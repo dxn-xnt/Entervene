@@ -135,15 +135,6 @@ class PracticeAttemptActiveQuestion(BaseModel):
     options: list[PracticeAttemptActiveOption] = Field(default_factory=list)
 
 
-class PracticeAttemptStartResponse(BaseModel):
-    attempt_id: int
-    attempt_number: int
-    status: str
-    passing_percentage: Decimal
-    total_questions: int
-    questions: list[PracticeAttemptActiveQuestion]
-
-
 class PracticeAttemptAnswerSubmission(BaseModel):
     practice_question_id: int
     selected_option_id: int | None = None
@@ -152,6 +143,23 @@ class PracticeAttemptAnswerSubmission(BaseModel):
 
 class PracticeAttemptSubmitRequest(BaseModel):
     answers: list[PracticeAttemptAnswerSubmission] = Field(default_factory=list)
+
+
+class PracticeAttemptStartResponse(BaseModel):
+    attempt_id: int
+    attempt_number: int
+    status: str
+    passing_percentage: Decimal
+    total_questions: int
+    questions: list[PracticeAttemptActiveQuestion]
+    saved_answers: list[PracticeAttemptAnswerSubmission] = Field(default_factory=list)
+
+
+class PracticeAttemptDraftSaveResponse(BaseModel):
+    attempt_id: int
+    status: str
+    saved_answers_count: int
+    saved_at: datetime
 
 
 # ---------------------------------------------------------------------------

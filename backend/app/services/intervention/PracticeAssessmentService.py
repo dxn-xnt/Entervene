@@ -31,6 +31,8 @@ from app.schemas.PracticeAssessment import (
     PracticeAssessmentUpdate,
     PracticeAttemptActiveOption,
     PracticeAttemptActiveQuestion,
+    PracticeAttemptAnswerSubmission,
+    PracticeAttemptDraftSaveResponse,
     PracticeAttemptFeedbackItem,
     PracticeAttemptFeedbackResponse,
     PracticeAttemptStartResponse,
@@ -669,6 +671,19 @@ def _format_active_attempt_response(attempt: PracticeAttempt) -> PracticeAttempt
             options=active_opts,
         ))
 
+    raw_drafts = snapshot.get("draft_answers", [])
+    saved_answers: list[PracticeAttemptAnswerSubmission] = []
+    if isinstance(raw_drafts, list):
+        for item in raw_drafts:
+            if isinstance(item, dict) and "practice_question_id" in item:
+                saved_answers.append(
+                    PracticeAttemptAnswerSubmission(
+                        practice_question_id=item["practice_question_id"],
+                        selected_option_id=item.get("selected_option_id"),
+                        student_answer_text=item.get("student_answer_text"),
+                    )
+                )
+
     return PracticeAttemptStartResponse(
         attempt_id=attempt.attempt_id,
         attempt_number=attempt.attempt_number,
@@ -676,6 +691,53 @@ def _format_active_attempt_response(attempt: PracticeAttempt) -> PracticeAttempt
         passing_percentage=attempt.passing_threshold_snapshot,
         total_questions=len(active_questions),
         questions=active_questions,
+        saved_answers=saved_answers,
+    )
+
+
+def save_attempt_draft(
+    db: Session,
+    student_id: UUID,
+    intervention_id: int,
+    attempt_id: int,
+    payload: PracticeAttemptSubmitRequest,
+) -> PracticeAttemptDraftSaveResponse:
+    """Persist student draft answers without finalizing, scoring, or revealing diagnostic feedback."""
+    attempt = db.get(PracticeAttempt, attempt_id)
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    if attempt.student_id != student_id:
+        raise HTTPException(status_code=403, detail="Attempt belongs to another student")
+    if attempt.assessment.intervention_id != intervention_id:
+        raise HTTPException(status_code=400, detail="Mismatched intervention ID for this attempt")
+
+    if attempt.status != "STARTED":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot save draft answers for an attempt with status '{attempt.status}'.",
+        )
+
+    # Persist draft answers in the attempt snapshot
+    snapshot = dict(attempt.attempt_snapshot or {})
+    draft_list = [
+        {
+            "practice_question_id": ans.practice_question_id,
+            "selected_option_id": ans.selected_option_id,
+            "student_answer_text": ans.student_answer_text.strip() if ans.student_answer_text else None,
+        }
+        for ans in payload.answers
+    ]
+    snapshot["draft_answers"] = draft_list
+    attempt.attempt_snapshot = snapshot
+
+    db.commit()
+    db.refresh(attempt)
+
+    return PracticeAttemptDraftSaveResponse(
+        attempt_id=attempt.attempt_id,
+        status=attempt.status,
+        saved_answers_count=len(draft_list),
+        saved_at=datetime.now(timezone.utc),
     )
 
 
@@ -706,6 +768,18 @@ def submit_attempt(
         q["practice_question_id"]: q for q in snapshot.get("questions", [])
     }
     answer_map = {ans.practice_question_id: ans for ans in payload.answers}
+    if not answer_map:
+        # Fallback to saved draft answers if explicit payload answers was empty
+        raw_drafts = snapshot.get("draft_answers", [])
+        if isinstance(raw_drafts, list):
+            for d in raw_drafts:
+                if isinstance(d, dict) and "practice_question_id" in d:
+                    qid = d["practice_question_id"]
+                    answer_map[qid] = PracticeAttemptAnswerSubmission(
+                        practice_question_id=qid,
+                        selected_option_id=d.get("selected_option_id"),
+                        student_answer_text=d.get("student_answer_text"),
+                    )
 
     total_score = Decimal("0.00")
     max_score = Decimal("0.00")
@@ -826,6 +900,12 @@ def get_attempt_feedback(
     attempt = db.get(PracticeAttempt, attempt_id)
     if attempt is None or attempt.assessment.intervention_id != intervention_id:
         raise HTTPException(status_code=404, detail="Attempt not found for this intervention")
+
+    if attempt.status != "SUBMITTED":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot retrieve diagnostic feedback for an unsubmitted practice attempt.",
+        )
 
     role = current_user.get("role")
     user_id = current_user.get("sub") or current_user.get("user_id")

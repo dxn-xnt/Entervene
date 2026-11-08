@@ -29,6 +29,7 @@ export type QuizAttemptQuestion = {
   selected_option_id?: number | null;
   points_awarded?: number | null;
   is_correct?: boolean | null;
+  explanation?: string | null;
 };
 
 export type QuizAttemptResponse = {
@@ -51,6 +52,7 @@ export type QuizAttemptResponse = {
   summary_release_mode: string;
   summary_release_at?: string | null;
   summary_message?: string | null;
+  feedback?: string | null;
   questions: QuizAttemptQuestion[];
 };
 

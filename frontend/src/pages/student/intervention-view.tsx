@@ -891,7 +891,10 @@ export default function StudentInterventionView() {
       {(intervention?.intervention_id || interventionId) && (
         <StudentPracticeAssessmentModal
           isOpen={isPracticeModalOpen}
-          onClose={() => setIsPracticeModalOpen(false)}
+          onClose={() => {
+            setIsPracticeModalOpen(false);
+            void reloadInterventionData();
+          }}
           interventionId={intervention?.intervention_id ?? interventionId!}
           initialMode={practiceModalMode}
           onAttemptCompleted={() => {

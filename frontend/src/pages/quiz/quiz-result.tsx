@@ -1,6 +1,15 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { CheckCircle2, XCircle, Clock, AlertCircle, Award, RotateCcw } from "lucide-react";
+import {
+  AlertCircle,
+  Award,
+  BookOpen,
+  CheckCircle2,
+  Clock,
+  MessageSquare,
+  RotateCcw,
+  XCircle,
+} from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
@@ -12,6 +21,33 @@ import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
 import { getQuizAttempt, type QuizAttemptResponse, type QuizAttemptQuestion } from "@/lib/quiz-api";
 import { quizPathWithContext, quizReturnContext } from "@/lib/student-quiz-navigation";
+
+type QuestionStatus = "correct" | "incorrect" | "partial" | "reviewed" | "pending";
+
+function getQuestionStatus(question: QuizAttemptQuestion): QuestionStatus {
+  if (question.is_correct === true) return "correct";
+  if (question.is_correct === false) return "incorrect";
+  if (question.points_awarded == null) return "pending";
+  if (question.points_awarded > 0 && question.points_awarded < question.points) {
+    return "partial";
+  }
+  return "reviewed";
+}
+
+function questionStatusClass(status: QuestionStatus): string {
+  switch (status) {
+    case "correct":
+      return "bg-[#8BCB88] text-black";
+    case "incorrect":
+      return "bg-[#FF6B6B] text-black";
+    case "partial":
+      return "bg-[#FFD08A] text-black";
+    case "reviewed":
+      return "bg-[#B8D8FF] text-black";
+    default:
+      return "bg-[#F6E9B2] text-black";
+  }
+}
 
 const StudentQuizResult = () => {
   const { assignmentId } = useParams<{ assignmentId: string }>();
@@ -54,12 +90,6 @@ const StudentQuizResult = () => {
     };
   }, [aid]);
 
-  const getQuestionStatus = (q: QuizAttemptQuestion): "correct" | "incorrect" | "unattempted" => {
-    if (q.is_correct === true) return "correct";
-    if (q.is_correct === false) return "incorrect";
-    return "unattempted";
-  };
-
   const isQuestionIncorrect = (q: QuizAttemptQuestion) => q.is_correct === false;
 
   const questionItems = useMemo(() => {
@@ -82,9 +112,9 @@ const StudentQuizResult = () => {
     return questionItems;
   }, [showIncorrectOnly, questionItems]);
 
-  const hasUnattemptedOrNeedsGrading = useMemo(() => {
-    if (!quiz?.questions) return false;
-    return quiz.questions.some((q) => q.is_correct == null);
+  const questionStatuses = useMemo(() => {
+    if (!quiz?.questions) return [];
+    return quiz.questions.map(getQuestionStatus);
   }, [quiz?.questions]);
 
   const handleQuestionClick = (originalIndex: number) => {
@@ -124,7 +154,20 @@ const StudentQuizResult = () => {
   const maxPoints = quiz.total_points ?? quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0);
   const grade = quiz.grade != null ? quiz.grade : null;
   const scorePercent = grade != null && maxPoints > 0 ? Math.round((grade / maxPoints) * 100) : null;
-  const isPendingGrading = quiz.status === "submitted" || quiz.status === "late";
+  const isActiveAttempt = quiz.status === "pending" || quiz.status === "not_started";
+  const hasVisiblePendingEvaluation =
+    quiz.summary_available && quiz.questions.some((question) => question.points_awarded == null);
+  const isPendingGrading =
+    quiz.status === "submitted" || quiz.status === "late" ||
+    (quiz.status === "graded" && hasVisiblePendingEvaluation);
+  const showFinalScore = quiz.status === "graded" && !isPendingGrading && scorePercent != null;
+  const teacherFeedback = quiz.feedback?.trim() ? quiz.feedback : null;
+  const hasPartial = questionStatuses.includes("partial");
+  const hasReviewed = questionStatuses.includes("reviewed");
+  const hasPending = questionStatuses.includes("pending");
+  const allQuestionsCorrect =
+    questionStatuses.length > 0 &&
+    questionStatuses.every((status) => status === "correct");
 
   return (
     <AppLayout>
@@ -179,12 +222,31 @@ const StudentQuizResult = () => {
               {/* Score Hero Card */}
               <Card className="bg-card p-5 flex flex-col items-center justify-center text-center shadow-none hover:shadow-none">
                 <span className="text-lg font-bold mb-1">
-                  {isPendingGrading ? "Quiz Submitted" : "Score Result"}
+                  {isActiveAttempt ? "Quiz in Progress" : isPendingGrading ? "Quiz Submitted" : "Score Result"}
                 </span>
 
-                {scorePercent != null ? (
+                {isActiveAttempt ? (
+                  <div className="my-4 flex flex-col items-center gap-2">
+                    <Clock className="w-12 h-12 text-amber-600" />
+                    <p className="text-xl font-bold text-black/80">Quiz in Progress</p>
+                    <p className="text-sm text-black/60 max-w-md">
+                      Complete and submit this attempt to view released results.
+                    </p>
+                  </div>
+                ) : isPendingGrading ? (
+                  <div className="my-4 flex flex-col items-center gap-2">
+                    <Clock className="w-12 h-12 text-amber-600" />
+                    <p className="text-xl font-bold text-black/80">Grading in Progress</p>
+                    <p className="text-sm text-black/60 max-w-md">
+                      Your open-ended answers are currently awaiting teacher review.
+                    </p>
+                  </div>
+                ) : showFinalScore ? (
                   <>
-                    <p className="text-4xl font-bold my-2">
+                    <p
+                      className="text-4xl font-bold my-2"
+                      aria-label={`Final score ${scorePercent}%`}
+                    >
                       {scorePercent}
                       <span className="text-2xl font-bold">%</span>
                     </p>
@@ -195,9 +257,9 @@ const StudentQuizResult = () => {
                 ) : (
                   <div className="my-4 flex flex-col items-center gap-2">
                     <Clock className="w-12 h-12 text-amber-600" />
-                    <p className="text-xl font-bold text-black/80">Grading in Progress</p>
+                    <p className="text-xl font-bold text-black/80">Score Unavailable</p>
                     <p className="text-sm text-black/60 max-w-md">
-                      Your open-ended answers are currently being reviewed by your instructor.
+                      A final score is not available for this attempt.
                     </p>
                   </div>
                 )}
@@ -215,6 +277,23 @@ const StudentQuizResult = () => {
                   </span>
                 </div>
               </Card>
+
+              {teacherFeedback && (
+                <Card
+                  className="w-full bg-[#F6E9B2]/40 border-2 border-black p-4 shadow-none hover:shadow-none"
+                  aria-label="Teacher Feedback"
+                >
+                  <div className="flex items-start gap-3">
+                    <MessageSquare className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <h2 className="font-bold">Teacher Feedback</h2>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm text-black/75">
+                        {teacherFeedback}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              )}
 
               {/* Summary Release Notice if restricted */}
               {!quiz.summary_available && quiz.summary_message && (
@@ -240,9 +319,19 @@ const StudentQuizResult = () => {
                           <span className="flex items-center gap-1.5">
                             <span className="h-2.5 w-2.5 rounded-full bg-[#FF6B6B] border border-black" /> Incorrect
                           </span>
-                          {hasUnattemptedOrNeedsGrading && (
+                          {hasPartial && (
                             <span className="flex items-center gap-1.5">
-                              <span className="h-2.5 w-2.5 rounded-full bg-[#FFD08A] border border-black" /> Unattempted / Needs Grading
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#FFD08A] border border-black" /> Partial
+                            </span>
+                          )}
+                          {hasReviewed && (
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#B8D8FF] border border-black" /> Reviewed
+                            </span>
+                          )}
+                          {hasPending && (
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#F6E9B2] border border-black" /> Pending Review
                             </span>
                           )}
                         </div>
@@ -256,13 +345,7 @@ const StudentQuizResult = () => {
                               key={q.quiz_question_id}
                               type="button"
                               onClick={() => handleQuestionClick(idx)}
-                              className={`relative flex h-8 min-w-8 items-center justify-center rounded border-2 border-black px-2 text-sm font-black transition-all cursor-pointer ${
-                                status === "correct"
-                                  ? "bg-[#8BCB88] text-black"
-                                  : status === "incorrect"
-                                    ? "bg-[#FF6B6B] text-black"
-                                    : "bg-[#FFD08A] text-black"
-                              } hover:scale-105 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1`}
+                              className={`relative flex h-8 min-w-8 items-center justify-center rounded border-2 border-black px-2 text-sm font-black transition-all cursor-pointer ${questionStatusClass(status)} hover:scale-105 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1`}
                               title={`Question ${idx + 1}: ${status}`}
                               aria-label={`Question ${idx + 1} (${status})`}
                               data-question-number={idx + 1}
@@ -295,8 +378,14 @@ const StudentQuizResult = () => {
                         </label>
 
                         {incorrectCount === 0 && (
-                          <span className="text-sm font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300">
-                            Perfect score! No incorrect questions.
+                          <span className={`text-sm font-semibold px-2 py-0.5 rounded border ${
+                            allQuestionsCorrect
+                              ? "text-emerald-700 bg-emerald-50 border-emerald-300"
+                              : "text-gray-700 bg-gray-50 border-gray-300"
+                          }`}>
+                            {allQuestionsCorrect
+                              ? "Perfect score! No incorrect questions."
+                              : "No incorrect responses to show."}
                           </span>
                         )}
                         {showIncorrectOnly && incorrectCount > 0 && (
@@ -322,9 +411,12 @@ const StudentQuizResult = () => {
 
                   <div className="flex flex-col gap-3">
                     {displayedQuestions.map(({ question: q, originalIndex }) => {
-                      const isCorrect = q.is_correct === true;
-                      const isIncorrect = q.is_correct === false;
-                      const isNeedsGrading = q.is_correct == null && q.points_awarded == null;
+                      const status = getQuestionStatus(q);
+                      const isCorrect = status === "correct";
+                      const isIncorrect = status === "incorrect";
+                      const isPartial = status === "partial";
+                      const isReviewed = status === "reviewed";
+                      const isNeedsGrading = status === "pending";
 
                       return (
                         <Card
@@ -355,7 +447,19 @@ const StudentQuizResult = () => {
                               {isIncorrect && (
                                 <Badge size="sm" variant="destructive" className="gap-1.5">
                                   <XCircle className="w-3.5 h-3.5" />
-                                  0 / {q.points} pts
+                                  {q.points_awarded ?? 0} / {q.points} pts
+                                </Badge>
+                              )}
+                              {isPartial && (
+                                <Badge size="sm" variant="outline" className="gap-1.5 bg-[#FFD08A]/40">
+                                  <Award className="w-3.5 h-3.5" />
+                                  Partially Correct - {q.points_awarded} / {q.points} pts
+                                </Badge>
+                              )}
+                              {isReviewed && (
+                                <Badge size="sm" variant="outline" className="gap-1.5 bg-[#B8D8FF]/40">
+                                  <Award className="w-3.5 h-3.5" />
+                                  Reviewed - {q.points_awarded} / {q.points} pts
                                 </Badge>
                               )}
                               {isNeedsGrading && (
@@ -413,6 +517,23 @@ const StudentQuizResult = () => {
                               <span className="font-semibold text-black/60 block mb-1">Your Submission:</span>
                               <p className="text-black/90 whitespace-pre-wrap">{q.answer_text || "(No answer provided)"}</p>
                             </div>
+                          )}
+
+                          {q.explanation?.trim() && (
+                            <Card
+                              className="block w-full bg-[#FFFBEE] border-2 border-black p-3 shadow-none hover:shadow-none"
+                              aria-label="Explanation"
+                            >
+                              <div className="flex items-start gap-2">
+                                <BookOpen className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold">Explanation</p>
+                                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-black/75">
+                                    {q.explanation}
+                                  </p>
+                                </div>
+                              </div>
+                            </Card>
                           )}
                         </Card>
                       );

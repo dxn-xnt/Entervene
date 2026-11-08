@@ -102,6 +102,14 @@ export interface PracticeAttemptStartResponse {
   passing_percentage: number;
   total_questions: number;
   questions: PracticeAttemptActiveQuestion[];
+  saved_answers?: PracticeAttemptAnswerSubmission[];
+}
+
+export interface PracticeAttemptDraftSaveResponse {
+  attempt_id: number;
+  status: string;
+  saved_answers_count: number;
+  saved_at: string;
 }
 
 export interface PracticeAttemptAnswerSubmission {
@@ -378,6 +386,21 @@ export async function startStudentPracticeAttempt(
   interventionId: number
 ): Promise<PracticeAttemptStartResponse> {
   return request<PracticeAttemptStartResponse>(`${studentBase(interventionId)}/start`, "POST");
+}
+
+/**
+ * Save draft answers for an active practice attempt without submitting or scoring.
+ */
+export async function saveStudentPracticeAttemptDraft(
+  interventionId: number,
+  attemptId: number,
+  answers: PracticeAttemptAnswerSubmission[]
+): Promise<PracticeAttemptDraftSaveResponse> {
+  return request<PracticeAttemptDraftSaveResponse>(
+    `${studentBase(interventionId)}/attempts/${attemptId}/draft`,
+    "PUT",
+    { answers }
+  );
 }
 
 /**

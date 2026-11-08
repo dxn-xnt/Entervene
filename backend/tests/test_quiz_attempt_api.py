@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -35,6 +36,7 @@ from app.models.quiz.QuizSetting import QuizSetting
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.quiz.QuizAttemptService import _summary_release_state
 
 
 TABLES = [
@@ -260,6 +262,24 @@ def _act_as(context, account_name: str, role: str) -> None:
     )
 
 
+def _submit_fixture_quiz(context, *, selected_option_id=None, short_answer="Variables store values."):
+    return context["client"].post(
+        f"/api/v1/quizzes/assignment/{context['assignment'].classwork_assignment_id}/submit",
+        json={
+            "answers": [
+                {
+                    "quiz_question_id": context["mc_link"].quiz_question_id,
+                    "selected_option_id": selected_option_id or context["correct"].option_id,
+                },
+                {
+                    "quiz_question_id": context["short_link"].quiz_question_id,
+                    "answer_text": short_answer,
+                },
+            ]
+        },
+    )
+
+
 def test_student_can_start_resume_and_submit_quiz_with_server_scoring(quiz_attempt_context):
     c = quiz_attempt_context
     assignment_id = c["assignment"].classwork_assignment_id
@@ -298,6 +318,50 @@ def test_student_can_start_resume_and_submit_quiz_with_server_scoring(quiz_attem
     assert c["db"].query(QuizAnswer).count() == 2
 
 
+def test_unfinished_attempt_never_exposes_evaluation_or_correct_answers(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["db"].commit()
+
+    started = c["client"].post(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/start"
+    )
+
+    assert started.status_code == 200
+    body = started.json()
+    assert body["status"] == "pending"
+    assert body["summary_available"] is False
+    assert body["feedback"] is None
+    for question in body["questions"]:
+        assert question["points_awarded"] is None
+        assert question["is_correct"] is None
+        assert question["explanation"] is None
+        assert all(option["is_correct"] is None for option in question["options"])
+
+
+def test_unsubmitted_quiz_never_exposes_feedback_or_solutions(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["db"].commit()
+
+    response = c["client"].get(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/attempt"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "not_started"
+    assert body["feedback"] is None
+    assert body["questions"][0]["explanation"] is None
+    assert body["questions"][0]["points_awarded"] is None
+    assert body["questions"][0]["is_correct"] is None
+    assert all(option["is_correct"] is None for option in body["questions"][0]["options"])
+
+
 def test_multiple_choice_only_quiz_is_auto_graded(quiz_attempt_context):
     c = quiz_attempt_context
     c["db"].query(QuizQuestion).filter_by(quiz_question_id=c["short_link"].quiz_question_id).delete()
@@ -326,6 +390,7 @@ def test_quiz_summary_is_hidden_until_scheduled_release(quiz_attempt_context):
     c["setting"].show_correct_answers = True
     c["setting"].summary_release_mode = "SCHEDULED"
     c["setting"].summary_release_at = datetime.now(timezone.utc) + timedelta(days=1)
+    c["mc_link"].question.explanation = "The correct answer is Variable."
     c["db"].commit()
 
     response = c["client"].post(
@@ -352,6 +417,7 @@ def test_quiz_summary_is_hidden_until_scheduled_release(quiz_attempt_context):
     assert body["questions"][0]["selected_option_id"] is None
     assert body["questions"][0]["options"][0]["is_correct"] is None
     assert body["questions"][0]["points_awarded"] is None
+    assert body["questions"][0]["explanation"] is None
 
     c["setting"].summary_release_at = datetime.now(timezone.utc) - timedelta(minutes=1)
     c["db"].commit()
@@ -365,12 +431,125 @@ def test_quiz_summary_is_hidden_until_scheduled_release(quiz_attempt_context):
     assert released_body["questions"][0]["selected_option_id"] == c["correct"].option_id
     assert released_body["questions"][0]["options"][0]["is_correct"] is True
     assert released_body["questions"][0]["points_awarded"] == 6.0
+    assert released_body["questions"][0]["explanation"] == "The correct answer is Variable."
+
+
+def test_after_due_date_summary_releases_only_after_due_without_writes(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "AFTER_DUE_DATE"
+    c["assignment"].due_date = datetime.now(timezone.utc) + timedelta(hours=1)
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["db"].commit()
+
+    submitted = _submit_fixture_quiz(c)
+    assert submitted.status_code == 200
+    assert submitted.json()["summary_available"] is False
+    assert submitted.json()["questions"][0]["points_awarded"] is None
+    assert submitted.json()["questions"][0]["explanation"] is None
+
+    submission_id = c["db"].query(StudentSubmission.submission_id).scalar()
+    stored_submission = c["db"].get(StudentSubmission, submission_id)
+    stored_grade = stored_submission.grade
+    stored_attempt_count = stored_submission.attempt_count
+    stored_answer_count = c["db"].query(QuizAnswer).count()
+    stored_answers = [
+        (answer.answer_id, answer.answer_text, answer.points_awarded, answer.is_correct)
+        for answer in c["db"].query(QuizAnswer).order_by(QuizAnswer.answer_id).all()
+    ]
+    period_grade_count = c["db"].query(StudentPeriodGrade).count()
+
+    c["assignment"].due_date = datetime.now(timezone.utc) - timedelta(minutes=1)
+    c["db"].commit()
+    released = c["client"].get(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/attempt"
+    )
+
+    assert released.status_code == 200
+    body = released.json()
+    assert body["summary_available"] is True
+    assert body["questions"][0]["points_awarded"] == 6.0
+    assert body["questions"][0]["is_correct"] is True
+    assert body["questions"][0]["options"][0]["is_correct"] is True
+    assert body["questions"][0]["explanation"] == "The correct answer is Variable."
+    stored_submission = c["db"].get(StudentSubmission, submission_id)
+    assert stored_submission.grade == stored_grade
+    assert stored_submission.attempt_count == stored_attempt_count
+    assert c["db"].query(QuizAnswer).count() == stored_answer_count
+    assert [
+        (answer.answer_id, answer.answer_text, answer.points_awarded, answer.is_correct)
+        for answer in c["db"].query(QuizAnswer).order_by(QuizAnswer.answer_id).all()
+    ] == stored_answers
+    assert c["db"].query(StudentPeriodGrade).count() == period_grade_count
+
+
+def test_never_release_keeps_score_but_hides_all_question_feedback(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "NEVER"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["db"].commit()
+
+    response = _submit_fixture_quiz(c)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grade"] == 6.0
+    assert body["summary_available"] is False
+    assert "not available" in body["summary_message"]
+    for question in body["questions"]:
+        assert question["answer_text"] is None
+        assert question["selected_option_id"] is None
+        assert question["points_awarded"] is None
+        assert question["is_correct"] is None
+        assert question["explanation"] is None
+        assert all(option["is_correct"] is None for option in question["options"])
+
+
+@pytest.mark.parametrize("release_mode", ["SCHEDULED", "AFTER_DUE_DATE"])
+def test_release_mode_missing_required_date_fails_closed(quiz_attempt_context, release_mode):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = release_mode
+    c["setting"].summary_release_at = None
+    c["assignment"].due_date = None
+    c["db"].commit()
+
+    response = _submit_fixture_quiz(c)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grade"] == 6.0
+    assert body["summary_available"] is False
+    assert body["summary_release_at"] is None
+    assert "currently unavailable" in body["summary_message"]
+    assert body["questions"][0]["selected_option_id"] is None
+    assert body["questions"][0]["points_awarded"] is None
+    assert body["questions"][0]["is_correct"] is None
+    assert body["questions"][0]["explanation"] is None
+    assert all(option["is_correct"] is None for option in body["questions"][0]["options"])
+
+
+def test_unsupported_release_mode_fails_closed():
+    setting = SimpleNamespace(
+        summary_release_mode="UNSUPPORTED",
+        summary_release_at=None,
+    )
+    assignment = SimpleNamespace(due_date=None)
+    submission = SimpleNamespace(status="graded")
+
+    available, release_at, message = _summary_release_state(setting, assignment, submission)
+
+    assert available is False
+    assert release_at is None
+    assert "currently unavailable" in message
 
 
 def test_released_summary_includes_student_answers_without_revealing_correct_key(quiz_attempt_context):
     c = quiz_attempt_context
     c["setting"].show_correct_answers = False
     c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
     c["db"].commit()
 
     response = c["client"].post(
@@ -395,7 +574,216 @@ def test_released_summary_includes_student_answers_without_revealing_correct_key
     assert body["questions"][0]["selected_option_id"] == c["wrong"].option_id
     assert body["questions"][0]["points_awarded"] == 0.0
     assert body["questions"][0]["options"][0]["is_correct"] is None
+    assert body["questions"][0]["explanation"] is None
     assert body["questions"][1]["answer_text"] == "Variables store values."
+
+
+def test_immediate_release_returns_nonblank_explanation_only_with_correct_answers_enabled(
+    quiz_attempt_context,
+):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["short_link"].question.explanation = "This essay explanation must wait for grading."
+    c["db"].commit()
+
+    response = _submit_fixture_quiz(c)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "submitted"
+    assert body["summary_available"] is True
+    assert body["feedback"] is None
+    assert body["questions"][0]["explanation"] == "The correct answer is Variable."
+    assert body["questions"][1]["points_awarded"] is None
+    assert body["questions"][1]["is_correct"] is None
+    assert body["questions"][1]["explanation"] is None
+
+
+def test_blank_or_missing_explanations_are_returned_as_none(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "   "
+    c["short_link"].question.explanation = None
+    c["db"].commit()
+
+    response = _submit_fixture_quiz(c)
+
+    assert response.status_code == 200
+    assert all(question["explanation"] is None for question in response.json()["questions"])
+
+
+def test_partially_graded_response_releases_explanation_and_exact_teacher_feedback(
+    quiz_attempt_context,
+):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["short_link"].question.explanation = "A variable stores a reusable value."
+    c["db"].commit()
+
+    submitted = _submit_fixture_quiz(c)
+    assert submitted.status_code == 200
+    submitted_body = submitted.json()
+    assert submitted_body["questions"][0]["explanation"] == "The correct answer is Variable."
+    assert submitted_body["questions"][1]["explanation"] is None
+
+    submission = c["db"].query(StudentSubmission).one()
+    essay_answer = c["db"].query(QuizAnswer).filter(
+        QuizAnswer.submission_id == submission.submission_id,
+        QuizAnswer.quiz_question_id == c["short_link"].quiz_question_id,
+    ).one()
+    essay_answer.points_awarded = Decimal("2.00")
+    essay_answer.is_correct = None
+    submission.grade = Decimal("8.00")
+    submission.status = "graded"
+    submission.feedback = "Good foundation; add one concrete example."
+    c["db"].commit()
+
+    result = c["client"].get(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/attempt"
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["feedback"] == "Good foundation; add one concrete example."
+    assert body["questions"][1]["points_awarded"] == 2.0
+    assert body["questions"][1]["is_correct"] is None
+    assert body["questions"][1]["explanation"] == "A variable stores a reusable value."
+
+
+def test_teacher_feedback_preserves_owner_visibility_without_releasing_never_summary(
+    quiz_attempt_context,
+):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "NEVER"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["db"].commit()
+    assert _submit_fixture_quiz(c).status_code == 200
+
+    submission = c["db"].query(StudentSubmission).one()
+    submission.status = "graded"
+    submission.feedback = "Review variables before the next lesson."
+    c["db"].commit()
+
+    result = c["client"].get(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/attempt"
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["summary_available"] is False
+    assert body["feedback"] == "Review variables before the next lesson."
+    assert all(question["explanation"] is None for question in body["questions"])
+
+    _act_as(c, "other_student", "student")
+    unauthorized = c["client"].get(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/attempt"
+    )
+    assert unauthorized.status_code == 403
+    assert "Review variables" not in unauthorized.text
+    assert "correct answer" not in unauthorized.text
+
+
+def test_identification_accepted_keys_are_not_invented_as_a_display_answer(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["short_link"].question.question_type = "IDENTIFICATION"
+    c["short_link"].question.explanation = "Review the scientist discussed in class."
+    c["db"].add_all([
+        QuestionOption(
+            question_id=c["short_link"].question_id,
+            option_text="Isaac Newton",
+            is_correct=True,
+            option_order=1,
+        ),
+        QuestionOption(
+            question_id=c["short_link"].question_id,
+            option_text="Sir Isaac Newton",
+            is_correct=True,
+            option_order=2,
+        ),
+    ])
+    c["db"].commit()
+
+    response = _submit_fixture_quiz(c, short_answer="Albert Einstein")
+
+    assert response.status_code == 200
+    body = response.json()
+    identification = body["questions"][1]
+    assert identification["question_type"] == "IDENTIFICATION"
+    assert identification["answer_text"] == "Albert Einstein"
+    assert identification["is_correct"] is False
+    assert identification["options"] == []
+    assert identification["explanation"] == "Review the scientist discussed in class."
+    assert "Isaac Newton" not in response.text
+    assert "Sir Isaac Newton" not in response.text
+
+
+def test_started_retake_restores_own_answers_without_prior_evaluation_or_solutions(quiz_attempt_context):
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "A variable is the authoritative solution."
+    c["short_link"].question.question_type = "IDENTIFICATION"
+    c["short_link"].question.explanation = "The accepted answer is Isaac Newton."
+    c["db"].add(QuestionOption(
+        question_id=c["short_link"].question_id,
+        option_text="Isaac Newton",
+        is_correct=True,
+        option_order=1,
+    ))
+    c["db"].commit()
+
+    submitted = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={
+            "answers": [
+                {
+                    "quiz_question_id": c["mc_link"].quiz_question_id,
+                    "selected_option_id": c["correct"].option_id,
+                },
+                {
+                    "quiz_question_id": c["short_link"].quiz_question_id,
+                    "answer_text": "Albert Einstein",
+                },
+            ]
+        },
+    )
+    assert submitted.status_code == 200
+    submitted_body = submitted.json()
+    assert submitted_body["status"] == "graded"
+    assert submitted_body["can_submit"] is True
+    assert submitted_body["questions"][0]["options"][0]["is_correct"] is True
+    submission = c["db"].query(StudentSubmission).one()
+    submission.feedback = "The previous attempt feedback must not survive a retake."
+    c["db"].commit()
+
+    restarted = c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start")
+
+    assert restarted.status_code == 200
+    body = restarted.json()
+    assert body["status"] == "pending"
+    assert body["summary_available"] is False
+    assert body["grade"] is None
+    assert body["feedback"] is None
+    assert body["questions"][0]["selected_option_id"] == c["correct"].option_id
+    assert body["questions"][0]["points_awarded"] is None
+    assert body["questions"][0]["is_correct"] is None
+    assert body["questions"][0]["explanation"] is None
+    assert all(option["is_correct"] is None for option in body["questions"][0]["options"])
+    assert body["questions"][1]["answer_text"] == "Albert Einstein"
+    assert body["questions"][1]["points_awarded"] is None
+    assert body["questions"][1]["is_correct"] is None
+    assert body["questions"][1]["explanation"] is None
+    assert "Isaac Newton" not in restarted.text
+    assert "authoritative solution" not in restarted.text
 
 
 def test_quiz_submit_allows_unanswered_items_for_timed_autosubmit(quiz_attempt_context):

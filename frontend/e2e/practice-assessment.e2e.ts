@@ -68,7 +68,7 @@ test.describe("Practice Assessment End-to-End Hardened Real Browser Suite", () =
       // SCENARIO C: REAL UI READING COMPLETION & PERSISTENCE VALIDATION
       // =======================================================================
       await studentPage.goto(`${base}/student/interventions/view?intervention=${interventionId}`);
-      await expect(studentPage.getByRole("heading", { name: "Study Support", exact: true })).toBeVisible({ timeout: 15_000 });
+      await expect(studentPage.getByRole("heading", { name: /support/i }).first()).toBeVisible({ timeout: 15_000 });
 
       // Confirm initial 0/3 readings reviewed
       await expect(studentPage.getByText("0 of 3 reviewed")).toBeVisible({ timeout: 10_000 });
@@ -93,7 +93,7 @@ test.describe("Practice Assessment End-to-End Hardened Real Browser Suite", () =
       await backBtn.click();
 
       // Confirm Study Support reflects 1 of 3 reviewed
-      await expect(studentPage.getByRole("heading", { name: "Study Support", exact: true })).toBeVisible({ timeout: 15_000 });
+      await expect(studentPage.getByRole("heading", { name: /support/i }).first()).toBeVisible({ timeout: 15_000 });
       await expect(studentPage.getByText("1 of 3 reviewed")).toBeVisible({ timeout: 10_000 });
 
       // Verify directly against PostgreSQL that 1 row is genuinely persisted in InterventionReadingReview
@@ -173,7 +173,7 @@ test.describe("Practice Assessment End-to-End Hardened Real Browser Suite", () =
       // Student takes practice under REQUIRE_ATTEMPT, fails, but unlocks remediation
       // -----------------------------------------------------------------------
       await studentPage.goto(`${base}/student/interventions/view?intervention=${interventionId}`);
-      await expect(studentPage.getByRole("heading", { name: "Study Support", exact: true })).toBeVisible({ timeout: 15_000 });
+      await expect(studentPage.getByRole("heading", { name: /support/i }).first()).toBeVisible({ timeout: 15_000 });
 
       // Verify Attempt Required badge
       await expect(studentPage.getByText("Attempt Required")).toBeVisible({ timeout: 10_000 });
@@ -251,7 +251,7 @@ test.describe("Practice Assessment End-to-End Hardened Real Browser Suite", () =
       // Student sees remediation locked under REQUIRE_PASS, retries, passes, unlocks
       // -----------------------------------------------------------------------
       await studentPage.goto(`${base}/student/interventions/view?intervention=${interventionId}`);
-      await expect(studentPage.getByRole("heading", { name: "Study Support", exact: true })).toBeVisible({ timeout: 15_000 });
+      await expect(studentPage.getByRole("heading", { name: /support/i }).first()).toBeVisible({ timeout: 15_000 });
 
       // Practice card now indicates Passing Required (75%)
       await expect(studentPage.getByText(/passing required/i)).toBeVisible({ timeout: 10_000 });

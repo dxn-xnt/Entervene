@@ -120,6 +120,7 @@ class QuizAttemptQuestionOut(BaseModel):
     selected_option_id: Optional[int] = None
     points_awarded: Optional[float] = None
     is_correct: Optional[bool] = None
+    explanation: Optional[str] = None
 
 
 class QuizAttemptResponse(BaseModel):
@@ -142,6 +143,7 @@ class QuizAttemptResponse(BaseModel):
     summary_release_mode: str = "IMMEDIATE"
     summary_release_at: Optional[datetime] = None
     summary_message: Optional[str] = None
+    feedback: Optional[str] = None
     questions: list[QuizAttemptQuestionOut] = Field(default_factory=list)
 
 

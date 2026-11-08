@@ -61,12 +61,80 @@ PREFIX = "entervene_browser_remediation_"
 BACKEND = Path(__file__).resolve().parents[2]
 SOURCE = create_engine(settings.database_url).url
 
+PROTECTED_DATABASES = {
+    "entervendb",
+    "entervene_pm_practice_demo",
+    "entervene_db",
+    "enterevene_db",
+    "activity_db",
+    "entervene_demo",
+    "entervene_demo_disposable",
+    "entervene_preview",
+    "entervene_repost_smoke",
+    "main",
+    "entervene",
+    "postgres",
+    "schooldb",
+    "school_db",
+    "schooldb3",
+}
 
-def _target(state: dict):
-    name = state["database"]
+
+def _active_development_databases() -> set[str]:
+    """Dynamically resolve all database names configured in settings, environment, or backend/.env."""
+    from sqlalchemy.engine import make_url
+    dbs = set()
+    if SOURCE.database:
+        dbs.add(SOURCE.database.casefold())
+    env_url = os.environ.get("DATABASE_URL")
+    if env_url:
+        try:
+            parsed = make_url(env_url).database
+            if parsed:
+                dbs.add(parsed.casefold())
+        except Exception:
+            pass
+    env_file = BACKEND / ".env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("DATABASE_URL=") and not line.startswith("#"):
+                val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                try:
+                    parsed = make_url(val).database
+                    if parsed:
+                        dbs.add(parsed.casefold())
+                except Exception:
+                    pass
+    return dbs
+
+
+def _target(state: dict, is_destructive: bool = False):
+    name = state.get("database", "")
+    if not isinstance(name, str) or not name:
+        raise ValueError("Invalid or missing database name in state")
+
     if (SOURCE.get_backend_name() != "postgresql" or SOURCE.host not in {"localhost", "127.0.0.1"}
-            or not name.startswith(PREFIX) or name.casefold() in {"entervene_demo", "main", "entervene"}):
-        raise ValueError("Refusing non-disposable PostgreSQL target")
+            or not name.startswith(PREFIX) or name.casefold() in PROTECTED_DATABASES):
+        raise ValueError(f"Refusing non-disposable or protected PostgreSQL target: '{name}'")
+
+    if is_destructive:
+        if not state.get("disposable"):
+            raise ValueError(f"Refusing destructive operation: state lacks 'disposable: true' marker for '{name}'")
+        if not state.get("test_run_id"):
+            raise ValueError(f"Refusing destructive operation: state lacks 'test_run_id' verification for '{name}'")
+
+        # Guard against accidentally targeting any database currently active in settings, process env, or backend/.env
+        active_databases = _active_development_databases()
+        if name.casefold() in active_databases and os.environ.get("ALLOW_DESTRUCTIVE_FIXTURE_ON_ACTIVE_DEV") != "true":
+            raise RuntimeError(
+                f"Refusing destructive fixture execution: target database '{name}' is currently "
+                f"configured as the active backend database in settings/environment. "
+                f"Destructive fixtures must run against independently provisioned databases, "
+                f"not the active development server database. "
+                f"Set ALLOW_DESTRUCTIVE_FIXTURE_ON_ACTIVE_DEV=true to override."
+            )
+
     return SOURCE.set(database=name)
 
 
@@ -184,7 +252,7 @@ def _attach_documents(db: Session, directory: Path, readings: list[tuple]) -> li
 
 
 def _drop(state: dict):
-    url = _target(state)
+    url = _target(state, is_destructive=True)
     admin = _admin()
     try:
         with admin.connect() as connection:
@@ -328,11 +396,16 @@ def set_completion_state(state_path: Path, count: int) -> None:
 def prepare(state_path: Path):
     if state_path.exists():
         raise ValueError("Refusing to replace a browser fixture state file")
-    state = {"database": PREFIX + uuid4().hex,
-             "password": secrets.token_urlsafe(24),
-             "teacher_email": "browser-teacher@example.com",
-             "target_email": "browser-target@example.com",
-             "control_email": "browser-control@example.com"}
+    state = {
+        "database": PREFIX + uuid4().hex,
+        "password": secrets.token_urlsafe(24),
+        "teacher_email": "browser-teacher@example.com",
+        "target_email": "browser-target@example.com",
+        "control_email": "browser-control@example.com",
+        "test_run_id": str(uuid4()),
+        "disposable": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
     url = _target(state)
     admin = _admin()
     try:
@@ -564,6 +637,164 @@ def count_reading_reviews(state_path: Path):
         engine.dispose()
 
 
+def seed_20_practice_questions(state_path: Path, allow_overwrite: bool = False):
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    target_url = _target(state, is_destructive=True)
+    engine = create_engine(target_url)
+    try:
+        with Session(engine) as db:
+            from decimal import Decimal
+            from app.models.intervention.PracticeAssessment import PracticeAssessment
+            from app.models.intervention.PracticeQuestion import PracticeQuestion
+            from app.models.intervention.PracticeQuestionOption import PracticeQuestionOption
+            from app.models.intervention.PracticeAttempt import PracticeAttempt
+            from app.models.intervention.PracticeAttemptAnswer import PracticeAttemptAnswer
+
+            intervention_id = state["intervention_id"]
+            assessment = db.query(PracticeAssessment).filter_by(intervention_id=intervention_id).first()
+            if not assessment:
+                assessment = PracticeAssessment(
+                    intervention_id=intervention_id,
+                    title="Comprehensive Practice Assessment (20 Questions)",
+                    status="PUBLISHED",
+                    gatekeeper_policy="REQUIRE_PASS",
+                    passing_percentage=Decimal("75.00"),
+                    version=1,
+                )
+                db.add(assessment)
+                db.flush()
+            else:
+                existing_questions_count = db.query(PracticeQuestion).filter_by(
+                    practice_assessment_id=assessment.practice_assessment_id
+                ).count()
+                existing_attempts_count = db.query(PracticeAttempt).filter_by(
+                    practice_assessment_id=assessment.practice_assessment_id
+                ).count()
+
+                env_allow_overwrite = os.environ.get("ALLOW_FIXTURE_QUESTION_OVERWRITE") == "true"
+                if (existing_questions_count > 0 or existing_attempts_count > 0) and not (allow_overwrite or env_allow_overwrite):
+                    raise RuntimeError(
+                        f"Refusing to overwrite existing Practice Assessment on intervention {intervention_id}. "
+                        f"Found {existing_questions_count} existing questions and {existing_attempts_count} existing attempts. "
+                        f"To prevent silent question replacement, destructive overwrites require explicit authorization "
+                        f"(ALLOW_FIXTURE_QUESTION_OVERWRITE=true or --overwrite)."
+                    )
+
+                assessment.status = "PUBLISHED"
+                assessment.title = "Comprehensive Practice Assessment (20 Questions)"
+                assessment.passing_percentage = Decimal("75.00")
+                assessment.gatekeeper_policy = "REQUIRE_PASS"
+                attempts = db.query(PracticeAttempt).filter_by(practice_assessment_id=assessment.practice_assessment_id).all()
+                for a in attempts:
+                    db.query(PracticeAttemptAnswer).filter_by(attempt_id=a.attempt_id).delete()
+                    db.delete(a)
+                questions = db.query(PracticeQuestion).filter_by(practice_assessment_id=assessment.practice_assessment_id).all()
+                for q in questions:
+                    db.query(PracticeQuestionOption).filter_by(practice_question_id=q.practice_question_id).delete()
+                    db.delete(q)
+                db.flush()
+
+            for i in range(1, 21):
+                if i <= 14:
+                    q = PracticeQuestion(
+                        practice_assessment_id=assessment.practice_assessment_id,
+                        question_text=f"Question {i}: What is the solution to problem {i}?",
+                        question_type="MULTIPLE_CHOICE",
+                        points=Decimal("1.00"),
+                        display_order=i,
+                        explanation=f"Explanation for question {i}.",
+                    )
+                    db.add(q)
+                    db.flush()
+                    for opt_idx, letter in enumerate(["A", "B", "C", "D"], start=1):
+                        db.add(PracticeQuestionOption(
+                            practice_question_id=q.practice_question_id,
+                            option_text=f"Option {letter} for Q{i}",
+                            is_correct=(opt_idx == 1),
+                            option_order=opt_idx,
+                        ))
+                elif i <= 18:
+                    q = PracticeQuestion(
+                        practice_assessment_id=assessment.practice_assessment_id,
+                        question_text=f"Question {i}: Statement {i} is scientifically accurate.",
+                        question_type="TRUE_FALSE",
+                        points=Decimal("1.00"),
+                        display_order=i,
+                        explanation=f"Explanation for question {i}.",
+                    )
+                    db.add(q)
+                    db.flush()
+                    db.add(PracticeQuestionOption(
+                        practice_question_id=q.practice_question_id,
+                        option_text="True",
+                        is_correct=True,
+                        option_order=1,
+                    ))
+                    db.add(PracticeQuestionOption(
+                        practice_question_id=q.practice_question_id,
+                        option_text="False",
+                        is_correct=False,
+                        option_order=2,
+                    ))
+                else:
+                    q = PracticeQuestion(
+                        practice_assessment_id=assessment.practice_assessment_id,
+                        question_text=f"Question {i}: Identify the primary term for concept {i}.",
+                        question_type="IDENTIFICATION",
+                        points=Decimal("1.00"),
+                        display_order=i,
+                        explanation=f"Explanation for question {i}.",
+                    )
+                    db.add(q)
+                    db.flush()
+                    db.add(PracticeQuestionOption(
+                        practice_question_id=q.practice_question_id,
+                        option_text=f"Answer{i}",
+                        is_correct=True,
+                        option_order=1,
+                    ))
+            db.commit()
+            print(json.dumps({"seeded_practice_questions": 20, "assessment_id": assessment.practice_assessment_id}))
+    finally:
+        engine.dispose()
+
+
+def inspect_practice_attempt(state_path: Path):
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    engine = create_engine(_target(state))
+    try:
+        with Session(engine) as db:
+            from app.models.intervention.PracticeAssessment import PracticeAssessment
+            from app.models.intervention.PracticeAttempt import PracticeAttempt
+
+            intervention_id = state["intervention_id"]
+            assessment = db.query(PracticeAssessment).filter_by(intervention_id=intervention_id).first()
+            if not assessment:
+                print(json.dumps({"error": "no assessment"}))
+                return
+            attempts = (
+                db.query(PracticeAttempt)
+                .filter_by(practice_assessment_id=assessment.practice_assessment_id)
+                .order_by(PracticeAttempt.attempt_number.desc())
+                .all()
+            )
+            data = []
+            for a in attempts:
+                data.append({
+                    "attempt_id": a.attempt_id,
+                    "attempt_number": a.attempt_number,
+                    "status": a.status,
+                    "total_score": float(a.total_score),
+                    "score_percentage": float(a.score_percentage),
+                    "is_passed": a.is_passed,
+                    "completed_at": a.completed_at.isoformat() if a.completed_at else None,
+                    "draft_answers": (a.attempt_snapshot or {}).get("draft_answers", []),
+                })
+            print(json.dumps({"attempts_count": len(attempts), "attempts": data}))
+    finally:
+        engine.dispose()
+
+
 def cleanup(state_path: Path):
     if state_path.exists():
         _drop(json.loads(state_path.read_text(encoding="utf-8")))
@@ -572,11 +803,21 @@ def cleanup(state_path: Path):
 
 
 if __name__ == "__main__":
-    action, file_name = sys.argv[1:]
-    actions = {"prepare": prepare, "inspect": inspect_remediation, "cleanup": cleanup,
-               "count_reading_reviews": count_reading_reviews,
-               "zero": lambda path: set_completion_state(path, 0),
-               "partial": lambda path: set_completion_state(path, 2),
-               "complete": lambda path: set_completion_state(path, 3),
-               "url": lambda path: print(_target(json.loads(path.read_text(encoding="utf-8"))).render_as_string(hide_password=False))}
+    action = sys.argv[1]
+    file_name = sys.argv[2]
+    extra_flags = set(sys.argv[3:])
+    allow_overwrite = "--overwrite" in extra_flags or "--force" in extra_flags
+
+    actions = {
+        "prepare": prepare,
+        "inspect": inspect_remediation,
+        "cleanup": cleanup,
+        "count_reading_reviews": count_reading_reviews,
+        "seed_20_practice_questions": lambda path: seed_20_practice_questions(path, allow_overwrite=allow_overwrite),
+        "inspect_practice_attempt": inspect_practice_attempt,
+        "zero": lambda path: set_completion_state(path, 0),
+        "partial": lambda path: set_completion_state(path, 2),
+        "complete": lambda path: set_completion_state(path, 3),
+        "url": lambda path: print(_target(json.loads(path.read_text(encoding="utf-8"))).render_as_string(hide_password=False)),
+    }
     actions[action](Path(file_name))

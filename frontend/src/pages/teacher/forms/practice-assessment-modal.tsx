@@ -298,10 +298,9 @@ export default function PracticeAssessmentModal({
       const preview = await importPracticeQuestionsPreview(interventionId, file);
       if (preview.questions.length > 0) {
         setQuestions((prev) => [...prev, ...preview.questions]);
-        toast({
+        toast.success({
           title: "Questions Imported",
           description: `Imported ${preview.questions.length} questions from ${file.name}. Review and save draft.`,
-          variant: "success",
         });
       }
       if (preview.warnings && preview.warnings.length > 0) {
@@ -363,10 +362,9 @@ export default function PracticeAssessmentModal({
         setQuestions((prev) => [...prev, ...generated]);
         setShowAiDrawer(false);
         setAiGuidance("");
-        toast({
+        toast.success({
           title: "AI Questions Generated",
           description: `Generated ${generated.length} multiple-choice questions grounded in selected readings.`,
-          variant: "success",
         });
       }
     } catch (err) {
@@ -439,10 +437,9 @@ export default function PracticeAssessmentModal({
       setAssessment(currentAssessment);
       if (onAssessmentUpdated) onAssessmentUpdated(currentAssessment);
 
-      toast({
+      toast.success({
         title: "Draft Saved",
         description: "Practice Assessment configuration and questions saved.",
-        variant: "success",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save practice assessment draft.";
@@ -488,10 +485,9 @@ export default function PracticeAssessmentModal({
       setAssessment(published);
       if (onAssessmentUpdated) onAssessmentUpdated(published);
 
-      toast({
+      toast.success({
         title: "Practice Assessment Published",
         description: "Practice assessment is now published and active for this intervention.",
-        variant: "success",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to publish practice assessment.";
@@ -524,7 +520,7 @@ export default function PracticeAssessmentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content size="2xl" className="max-h-[90vh] flex flex-col p-0 overflow-hidden">
+      <Dialog.Content size="3xl" className="max-h-[90vh] flex flex-col p-0 overflow-hidden">
         {/* Header */}
         <Dialog.Header className="px-5 py-4 border-b-2 border-border">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -574,17 +570,19 @@ export default function PracticeAssessmentModal({
               )}
 
               {isLocked && (
-                <Alert status="warning" className="border-2 border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
-                  <Lock className="size-4 text-amber-600 dark:text-amber-400" />
-                  <Alert.Title className="text-amber-900 dark:text-amber-200">
-                    Questions Locked
-                  </Alert.Title>
-                  <Alert.Description className="text-amber-800 dark:text-amber-300">
-                    Student attempts already exist for this Practice Assessment. Question content is permanently locked
-                    to preserve attempt and feedback snapshot integrity. You can still adjust the title, passing percentage,
-                    and progression policy.
-                  </Alert.Description>
-                </Alert>
+                <div className="rounded border-2 border-amber-600 bg-amber-100 p-4 text-amber-950 shadow-xs">
+                  <div className="flex items-start gap-3">
+                    <Lock className="size-5 text-amber-800 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <h5 className="text-amber-950 font-black text-sm">Questions Locked</h5>
+                      <p className="text-amber-900 text-xs sm:text-sm font-medium leading-relaxed">
+                        Student attempts already exist for this Practice Assessment. Question content is permanently locked
+                        to preserve attempt and feedback snapshot integrity. You can still adjust the title, passing percentage,
+                        and progression policy.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* General Settings Card */}
@@ -940,13 +938,15 @@ export default function PracticeAssessmentModal({
                           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             <div className="sm:col-span-3 space-y-1">
                               <Label className="text-xs font-semibold">Question Text</Label>
-                              <Input
+                              <textarea
                                 disabled={isLocked}
                                 value={q.question_text}
                                 onChange={(e) =>
                                   handleUpdateQuestion(qIdx, { question_text: e.target.value })
                                 }
                                 placeholder="Enter the question prompt..."
+                                rows={3}
+                                className="w-full rounded border-2 border-border bg-background p-2.5 text-sm transition focus:outline-hidden focus:border-black min-h-20 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
                               />
                             </div>
                             <div className="space-y-1">
@@ -962,6 +962,7 @@ export default function PracticeAssessmentModal({
                                     points: Math.max(0.1, Number(e.target.value) || 1.0),
                                   })
                                 }
+                                className="disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
                               />
                             </div>
                           </div>
@@ -975,25 +976,39 @@ export default function PracticeAssessmentModal({
                             </Label>
 
                             {q.question_type === "IDENTIFICATION" ? (
-                              <Input
-                                disabled={isLocked}
-                                value={q.options[0]?.option_text || ""}
-                                onChange={(e) => handleUpdateOptionText(qIdx, 0, e.target.value)}
-                                placeholder="Enter accepted answer (case-insensitive)..."
-                              />
+                              <div className="space-y-1">
+                                <Input
+                                  disabled={isLocked}
+                                  value={q.options[0]?.option_text || ""}
+                                  onChange={(e) => handleUpdateOptionText(qIdx, 0, e.target.value)}
+                                  placeholder="Enter accepted answer (case-insensitive)..."
+                                  className="disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default font-mono text-sm"
+                                />
+                                {isLocked && (
+                                  <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                                    <CheckCircle2 className="size-3.5" /> Accepted student answer key
+                                  </p>
+                                )}
+                              </div>
                             ) : q.question_type === "TRUE_FALSE" ? (
                               <div className="grid grid-cols-2 gap-2">
                                 {q.options.map((opt, optIdx) => (
                                   <div
                                     key={optIdx}
                                     onClick={() => !isLocked && handleSetCorrectOption(qIdx, optIdx)}
-                                    className={`flex items-center justify-between p-2.5 rounded border-2 cursor-pointer transition-colors ${opt.is_correct
-                                      ? "border-primary bg-primary/10 font-bold"
-                                      : "border-border hover:bg-muted/40"
-                                      }`}
+                                    className={`flex items-center justify-between p-2.5 rounded border-2 transition-colors ${
+                                      opt.is_correct
+                                        ? "border-emerald-600 bg-emerald-50 text-emerald-950 font-bold"
+                                        : "border-border bg-background text-foreground"
+                                    } ${isLocked ? "cursor-default" : "cursor-pointer hover:bg-muted/40"}`}
                                   >
                                     <span className="text-sm">{opt.option_text}</span>
-                                    {opt.is_correct && <CheckCircle2 className="size-4 text-primary" />}
+                                    {opt.is_correct && (
+                                      <div className="flex items-center gap-1 text-emerald-700">
+                                        <CheckCircle2 className="size-4" />
+                                        <span className="text-xs font-bold uppercase tracking-wider">Correct</span>
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -1001,14 +1016,21 @@ export default function PracticeAssessmentModal({
                               /* MULTIPLE CHOICE */
                               <div className="space-y-2">
                                 {q.options.map((opt, optIdx) => (
-                                  <div key={optIdx} className="flex items-center gap-2">
+                                  <div
+                                    key={optIdx}
+                                    className={`flex items-center gap-2 rounded border p-1.5 transition-colors ${
+                                      opt.is_correct
+                                        ? "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/20"
+                                        : "border-transparent"
+                                    }`}
+                                  >
                                     <input
                                       type="radio"
                                       name={`correct-opt-${qIdx}`}
                                       checked={opt.is_correct}
                                       disabled={isLocked}
                                       onChange={() => handleSetCorrectOption(qIdx, optIdx)}
-                                      className="size-4 text-primary cursor-pointer"
+                                      className="size-4 text-primary cursor-pointer disabled:cursor-default"
                                       title="Mark as correct answer"
                                     />
                                     <Input
@@ -1018,8 +1040,13 @@ export default function PracticeAssessmentModal({
                                         handleUpdateOptionText(qIdx, optIdx, e.target.value)
                                       }
                                       placeholder={`Option ${String.fromCharCode(65 + optIdx)}`}
-                                      className="flex-1"
+                                      className="flex-1 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
                                     />
+                                    {opt.is_correct && (
+                                      <Badge variant="solid" size="sm" className="bg-emerald-600 text-white shrink-0">
+                                        Correct
+                                      </Badge>
+                                    )}
                                     {!isLocked && q.options.length > 2 && (
                                       <Button
                                         size="icon"
@@ -1053,13 +1080,15 @@ export default function PracticeAssessmentModal({
                             <Label className="text-xs font-semibold text-muted-foreground">
                               Explanation / Rationale (Shown after submission)
                             </Label>
-                            <Input
+                            <textarea
                               disabled={isLocked}
                               value={q.explanation || ""}
                               onChange={(e) =>
                                 handleUpdateQuestion(qIdx, { explanation: e.target.value })
                               }
                               placeholder="Explanation for the correct answer..."
+                              rows={2}
+                              className="w-full rounded border-2 border-border bg-background p-2.5 text-sm transition focus:outline-hidden focus:border-black min-h-16 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
                             />
                           </div>
                         </Card>
@@ -1080,40 +1109,64 @@ export default function PracticeAssessmentModal({
                     />
                   ) : (
                     <div className="space-y-3">
-                      {attempts.map((att) => (
-                        <Card
-                          key={att.attempt_id}
-                          className="border-2 border-border p-3 flex flex-wrap items-center justify-between gap-3"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-sm">Attempt #{att.attempt_number}</span>
-                              <Badge
-                                variant={att.is_passed ? "solid" : "destructive"}
-                                size="sm"
-                              >
-                                {att.is_passed ? "PASSED" : "BELOW PASSING"}
-                              </Badge>
-                              <Badge variant="outline" size="sm">
-                                {att.status}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              Started: {new Date(att.started_at).toLocaleString("en-PH")}
-                              {att.completed_at
-                                ? ` · Submitted: ${new Date(att.completed_at).toLocaleString("en-PH")}`
-                                : ""}
-                            </p>
-                          </div>
+                      {attempts.map((att) => {
+                        const isSubmitted = att.status === "SUBMITTED";
+                        const isStarted = att.status === "STARTED";
 
-                          <div className="text-right">
-                            <div className="text-lg font-black">{Number(att.score_percentage).toFixed(1)}%</div>
-                            <div className="text-xs text-muted-foreground">
-                              {Number(att.total_score).toFixed(1)} / {Number(att.max_score).toFixed(1)} pts
+                        return (
+                          <Card
+                            key={att.attempt_id}
+                            className="border-2 border-border p-3 flex flex-wrap items-center justify-between gap-3"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm">Attempt #{att.attempt_number}</span>
+                                {isSubmitted ? (
+                                  <Badge
+                                    variant={att.is_passed ? "solid" : "destructive"}
+                                    size="sm"
+                                  >
+                                    {att.is_passed ? "PASSED" : "BELOW PASSING"}
+                                  </Badge>
+                                ) : isStarted ? (
+                                  <Badge variant="surface" size="sm" className="bg-amber-100 text-amber-900 border-amber-300 font-bold">
+                                    IN PROGRESS
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" size="sm">
+                                    {att.status}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Started: {new Date(att.started_at).toLocaleString("en-PH")}
+                                {isSubmitted && att.completed_at
+                                  ? ` · Submitted: ${new Date(att.completed_at).toLocaleString("en-PH")}`
+                                  : ""}
+                              </p>
                             </div>
-                          </div>
-                        </Card>
-                      ))}
+
+                            <div className="text-right">
+                              {isSubmitted ? (
+                                <>
+                                  <div className="text-lg font-black">{Number(att.score_percentage).toFixed(1)}%</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {Number(att.total_score).toFixed(1)} / {Number(att.max_score).toFixed(1)} pts
+                                  </div>
+                                </>
+                              ) : isStarted ? (
+                                <div className="text-xs font-semibold text-muted-foreground italic">
+                                  Draft In Progress
+                                </div>
+                              ) : (
+                                <div className="text-xs font-semibold text-muted-foreground">
+                                  {att.status}
+                                </div>
+                              )}
+                            </div>
+                          </Card>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
