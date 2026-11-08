@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -37,6 +38,28 @@ from app.services.prediction.DevelopmentGradeRefreshService import refresh_after
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 from app.services.intervention.RemediationPrerequisiteService import require_remediation_prerequisite
 from app.services.quiz.quiz_normalization import is_identification_correct
+
+
+COMPLETED_ATTEMPT_STATUSES = frozenset({"submitted", "late", "graded"})
+INVALID_SUMMARY_RELEASE_MESSAGE = (
+    "Your quiz has been submitted successfully. "
+    "Your quiz summary is currently unavailable."
+)
+
+
+@dataclass(frozen=True)
+class _AttemptFeedbackVisibility:
+    """Independent student-facing visibility decisions for attempt feedback.
+
+    Keeping each decision separate prevents summary availability from being
+    treated as permission to expose every feedback type.
+    """
+
+    student_response: bool
+    evaluation: bool
+    correct_answers: bool
+    explanation: bool
+    teacher_comment: bool
 
 
 def get_student_quiz_attempt(
@@ -395,26 +418,16 @@ def _attempt_response(
 ) -> QuizAttemptResponse:
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
     summary_available, release_at, summary_message = _summary_release_state(setting, assignment, submission)
-    should_reveal = reveal_answers or bool(
-        setting
-        and setting.show_correct_answers
-        and submission
-        and submission.status in {"submitted", "late", "graded"}
-        and summary_available
+    visibility = _attempt_feedback_visibility(
+        setting,
+        submission,
+        summary_available=summary_available,
+        reveal_answers=reveal_answers,
     )
     answers = {
         answer.quiz_question_id: answer
         for answer in (getattr(submission, "quiz_answers", []) if submission else [])
     }
-    # Summary release controls when students can see their own recorded answers.
-    # Correct-answer visibility remains controlled separately by show_correct_answers.
-    include_student_answers = bool(
-        submission
-        and (
-            submission.status == "pending"
-            or (submission.status in {"submitted", "late", "graded"} and summary_available)
-        )
-    )
     return QuizAttemptResponse(
         quiz_id=quiz.quiz_id,
         classwork_assignment_id=assignment.classwork_assignment_id,
@@ -435,10 +448,46 @@ def _attempt_response(
         summary_release_mode=setting.summary_release_mode if setting else "IMMEDIATE",
         summary_release_at=release_at,
         summary_message=summary_message,
+        feedback=(
+            submission.feedback
+            if submission and visibility.teacher_comment
+            else None
+        ),
         questions=[
-            _attempt_question_out(link, answers.get(link.quiz_question_id), should_reveal, include_student_answers)
+            _attempt_question_out(link, answers.get(link.quiz_question_id), visibility)
             for link in _ordered_quiz_questions(quiz)
         ],
+    )
+
+
+def _attempt_feedback_visibility(
+    setting: QuizSetting | None,
+    submission: StudentSubmission | None,
+    *,
+    summary_available: bool,
+    reveal_answers: bool = False,
+) -> _AttemptFeedbackVisibility:
+    status = submission.status if submission else None
+    is_completed = status in COMPLETED_ATTEMPT_STATUSES
+    student_response = bool(
+        submission
+        and (status == "pending" or (is_completed and summary_available))
+    )
+    evaluation = bool(is_completed and summary_available)
+    correct_answers = bool(
+        evaluation
+        and (reveal_answers or (setting and setting.show_correct_answers))
+    )
+    return _AttemptFeedbackVisibility(
+        student_response=student_response,
+        evaluation=evaluation,
+        correct_answers=correct_answers,
+        explanation=correct_answers,
+        # The generic submission-detail contract exposes an existing teacher
+        # comment to the submission owner independently of answer-summary
+        # timing. Preserve that behavior for completed quiz submissions while
+        # keeping comments out of active and pending-retake responses.
+        teacher_comment=bool(submission and is_completed),
     )
 
 
@@ -447,25 +496,29 @@ def _summary_release_state(
     assignment: ClassworkAssignment,
     submission: StudentSubmission | None,
 ) -> tuple[bool, datetime | None, str | None]:
-    if not submission or submission.status not in {"submitted", "late", "graded"}:
+    if not submission or submission.status not in COMPLETED_ATTEMPT_STATUSES:
         return False, None, None
-    mode = (setting.summary_release_mode if setting else "IMMEDIATE").upper()
+    mode = (setting.summary_release_mode if setting else "IMMEDIATE").strip().upper()
     now = datetime.now(timezone.utc)
+    if mode == "IMMEDIATE":
+        return True, None, None
     if mode == "NEVER":
         return False, None, "Your quiz has been submitted successfully. Your quiz summary is not available."
     if mode == "AFTER_DUE_DATE":
         release_at = aware_utc(assignment.due_date)
         if not release_at:
-            return True, None, None
+            return False, None, INVALID_SUMMARY_RELEASE_MESSAGE
         if now >= release_at:
             return True, release_at, None
         return False, release_at, _summary_release_message(release_at)
     if mode == "SCHEDULED":
         release_at = aware_utc(setting.summary_release_at if setting else None)
-        if release_at and now < release_at:
+        if not release_at:
+            return False, None, INVALID_SUMMARY_RELEASE_MESSAGE
+        if now < release_at:
             return False, release_at, _summary_release_message(release_at)
         return True, release_at, None
-    return True, None, None
+    return False, None, INVALID_SUMMARY_RELEASE_MESSAGE
 
 
 def _summary_release_message(release_at: datetime) -> str:
@@ -493,12 +546,11 @@ def _can_submit(
 def _attempt_question_out(
     link: QuizQuestion,
     answer: QuizAnswer | None,
-    reveal_answers: bool,
-    include_student_answer: bool,
+    visibility: _AttemptFeedbackVisibility,
 ) -> QuizAttemptQuestionOut:
     question = link.question
     selected_option_id = None
-    if answer and include_student_answer and question.question_type == "MULTIPLE_CHOICE":
+    if answer and visibility.student_response and question.question_type == "MULTIPLE_CHOICE":
         selected = next(
             (option.option_id for option in question.options if option.option_text == answer.answer_text),
             None,
@@ -515,6 +567,15 @@ def _attempt_question_out(
         )
         else question.question_type
     )
+    explanation = None
+    if (
+        visibility.explanation
+        and answer
+        and answer.points_awarded is not None
+        and question.explanation
+        and question.explanation.strip()
+    ):
+        explanation = question.explanation
     return QuizAttemptQuestionOut(
         quiz_question_id=link.quiz_question_id,
         question_text=question.question_text,
@@ -526,13 +587,18 @@ def _attempt_question_out(
                 option_id=option.option_id,
                 option_text=option.option_text,
                 option_order=option.option_order,
-                is_correct=option.is_correct if reveal_answers else None,
+                is_correct=option.is_correct if visibility.correct_answers else None,
             )
             for option in sorted(question.options, key=lambda item: item.option_order)
             if question.question_type == "MULTIPLE_CHOICE"
         ],
-        answer_text=answer.answer_text if answer and include_student_answer else None,
+        answer_text=answer.answer_text if answer and visibility.student_response else None,
         selected_option_id=selected_option_id,
-        points_awarded=float(answer.points_awarded) if answer and include_student_answer and answer.points_awarded is not None else None,
-        is_correct=answer.is_correct if answer and include_student_answer else None,
+        points_awarded=(
+            float(answer.points_awarded)
+            if answer and visibility.evaluation and answer.points_awarded is not None
+            else None
+        ),
+        is_correct=answer.is_correct if answer and visibility.evaluation else None,
+        explanation=explanation,
     )
