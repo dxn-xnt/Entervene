@@ -83,4 +83,35 @@ describe("Subjects grading template manager", () => {
     expect(updateTemplate).not.toHaveBeenCalled();
     expect(reload).toHaveBeenCalled();
   });
+
+  it("filters templates by search term and resets", () => {
+    const multiTemplates = [
+      { ...templates[0], grading_template_id: 1, template_name: "Languages" },
+      { ...templates[0], grading_template_id: 2, template_name: "Science & Math" },
+    ];
+    render(<GradingTemplateManager templates={multiTemplates} subjects={[]} onReload={vi.fn()} />);
+
+    expect(screen.getByText("Languages")).toBeTruthy();
+    expect(screen.getByText("Science & Math")).toBeTruthy();
+
+    const searchInput = screen.getByPlaceholderText("Search template name, description, or subject");
+    fireEvent.change(searchInput, { target: { value: "Science" } });
+
+    expect(screen.queryByText("Languages")).toBeNull();
+    expect(screen.getByText("Science & Math")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.getByText("Languages")).toBeTruthy();
+    expect(screen.getByText("Science & Math")).toBeTruthy();
+  });
+
+  it("shows empty state when no templates match filters", () => {
+    render(<GradingTemplateManager templates={templates} subjects={[]} onReload={vi.fn()} />);
+    const searchInput = screen.getByPlaceholderText("Search template name, description, or subject");
+    fireEvent.change(searchInput, { target: { value: "NonExistentTemplate" } });
+
+    expect(screen.getByText("No grading templates match the selected filters.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear Filters" }));
+    expect(screen.getByText("87%")).toBeTruthy();
+  });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
@@ -110,15 +110,14 @@ export default function AssignTeacherModal({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search teacher by name or staff ID..."
-              className="w-full shadow-none"
+              className="h-8.5 w-full shadow-none"
             />
           </label>
 
           {target.currentStaffId && (
             <Button
-              size="sm"
-              variant="outline"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs shrink-0 cursor-pointer"
+              variant="destructive"
+              className="text-xs cursor-pointer"
               onClick={() => {
                 onAssign(target.classId, target.subjectId, "none");
               }}

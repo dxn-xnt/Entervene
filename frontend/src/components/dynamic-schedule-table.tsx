@@ -6,6 +6,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import type { DynamicScheduleRow } from "@/lib/api";
+import { getSubjectColor } from "@/lib/subject-colors";
 
 // Fixed day order matching DepEd school week
 const DAY_ORDER = ["M", "T", "W", "Th", "F"] as const;
@@ -262,7 +263,7 @@ export function DynamicScheduleTable({
                                 ? "bg-amber-50"
                                 : entry.is_substitution
                                   ? "bg-emerald-50"
-                                  : "bg-white"
+                                  : getSubjectColor(entry.subject, entry.subject_load_id)
                                 }`}
                             >
                               {/* Subject */}

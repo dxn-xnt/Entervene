@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Archive, Check, Ellipsis, Pencil, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Table } from "@/components/retroui/Table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";

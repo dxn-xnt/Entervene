@@ -20,7 +20,7 @@ import ManualClassWizard from "@/pages/admin/forms/classes/manual-class-wizard";
 import SetupYearWizard, { type SetupYearStep } from "@/pages/admin/forms/classes/setup-year-wizard";
 import ClassCard from "@/components/admin/classes/class-card";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { deleteOfficialSection, fetchPathways, getClassFormOptions, type AcademicPathwayRead } from "@/lib/api";
 import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft, OfficialSectionOption } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
