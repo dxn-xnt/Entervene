@@ -66,7 +66,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <Select.Value className="text-xs" placeholder="Academic Year" />
             </Select.Trigger>
-            <Select.Content className="max-w-none min-w-36">
+            <Select.Content className="max-w-none min-w-48">
               <Select.Group>
                 {academicYears.map((year) => (
                   <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
@@ -97,7 +97,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 placeholder={periods.length === 0 ? "No terms available" : "Active Period"}
               />
             </Select.Trigger>
-            <Select.Content className="max-w-none min-w-36">
+            <Select.Content className="max-w-none min-w-48">
               <Select.Group>
                 {periods.map((period) => (
                   <Select.Item key={period.id} value={String(period.id)}>
