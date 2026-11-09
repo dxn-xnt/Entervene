@@ -409,9 +409,8 @@ export function LessonStatisticalOverview({
                                         </p>
                                     </div>
                                     <Badge
-                                        variant={student.badgeType === "Flag" ? "destructive" : "outline"}
+                                        variant={student.badgeType === "Flag" ? "destructive" : "default"}
                                         size="sm"
-                                        className={student.badgeType === "Pending" ? "bg-white text-black" : undefined}
                                     >
                                         {student.badgeType}
                                     </Badge>
@@ -479,7 +478,7 @@ export function LessonStatisticalOverview({
                         <Progress value={stats.completionRate} className="h-2" aria-label={`Classwork completion: ${stats.completionRate}%`} />
                         <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
                             <Badge variant="success" size="sm">Submitted · {stats.submittedCount}</Badge>
-                            <Badge variant="outline" size="sm" className="bg-white text-black">Pending · {stats.pendingCount}</Badge>
+                            <Badge variant="default" size="sm">Pending · {stats.pendingCount}</Badge>
                             <Badge variant="destructive" size="sm">Late · {stats.lateCount}</Badge>
                         </div>
                     </Card.Content>

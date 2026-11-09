@@ -78,7 +78,7 @@ function getStatusStyle(status: string | undefined | null): StatusStyle {
     case "active":
       return { label: "Active", variant: "secondary" };
     case "pending":
-      return { label: "Pending", variant: "outline" };
+      return { label: "Pending", variant: "default" };
     case "inactive":
       return { label: "Inactive", variant: "default" };
     case "suspended":
@@ -898,7 +898,7 @@ function UserRow({
               <Badge
                 variant="default"
                 size="sm"
-                className="text-[10px] font-medium shrink-0 whitespace-nowrap"
+                className="shrink-0 whitespace-nowrap"
               >
                 No subjects
               </Badge>
