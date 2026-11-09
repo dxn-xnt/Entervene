@@ -26,6 +26,8 @@ export const routes = {
     predictions: "/admin/predictions",
     gradePredictions: "/admin/predictions/:grade",
     sectionPredictions: "/admin/predictions/:grade/:classId",
+    subjectPredictions: "/admin/predictions/subject/:subjectId",
+    subjectSectionPredictions: "/admin/predictions/subject/:subjectId/section/:classId",
     profile: "/admin/profile",
     substitutions: "/admin/substitutions",
   },

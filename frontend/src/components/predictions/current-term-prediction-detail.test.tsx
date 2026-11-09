@@ -59,6 +59,8 @@ describe("current-term prediction detail", () => {
     auth.role = "admin";
     render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} activeInterventionId={19} open onOpenChange={() => undefined} /></MemoryRouter>);
     expect(screen.queryByRole("link", { name: "View Active Intervention" })).toBeNull();
+    expect(screen.getByText(/Read-only Admin view/i)).toBeTruthy();
+    expect(screen.getByText("Academic Evidence at Prediction Time")).toBeTruthy();
   });
   it("never shows candidate review in the Admin prediction detail", () => {
     auth.role = "admin";

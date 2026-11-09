@@ -46,5 +46,12 @@ def test_admin_forbidden_on_state_mutating_interventions():
         )
         assert res_assign.status_code == 403, f"Expected 403, got {res_assign.status_code}"
 
+        # Admin prediction access is read-only; teacher reviews remain teacher-only.
+        res_review = client.post(
+            "/api/v1/predictions/100/teacher-review",
+            json={"decision": "CONFIRMED_RISK", "teacher_notes": "Admin must not write"},
+        )
+        assert res_review.status_code == 403, f"Expected 403, got {res_review.status_code}"
+
     finally:
         app.dependency_overrides.clear()

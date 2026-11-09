@@ -42,6 +42,8 @@ import {
 } from "@/components/predictions/current-term-dashboard-adapter";
 import { PredictionSubjectSection } from "@/components/predictions/prediction-subject-section";
 import { getTeacherRiskDisplaySummary } from "@/components/predictions/teacher-risk-display";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
+import { SearchX, Sparkles } from "lucide-react";
 
 const EMPTY_SUMMARY: RiskSummary = {
   HIGH_RISK: 0,
@@ -100,10 +102,10 @@ const TEACHER_RISK_CARDS = [
 
 export default function PredictionsDashboard() {
   const { role } = useAuth();
-  return role === "teacher" ? <TeacherCurrentTermDashboard /> : <LegacyPredictionsDashboard />;
+  return role === "teacher" ? <TeacherCurrentTermDashboard /> : <AdminCurrentTermDashboard />;
 }
 
-function LegacyPredictionsDashboard() {
+export function LegacyPredictionsDashboard() {
   const { role } = useAuth();
   const canUseDevelopment = developmentPredictionsAvailable(role);
   const [view, setView] = useState<"legacy" | "development">("legacy");
@@ -401,6 +403,207 @@ function LegacyPredictionsDashboard() {
   );
 }
 
+function AdminCurrentTermDashboard() {
+  const { selectedPeriodId } = useAcademicPeriod();
+  const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
+  const [assignedScopes, setAssignedScopes] = useState<AssignedSubjectSectionScope[]>([]);
+  const [filters, setFilters] = useState<DashboardFilters | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [gradeLevel, setGradeLevel] = useState<number | undefined>();
+  const [classId, setClassId] = useState<number | undefined>();
+  const [subjectId, setSubjectId] = useState<number | undefined>();
+  const [riskLevel, setRiskLevel] = useState<string | undefined>();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
+
+  useEffect(() => {
+    if (!selectedPeriodId) {
+      Promise.resolve().then(() => {
+        setSelected(null);
+        setRows([]);
+        setAssignedScopes([]);
+        setFilters(null);
+        setLoadError(null);
+        setLoading(false);
+      });
+      return;
+    }
+
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setSelected(null);
+        setLoading(true);
+        setLoadError(null);
+      }
+    });
+
+    loadAuthorizedCurrentTermPredictions(selectedPeriodId, {}, "admin")
+      .then((result) => {
+        if (!cancelled) {
+          setRows(result.rows);
+          setFilters(result.filters);
+          setAssignedScopes(result.assignedScopes);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setRows([]);
+          setAssignedScopes([]);
+          setFilters(null);
+          setLoadError(currentTermPredictionErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPeriodId]);
+
+  const clearFilters = () => {
+    setGradeLevel(undefined);
+    setClassId(undefined);
+    setSubjectId(undefined);
+    setRiskLevel(undefined);
+    setSearch("");
+  };
+  const scopedRows = rows.filter(
+    (row) =>
+      (gradeLevel === undefined || row.grade_level === gradeLevel) &&
+      (classId === undefined || row.class_id === classId) &&
+      (subjectId === undefined || row.subject_id === subjectId)
+  );
+  const data = buildCurrentTermDashboard(scopedRows, {
+    search,
+    interventionLevel: riskLevel,
+    limit: Math.max(10, scopedRows.length),
+  });
+  const summary = currentTermRiskSummary(scopedRows);
+  const displaySummary = getTeacherRiskDisplaySummary(summary);
+  const subjectSummaries = buildCurrentTermSubjectSummaries(rows, assignedScopes);
+  const filtered =
+    gradeLevel !== undefined ||
+    classId !== undefined ||
+    subjectId !== undefined ||
+    riskLevel !== undefined ||
+    search.trim() !== "";
+
+  return (
+    <AppLayout>
+      <div className="flex flex-1 flex-col">
+        <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+          <SidebarTrigger className="shrink-0 md:hidden" />
+          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
+        </header>
+
+        <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+          <div aria-label="Prediction risk summary" className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
+            {TEACHER_RISK_CARDS.map((card) => (
+              <OverviewCard
+                key={card.key}
+                title={card.label}
+                count={String(displaySummary[card.key])}
+                className="w-full border-2 border-black shadow-[4px_4px_0px_#000]"
+              />
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <PredictionFilters
+              filters={filters}
+              gradeLevel={gradeLevel}
+              classId={classId}
+              subjectId={subjectId}
+              academicPeriodId={selectedPeriodId ?? undefined}
+              riskLevel={riskLevel}
+              search={search}
+              hidePeriodFilter
+              simplifiedTeacherRisk
+              riskSummary={summary}
+              onGradeChange={setGradeLevel}
+              onClassChange={setClassId}
+              onSubjectChange={setSubjectId}
+              onRiskChange={setRiskLevel}
+              onSearchChange={setSearch}
+              onClearAll={clearFilters}
+            />
+
+            {loadError && <Alert status="error" className="font-semibold">{loadError}</Alert>}
+
+            {loading ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-20 font-semibold text-gray-500">
+                <Loader size="md" />
+                <span>Loading current-term projections...</span>
+              </div>
+            ) : loadError ? null : !selectedPeriodId ? (
+              <EmptyStateCard
+                icon={<Sparkles />}
+                title="Select an academic term"
+                description="Choose an academic year and term from the sidebar to view current-term projections."
+              />
+            ) : filtered ? (
+              data.total > 0 ? (
+                <PredictionTable
+                  items={data.items}
+                  total={data.total}
+                  limit={Math.max(10, data.total)}
+                  offset={0}
+                  currentTerm
+                  simplifiedTeacherRisk
+                  showGradeLevel
+                  hidePagination
+                  onSort={() => undefined}
+                  onPageChange={() => undefined}
+                  onRowClick={(predictionId) =>
+                    setSelected(rows.find((row) => row.prediction_id === predictionId) || null)
+                  }
+                />
+              ) : (
+                <EmptyStateCard
+                  icon={<SearchX />}
+                  title="No predictions match these filters"
+                  description="Try another student, grade, section, subject, or risk level."
+                  actionLabel="Clear filters"
+                  onAction={clearFilters}
+                />
+              )
+            ) : subjectSummaries.length ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {subjectSummaries.map((group) => (
+                  <PredictionSubjectSection
+                    key={group.subject_id}
+                    group={group}
+                    predictionBasePath="/admin/predictions"
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyStateCard
+                icon={<Sparkles />}
+                title="No current-term projections available"
+                description="No generated projections are available for valid classes and subject loads in the selected term."
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <PredictionDetailSheet
+        predictionId={selected?.prediction_id ?? null}
+        currentTermPrediction={selected}
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+      />
+    </AppLayout>
+  );
+}
+
 function TeacherCurrentTermDashboard() {
   const { selectedPeriodId } = useAcademicPeriod();
   const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
@@ -418,18 +621,18 @@ function TeacherCurrentTermDashboard() {
   const activeInterventionId = useTeacherActiveInterventionShortcut(selected);
 
   useEffect(() => {
-    setSelected(null);
-  }, [selectedPeriodId]);
-
-  useEffect(() => {
     if (!selectedPeriodId) {
-      Promise.resolve().then(() => setLoading(false));
+      Promise.resolve().then(() => {
+        setSelected(null);
+        setLoading(false);
+      });
       return;
     }
 
     let cancelled = false;
     Promise.resolve().then(() => {
       if (!cancelled) {
+        setSelected(null);
         setLoading(true);
         setLoadError(null);
       }

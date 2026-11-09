@@ -5,6 +5,8 @@ vi.mock("./api", () => ({ apiFetch: mocks.apiFetch }));
 
 import {
   CurrentTermPredictionLoadError,
+  fetchAdminCurrentTermScope,
+  fetchApprovedCurrentTermPredictions,
   fetchCurrentTermPredictions,
 } from "./prediction-api";
 
@@ -41,6 +43,18 @@ describe("Current-Term prediction read client", () => {
     );
   });
 
+  it("can explicitly read the approved endpoint even when development is enabled", async () => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("VITE_ENABLE_DEVELOPMENT_PREDICTIONS", "true");
+    mocks.apiFetch.mockImplementation(ok);
+
+    await fetchApprovedCurrentTermPredictions(params);
+
+    expect(mocks.apiFetch).toHaveBeenCalledWith(
+      "/api/v1/current-term-predictions?class_id=7&subject_id=9&academic_period_id=3",
+    );
+  });
+
   it.each([404, 503])("reports unavailable for a stable read response %s", async (status) => {
     vi.stubEnv("DEV", false);
     mocks.apiFetch.mockResolvedValue({ ok: false, status, json: async () => ({}) });
@@ -49,5 +63,24 @@ describe("Current-Term prediction read client", () => {
 
     expect(error).toBeInstanceOf(CurrentTermPredictionLoadError);
     expect(error.kind).toBe("unavailable");
+  });
+
+  it("loads the Admin scope through a GET for the selected term", async () => {
+    mocks.apiFetch.mockImplementation(ok);
+
+    await fetchAdminCurrentTermScope(12);
+
+    expect(mocks.apiFetch).toHaveBeenCalledWith(
+      "/api/v1/current-term-predictions/scope?academic_period_id=12",
+    );
+  });
+
+  it.each([401, 403])("reports Admin scope authorization failures for %s", async (status) => {
+    mocks.apiFetch.mockResolvedValue({ ok: false, status, json: async () => ({}) });
+
+    const error = await fetchAdminCurrentTermScope(12).catch((cause) => cause);
+
+    expect(error).toBeInstanceOf(CurrentTermPredictionLoadError);
+    expect(error.kind).toBe("access");
   });
 });
