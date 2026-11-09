@@ -15,6 +15,8 @@ export interface SubjectSectionCardProps {
   moderateRisk?: number;
   needsMonitoring?: number;
   lowRisk?: number;
+  navigationEnabled?: boolean;
+  predictionBasePath?: string;
 }
 
 export function SubjectSectionCard({
@@ -26,6 +28,8 @@ export function SubjectSectionCard({
   moderateRisk = 0,
   needsMonitoring = 0,
   lowRisk = 0,
+  navigationEnabled = true,
+  predictionBasePath = "/teacher/predictions",
 }: SubjectSectionCardProps) {
   const displaySummary = getTeacherRiskDisplaySummary({
     HIGH_RISK: highRisk,
@@ -44,15 +48,9 @@ export function SubjectSectionCard({
     percentage: getTeacherRiskPercentage(risk.count, displaySummary.assessedTotal),
   }));
 
-  const targetUrl = `/teacher/predictions/subject/${subjectId}/section/${classId}`;
+  const targetUrl = `${predictionBasePath}/subject/${subjectId}/section/${classId}`;
 
-  return (
-    <RetroCard className="group relative flex flex-col justify-between shadow-none p-3 hover:-translate-y-1 transition-transform min-w-[200px] max-w-full">
-      <Link
-        to={targetUrl}
-        className="min-w-0 flex-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 rounded"
-        aria-label={`View ${name} predictions`}
-      >
+  const content = (
         <div className="flex flex-col items-start justify-between gap-1">
           <div className="flex flex-row w-full justify-between items-center gap-2">
             <div className="min-w-0 flex-1">
@@ -100,7 +98,21 @@ export function SubjectSectionCard({
             </div>
           )}
         </div>
-      </Link>
+  );
+
+  return (
+    <RetroCard className={`group relative flex flex-col justify-between shadow-none p-3 transition-transform min-w-[200px] max-w-full ${navigationEnabled ? "hover:-translate-y-1" : ""}`}>
+      {navigationEnabled ? (
+        <Link
+          to={targetUrl}
+          className="min-w-0 flex-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 rounded"
+          aria-label={`View ${name} predictions`}
+        >
+          {content}
+        </Link>
+      ) : (
+        <div className="min-w-0 flex-1">{content}</div>
+      )}
     </RetroCard>
   );
 }

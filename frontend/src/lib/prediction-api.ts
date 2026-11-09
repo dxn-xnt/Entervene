@@ -132,6 +132,20 @@ export interface DevelopmentCurrentTermListResponse {
   total: number;
 }
 
+export interface AdminCurrentTermScopeItem {
+  class_id: number;
+  section_name: string;
+  grade_level: number | null;
+  subject_id: number;
+  subject_name: string;
+  subject_codename: string | null;
+}
+
+export interface AdminCurrentTermScopeResponse {
+  filters: DashboardFilters;
+  scopes: AdminCurrentTermScopeItem[];
+}
+
 export function developmentPredictionsAvailable(role: string | null): boolean {
   return import.meta.env.DEV
     && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true"
@@ -182,6 +196,12 @@ export async function fetchCurrentTermPredictions(
   if (developmentPredictionsAvailable(role)) {
     return fetchDevelopmentCurrentTermPredictions(params, role);
   }
+  return fetchApprovedCurrentTermPredictions(params);
+}
+
+export async function fetchApprovedCurrentTermPredictions(
+  params: DevelopmentCurrentTermListParams,
+): Promise<DevelopmentCurrentTermListResponse> {
   const query = new URLSearchParams({
     class_id: String(params.class_id),
     subject_id: String(params.subject_id),
@@ -198,6 +218,33 @@ export async function fetchCurrentTermPredictions(
     throw new CurrentTermPredictionLoadError("Current-term projections could not be loaded. Please try again.", "failure");
   }
   return (await response.json()) as DevelopmentCurrentTermListResponse;
+}
+
+export async function fetchAdminCurrentTermScope(
+  academicPeriodId: number,
+): Promise<AdminCurrentTermScopeResponse> {
+  const response = await apiFetch(
+    `/api/v1/current-term-predictions/scope?academic_period_id=${academicPeriodId}`,
+  );
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new CurrentTermPredictionLoadError(
+        "You do not have access to the school-wide current-term prediction scope.",
+        "access",
+      );
+    }
+    if (response.status === 404) {
+      throw new CurrentTermPredictionLoadError(
+        "The selected academic term is unavailable.",
+        "unavailable",
+      );
+    }
+    throw new CurrentTermPredictionLoadError(
+      "The school-wide current-term prediction scope could not be loaded. Please try again.",
+      "failure",
+    );
+  }
+  return (await response.json()) as AdminCurrentTermScopeResponse;
 }
 
 export async function generateDevelopmentCurrentTermPrediction(

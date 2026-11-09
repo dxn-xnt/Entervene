@@ -5,6 +5,11 @@ from sqlalchemy.orm import Session
 
 from app.core.Dependencies import require_role
 from app.db.Session import get_db
+from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
+from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.AIModelVersion import ModelPurpose
 from app.services.prediction import DevelopmentCurrentTermPredictionReadService as read_service
 from app.services.prediction.CurrentTermV3Domain import resolve_v3_academic_scope
@@ -26,6 +31,107 @@ def _approved_current_term_model(db: Session):
             detail="Approved current-term prediction model is unavailable.",
         )
     return versions[0]
+
+
+@router.get("/scope")
+def read_admin_current_term_scope(
+    academic_period_id: int = Query(..., gt=0),
+    _admin: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Return valid school-wide read scopes for one selected academic term.
+
+    Scope discovery is deliberately based on the academic setup rather than
+    legacy ``ai_prediction`` rows. A valid scope requires an active published
+    subject-load version whose class belongs to the selected period's academic
+    year and whose class/subject pair is supported by the current-term domain.
+    """
+    period = db.get(AcademicPeriod, academic_period_id)
+    if period is None:
+        raise HTTPException(status_code=404, detail="Academic period not found.")
+
+    rows = (
+        db.query(SubjectLoad, Class, Subject, AcademicLevel)
+        .join(Class, SubjectLoad.class_id == Class.class_id)
+        .join(Subject, SubjectLoad.subject_id == Subject.subject_id)
+        .outerjoin(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
+        .filter(
+            SubjectLoad.academic_period_id == academic_period_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(("published", "active")),
+            Class.academic_year_id == period.academic_year_id,
+        )
+        .order_by(
+            AcademicLevel.grade_level.asc(),
+            Class.section_name.asc(),
+            Subject.subject_name.asc(),
+            SubjectLoad.subject_load_id.asc(),
+        )
+        .all()
+    )
+
+    scopes_by_key: dict[tuple[int, int], dict] = {}
+    for _load, class_, subject, level in rows:
+        domain = resolve_v3_academic_scope(db, class_.class_id, subject.subject_id)
+        if not domain["supported"]:
+            continue
+        scopes_by_key.setdefault(
+            (class_.class_id, subject.subject_id),
+            {
+                "class_id": class_.class_id,
+                "section_name": class_.section_name,
+                "grade_level": level.grade_level if level is not None else None,
+                "subject_id": subject.subject_id,
+                "subject_name": subject.subject_name,
+                "subject_codename": subject.subject_codename,
+            },
+        )
+
+    scopes = list(scopes_by_key.values())
+    classes_by_id = {
+        scope["class_id"]: {
+            "class_id": scope["class_id"],
+            "section_name": scope["section_name"],
+            "grade_level": scope["grade_level"],
+        }
+        for scope in scopes
+    }
+    subjects_by_id = {
+        scope["subject_id"]: {
+            "subject_id": scope["subject_id"],
+            "subject_name": scope["subject_name"],
+            "subject_codename": scope["subject_codename"],
+            "period_index": None,
+        }
+        for scope in scopes
+    }
+    grades = sorted({scope["grade_level"] for scope in scopes if scope["grade_level"] is not None})
+    periods = (
+        db.query(AcademicPeriod)
+        .filter(AcademicPeriod.academic_year_id == period.academic_year_id)
+        .order_by(AcademicPeriod.period_sequence.asc(), AcademicPeriod.academic_period_id.asc())
+        .all()
+    )
+
+    return {
+        "filters": {
+            "grades": [
+                {"grade_level": grade, "level_name": f"Grade {grade}"}
+                for grade in grades
+            ],
+            "classes": list(classes_by_id.values()),
+            "subjects": list(subjects_by_id.values()),
+            "terms": [
+                {
+                    "term_number": item.period_sequence,
+                    "term_label": item.period_name,
+                    "academic_period_id": item.academic_period_id,
+                }
+                for item in periods
+            ],
+        },
+        "scopes": scopes,
+    }
 
 
 @router.get("")

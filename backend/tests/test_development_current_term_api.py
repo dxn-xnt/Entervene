@@ -143,6 +143,48 @@ def test_selected_model_default_and_authorized_legacy_history(current_period_con
     assert history.json()["items"][0]["model_version_id"] == legacy_id
 
 
+def test_missing_configured_model_uses_sole_valid_registered_model(current_period_context, monkeypatch):
+    ctx = current_period_context
+    legacy_id = _register_test_model(ctx)
+    prediction = _insert_development_prediction(ctx, model_version_id=legacy_id, grade="86.00")
+
+    response = _client(
+        monkeypatch,
+        ctx["db"],
+        model_name="entervene_current_term_official_target_rf_candidate",
+    ).get(PATH, params=_read_params(ctx))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["prediction_id"] == prediction.prediction_id
+    assert response.json()["items"][0]["model_version_id"] == legacy_id
+
+
+def test_invalid_configured_registry_entry_does_not_fall_back(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _register_test_model(ctx)
+    ctx["db"].add(AIModelVersion(
+        model_name="entervene_current_term_official_target_rf_candidate",
+        model_type="REGRESSOR",
+        model_purpose="CURRENT_TERM_FINAL_GRADE_PROJECTION",
+        algorithm="RandomForestRegressor",
+        target_column="target_final_period_grade",
+        lifecycle_status="CANDIDATE",
+        is_active=False,
+        production_validated=False,
+        independent_three_term_validation=False,
+    ))
+    ctx["db"].commit()
+
+    response = _client(
+        monkeypatch,
+        ctx["db"],
+        model_name="entervene_current_term_official_target_rf_candidate",
+    ).get(PATH, params=_read_params(ctx))
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Selected development model registry entry unavailable"
+
+
 def _add_student(ctx, first_name="Second", last_name="Learner", lrn="300000000002"):
     student = Student(
         student_id=uuid.uuid4(),
@@ -577,6 +619,7 @@ def test_teacher_cannot_spoof_staff_identity(current_period_context, monkeypatch
 
 @pytest.mark.parametrize("environment,enabled,expected", [
     ("production", True, 404),
+    ("development", True, 404),
     ("development", False, 404),
     ("test", True, 401),
     ("test", True, 403),

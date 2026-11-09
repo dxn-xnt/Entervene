@@ -2,16 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { BookOpen, TrendingUp } from "lucide-react";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { useAuth } from "@/context/AuthContext";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
+import { Alert } from "@/components/retroui/Alert";
 import { Progress } from "@/components/retroui/Progress";
 import { Button } from "@/components/teacher/button";
 import { Empty } from "@/components/retroui/Empty";
 import IconContainer from "@/components/icon-container";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
@@ -36,6 +39,10 @@ import {
 
 
 export default function SubjectPrediction() {
+  const { role } = useAuth();
+  const viewerRole = role === "admin" ? "admin" : "teacher";
+  const isTeacher = viewerRole === "teacher";
+  const predictionBasePath = `/${viewerRole}/predictions`;
   const navigate = useNavigate();
   const { subjectId: routeSubjectSlug } = useParams<{ subjectId?: string }>();
   const { selectedPeriodId } = useAcademicPeriod();
@@ -52,8 +59,8 @@ export default function SubjectPrediction() {
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
-  const candidateId = useTeacherCandidateShortcut(selected);
-  const activeInterventionId = useTeacherActiveInterventionShortcut(selected);
+  const candidateId = useTeacherCandidateShortcut(selected, isTeacher);
+  const activeInterventionId = useTeacherActiveInterventionShortcut(selected, isTeacher);
 
   // Section-by-section health
   const [healthData, setHealthData] = useState<TeacherDashboardHealthResponse | null>(null);
@@ -112,7 +119,11 @@ export default function SubjectPrediction() {
       }
     });
 
-    loadAuthorizedCurrentTermPredictions(selectedPeriodId, { subjectId: routeSubjectId })
+    loadAuthorizedCurrentTermPredictions(
+      selectedPeriodId,
+      { subjectId: routeSubjectId },
+      viewerRole,
+    )
       .then(({ rows: loaded, assignedScopes: loadedScopes }) => {
         if (!cancelled) {
           setRows(loaded);
@@ -133,7 +144,7 @@ export default function SubjectPrediction() {
     return () => {
       cancelled = true;
     };
-  }, [routeSubjectId, selectedPeriodId]);
+  }, [routeSubjectId, selectedPeriodId, viewerRole]);
 
   useEffect(() => {
     let isMounted = true;
@@ -153,13 +164,13 @@ export default function SubjectPrediction() {
         if (isMounted) setIsHealthLoading(false);
       }
     };
-    if (routeSubjectId) {
+    if (isTeacher && routeSubjectId) {
       void loadHealth();
     }
     return () => {
       isMounted = false;
     };
-  }, [routeSubjectId, selectedPeriodId]);
+  }, [isTeacher, routeSubjectId, selectedPeriodId]);
 
   const sections: SectionHealthItem[] = useMemo(() => {
     if (healthData?.section_matrix && healthData.section_matrix.length > 0) {
@@ -232,7 +243,7 @@ export default function SubjectPrediction() {
             <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
               <Breadcrumb.Item>
                 <Breadcrumb.Link asChild>
-                  <Link to="/teacher/predictions">AI Predictions</Link>
+                  <Link to={predictionBasePath}>AI Predictions</Link>
                 </Breadcrumb.Link>
               </Breadcrumb.Item>
               <Breadcrumb.Separator />
@@ -270,11 +281,11 @@ export default function SubjectPrediction() {
 
             <div className="grid grid-cols-1 lg:grid-cols-15 gap-4 items-start">
               {/* ── Left Column: Prediction Table ── */}
-              <div className="lg:col-span-8 xl:col-span-10 min-w-0 flex flex-col gap-4">
+              <div className={isTeacher ? "lg:col-span-8 xl:col-span-10 min-w-0 flex flex-col gap-4" : "lg:col-span-15 min-w-0 flex flex-col gap-4"}>
                 {loadError && (
-                  <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold text-red-900">
+                  <Alert status="error" className="font-semibold">
                     {loadError}
-                  </div>
+                  </Alert>
                 )}
 
                 {loading ? (
@@ -288,18 +299,26 @@ export default function SubjectPrediction() {
                 ) : assignedScopes.length === 0 ? (
                   <div role="alert" className="border-2 border-red-600 bg-red-50 p-6 font-semibold flex flex-col items-start gap-4">
                     <p className="text-red-950 font-bold">
-                      This subject is not assigned to you or you do not have permission to access it in the selected term.
+                      This subject is unavailable in the selected term or you do not have permission to access it.
                     </p>
                     <Button asChild variant="outline" className="border-2 border-black font-bold">
-                      <Link to="/teacher/predictions">Return to AI Predictions</Link>
+                      <Link to={predictionBasePath}>Return to AI Predictions</Link>
                     </Button>
                   </div>
                 ) : rows.length === 0 ? (
-                  <TeacherEmptyState
-                    icon={<TrendingUp />}
-                    title={`No predictions available for ${subjectDisplayName}`}
-                    description="There are currently no generated predictions for this subject across your assigned sections in the selected term."
-                  />
+                  isTeacher ? (
+                    <TeacherEmptyState
+                      icon={<TrendingUp />}
+                      title={`No predictions available for ${subjectDisplayName}`}
+                      description="There are currently no generated predictions for this subject across your assigned sections in the selected term."
+                    />
+                  ) : (
+                    <EmptyStateCard
+                      icon={<TrendingUp />}
+                      title={`No predictions available for ${subjectDisplayName}`}
+                      description="There are currently no generated predictions for this subject across school sections in the selected term."
+                    />
+                  )
                 ) : (
                   <PredictionTable
                     items={data.items}
@@ -320,7 +339,7 @@ export default function SubjectPrediction() {
               </div>
 
               {/* ── Right Column: Section-by-Section Health ── */}
-              <aside className="lg:col-span-4 xl:col-span-5 min-w-0 lg:sticky lg:top-4 flex flex-col gap-4">
+              {isTeacher && <aside className="lg:col-span-4 xl:col-span-5 min-w-0 lg:sticky lg:top-4 flex flex-col gap-4">
                 <Card className="flex flex-col justify-between p-4 sm:p-5 border-2 border-black bg-background">
                   <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
                     <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
@@ -357,9 +376,9 @@ export default function SubjectPrediction() {
                               onClick={() => {
                                 const targetSubjectId = routeSubjectId ?? sec.subject_id;
                                 if (sec.class_id && targetSubjectId) {
-                                  navigate(`/teacher/predictions/subject/${targetSubjectId}/section/${sec.class_id}`);
+                                  navigate(`${predictionBasePath}/subject/${targetSubjectId}/section/${sec.class_id}`);
                                 } else if (sec.class_id) {
-                                  navigate(`/teacher/predictions/${sec.grade_level ?? 0}/${sec.class_id}`);
+                                  navigate(`${predictionBasePath}/${sec.grade_level ?? 0}/${sec.class_id}`);
                                 }
                               }}
                             >
@@ -528,7 +547,7 @@ export default function SubjectPrediction() {
                     )}
                   </Card.Content>
                 </Card>
-              </aside>
+              </aside>}
             </div>
           </div>
         </div>

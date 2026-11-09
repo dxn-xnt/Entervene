@@ -4,6 +4,7 @@ import { BookOpen, TrendingUp } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
+import { Alert } from "@/components/retroui/Alert";
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import { Progress } from "@/components/retroui/Progress";
 import { Empty } from "@/components/retroui/Empty";
@@ -45,10 +46,11 @@ import {
 
 export default function SectionPredictions() {
   const { role } = useAuth();
-  return role === "teacher" ? <TeacherCurrentTermSectionPredictions /> : <LegacySectionPredictions />;
+  const viewerRole = role === "admin" ? "admin" : "teacher";
+  return <TeacherCurrentTermSectionPredictions viewerRole={viewerRole} />;
 }
 
-function LegacySectionPredictions() {
+export function LegacySectionPredictions() {
   const { role } = useAuth();
   const baseRole = role === "admin" ? "admin" : "teacher";
   const { grade, classId: classSlug } = useParams<{ grade: string; classId: string }>();
@@ -413,7 +415,9 @@ function LegacySectionPredictions() {
   );
 }
 
-function TeacherCurrentTermSectionPredictions() {
+function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "admin" | "teacher" }) {
+  const isTeacher = viewerRole === "teacher";
+  const predictionBasePath = `/${viewerRole}/predictions`;
   const { grade, classId: classSlug, subjectId: routeSubjectSlug } = useParams<{
     grade?: string;
     classId?: string;
@@ -431,8 +435,8 @@ function TeacherCurrentTermSectionPredictions() {
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
-  const candidateId = useTeacherCandidateShortcut(selected);
-  const activeInterventionId = useTeacherActiveInterventionShortcut(selected);
+  const candidateId = useTeacherCandidateShortcut(selected, isTeacher);
+  const activeInterventionId = useTeacherActiveInterventionShortcut(selected, isTeacher);
 
   // Auto-open via search params (e.g. from dashboard)
   const [searchParams] = useSearchParams();
@@ -495,7 +499,7 @@ function TeacherCurrentTermSectionPredictions() {
       constraints.gradeLevel = Number(grade);
     }
 
-    loadAuthorizedCurrentTermPredictions(selectedPeriodId, constraints)
+    loadAuthorizedCurrentTermPredictions(selectedPeriodId, constraints, viewerRole)
       .then(({ rows: loaded, assignedScopes: loadedScopes }) => {
         if (!cancelled) {
           setRows(loaded);
@@ -516,7 +520,7 @@ function TeacherCurrentTermSectionPredictions() {
     return () => {
       cancelled = true;
     };
-  }, [resolvedClassId, routeSubjectId, grade, selectedPeriodId]);
+  }, [resolvedClassId, routeSubjectId, grade, selectedPeriodId, viewerRole]);
 
   const [healthData, setHealthData] = useState<TeacherDashboardHealthResponse | null>(null);
   const [isHealthLoading, setIsHealthLoading] = useState(false);
@@ -524,7 +528,7 @@ function TeacherCurrentTermSectionPredictions() {
   useEffect(() => {
     let isMounted = true;
     const effectiveSubjectId = routeSubjectId ?? assignedScopes[0]?.subject_id;
-    if (!effectiveSubjectId) return;
+    if (!isTeacher || !effectiveSubjectId) return;
 
     const loadHealth = async () => {
       setIsHealthLoading(true);
@@ -547,7 +551,7 @@ function TeacherCurrentTermSectionPredictions() {
     return () => {
       isMounted = false;
     };
-  }, [routeSubjectId, assignedScopes, selectedPeriodId]);
+  }, [isTeacher, routeSubjectId, assignedScopes, selectedPeriodId]);
 
   const lessonPerformance = isHealthLoading ? undefined : healthData?.details?.lesson_performance;
   const lessonSubject = useMemo(() => {
@@ -587,7 +591,7 @@ function TeacherCurrentTermSectionPredictions() {
     if (assignedScopes.length === 1 && resolvedClassId) {
       return (
         <Navigate
-          to={`/teacher/predictions/subject/${assignedScopes[0].subject_id}/section/${resolvedClassId}`}
+          to={`${predictionBasePath}/subject/${assignedScopes[0].subject_id}/section/${resolvedClassId}`}
           replace
         />
       );
@@ -609,7 +613,7 @@ function TeacherCurrentTermSectionPredictions() {
                   variant="outline"
                   className="justify-start border-2 border-black font-bold p-4 text-left"
                 >
-                  <Link to={`/teacher/predictions/subject/${scope.subject_id}/section/${resolvedClassId}`}>
+                  <Link to={`${predictionBasePath}/subject/${scope.subject_id}/section/${resolvedClassId}`}>
                     {formatSubjectDisplayName(scope.subject_name, scope.grade_level)}
                   </Link>
                 </Button>
@@ -617,7 +621,7 @@ function TeacherCurrentTermSectionPredictions() {
             </div>
             <div className="pt-4">
               <Button asChild variant="secondary" className="border-2 border-black font-bold">
-                <Link to="/teacher/predictions">Return to AI Predictions</Link>
+                <Link to={predictionBasePath}>Return to AI Predictions</Link>
               </Button>
             </div>
           </div>
@@ -630,7 +634,7 @@ function TeacherCurrentTermSectionPredictions() {
           <div role="alert" className="border-2 border-amber-600 bg-amber-50 p-6 font-semibold flex flex-col items-start gap-4">
             <p className="text-amber-950 font-bold">No authorized subjects were found for this section in the selected term.</p>
             <Button asChild variant="outline" className="border-2 border-black font-bold">
-              <Link to="/teacher/predictions">Return to AI Predictions</Link>
+              <Link to={predictionBasePath}>Return to AI Predictions</Link>
             </Button>
           </div>
         </div>
@@ -646,7 +650,7 @@ function TeacherCurrentTermSectionPredictions() {
           <div role="alert" className="border-2 border-red-600 bg-red-50 p-6 font-semibold flex flex-col items-start gap-4">
             <p className="text-red-950 font-bold">Invalid subject or section identifier in the address.</p>
             <Button asChild variant="outline" className="border-2 border-black font-bold">
-              <Link to="/teacher/predictions">Return to AI Predictions</Link>
+              <Link to={predictionBasePath}>Return to AI Predictions</Link>
             </Button>
           </div>
         </div>
@@ -678,7 +682,7 @@ function TeacherCurrentTermSectionPredictions() {
             <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
               <Breadcrumb.Item>
                 <Breadcrumb.Link asChild>
-                  <Link to="/teacher/predictions">AI Predictions</Link>
+                  <Link to={predictionBasePath}>AI Predictions</Link>
                 </Breadcrumb.Link>
               </Breadcrumb.Item>
               <Breadcrumb.Separator />
@@ -687,8 +691,8 @@ function TeacherCurrentTermSectionPredictions() {
                   <Link
                     to={
                       targetSubjectId
-                        ? `/teacher/predictions/subject/${targetSubjectId}`
-                        : "/teacher/predictions"
+                        ? `${predictionBasePath}/subject/${targetSubjectId}`
+                        : predictionBasePath
                     }
                   >
                     {subjectDisplayName}
@@ -729,14 +733,14 @@ function TeacherCurrentTermSectionPredictions() {
             />
 
             {loadError && (
-              <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold text-red-900">
+              <Alert status="error" className="font-semibold">
                 {loadError}
-              </div>
+              </Alert>
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-15 gap-4 items-start">
               {/* ── Left Column: Prediction Table ── */}
-              <div className="lg:col-span-8 xl:col-span-10 min-w-0 flex flex-col gap-4">
+              <div className={isTeacher ? "lg:col-span-8 xl:col-span-10 min-w-0 flex flex-col gap-4" : "lg:col-span-15 min-w-0 flex flex-col gap-4"}>
                 {loading ? (
                   <div className="py-20 text-center font-semibold text-gray-500">
                     Loading current-term projections...
@@ -751,15 +755,23 @@ function TeacherCurrentTermSectionPredictions() {
                       This subject is not assigned to this section or you do not have permission to access it in the selected term.
                     </p>
                     <Button asChild variant="outline" className="border-2 border-black font-bold">
-                      <Link to="/teacher/predictions">Return to AI Predictions</Link>
+                      <Link to={predictionBasePath}>Return to AI Predictions</Link>
                     </Button>
                   </div>
                 ) : rows.length === 0 ? (
-                  <TeacherEmptyState
-                    icon={<TrendingUp />}
-                    title={`No predictions available for ${subjectDisplayName} in ${sectionName}`}
-                    description="There are currently no generated predictions for this subject and section in the selected term."
-                  />
+                  isTeacher ? (
+                    <TeacherEmptyState
+                      icon={<TrendingUp />}
+                      title={`No predictions available for ${subjectDisplayName} in ${sectionName}`}
+                      description="There are currently no generated predictions for this subject and section in the selected term."
+                    />
+                  ) : (
+                    <EmptyStateCard
+                      icon={<TrendingUp />}
+                      title={`No predictions available for ${subjectDisplayName} in ${sectionName}`}
+                      description="There are currently no generated predictions for this subject and section in the selected term."
+                    />
+                  )
                 ) : (
                   <PredictionTable
                     items={data.items}
@@ -781,7 +793,7 @@ function TeacherCurrentTermSectionPredictions() {
               </div>
 
               {/* ── Right Column: Lesson Performance ── */}
-              <aside className="lg:col-span-7 xl:col-span-5 min-w-0 lg:sticky lg:top-4 flex flex-col gap-4">
+              {isTeacher && <aside className="lg:col-span-7 xl:col-span-5 min-w-0 lg:sticky lg:top-4 flex flex-col gap-4">
                 {/* Scored quiz lesson performance */}
                 <Card className="flex flex-col p-4 sm:p-5 min-h-62 border-2 border-black bg-background">
                   <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
@@ -838,7 +850,7 @@ function TeacherCurrentTermSectionPredictions() {
                     )}
                   </Card.Content>
                 </Card>
-              </aside>
+              </aside>}
             </div>
           </div>
         </div>

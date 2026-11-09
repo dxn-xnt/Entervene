@@ -1,4 +1,6 @@
 import {
+  fetchApprovedCurrentTermPredictions,
+  fetchAdminCurrentTermScope,
   fetchTeacherAcademicScope,
   fetchCurrentTermPredictions,
   type DashboardAtRiskResponse,
@@ -12,6 +14,7 @@ import {
 import { matchesTeacherRiskFilter } from "./teacher-risk-display";
 
 export type AuthorizedCurrentTermRow = DevelopmentCurrentTermListItem & { grade_level: number | null };
+export type CurrentTermViewerRole = "admin" | "teacher";
 
 export function currentTermPredictionErrorMessage(error: unknown): string {
   return error instanceof CurrentTermPredictionLoadError
@@ -22,7 +25,27 @@ export function currentTermPredictionErrorMessage(error: unknown): string {
 export async function loadAuthorizedCurrentTermPredictions(
   academicPeriodId: number,
   constraints: { gradeLevel?: number; classId?: number; subjectId?: number } = {},
+  role: CurrentTermViewerRole = "teacher",
 ): Promise<{ filters: DashboardFilters; rows: AuthorizedCurrentTermRow[]; assignedScopes: AssignedSubjectSectionScope[] }> {
+  if (role === "admin") {
+    const { filters, scopes } = await fetchAdminCurrentTermScope(academicPeriodId);
+    const assignedScopes = scopes.filter((scope) =>
+      (constraints.gradeLevel === undefined || scope.grade_level === constraints.gradeLevel)
+      && (constraints.classId === undefined || scope.class_id === constraints.classId)
+      && (constraints.subjectId === undefined || scope.subject_id === constraints.subjectId));
+    const responses = await Promise.all(assignedScopes.map(async (scope) => {
+      const response = await fetchApprovedCurrentTermPredictions({
+        class_id: scope.class_id,
+        subject_id: scope.subject_id,
+        academic_period_id: academicPeriodId,
+      });
+      return response.items.map((row) => ({ ...row, grade_level: scope.grade_level }));
+    }));
+    const unique = new Map<number, AuthorizedCurrentTermRow>();
+    responses.flat().forEach((row) => unique.set(row.prediction_id, row));
+    return { filters, rows: [...unique.values()], assignedScopes };
+  }
+
   const filters = await fetchTeacherAcademicScope();
   const classes = filters.classes.filter((item) =>
     (constraints.gradeLevel === undefined || item.grade_level === constraints.gradeLevel)
