@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BookOpen, Lock, Pencil, Plus, Search, X } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
@@ -80,15 +80,58 @@ export function GradingTemplateManager({
   const [thresholdYearId, setThresholdYearId] = useState("");
   const [thresholdSaving, setThresholdSaving] = useState(false);
   const handledCreateRequest = useRef(createRequest);
-  const grades = useMemo(
-    () =>
-      [
-        ...new Set(
-          subjects.map((subject) => subject.academic_level.grade_level),
-        ),
-      ].sort((a, b) => a - b),
-    [subjects],
-  );
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateGradeFilter, setTemplateGradeFilter] = useState("all");
+  const [templateStatusFilter, setTemplateStatusFilter] = useState<SubjectStatus | "all">("all");
+
+  const grades = useMemo(() => {
+    const list = [
+      ...new Set(
+        subjects
+          .map((subject) => subject.academic_level?.grade_level)
+          .filter((g): g is number => g != null),
+      ),
+    ].sort((a, b) => a - b);
+    return list.length ? list : [7, 8, 9, 10, 11, 12];
+  }, [subjects]);
+
+  const subjectGradeMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const s of subjects) {
+      if (s.academic_level?.grade_level != null) {
+        map.set(s.subject_id, s.academic_level.grade_level);
+      }
+    }
+    return map;
+  }, [subjects]);
+
+  const filteredTemplates = useMemo(() => {
+    const q = templateSearch.trim().toLowerCase();
+    return templates.filter((template) => {
+      if (templateStatusFilter !== "all" && template.status !== templateStatusFilter) {
+        return false;
+      }
+      if (templateGradeFilter !== "all") {
+        const targetGrade = Number(templateGradeFilter);
+        const hasGrade = template.assigned_subjects.some((sub) => {
+          const gl = sub.grade_level ?? subjectGradeMap.get(sub.subject_id);
+          return gl === targetGrade;
+        });
+        if (!hasGrade) return false;
+      }
+      if (q) {
+        const matchName = template.template_name.toLowerCase().includes(q);
+        const matchDesc = (template.description || "").toLowerCase().includes(q);
+        const matchSubject = template.assigned_subjects.some(
+          (sub) =>
+            sub.subject_name.toLowerCase().includes(q) ||
+            (sub.subject_codename || "").toLowerCase().includes(q),
+        );
+        if (!matchName && !matchDesc && !matchSubject) return false;
+      }
+      return true;
+    });
+  }, [templates, templateSearch, templateGradeFilter, templateStatusFilter, subjectGradeMap]);
   const visibleSubjects = useMemo(() => {
     const query = search.trim().toLowerCase();
     return subjects.filter(
@@ -107,8 +150,8 @@ export function GradingTemplateManager({
   );
   const removedIds = editing
     ? editing.assigned_subjects
-        .map((subject) => subject.subject_id)
-        .filter((id) => !form.subjectIds.has(id))
+      .map((subject) => subject.subject_id)
+      .filter((id) => !form.subjectIds.has(id))
     : [];
 
   useEffect(() => {
@@ -232,11 +275,11 @@ export function GradingTemplateManager({
             : {}),
           ...(!editing.is_locked
             ? {
-                template_name: form.name.trim(),
-                description: form.description.trim() || null,
-                status: form.status,
-                components,
-              }
+              template_name: form.name.trim(),
+              description: form.description.trim() || null,
+              status: form.status,
+              components,
+            }
             : {}),
         });
       else
@@ -305,7 +348,7 @@ export function GradingTemplateManager({
   const weightError =
     error === "Enter valid numeric grading values." ||
     error ===
-      "Written Work, Performance Tasks, and Exams must total exactly 100%.";
+    "Written Work, Performance Tasks, and Exams must total exactly 100%.";
   const updateWeight = (key: "ww" | "pt" | "exams", value: string) => {
     const next = { ...form, [key]: value };
     setForm(next);
@@ -329,20 +372,87 @@ export function GradingTemplateManager({
           </Button>
         </div>
       ) : null}
-      <div>
-        <h2 className="text-2xl font-bold">Grading Setup</h2>
-        <p className="text-sm text-muted-foreground">
-          Create reusable grading templates with Written Work, Performance
-          Tasks, and Exams.
-        </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px_160px] lg:grid-cols-[1fr_180px_160px_auto]">
+        <label className="relative min-w-0">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+          <Input
+            variant="search"
+            value={templateSearch}
+            onChange={(event) => setTemplateSearch(event.target.value)}
+            placeholder="Search template name, description, or subject"
+            className="w-full"
+          />
+        </label>
+        <Select value={templateGradeFilter} onValueChange={setTemplateGradeFilter}>
+          <Select.Trigger className="w-full">
+            <Select.Value placeholder="Grade" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              <Select.Item value="all">All Grades</Select.Item>
+              {grades.map((item) => (
+                <Select.Item key={item} value={String(item)}>
+                  Grade {item}
+                </Select.Item>
+              ))}
+            </Select.Group>
+          </Select.Content>
+        </Select>
+        <Select
+          value={templateStatusFilter}
+          onValueChange={(val) => setTemplateStatusFilter(val as SubjectStatus | "all")}
+        >
+          <Select.Trigger className="w-full">
+            <Select.Value placeholder="Status" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              <Select.Item value="all">All Statuses</Select.Item>
+              <Select.Item value="active">Active</Select.Item>
+              <Select.Item value="archived">Archived</Select.Item>
+            </Select.Group>
+          </Select.Content>
+        </Select>
+        {templateSearch.trim() || templateGradeFilter !== "all" || templateStatusFilter !== "all" ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 border-black shadow-none"
+            onClick={() => {
+              setTemplateSearch("");
+              setTemplateGradeFilter("all");
+              setTemplateStatusFilter("all");
+            }}
+          >
+            Reset
+          </Button>
+        ) : null}
       </div>
+
       {!templates.length ? (
         <Card className="border-2 border-black p-5 text-sm">
           No grading templates found.
         </Card>
+      ) : !filteredTemplates.length ? (
+        <Card className="flex flex-col items-center justify-center gap-2 border-2 border-black p-5 py-8 text-center text-sm">
+          <p className="font-semibold">No grading templates match the selected filters.</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-black shadow-none"
+            onClick={() => {
+              setTemplateSearch("");
+              setTemplateGradeFilter("all");
+              setTemplateStatusFilter("all");
+            }}
+          >
+            Clear Filters
+          </Button>
+        </Card>
       ) : (
         <div className="grid items-stretch gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
-          {templates.map((template) => (
+          {filteredTemplates.map((template) => (
             <TemplateCard
               key={template.grading_template_id}
               template={template}
@@ -376,13 +486,13 @@ export function GradingTemplateManager({
             <AdminValidationAlert
               message={
                 error &&
-                ![
-                  "Template name is required.",
-                  "Enter valid numeric grading values.",
-                  "Written Work, Performance Tasks, and Exams must total exactly 100%.",
-                  "Choose a replacement template for removed subjects.",
-                  "Select a year and enter an audit reason.",
-                ].includes(error)
+                  ![
+                    "Template name is required.",
+                    "Enter valid numeric grading values.",
+                    "Written Work, Performance Tasks, and Exams must total exactly 100%.",
+                    "Choose a replacement template for removed subjects.",
+                    "Select a year and enter an audit reason.",
+                  ].includes(error)
                   ? error
                   : null
               }
@@ -647,7 +757,7 @@ export function GradingTemplateManager({
                     if (
                       value &&
                       error ===
-                        "Choose a replacement template for removed subjects."
+                      "Choose a replacement template for removed subjects."
                     )
                       setError(null);
                   }}
@@ -668,7 +778,7 @@ export function GradingTemplateManager({
                           (item) =>
                             item.status === "active" &&
                             item.grading_template_id !==
-                              editing?.grading_template_id,
+                            editing?.grading_template_id,
                         )
                         .map((item) => (
                           <Select.Item
@@ -685,8 +795,8 @@ export function GradingTemplateManager({
             ) : null}
             {error ===
               "Choose a replacement template for removed subjects." && (
-              <FormMessage>{error}</FormMessage>
-            )}
+                <FormMessage>{error}</FormMessage>
+              )}
             <Field label="Description">
               <textarea
                 className="min-h-14 w-full rounded! border-2 border-border bg-background p-2 disabled:bg-background disabled:opacity-100"
@@ -748,9 +858,9 @@ export function GradingTemplateManager({
               </div>
               {(error === "Enter valid numeric grading values." ||
                 error ===
-                  "Written Work, Performance Tasks, and Exams must total exactly 100%.") && (
-                <FormMessage>{error}</FormMessage>
-              )}
+                "Written Work, Performance Tasks, and Exams must total exactly 100%.") && (
+                  <FormMessage>{error}</FormMessage>
+                )}
             </section>
           </div>
           <Dialog.Footer className="mt-0 border-t-2 border-black bg-white">
@@ -789,17 +899,20 @@ function TemplateCard({
   }, [template.assigned_subjects]);
   const preview = template.assigned_subjects.slice(0, 4);
   return (
-    <Card className="flex h-full min-w-0 flex-col overflow-hidden border-2 border-black bg-primary p-3 shadow-[5px_5px_0_#000]">
-      <div className="mb-2 flex min-w-0 items-start justify-between gap-2">
-        <h3 className="min-w-0 break-words text-xl font-bold leading-tight">
-          {template.template_name}
-        </h3>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+    <Card className="flex h-full min-w-0 flex-col overflow-hidden border-2 border-black bg-primary p-3 ">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="flex flex-row items-center gap-2">
+          <h3 className="min-w-0 break-words text-2xl font-bold leading-tight">
+            {template.template_name}
+          </h3>
           <Badge size="sm" className="capitalize" variant="outline">
             {template.status}
           </Badge>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+
           {template.is_locked ? (
-            <Badge size="sm" className="bg-black text-white" variant="solid">
+            <Badge size="sm" className="bg-black text-white py-0.75! rounded-md!" variant="solid">
               <Lock className="mr-1 size-3" />
               Locked
             </Badge>
@@ -807,14 +920,14 @@ function TemplateCard({
           <Button
             aria-label={`Edit ${template.template_name}`}
             size="sm"
-            className="size-7 bg-black p-0 text-white shadow-none"
+            className="size-6 bg-black p-1 text-white shadow-none"
             onClick={() => onEdit(template)}
           >
             <Pencil className="size-3.5" />
           </Button>
         </div>
       </div>
-      <div className="mb-2 flex items-center justify-between gap-2 text-sm">
+      <div className="flex items-center justify-between gap-2 text-sm px-1">
         <span>
           Passing: <strong>{template.passing_threshold}%</strong>
         </span>
@@ -837,6 +950,7 @@ function TemplateCard({
             {preview.map((subject) => (
               <Badge
                 key={subject.subject_id}
+                size="md"
                 className="max-w-full"
                 variant="outline"
               >

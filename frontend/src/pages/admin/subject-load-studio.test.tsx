@@ -13,6 +13,7 @@ vi.mock("@/components/ui/sidebar", () => ({ SidebarTrigger: () => null }));
 vi.mock("@/context/SettingsContext", () => ({ useSettings: () => ({ getSetting: (_: string, fallback: string) => fallback }) }));
 vi.mock("@/context/AcademicPeriodContext", () => ({ useAcademicPeriod: () => ({ selectedPeriodId: 1 }) }));
 vi.mock("@/components/retroui/use-toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock("@/components/retroui/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock("@/lib/api", () => ({
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => [] }),
   getSubjectLoadStudioData: getStudio,
@@ -91,7 +92,7 @@ describe("Subject Load Studio locked section", () => {
     await waitFor(() => expect(screen.getByText("Medical Courses and Sciences Related")).toBeTruthy());
     fireEvent.click(screen.getByText("List"));
     expect(screen.getByText("Medical Courses and Sciences Related")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Next section" }));
+    fireEvent.click(screen.getByRole("button", { name: /Campos/i }));
     await waitFor(() => expect(screen.getByText("Engineering and Mathematics Related")).toBeTruthy());
     fireEvent.change(screen.getByPlaceholderText("Search class"), { target: { value: "Medical Courses" } });
     await waitFor(() => expect(screen.getByText("Medical Courses and Sciences Related")).toBeTruthy());
@@ -230,23 +231,18 @@ describe("Subject Load Studio Grade and Status filters", () => {
     await waitFor(() => expect(screen.getByText("Grade:")).toBeTruthy());
     expect(screen.getByRole("button", { name: "Grade 7" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Grade 8" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "All" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "All" })).toBeNull();
 
     expect(screen.getByText("Apollo")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Next section" }));
-    await waitFor(() => expect(screen.getByText("Zeus")).toBeTruthy());
-
-    fireEvent.click(screen.getByRole("button", { name: "Grade 7" }));
-    await waitFor(() => expect(screen.getByText("Apollo")).toBeTruthy());
     expect(screen.queryByText("Zeus")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Grade 8" }));
     await waitFor(() => expect(screen.getByText("Zeus")).toBeTruthy());
     expect(screen.queryByText("Apollo")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.click(screen.getByRole("button", { name: "Grade 7" }));
     await waitFor(() => expect(screen.getByText("Apollo")).toBeTruthy());
+    expect(screen.queryByText("Zeus")).toBeNull();
   });
 
   it("renders Status filter dropdown with options replacing the grade select", async () => {
@@ -270,5 +266,67 @@ describe("Subject Load Studio Grade and Status filters", () => {
 
     await waitFor(() => expect(screen.getByText("All Statuses")).toBeTruthy());
     expect(screen.queryByText("All Grade Levels")).toBeNull();
+  });
+});
+
+describe("Subject Load Studio timetable grid editing", () => {
+  const draftGridData = {
+    ...baseline,
+    subjects: [
+      { subject_id: 3, subject_name: "Filipino 9", subject_codename: "F9", academic_level_id: 9, subject_group: "Core" },
+      { subject_id: 4, subject_name: "English 9", subject_codename: "E9", academic_level_id: 9, subject_group: "Core" },
+    ],
+    subject_offerings: [
+      { subject_offering_id: 30, subject_id: 3, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [] },
+      { subject_offering_id: 31, subject_id: 4, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [] },
+    ],
+    existing_loads: [
+      { subject_load_id: 21, class_id: 8, subject_id: 3, staff_id: "T1", academic_period_id: 1, start_time: "08:00", end_time: "08:45",
+        days_of_week: ["MON", "TUE", "WED", "THU", "FRI"], status: "draft", is_locked: false },
+      { subject_load_id: 22, class_id: 8, subject_id: 4, staff_id: null, academic_period_id: 1, start_time: "08:45", end_time: "09:30",
+        days_of_week: ["MON", "TUE", "WED", "THU", "FRI"], status: "draft", is_locked: false },
+    ],
+    has_pending_draft_by_class: { 8: true },
+  };
+
+  it("swaps two subject blocks when one is dragged onto the other", async () => {
+    getStudio.mockResolvedValue(draftGridData);
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    const filipino = (await screen.findByText("Filipino 9")).closest("[draggable='true']") as HTMLElement;
+    const english = screen.getByText("English 9").closest("[draggable='true']") as HTMLElement;
+    expect(filipino).toBeTruthy();
+    expect(english).toBeTruthy();
+
+    const dataTransfer = { setData: vi.fn(), effectAllowed: "", dropEffect: "" };
+    validate.mockClear();
+    fireEvent.dragStart(filipino, { dataTransfer });
+    fireEvent.dragOver(english, { dataTransfer });
+    fireEvent.drop(english, { dataTransfer });
+
+    await waitFor(() => expect(validate).toHaveBeenCalled());
+    const swapped = validate.mock.calls.at(-1)?.[1] as Array<{ subject_id: number; start_time: string; end_time: string; subject_load_id: number }>;
+    expect(swapped.find((l) => l.subject_id === 3)).toMatchObject({ subject_load_id: 21, start_time: "08:45", end_time: "09:30" });
+    expect(swapped.find((l) => l.subject_id === 4)).toMatchObject({ subject_load_id: 22, start_time: "08:00", end_time: "08:45" });
+  });
+
+  it("selects empty cells and groups more cells with Ctrl + click", async () => {
+    getStudio.mockResolvedValue(draftGridData);
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Monday 9:45 AM - 10:30 AM" }));
+    expect(screen.getByText(/1 cell selected/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tuesday 9:45 AM - 10:30 AM" }), { ctrlKey: true });
+    expect(screen.getByText(/2 cells selected/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Add Subject/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Wednesday 9:45 AM - 10:30 AM" }));
+    expect(screen.getByText(/1 cell selected/)).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText(/cell selected/)).toBeNull());
   });
 });
