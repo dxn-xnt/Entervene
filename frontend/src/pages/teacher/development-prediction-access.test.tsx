@@ -82,17 +82,15 @@ describe("shared prediction page access", () => {
     await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
     expect(screen.getByRole("heading", { name: "AI Predictions" })).toBeTruthy();
     expect(screen.queryByText("Current-Term Development")).toBeNull();
-    const summaryButtons = screen.getAllByRole("button").filter((button) =>
+    expect(screen.getAllByText("Moderate Risk").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("High Risk").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("On Track").length).toBeGreaterThan(0);
+    const summaryButtons = screen.queryAllByRole("button").filter((button) =>
       /Moderate Risk|High Risk|On Track/.test(button.textContent || "")
     );
-    expect(summaryButtons).toEqual([
-      screen.getByRole("button", { name: /Moderate Risk\s+0/i }),
-      screen.getByRole("button", { name: /High Risk\s+1/i }),
-      screen.getByRole("button", { name: /On Track\s+0/i }),
-    ]);
-    expect(screen.getByRole("button", { name: /High Risk\s+1/i })).toBeTruthy();
+    expect(summaryButtons).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
+    fireEvent.change(screen.getByPlaceholderText("Search student or LRN..."), { target: { value: "Alex" } });
     expect(screen.getByText("Grade Level")).toBeTruthy();
     expect(screen.getByText("Grade 9")).toBeTruthy();
     expect(screen.getByText("Projected Grade")).toBeTruthy();
@@ -194,7 +192,7 @@ describe("shared prediction page access", () => {
     currentTerm.load.mockResolvedValue({ rows: [row], filters, assignedScopes: [] });
     const view = render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
     await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
-    fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
+    fireEvent.change(screen.getByPlaceholderText("Search student or LRN..."), { target: { value: "Alex" } });
     fireEvent.click(screen.getByText("Alex Rivera"));
     expect(screen.getByText("Prediction detail for Alex Rivera")).toBeTruthy();
 

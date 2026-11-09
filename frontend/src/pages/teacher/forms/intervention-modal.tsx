@@ -96,7 +96,7 @@ function AcademicDiagnosisCard({
     <Card className="flex flex-col gap-2 w-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-base text-foreground">Support focus:</span>
+          <span className="text-base text-foreground">Support Focus:</span>
           <span className="text-base font-bold">{focusName}</span>
         </div>
         <Badge variant="outline" size="sm">
@@ -214,7 +214,7 @@ export default function InterventionModal({
               ? "Resolved Intervention"
               : selectedKind === "active"
                 ? supportPage === "plan"
-                  ? "Adjust Support"
+                  ? "Edit Support"
                   : "Active Intervention"
                 : "Candidate Review"}
           </Dialog.Title>
@@ -744,7 +744,7 @@ export default function InterventionModal({
               ) : (
                 <>
                   <SlidersHorizontal className="size-4 mr-1.5" />
-                  Adjust Support
+                  Edit Support
                 </>
               )}
             </Button>

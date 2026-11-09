@@ -3,7 +3,7 @@ import type { DashboardFilters, RiskSummary } from "@/lib/prediction-api";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Button } from "@/components/teacher/button";
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import {
   getTeacherRiskDisplay,
   getTeacherRiskFilterCount,
@@ -239,11 +239,11 @@ export default function PredictionFilters({
         {showClearButton && hasActiveFilters && (
           <Button
             size="sm"
+            variant="secondary"
             onClick={onClearAll}
-            className="h-10 border-2 border-black bg-yellow-300 hover:bg-yellow-400 text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+            className="border-2 shadow-none"
           >
-            <X size={14} className="stroke-[3]" />
-            Clear Filters
+            Clear
           </Button>
         )}
       </div>

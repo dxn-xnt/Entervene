@@ -202,11 +202,6 @@ function LegacyPredictionsDashboard() {
     setOffset(0);
   };
 
-  const handleRiskClick = (level: string | undefined) => {
-    setRiskLevel(level);
-    setOffset(0);
-  };
-
   const handleClearAll = () => {
     setGradeLevel(undefined);
     setClassId(undefined);
@@ -290,26 +285,13 @@ function LegacyPredictionsDashboard() {
                 <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
                   {RISK_CARDS.map((card) => {
                     const count = summary[card.key];
-                    const isActive = riskLevel === card.key;
-
                     return (
-                      <button
+                      <OverviewCard
                         key={card.key}
-                        type="button"
-                        onClick={() => handleRiskClick(isActive ? undefined : card.key)}
-                        className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
-                      >
-                        <OverviewCard
-                          title={card.label}
-                          count={String(count)}
-                          className={cn(
-                            "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
-                            isActive
-                              ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
-                              : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
-                          )}
-                        />
-                      </button>
+                        title={card.label}
+                        count={String(count)}
+                        className="w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                      />
                     );
                   })}
                 </div>
@@ -509,21 +491,12 @@ function TeacherCurrentTermDashboard() {
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
             {TEACHER_RISK_CARDS.map((card) => (
-              <button
+              <OverviewCard
                 key={card.key}
-                type="button"
-                onClick={() => setRiskLevel(riskLevel === card.key ? undefined : card.key)}
-                className="w-full cursor-pointer text-left"
-              >
-                <OverviewCard
-                  title={card.label}
-                  count={String(displaySummary[card.key])}
-                  className={cn(
-                    "w-full border-2 border-black shadow-[4px_4px_0px_#000]",
-                    riskLevel === card.key && card.activeClass
-                  )}
-                />
-              </button>
+                title={card.label}
+                count={String(displaySummary[card.key])}
+                className="w-full border-2 border-black shadow-[4px_4px_0px_#000]"
+              />
             ))}
           </div>
 
