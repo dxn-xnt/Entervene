@@ -715,7 +715,7 @@ export default function Classworks() {
                             `${item.classwork_id}:${classFilter}`
                             ]
                           }
-                          showSubject={subjectFilter === "all"}
+                          showSubject={false}
                           showClassworkType={activeTab === "all"}
                           onOpen={openClassworkDetail}
                           onReload={() => {

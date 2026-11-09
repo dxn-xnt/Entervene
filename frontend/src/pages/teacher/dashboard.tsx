@@ -546,32 +546,6 @@ export default function Dashboard() {
                 />
               ) : (
                 <>
-                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-2xl" aria-label="Dashboard filters">
-                <div className="flex min-w-0 flex-col gap-2">
-                  <label htmlFor="dashboard-class" className="text-sm font-medium">Class</label>
-                  <Select name="dashboard-class" value={dashboardClass} onValueChange={(value) => changeDashboardScope(value,
-                    dashboardSubject === "all" || dashboardFilters.some(item => (value === "all" || String(item.class_id) === value) && String(item.subject_id) === dashboardSubject)
-                      ? dashboardSubject : "all")}
-                    disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
-                    <Select.Trigger id="dashboard-class" className="w-full"><Select.Value /></Select.Trigger>
-                    <Select.Content>
-                      <Select.Item value="all">All Classes</Select.Item>
-                      {classOptions.map(item => <Select.Item key={item.class_id} value={String(item.class_id)}>{item.section_name}</Select.Item>)}
-                    </Select.Content>
-                  </Select>
-                </div>
-                <div className="flex min-w-0 flex-col gap-2">
-                  <label htmlFor="dashboard-subject" className="text-sm font-medium">Subject</label>
-                  <Select name="dashboard-subject" value={dashboardSubject} onValueChange={(value) => changeDashboardScope(dashboardClass, value)}
-                    disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
-                    <Select.Trigger id="dashboard-subject" className="w-full"><Select.Value /></Select.Trigger>
-                    <Select.Content>
-                      <Select.Item value="all">All Subjects</Select.Item>
-                      {subjectOptions.map(item => <Select.Item key={item.subject_id} value={String(item.subject_id)}>{item.subject_name}</Select.Item>)}
-                    </Select.Content>
-                  </Select>
-                </div>
-              </div>
               {error && (
                 <Alert status="error" className="flex items-center gap-2">
                   <AlertCircle className="size-4 shrink-0" />
@@ -594,154 +568,6 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 md:gap-4">
                 {/* Left to Center Column: Main Statistical Cards & Charts */}
                 <div className="flex min-w-0 flex-col gap-3 lg:col-span-9 xl:col-span-9 md:gap-4">
-                  {/* 1. Students Support, Top Performers, Due this Week, Topic Mastery */}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {/* Observed check-in indicators, not AI or intervention eligibility */}
-                    {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="students to check in with" /> : (
-                    <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
-                          Students to Check In With
-                        </Card.Title>
-                        <Tooltip >
-                          <TooltipTrigger
-                            render={
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                autoIcon={false}
-                                aria-label="View grades"
-                                onClick={() => navigate(routes.teacher.grades)}
-                                className="text-foreground shadow-none px-1.5"
-                              >
-                                <ArrowUpRight className="size-4" />
-                              </Button>
-                            }
-                          />
-                          <TooltipContent side="right">View grades</TooltipContent>
-                        </Tooltip>
-                      </Card.Header>
-
-                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {!support?.items.length && (
-                          dashboardEmptyState("No students to check in with", support?.warnings.length
-                              ? "No confirmed check-in indicators in the available data."
-                              : "No students meet the check-in criteria.", <CheckCircle />)
-                        )}
-                        {support?.items.map((s) => {
-                          const depthReason = getMostDepthReason(s.reasons);
-                          return (
-                            <Card
-                              key={`${s.student_id}-${s.class_id}-${s.subject_id}`}
-                              className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm"
-                            >
-                              <div className="flex flex-col min-w-0 pr-2">
-                                <span className="font-semibold text-foreground truncate">
-                                  {s.name}
-                                </span>
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {s.subject_name}
-                                </span>
-                              </div>
-                              <div className="flex shrink-0 flex-wrap justify-end gap-1 max-w-[50%]">
-                                {depthReason && (
-                                  <Badge
-                                    key={depthReason.code}
-                                    size="sm"
-                                    variant="default"
-                                    title={depthReason.message}
-                                    className="whitespace-nowrap"
-                                  >
-                                    {reasonBadgeLabel(depthReason)}
-                                  </Badge>
-                                )}
-                              </div>
-                            </Card>
-                          );
-                        })}
-                        {support && (
-                          <Card.Description className="text-[11px] text-muted-foreground">
-                            {support.qualifying_entry_count} of {support.total_entry_count} student-class-subject entries meet the criteria.
-                            {support.omitted_entry_count > 0 && ` Showing ${support.items.length}; ${support.omitted_entry_count} more not shown.`}
-                          </Card.Description>
-                        )}
-                      </Card.Content>
-                    </Card>
-                    )}
-                    {/* Submissions to Review */}
-                    {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="submissions to review" /> : (
-                    <Card className="flex flex-col p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
-                          Submissions to Review
-                        </Card.Title>
-                        <Tooltip >
-                          <TooltipTrigger
-                            render={
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                autoIcon={false}
-                                onClick={() => navigate(routes.teacher.classworks)}
-                                className="text-foreground shadow-none px-1.5"
-                              >
-                                <ArrowUpRight className="size-4" />
-                              </Button>
-                            }
-                          />
-                          <TooltipContent side="right">View classworks</TooltipContent>
-                        </Tooltip>
-                      </Card.Header>
-
-                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {reviewSubmissions.length === 0 && (
-                          reviewWarnings.length ? (
-                            <p className="py-6 text-sm text-muted-foreground" role="status">Review queue incomplete.</p>
-                          ) : dashboardEmptyState(
-                            isHistorical ? "No historical submissions to review" : "No submissions need grading",
-                            isHistorical ? "There are no submissions awaiting review for this period." : "You're all caught up with grading.",
-                            <CheckCircle />,
-                          )
-                        )}
-                        {reviewSubmissions.map((item) => (
-                          <Card
-                            key={item.submission_id}
-                            onClick={() => {
-                              if (isPositiveId(item.classwork_id)) navigate(`/teacher/classworks/${item.classwork_id}`);
-                            }}
-                            className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
-                          >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {item.title}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
-                                {item.section}
-                              </span>
-                            </div>
-                            <Badge
-                              size="sm"
-                              variant={
-                                item.variant === "destructive"
-                                  ? "destructive"
-                                  : "default"
-                              }
-                              className="shrink-0"
-                            >
-                              {item.badge}
-                            </Badge>
-                          </Card>
-                        ))}
-                        {reviewWarnings.map((warning, index) => (
-                          <Card.Description key={`${warning.code}-${warning.assignment_id}-${index}`} className="text-xs text-muted-foreground">
-                            {warning.message}
-                          </Card.Description>
-                        ))}
-                      </Card.Content>
-                    </Card>
-                    )}
-                  </div>
-
                   {/* 2. Performance & Completion Trend Chart */}
                   <Card className="flex flex-col justify-between p-4 sm:p-5">
                     <Card.Header className="p-0">
@@ -1179,8 +1005,153 @@ export default function Dashboard() {
                     </Card.Content>
                   </Card>
 
-                  {/* 4. Submissions by weekday & Hardest questions */}
+                  {/* Review queues, followed by weekday submissions and top performers. */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {/* Observed check-in indicators, not AI or intervention eligibility */}
+                    {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="students to check in with" /> : (
+                    <Card className="flex flex-col justify-between p-4 sm:p-5">
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
+                          Students to Check In With
+                        </Card.Title>
+                        <Tooltip >
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                autoIcon={false}
+                                aria-label="View grades"
+                                onClick={() => navigate(routes.teacher.grades)}
+                                className="text-foreground shadow-none px-1.5"
+                              >
+                                <ArrowUpRight className="size-4" />
+                              </Button>
+                            }
+                          />
+                          <TooltipContent side="right">View grades</TooltipContent>
+                        </Tooltip>
+                      </Card.Header>
+
+                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
+                        {!support?.items.length && (
+                          dashboardEmptyState("No students to check in with", support?.warnings.length
+                              ? "No confirmed check-in indicators in the available data."
+                              : "No students meet the check-in criteria.", <CheckCircle />)
+                        )}
+                        {support?.items.slice(0, 3).map((s) => {
+                          const depthReason = getMostDepthReason(s.reasons);
+                          return (
+                            <Card
+                              key={`${s.student_id}-${s.class_id}-${s.subject_id}`}
+                              className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm"
+                            >
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <span className="font-semibold text-foreground truncate">
+                                  {s.name}
+                                </span>
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {s.subject_name}
+                                </span>
+                              </div>
+                              <div className="flex shrink-0 flex-wrap justify-end gap-1 max-w-[50%]">
+                                {depthReason && (
+                                  <Badge
+                                    key={depthReason.code}
+                                    size="sm"
+                                    variant="default"
+                                    title={depthReason.message}
+                                    className="whitespace-nowrap"
+                                  >
+                                    {reasonBadgeLabel(depthReason)}
+                                  </Badge>
+                                )}
+                              </div>
+                            </Card>
+                          );
+                        })}
+                        {support && (
+                          <Card.Description className="text-[11px] text-muted-foreground">
+                            {support.qualifying_entry_count} of {support.total_entry_count} student-class-subject entries meet the criteria.
+                            {support.qualifying_entry_count > Math.min(support.items.length, 3) && ` Showing ${Math.min(support.items.length, 3)}; ${support.qualifying_entry_count - Math.min(support.items.length, 3)} more not shown.`}
+                          </Card.Description>
+                        )}
+                      </Card.Content>
+                    </Card>
+                    )}
+                    {/* Submissions to Review */}
+                    {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="submissions to review" /> : (
+                    <Card className="flex flex-col p-4 sm:p-5">
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
+                          Submissions to Review
+                        </Card.Title>
+                        <Tooltip >
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                autoIcon={false}
+                                onClick={() => navigate(routes.teacher.classworks)}
+                                className="text-foreground shadow-none px-1.5"
+                              >
+                                <ArrowUpRight className="size-4" />
+                              </Button>
+                            }
+                          />
+                          <TooltipContent side="right">View classworks</TooltipContent>
+                        </Tooltip>
+                      </Card.Header>
+
+                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
+                        {reviewSubmissions.length === 0 && (
+                          reviewWarnings.length ? (
+                            <p className="py-6 text-sm text-muted-foreground" role="status">Review queue incomplete.</p>
+                          ) : dashboardEmptyState(
+                            isHistorical ? "No historical submissions to review" : "No submissions need grading",
+                            isHistorical ? "There are no submissions awaiting review for this period." : "You're all caught up with grading.",
+                            <CheckCircle />,
+                          )
+                        )}
+                        {reviewSubmissions.slice(0, 3).map((item) => (
+                          <Card
+                            key={item.submission_id}
+                            onClick={() => {
+                              if (isPositiveId(item.classwork_id)) navigate(`/teacher/classworks/${item.classwork_id}`);
+                            }}
+                            className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
+                          >
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="font-semibold text-foreground truncate">
+                                {item.title}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground truncate">
+                                {item.section}
+                              </span>
+                            </div>
+                            <Badge
+                              size="sm"
+                              variant={
+                                item.variant === "destructive"
+                                  ? "destructive"
+                                  : "default"
+                              }
+                              className="shrink-0"
+                            >
+                              {item.badge}
+                            </Badge>
+                          </Card>
+                        ))}
+                        {reviewWarnings.map((warning, index) => (
+                          <Card.Description key={`${warning.code}-${warning.assignment_id}-${index}`} className="text-xs text-muted-foreground">
+                            {warning.message}
+                          </Card.Description>
+                        ))}
+                      </Card.Content>
+                    </Card>
+                    )}
+
                     {/* Submissions by weekday */}
                     <Card className="flex flex-col justify-start p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0">
@@ -1302,10 +1273,39 @@ export default function Dashboard() {
 
 
                   </div>
+
                 </div>
 
                 {/* Right Column: All Overview Cards */}
                 <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-3 xl:col-span-3">
+                  <div className="grid min-w-0 grid-cols-1 gap-2" aria-label="Dashboard filters">
+                    <p className="text-sm font-medium">Filters</p>
+                <div className="flex min-w-0 flex-col gap-2">
+                  <label htmlFor="dashboard-class" className="sr-only">Class</label>
+                  <Select name="dashboard-class" value={dashboardClass} onValueChange={(value) => changeDashboardScope(value,
+                    dashboardSubject === "all" || dashboardFilters.some(item => (value === "all" || String(item.class_id) === value) && String(item.subject_id) === dashboardSubject)
+                      ? dashboardSubject : "all")}
+                    disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
+                    <Select.Trigger id="dashboard-class" className="w-full"><Select.Value /></Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="all">All Classes</Select.Item>
+                      {classOptions.map(item => <Select.Item key={item.class_id} value={String(item.class_id)}>{item.section_name}</Select.Item>)}
+                    </Select.Content>
+                  </Select>
+                </div>
+                <div className="flex min-w-0 flex-col gap-2">
+                  <label htmlFor="dashboard-subject" className="sr-only">Subject</label>
+                  <Select name="dashboard-subject" value={dashboardSubject} onValueChange={(value) => changeDashboardScope(dashboardClass, value)}
+                    disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
+                    <Select.Trigger id="dashboard-subject" className="w-full"><Select.Value /></Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="all">All Subjects</Select.Item>
+                      {subjectOptions.map(item => <Select.Item key={item.subject_id} value={String(item.subject_id)}>{item.subject_name}</Select.Item>)}
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
+
                   <div className="grid grid-cols-1 gap-3.5">
                     {isLoading && !data
                       ? Array.from({ length: defaultTeacherCards.length }).map((_, i) => (

@@ -61,7 +61,7 @@ export function StudentSubjectSectionCard({
                 {subjectName}
               </Card.Title>
               {pendingCount > 0 && (
-                <Badge size="sm" variant="surface" className="shrink-0">
+                <Badge size="sm" variant="default" className="shrink-0">
                   {pendingCount} Pending
                 </Badge>
               )}

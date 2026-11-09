@@ -223,9 +223,9 @@ describe("PredictionSubjectSection", () => {
     expect(screen.getByRole("heading", { level: 2, name: /Mathematics 9/i })).toBeDefined();
 
     // Badges in header
-    expect(screen.getByText("2 Moderate Risk (22%)")).toBeDefined();
-    expect(screen.getByText("1 High Risk (11%)")).toBeDefined();
-    expect(screen.getByText("6 On Track (67%)")).toBeDefined();
+    expect(screen.getByText("2 Moderate Risk")).toBeDefined();
+    expect(screen.getByText("1 High Risk")).toBeDefined();
+    expect(screen.queryByText("6 On Track (67%)")).toBeNull();
 
     // Sections
     expect(screen.getByText("Demo Archimedes")).toBeDefined();
