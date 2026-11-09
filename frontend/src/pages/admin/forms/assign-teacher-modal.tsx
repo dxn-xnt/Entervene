@@ -79,14 +79,38 @@ export default function AssignTeacherModal({
   }, [loads, target, targetSubjectHours]);
 
   const q = searchQuery.toLowerCase().trim();
-  const eligibleTeachers = React.useMemo(() => {
-    return (teachers || []).filter(
+  const sortedTeachers = React.useMemo(() => {
+    const list = (teachers || []).filter(
       (t) =>
         !t.staff_id.toUpperCase().startsWith("ADM") &&
         !t.name.toLowerCase().includes("admin") &&
         (!q || t.name.toLowerCase().includes(q) || t.staff_id.toLowerCase().includes(q))
     );
-  }, [teachers, q]);
+
+    return list
+      .map((t) => {
+        const isCurrent = target.currentStaffId === t.staff_id;
+        const statusText = getTeacherAvailabilityStatus(
+          t.staff_id,
+          target.classId,
+          target.subjectId
+        );
+        const hasConflict = statusText.includes("Conflict");
+        return { teacher: t, isCurrent, statusText, hasConflict };
+      })
+      .sort((a, b) => {
+        // 1. Current assigned teacher at top of list
+        if (a.isCurrent && !b.isCurrent) return -1;
+        if (!a.isCurrent && b.isCurrent) return 1;
+
+        // 2. Prioritize available teachers before teachers with conflicts
+        if (!a.hasConflict && b.hasConflict) return -1;
+        if (a.hasConflict && !b.hasConflict) return 1;
+
+        // 3. Alphabetical tie-breaker by name
+        return (a.teacher.name || "").localeCompare(b.teacher.name || "");
+      });
+  }, [teachers, q, target.currentStaffId, target.classId, target.subjectId, getTeacherAvailabilityStatus]);
 
   return (
     <Dialog.Content size="xl" className="max-w-3xl">
@@ -94,9 +118,7 @@ export default function AssignTeacherModal({
         <div className="flex flex-col text-left">
           <Text as="h4" className="font-bold text-lg text-primary-foreground">
             Assign Teacher to {target.subjectName} <span className="font-normal">({target.className})</span>
-
           </Text>
-
         </div>
       </Dialog.Header>
 
@@ -140,22 +162,15 @@ export default function AssignTeacherModal({
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {eligibleTeachers.length === 0 ? (
+              {sortedTeachers.length === 0 ? (
                 <Table.Row>
                   <Table.Cell colSpan={4} className="text-center py-6 text-muted-foreground">
                     No teachers found matching &quot;{searchQuery}&quot;
                   </Table.Cell>
                 </Table.Row>
               ) : (
-                eligibleTeachers.map((t) => {
-                  const isCurrent = target.currentStaffId === t.staff_id;
+                sortedTeachers.map(({ teacher: t, isCurrent, statusText, hasConflict }) => {
                   const isHovered = hoveredStaffId === t.staff_id;
-                  const statusText = getTeacherAvailabilityStatus(
-                    t.staff_id,
-                    target.classId,
-                    target.subjectId
-                  );
-                  const hasConflict = statusText.includes("Conflict");
 
                   const w = teacherWorkloads.find((item) => item.staff_id === t.staff_id);
                   const weeklyHours = w?.total_weekly_hours || 0;
