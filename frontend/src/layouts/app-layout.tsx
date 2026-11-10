@@ -28,6 +28,9 @@ export default function AppLayout({
         if (header) resizeObserver.observe(header);
       }
       if (header && selectors) {
+        layout.style.setProperty('--academic-selector-row-height', `${selectors.getBoundingClientRect().height}px`);
+        const stablePlainHeader = ['/admin', '/teacher', '/student'].some((prefix) => pathname.startsWith(prefix)) && !tabbedHeader;
+        layout.toggleAttribute('data-stable-plain-header', stablePlainHeader);
         if (tabbedHeader) {
           layout.dataset.alignedTabbedHeader = '';
           delete layout.dataset.alignedPlainHeader;
@@ -39,6 +42,7 @@ export default function AppLayout({
       } else {
         delete layout.dataset.alignedTabbedHeader;
         delete layout.dataset.alignedPlainHeader;
+        delete layout.dataset.stablePlainHeader;
         layout.style.removeProperty('--aligned-sidebar-brand-height');
       }
     };
@@ -52,12 +56,15 @@ export default function AppLayout({
       mutationObserver.disconnect();
       delete layout.dataset.alignedTabbedHeader;
       delete layout.dataset.alignedPlainHeader;
+      delete layout.dataset.stablePlainHeader;
       layout.style.removeProperty('--aligned-sidebar-brand-height');
+      layout.style.removeProperty('--academic-selector-row-height');
     };
   }, [pathname]);
 
   return (
     <SidebarProvider
+      data-stable-layout={['/admin', '/teacher', '/student'].some((prefix) => pathname.startsWith(prefix)) || undefined}
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 72)",

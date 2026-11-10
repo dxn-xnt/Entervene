@@ -16,18 +16,85 @@
     flex-shrink: 0;
   }
 
-  [data-aligned-plain-header] [data-sidebar="header"] > [data-sidebar="menu"],
-  [data-aligned-plain-header] [data-sidebar="header"] [data-sidebar="menu-item"] {
+  [data-aligned-plain-header]:not([data-stable-plain-header]) [data-sidebar="header"] > [data-sidebar="menu"],
+  [data-aligned-plain-header]:not([data-stable-plain-header]) [data-sidebar="header"] [data-sidebar="menu-item"] {
     height: 100%;
   }
 
-  [data-aligned-plain-header] [data-sidebar="header"] [data-sidebar="menu-item"] {
+  [data-aligned-plain-header]:not([data-stable-plain-header]) [data-sidebar="header"] [data-sidebar="menu-item"] {
     margin-bottom: 0;
   }
 
   [data-aligned-plain-header] [data-academic-selectors] {
     border-top-width: 0;
     flex-shrink: 0;
+  }
+
+  [data-stable-plain-header] [data-academic-selectors] {
+    border-top-width: 2px;
+  }
+
+  /* A stable shell prevents selector movement between page types for every role. */
+  [data-stable-layout] {
+    --stable-title-row-height: calc(var(--spacing) * 18);
+  }
+
+  [data-stable-layout] [data-sidebar="header"] {
+    height: calc(var(--stable-title-row-height) + var(--spacing) * 2);
+    flex-shrink: 0;
+  }
+
+  [data-stable-layout] [data-sidebar="header"] > [data-sidebar="menu"],
+  [data-stable-layout] [data-sidebar="header"] [data-sidebar="menu-item"] {
+    height: var(--stable-title-row-height);
+  }
+
+  [data-stable-layout] [data-sidebar="header"] [data-sidebar="menu-item"] {
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+
+  [data-stable-layout] [data-academic-selectors] {
+    border-top-width: 2px;
+    flex-shrink: 0;
+  }
+
+  [data-stable-layout] [data-app-content] header:has([data-sidebar="trigger"]) {
+    height: var(--stable-title-row-height);
+    flex-shrink: 0;
+  }
+
+  [data-stable-layout] [data-page-tabs-sticky-region] [role="tablist"] {
+    padding-top: calc(var(--spacing) * 2.5);
+  }
+
+  [data-stable-layout] [data-page-tabs-sticky-region] > header + div {
+    margin-top: 0;
+  }
+
+  [data-stable-layout] [data-page-tabs-sticky-region] [data-tabs-sentinel] {
+    height: 0;
+  }
+
+  /* Both sides end at the same measured selector-row boundary. */
+  [data-stable-layout][data-aligned-tabbed-header] [data-page-tabs-sticky-region]:has([role="tablist"]) {
+    display: flex;
+    flex-direction: column;
+    height: calc(var(--stable-title-row-height) + var(--spacing) * 2 + var(--academic-selector-row-height));
+  }
+
+  [data-stable-layout][data-aligned-tabbed-header] [data-page-tabs-sticky-region] > header + div {
+    flex: 1;
+    min-height: 0;
+  }
+
+  [data-stable-layout][data-aligned-tabbed-header] [data-page-tabs-sticky-region] > header + div > div:has(> [role="tablist"]) {
+    height: 100%;
+  }
+
+  [data-stable-layout][data-aligned-tabbed-header] [data-page-tabs-sticky-region] [role="tablist"] {
+    height: 100%;
+    align-items: flex-end;
+    padding-top: 0;
   }
 }
 
