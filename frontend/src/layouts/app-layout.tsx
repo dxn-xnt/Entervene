@@ -28,8 +28,9 @@ export default function AppLayout({
         if (header) resizeObserver.observe(header);
       }
       if (header && selectors) {
-        const studentPlainHeader = pathname.startsWith('/student') && !tabbedHeader;
-        layout.toggleAttribute('data-student-plain-header', studentPlainHeader);
+        layout.style.setProperty('--academic-selector-row-height', `${selectors.getBoundingClientRect().height}px`);
+        const stablePlainHeader = (pathname.startsWith('/student') || pathname.startsWith('/teacher')) && !tabbedHeader;
+        layout.toggleAttribute('data-stable-plain-header', stablePlainHeader);
         if (tabbedHeader) {
           layout.dataset.alignedTabbedHeader = '';
           delete layout.dataset.alignedPlainHeader;
@@ -41,7 +42,7 @@ export default function AppLayout({
       } else {
         delete layout.dataset.alignedTabbedHeader;
         delete layout.dataset.alignedPlainHeader;
-        delete layout.dataset.studentPlainHeader;
+        delete layout.dataset.stablePlainHeader;
         layout.style.removeProperty('--aligned-sidebar-brand-height');
       }
     };
@@ -55,14 +56,15 @@ export default function AppLayout({
       mutationObserver.disconnect();
       delete layout.dataset.alignedTabbedHeader;
       delete layout.dataset.alignedPlainHeader;
-      delete layout.dataset.studentPlainHeader;
+      delete layout.dataset.stablePlainHeader;
       layout.style.removeProperty('--aligned-sidebar-brand-height');
+      layout.style.removeProperty('--academic-selector-row-height');
     };
   }, [pathname]);
 
   return (
     <SidebarProvider
-      data-student-layout={pathname.startsWith('/student') || undefined}
+      data-stable-layout={(pathname.startsWith('/student') || pathname.startsWith('/teacher')) || undefined}
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 72)",
