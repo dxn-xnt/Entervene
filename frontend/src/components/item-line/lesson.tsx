@@ -123,9 +123,9 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
   );
   const hasActions = Boolean(
     onOpenLessonManager ||
-      onArchiveLesson ||
-      onConfirmDelivery ||
-      onOpenCorrectionDialog,
+    onArchiveLesson ||
+    onConfirmDelivery ||
+    onOpenCorrectionDialog,
   );
   const accordionId = id ?? `lesson-${lesson.lesson_id}`;
 
@@ -167,28 +167,28 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 {lesson.title}
               </h4>
               <div className="flex flex-row items-center gap-2 -mr-1 shrink-0">
-                {showPublicationStatus && (
+                {badge}
+                {showDeliveryStatus && isTaught ? (
                   <Badge
-                    variant={lesson.is_published ? "solid" : "default"}
+                    variant="outline"
                     size="sm"
                     className="shrink-0 text-xs font-bold"
-                    data-testid={`badge-published-${lesson.lesson_id}`}
+                    data-testid={`badge-taught-${lesson.lesson_id}`}
                   >
-                    {lesson.is_published ? "Published" : "Draft"}
+                    Completed
                   </Badge>
+                ) : (
+                  showPublicationStatus && (
+                    <Badge
+                      variant={lesson.is_published ? "solid" : "default"}
+                      size="sm"
+                      className="shrink-0 text-xs font-bold"
+                      data-testid={`badge-published-${lesson.lesson_id}`}
+                    >
+                      {lesson.is_published ? "Published" : "Draft"}
+                    </Badge>
+                  )
                 )}
-                {badge}
-                {showDeliveryStatus && <Badge
-                  variant={isTaught ? "success" : "outline"}
-                  size="sm"
-                  className={cn(
-                    "shrink-0 text-xs font-bold",
-                    !isTaught && "text-muted-foreground border-border bg-background",
-                  )}
-                  data-testid={`badge-taught-${lesson.lesson_id}`}
-                >
-                  {isTaught ? "Taught" : "Not Taught"}
-                </Badge>}
               </div>
             </div>
             {subtitle && (
@@ -265,58 +265,44 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
               {((!isTaught && onConfirmDelivery) ||
                 (isTaught && onOpenCorrectionDialog) ||
                 (classworks.length > 0 && onOpenClassworkForm)) && <div className="mt-2 flex w-full flex-wrap items-center justify-between gap-2 pt-2">
-                {isTaught && activeDelivery?.delivered_at ? (
-                  <span className="text-sm text-muted-foreground">
-                    Confirmed taught {formatDate(activeDelivery.delivered_at)}
-                  </span>
-                ) : <span />}
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  {!isTaught && onConfirmDelivery && (
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="sm"
-                      disabled={isDeliveryLoading}
-                      onClick={() => void onConfirmDelivery(lesson)}
-                      className="h-8 gap-1.5"
-                      data-testid={`mark-taught-btn-${lesson.lesson_id}`}
-                    >
-                      {isDeliveryLoading ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <CheckCircle2 size={14} />
-                      )}
-                      <span>Mark as Taught</span>
-                    </Button>
-                  )}
-                  {isTaught && onOpenCorrectionDialog && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={isDeliveryLoading}
-                      onClick={() => onOpenCorrectionDialog(lesson)}
-                      className="h-8 gap-1.5 text-black hover:text-black"
-                      data-testid={`correct-delivery-btn-${lesson.lesson_id}`}
-                    >
-                      <RotateCcw size={13} />
-                      <span>Correct Confirmation</span>
-                    </Button>
-                  )}
-                  {classworks.length > 0 && onOpenClassworkForm && (
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="sm"
-                      onClick={() => onOpenClassworkForm(lesson)}
-                      className="h-8"
-                    >
-                      <Plus size={14} className="mr-1.5" />
-                      Add Classwork
-                    </Button>
-                  )}
-                </div>
-              </div>}
+                  {isTaught && activeDelivery?.delivered_at ? (
+                    <span className="text-sm text-muted-foreground">
+                      Completed on {formatDate(activeDelivery.delivered_at)}
+                    </span>
+                  ) : <span />}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {!isTaught && onConfirmDelivery && (
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        disabled={isDeliveryLoading}
+                        onClick={() => void onConfirmDelivery(lesson)}
+                        className="h-8 gap-1.5"
+                        data-testid={`mark-taught-btn-${lesson.lesson_id}`}
+                      >
+                        {isDeliveryLoading ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 size={14} />
+                        )}
+                        <span>Mark as Completed</span>
+                      </Button>
+                    )}
+                    {classworks.length > 0 && onOpenClassworkForm && (
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        onClick={() => onOpenClassworkForm(lesson)}
+                        className="h-8"
+                      >
+                        <Plus size={14} className="mr-1.5" />
+                        Add Classwork
+                      </Button>
+                    )}
+                  </div>
+                </div>}
             </>
           )}
         </Accordion.Content>
@@ -349,7 +335,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
             className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"
           >
             <CheckCircle2 size={14} />
-            <span>Mark as Taught</span>
+            <span>Mark as Completed</span>
           </ContextMenu.Item>
         )}
         {isTaught && onOpenCorrectionDialog && (

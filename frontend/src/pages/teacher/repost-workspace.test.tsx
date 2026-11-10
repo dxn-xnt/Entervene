@@ -653,7 +653,7 @@ describe("Unified Repost Workspace & Navigation Gate", () => {
   });
 
   it("renders exactly one accessible close control in dialog header", async () => {
-    const { RepostModal } = await import("@/components/teacher/repost-modal");
+    const { RepostModal } = await import("@/pages/teacher/forms/repost-modal");
     render(
       <MemoryRouter>
         <RepostModal

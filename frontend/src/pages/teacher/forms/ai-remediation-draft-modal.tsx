@@ -271,7 +271,7 @@ export default function AiRemediationDraftModal({
 
         <div className="flex-1 space-y-4 overflow-y-auto p-4 pr-3">
           <Dialog.Description className="text-sm text-muted-foreground">
-            Teacher evaluation preview grounded in verified student weaknesses and taught lessons.
+            Teacher evaluation preview grounded in verified student weaknesses and completed lessons.
           </Dialog.Description>
 
 
@@ -280,7 +280,7 @@ export default function AiRemediationDraftModal({
               <RefreshCw className="size-8 animate-spin text-primary" />
               <h4 className="font-bold text-base">Generating Remediation Draft…</h4>
               <p className="text-sm text-muted-foreground max-w-md">
-                Grounded in student weaknesses, eligible taught lessons, and verified learning materials.
+                Grounded in student weaknesses, eligible completed lessons, and verified learning materials.
               </p>
             </div>
           )}

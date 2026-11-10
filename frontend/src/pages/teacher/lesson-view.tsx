@@ -602,7 +602,7 @@ export function TeacherLessonView({
                                 ) : (
                                     <CheckCircle2 size={16} />
                                 )}
-                                Mark as Taught
+                                Mark as Completed
                             </Button>
                         )}
                         {!isReadOnly && isTaught && onOpenCorrectionDialog && (
@@ -669,7 +669,7 @@ export function TeacherLessonView({
                                     )}
                                     {isTaught && activeDelivery?.delivered_at && (
                                         <p className="text-xs text-foreground/80 font-medium pt-0.5">
-                                            Confirmed taught {formatDate(activeDelivery.delivered_at)}
+                                            Confirmed completed {formatDate(activeDelivery.delivered_at)}
                                         </p>
                                     )}
                                 </div>
@@ -690,7 +690,7 @@ export function TeacherLessonView({
                                     className={cn("py-1", !isTaught && "text-muted-foreground border-border bg-background")}
                                     data-testid={`detail-badge-taught-${lesson.lesson_id}`}
                                 >
-                                    {isTaught ? "Taught" : "Not Taught"}
+                                    {isTaught ? "Completed" : "Not Completed"}
                                 </Badge>
                             </div>
                         </div>
