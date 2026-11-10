@@ -15,7 +15,7 @@ export default function AppLayout({
   useLayoutEffect(() => {
     const content = contentRef.current;
     const layout = content?.closest<HTMLElement>('[data-slot="sidebar-wrapper"]');
-    if (!content || !layout || !pathname.startsWith('/admin')) return;
+    if (!content || !layout || !(pathname.startsWith('/admin') || pathname.startsWith('/teacher'))) return;
 
     let observedHeader: Element | null = null;
     const selectors = layout.querySelector<HTMLElement>('[data-academic-selectors]');
@@ -29,17 +29,17 @@ export default function AppLayout({
       }
       if (header && selectors) {
         if (tabbedHeader) {
-          layout.dataset.adminTabbedHeader = '';
-          delete layout.dataset.adminPlainHeader;
+          layout.dataset.alignedTabbedHeader = '';
+          delete layout.dataset.alignedPlainHeader;
         } else {
-          layout.dataset.adminPlainHeader = '';
-          delete layout.dataset.adminTabbedHeader;
+          layout.dataset.alignedPlainHeader = '';
+          delete layout.dataset.alignedTabbedHeader;
         }
-        layout.style.setProperty('--admin-sidebar-brand-height', `${header.getBoundingClientRect().height - (tabbedHeader ? selectors.getBoundingClientRect().height : 0)}px`);
+        layout.style.setProperty('--aligned-sidebar-brand-height', `${header.getBoundingClientRect().height - (tabbedHeader ? selectors.getBoundingClientRect().height : 0)}px`);
       } else {
-        delete layout.dataset.adminTabbedHeader;
-        delete layout.dataset.adminPlainHeader;
-        layout.style.removeProperty('--admin-sidebar-brand-height');
+        delete layout.dataset.alignedTabbedHeader;
+        delete layout.dataset.alignedPlainHeader;
+        layout.style.removeProperty('--aligned-sidebar-brand-height');
       }
     };
     const resizeObserver = new ResizeObserver(updateAlignment);
@@ -50,9 +50,9 @@ export default function AppLayout({
     return () => {
       resizeObserver.disconnect();
       mutationObserver.disconnect();
-      delete layout.dataset.adminTabbedHeader;
-      delete layout.dataset.adminPlainHeader;
-      layout.style.removeProperty('--admin-sidebar-brand-height');
+      delete layout.dataset.alignedTabbedHeader;
+      delete layout.dataset.alignedPlainHeader;
+      layout.style.removeProperty('--aligned-sidebar-brand-height');
     };
   }, [pathname]);
 

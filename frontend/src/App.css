@@ -1,31 +1,31 @@
 @import "tailwindcss";
 
-/* Align the selector border only with Admin headers that contain page tabs. */
+/* Align sidebar borders with Admin and Teacher page headers. */
 @media (min-width: 768px) {
-  [data-admin-tabbed-header] [data-sidebar="header"] {
-    height: var(--admin-sidebar-brand-height);
+  [data-aligned-tabbed-header] [data-sidebar="header"] {
+    height: var(--aligned-sidebar-brand-height);
     flex-shrink: 0;
   }
 
-  [data-admin-tabbed-header] [data-academic-selectors] {
+  [data-aligned-tabbed-header] [data-academic-selectors] {
     flex-shrink: 0;
   }
 
-  [data-admin-plain-header] [data-sidebar="header"] {
-    height: var(--admin-sidebar-brand-height);
+  [data-aligned-plain-header] [data-sidebar="header"] {
+    height: var(--aligned-sidebar-brand-height);
     flex-shrink: 0;
   }
 
-  [data-admin-plain-header] [data-sidebar="header"] > [data-sidebar="menu"],
-  [data-admin-plain-header] [data-sidebar="header"] [data-sidebar="menu-item"] {
+  [data-aligned-plain-header] [data-sidebar="header"] > [data-sidebar="menu"],
+  [data-aligned-plain-header] [data-sidebar="header"] [data-sidebar="menu-item"] {
     height: 100%;
   }
 
-  [data-admin-plain-header] [data-sidebar="header"] [data-sidebar="menu-item"] {
+  [data-aligned-plain-header] [data-sidebar="header"] [data-sidebar="menu-item"] {
     margin-bottom: 0;
   }
 
-  [data-admin-plain-header] [data-academic-selectors] {
+  [data-aligned-plain-header] [data-academic-selectors] {
     border-top-width: 0;
     flex-shrink: 0;
   }
@@ -51,15 +51,19 @@
 }
 
 /* Keep the separator owned by the sticky header, rather than scrolling content. */
-[data-admin-plain-header] [data-app-content] header:has([data-sidebar="trigger"]) {
+[data-aligned-plain-header] [data-app-content] header:has([data-sidebar="trigger"]) {
   border-bottom: 2px solid var(--border);
   flex-shrink: 0;
   background-color: var(--background);
 }
 
-[data-admin-plain-header] [data-app-content] header:has([data-sidebar="trigger"]) + * {
+[data-aligned-plain-header] [data-app-content] header:has([data-sidebar="trigger"]) + * {
   border-top-width: 0;
   margin-top: 0;
+}
+
+[data-aligned-plain-header] [data-page-tabs-sticky-region]:not(:has([role="tablist"])) {
+  border-bottom-width: 0;
 }
 
 /* Student drill-downs use the standard heavier page-header separator. */
