@@ -29,7 +29,7 @@ export default function AppLayout({
       }
       if (header && selectors) {
         layout.style.setProperty('--academic-selector-row-height', `${selectors.getBoundingClientRect().height}px`);
-        const stablePlainHeader = (pathname.startsWith('/student') || pathname.startsWith('/teacher')) && !tabbedHeader;
+        const stablePlainHeader = ['/admin', '/teacher', '/student'].some((prefix) => pathname.startsWith(prefix)) && !tabbedHeader;
         layout.toggleAttribute('data-stable-plain-header', stablePlainHeader);
         if (tabbedHeader) {
           layout.dataset.alignedTabbedHeader = '';
@@ -64,7 +64,7 @@ export default function AppLayout({
 
   return (
     <SidebarProvider
-      data-stable-layout={(pathname.startsWith('/student') || pathname.startsWith('/teacher')) || undefined}
+      data-stable-layout={['/admin', '/teacher', '/student'].some((prefix) => pathname.startsWith(prefix)) || undefined}
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 72)",

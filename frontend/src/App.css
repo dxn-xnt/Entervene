@@ -34,7 +34,7 @@
     border-top-width: 2px;
   }
 
-  /* A stable Student and Teacher shell prevents selector movement between page types. */
+  /* A stable shell prevents selector movement between page types for every role. */
   [data-stable-layout] {
     --stable-title-row-height: calc(var(--spacing) * 18);
   }
