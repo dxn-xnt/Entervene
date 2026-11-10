@@ -16,6 +16,7 @@ export interface GradeCardProps {
   lowRisk?: number;
   insufficientData?: number;
   role?: "teacher" | "admin";
+  emptyLabel?: string;
 }
 
 export function GradeCard({
@@ -29,6 +30,7 @@ export function GradeCard({
   lowRisk = 0,
   insufficientData = 0,
   role,
+  emptyLabel = "No At-Risk Students",
 }: GradeCardProps) {
   const { role: authRole } = useAuth();
   const activeRole = role ?? (authRole === "admin" ? "admin" : "teacher");
@@ -131,7 +133,7 @@ export function GradeCard({
           ) : (
             <Card className="w-full border border-border bg-emerald-100/70 px-3 py-2.5 text-center shadow-none hover:shadow-none">
               <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
-                No At-Risk Students
+                {emptyLabel}
               </span>
             </Card>
           )}

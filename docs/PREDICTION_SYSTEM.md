@@ -12,7 +12,7 @@
 
 | Path | Question answered | Current access and status |
 | --- | --- | --- |
-| **Development same-term V3** | “Given recorded work so far, what numeric final grade might this student receive in this same term?” | `POST/GET /api/v1/development/current-term-predictions`; development/test plus feature flag; Admin generates, Admin/authorized Teacher reads. JHS Grades 7–10 only. This is the current demo path, not a production-approved model. [`backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py:L37-L128`; `backend/app/services/prediction/CurrentTermV3Domain.py:L9-L63`.] |
+| **Development same-term V3** | “Given recorded work so far, what numeric final grade might this student receive in this same term?” | `POST/GET /api/v1/development/current-term-predictions`; development/test plus feature flag; Admin and authorized Teacher read. Grades 7–12 are supported; Grades 11–12 remain explicitly provisional and unvalidated. The HTTP writer is isolated to automated tests. This is the current demo path, not a production-approved model. [`backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py`; `backend/app/services/prediction/CurrentTermV3Domain.py`.] |
 | **Legacy next-period** | “Given a source period, what might the next-period grade be?” | `/api/v1/predictions` routes and active model lookup. The default local registry has no active `entervene_next_period_grade_rf`; requests needing it cannot score there. Its older risk engine evaluates grade and participation signals. [`backend/app/api/v1/routes/Predictions.py:L272-L389`; `backend/app/services/prediction/ModelScoringService.py:L25-L82,L265-L342`.] |
 | **Other artifacts/registry rows** | Earlier current-period or unified experiments | Local artifacts and candidate registry rows exist, but an active row alone does not prove an API uses it. No active route to the `unified_current_term_projection_v2` row was found under `backend/app/`. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L33-L38,L443-L448`; `backend/app/models/ai/AIModelVersion.py:L7-L27`.] |
 | **Historical imported predictions** | Stored research/demo records | Existing `ai_prediction` rows can appear in historical dashboard/read paths. Their saved values are not newly scored live evidence; null legacy evidence snapshots must not be retroactively explained. [`backend/app/api/v1/routes/Predictions.py:L141-L213`; `backend/app/services/prediction/PredictionReadService.py:L188-L225`.] |
@@ -64,7 +64,7 @@ This explains why WW and PT evidence can satisfy the 70% coverage gate for the p
 
 | Exact input name | Source / calculation | Type and practical range | Other use |
 | --- | --- | --- | --- |
-| `grade_level` | Student academic level, fallback class level | Numeric; V3 supported 7–10 | Scope gate; model |
+| `grade_level` | Student academic level, fallback class level | Numeric; V3 supports Grades 7–12, with Grades 11–12 provisional and unvalidated | Scope gate; model |
 | `ww_weight`, `pt_weight`, `qa_weight` | Resolved subject template fractions ×100 | Numeric percentages; accepted combinations 20/50/30 or 20/60/20 | Domain gate; model; weighted derivatives |
 | `ww_available_activity_count` | Count of usable scored WW items | Nonnegative count | Readiness through aggregate; model |
 | `pt_available_activity_count` | Count of usable scored PT items | Nonnegative count | Readiness through aggregate; model |

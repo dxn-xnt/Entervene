@@ -34,6 +34,8 @@ import {
 import {
   buildCurrentTermDashboard,
   buildCurrentTermSubjectSummaries,
+  buildAdminPredictionHierarchy,
+  adminUniqueStudentRiskSummary,
   currentTermRiskSummary,
   loadAuthorizedCurrentTermPredictions,
   currentTermPredictionErrorMessage,
@@ -41,6 +43,7 @@ import {
   type AssignedSubjectSectionScope,
 } from "@/components/predictions/current-term-dashboard-adapter";
 import { PredictionSubjectSection } from "@/components/predictions/prediction-subject-section";
+import { AdminPredictionGradeCard } from "@/components/predictions/admin-prediction-grade-card";
 import { getTeacherRiskDisplaySummary } from "@/components/predictions/teacher-risk-display";
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import { SearchX, Sparkles } from "lucide-react";
@@ -415,12 +418,10 @@ function AdminCurrentTermDashboard() {
   const [subjectId, setSubjectId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
 
   useEffect(() => {
     if (!selectedPeriodId) {
       Promise.resolve().then(() => {
-        setSelected(null);
         setRows([]);
         setAssignedScopes([]);
         setFilters(null);
@@ -433,7 +434,6 @@ function AdminCurrentTermDashboard() {
     let cancelled = false;
     Promise.resolve().then(() => {
       if (!cancelled) {
-        setSelected(null);
         setLoading(true);
         setLoadError(null);
       }
@@ -477,20 +477,35 @@ function AdminCurrentTermDashboard() {
       (classId === undefined || row.class_id === classId) &&
       (subjectId === undefined || row.subject_id === subjectId)
   );
-  const data = buildCurrentTermDashboard(scopedRows, {
+  const scopedAssignedScopes = assignedScopes.filter(
+    (scope) =>
+      (gradeLevel === undefined || scope.grade_level === gradeLevel) &&
+      (classId === undefined || scope.class_id === classId) &&
+      (subjectId === undefined || scope.subject_id === subjectId)
+  );
+  const normalizedSearch = search.trim().toLowerCase();
+  const searchedRows = scopedRows.filter((row) =>
+    !normalizedSearch || (row.student_name || row.student_id).toLowerCase().includes(normalizedSearch)
+  );
+  const displaySummary = adminUniqueStudentRiskSummary(searchedRows);
+  const filterRiskSummary: RiskSummary = {
+    HIGH_RISK: displaySummary.HIGH_RISK,
+    MODERATE_RISK: displaySummary.MODERATE_RISK,
+    NEEDS_MONITORING: 0,
+    LOW_RISK: displaySummary.ON_TRACK,
+    INSUFFICIENT_DATA: 0,
+    total: displaySummary.total,
+  };
+  const gradeHierarchy = buildAdminPredictionHierarchy(scopedRows, scopedAssignedScopes, {
+    gradeLevel,
     search,
-    interventionLevel: riskLevel,
-    limit: Math.max(10, scopedRows.length),
+    riskLevel,
+    includeEmptySections: !normalizedSearch && riskLevel === undefined,
   });
-  const summary = currentTermRiskSummary(scopedRows);
-  const displaySummary = getTeacherRiskDisplaySummary(summary);
-  const subjectSummaries = buildCurrentTermSubjectSummaries(rows, assignedScopes);
-  const filtered =
-    gradeLevel !== undefined ||
-    classId !== undefined ||
-    subjectId !== undefined ||
-    riskLevel !== undefined ||
-    search.trim() !== "";
+  const hasHierarchyMatches = gradeHierarchy.some((group) =>
+    group.sections.some((section) => section.students.length > 0)
+  );
+  const hasPredictionResultFilters = riskLevel !== undefined || search.trim() !== "";
 
   return (
     <AppLayout>
@@ -503,12 +518,23 @@ function AdminCurrentTermDashboard() {
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <div aria-label="Prediction risk summary" className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
             {TEACHER_RISK_CARDS.map((card) => (
-              <OverviewCard
+              <button
                 key={card.key}
-                title={card.label}
-                count={String(displaySummary[card.key])}
-                className="w-full border-2 border-black shadow-[4px_4px_0px_#000]"
-              />
+                type="button"
+                onClick={() => setRiskLevel((current) => current === card.key ? undefined : card.key)}
+                aria-label={`Filter by ${card.label}`}
+                aria-pressed={riskLevel === card.key}
+                className="cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+              >
+                <OverviewCard
+                  title={card.label}
+                  count={String(displaySummary[card.key])}
+                  className={cn(
+                    "w-full border-2 border-black shadow-[4px_4px_0px_#000]",
+                    riskLevel === card.key && "translate-x-1 translate-y-1 bg-yellow-100 shadow-none",
+                  )}
+                />
+              </button>
             ))}
           </div>
 
@@ -523,7 +549,7 @@ function AdminCurrentTermDashboard() {
               search={search}
               hidePeriodFilter
               simplifiedTeacherRisk
-              riskSummary={summary}
+              riskSummary={filterRiskSummary}
               onGradeChange={setGradeLevel}
               onClassChange={setClassId}
               onSubjectChange={setSubjectId}
@@ -545,61 +571,34 @@ function AdminCurrentTermDashboard() {
                 title="Select an academic term"
                 description="Choose an academic year and term from the sidebar to view current-term projections."
               />
-            ) : filtered ? (
-              data.total > 0 ? (
-                <PredictionTable
-                  items={data.items}
-                  total={data.total}
-                  limit={Math.max(10, data.total)}
-                  offset={0}
-                  currentTerm
-                  simplifiedTeacherRisk
-                  showGradeLevel
-                  hidePagination
-                  onSort={() => undefined}
-                  onPageChange={() => undefined}
-                  onRowClick={(predictionId) =>
-                    setSelected(rows.find((row) => row.prediction_id === predictionId) || null)
-                  }
-                />
-              ) : (
-                <EmptyStateCard
-                  icon={<SearchX />}
-                  title="No predictions match these filters"
-                  description="Try another student, grade, section, subject, or risk level."
-                  actionLabel="Clear filters"
-                  onAction={clearFilters}
-                />
-              )
-            ) : subjectSummaries.length ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {subjectSummaries.map((group) => (
-                  <PredictionSubjectSection
-                    key={group.subject_id}
-                    group={group}
-                    predictionBasePath="/admin/predictions"
-                  />
-                ))}
-              </div>
-            ) : (
+            ) : assignedScopes.length === 0 && rows.length === 0 ? (
               <EmptyStateCard
                 icon={<Sparkles />}
                 title="No current-term projections available"
-                description="No generated projections are available for valid classes and subject loads in the selected term."
+                description="No valid classes or published subject loads are available for predictions in the selected term."
               />
+            ) : hasPredictionResultFilters && !hasHierarchyMatches ? (
+              <EmptyStateCard
+                icon={<SearchX />}
+                title="No predictions match these filters"
+                description="Try another student, grade, section, subject, or risk level."
+                actionLabel="Clear filters"
+                onAction={clearFilters}
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {gradeHierarchy.map((group) => (
+                  <AdminPredictionGradeCard
+                    key={group.grade_level}
+                    group={group}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      <PredictionDetailSheet
-        predictionId={selected?.prediction_id ?? null}
-        currentTermPrediction={selected}
-        open={selected !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelected(null);
-        }}
-      />
     </AppLayout>
   );
 }

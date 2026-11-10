@@ -1,5 +1,4 @@
 import {
-  fetchApprovedCurrentTermPredictions,
   fetchAdminCurrentTermScope,
   fetchTeacherAcademicScope,
   fetchCurrentTermPredictions,
@@ -34,11 +33,11 @@ export async function loadAuthorizedCurrentTermPredictions(
       && (constraints.classId === undefined || scope.class_id === constraints.classId)
       && (constraints.subjectId === undefined || scope.subject_id === constraints.subjectId));
     const responses = await Promise.all(assignedScopes.map(async (scope) => {
-      const response = await fetchApprovedCurrentTermPredictions({
+      const response = await fetchCurrentTermPredictions({
         class_id: scope.class_id,
         subject_id: scope.subject_id,
         academic_period_id: academicPeriodId,
-      });
+      }, "admin");
       return response.items.map((row) => ({ ...row, grade_level: scope.grade_level }));
     }));
     const unique = new Map<number, AuthorizedCurrentTermRow>();
@@ -193,6 +192,225 @@ export interface AssignedSubjectSectionScope {
   grade_level?: number | null;
   class_id: number;
   section_name: string;
+}
+
+export type AdminStudentRiskLevel = "HIGH_RISK" | "MODERATE_RISK" | "ON_TRACK";
+
+export interface AdminPredictionStudentSummary {
+  student_id: string;
+  student_name: string;
+  risk_level: AdminStudentRiskLevel | null;
+  predictions: AuthorizedCurrentTermRow[];
+}
+
+export interface AdminPredictionSectionSummary {
+  class_id: number;
+  section_name: string;
+  grade_level: number;
+  unique_student_count: number;
+  prediction_count: number;
+  subject_count: number;
+  high_risk_count: number;
+  moderate_risk_count: number;
+  on_track_count: number;
+  students: AdminPredictionStudentSummary[];
+  subjects: AdminPredictionSubjectSummary[];
+}
+
+export interface AdminPredictionSubjectSummary {
+  subject_id: number;
+  subject_name: string;
+  subject_codename: string | null;
+  prediction_count: number;
+  high_risk_count: number;
+  moderate_risk_count: number;
+  needs_monitoring_count: number;
+  low_risk_count: number;
+  predictions: AuthorizedCurrentTermRow[];
+}
+
+export interface AdminPredictionGradeSummary {
+  grade_level: number;
+  sections: AdminPredictionSectionSummary[];
+}
+
+export interface AdminUniqueStudentRiskSummary {
+  HIGH_RISK: number;
+  MODERATE_RISK: number;
+  ON_TRACK: number;
+  total: number;
+}
+
+function isActionableCurrentTermRow(row: AuthorizedCurrentTermRow): boolean {
+  return !row.official_final_grade_available && row.term_context.is_active;
+}
+
+export function adminStudentRiskLevel(
+  predictions: AuthorizedCurrentTermRow[],
+): AdminStudentRiskLevel | null {
+  const actionable = predictions.filter(isActionableCurrentTermRow);
+  if (actionable.some((row) => row.intervention_level === "HIGH_RISK")) return "HIGH_RISK";
+  if (actionable.some((row) => row.intervention_level === "MODERATE_RISK")) return "MODERATE_RISK";
+  if (actionable.some((row) =>
+    row.intervention_level === "NEEDS_MONITORING" || row.intervention_level === "LOW_RISK")) {
+    return "ON_TRACK";
+  }
+  return null;
+}
+
+export function adminUniqueStudentRiskSummary(
+  rows: AuthorizedCurrentTermRow[],
+): AdminUniqueStudentRiskSummary {
+  const byStudent = new Map<string, AuthorizedCurrentTermRow[]>();
+  rows.forEach((row) => {
+    const current = byStudent.get(row.student_id) ?? [];
+    current.push(row);
+    byStudent.set(row.student_id, current);
+  });
+
+  const summary: AdminUniqueStudentRiskSummary = {
+    HIGH_RISK: 0,
+    MODERATE_RISK: 0,
+    ON_TRACK: 0,
+    total: 0,
+  };
+  byStudent.forEach((predictions) => {
+    const level = adminStudentRiskLevel(predictions);
+    if (!level) return;
+    summary[level] += 1;
+    summary.total += 1;
+  });
+  return summary;
+}
+
+export function buildAdminPredictionHierarchy(
+  rows: AuthorizedCurrentTermRow[],
+  assignedScopes: AssignedSubjectSectionScope[],
+  options: {
+    gradeLevel?: number;
+    search?: string;
+    riskLevel?: string;
+    includeEmptySections?: boolean;
+  } = {},
+): AdminPredictionGradeSummary[] {
+  const gradeLevels = options.gradeLevel === undefined
+    ? [7, 8, 9, 10, 11, 12]
+    : [options.gradeLevel];
+  const grades = new Map<number, Map<number, {
+    class_id: number;
+    section_name: string;
+    grade_level: number;
+    scope_subjects: Map<number, {
+      subject_id: number;
+      subject_name: string;
+      subject_codename: string | null;
+    }>;
+    rows: AuthorizedCurrentTermRow[];
+  }>>();
+  gradeLevels.forEach((grade) => grades.set(grade, new Map()));
+
+  const ensureSection = (
+    gradeLevel: number | null | undefined,
+    classId: number,
+    sectionName: string,
+  ) => {
+    if (gradeLevel == null || !grades.has(gradeLevel)) return null;
+    const sections = grades.get(gradeLevel)!;
+    let section = sections.get(classId);
+    if (!section) {
+      section = {
+        class_id: classId,
+        section_name: sectionName,
+        grade_level: gradeLevel,
+        scope_subjects: new Map(),
+        rows: [],
+      };
+      sections.set(classId, section);
+    }
+    return section;
+  };
+
+  assignedScopes.forEach((scope) => {
+    const section = ensureSection(scope.grade_level, scope.class_id, scope.section_name);
+    section?.scope_subjects.set(scope.subject_id, {
+      subject_id: scope.subject_id,
+      subject_name: scope.subject_name,
+      subject_codename: scope.subject_codename ?? null,
+    });
+  });
+  rows.forEach((row) => {
+    const section = ensureSection(row.grade_level, row.class_id, row.class_name);
+    if (!section) return;
+    section.scope_subjects.set(row.subject_id, {
+      subject_id: row.subject_id,
+      subject_name: row.subject_name,
+      subject_codename: row.subject_codename ?? null,
+    });
+    section.rows.push(row);
+  });
+
+  const search = options.search?.trim().toLowerCase() ?? "";
+  return gradeLevels.map((gradeLevel) => {
+    const sections = [...(grades.get(gradeLevel)?.values() ?? [])]
+      .map((section): AdminPredictionSectionSummary | null => {
+        const byStudent = new Map<string, AuthorizedCurrentTermRow[]>();
+        section.rows.forEach((row) => {
+          const current = byStudent.get(row.student_id) ?? [];
+          current.push(row);
+          byStudent.set(row.student_id, current);
+        });
+
+        const students = [...byStudent.entries()]
+          .map(([studentId, predictions]): AdminPredictionStudentSummary => ({
+            student_id: studentId,
+            student_name: predictions[0]?.student_name || studentId,
+            risk_level: adminStudentRiskLevel(predictions),
+            predictions: [...predictions].sort((a, b) =>
+              a.subject_name.localeCompare(b.subject_name) || a.prediction_id - b.prediction_id),
+          }))
+          .filter((student) => !search || student.student_name.toLowerCase().includes(search))
+          .filter((student) => !options.riskLevel || student.risk_level === options.riskLevel)
+          .sort((a, b) => a.student_name.localeCompare(b.student_name));
+
+        if (!options.includeEmptySections && students.length === 0) return null;
+        const visiblePredictions = students.flatMap((student) => student.predictions);
+        const subjects = [...section.scope_subjects.values()]
+          .map((subject): AdminPredictionSubjectSummary => {
+            const predictions = visiblePredictions
+              .filter((prediction) => prediction.subject_id === subject.subject_id)
+              .sort((a, b) =>
+                (a.student_name || a.student_id).localeCompare(b.student_name || b.student_id)
+                || a.prediction_id - b.prediction_id);
+            const actionable = predictions.filter(isActionableCurrentTermRow);
+            return {
+              ...subject,
+              prediction_count: predictions.length,
+              high_risk_count: actionable.filter((row) => row.intervention_level === "HIGH_RISK").length,
+              moderate_risk_count: actionable.filter((row) => row.intervention_level === "MODERATE_RISK").length,
+              needs_monitoring_count: actionable.filter((row) => row.intervention_level === "NEEDS_MONITORING").length,
+              low_risk_count: actionable.filter((row) => row.intervention_level === "LOW_RISK").length,
+              predictions,
+            };
+          })
+          .sort((a, b) => a.subject_name.localeCompare(b.subject_name) || a.subject_id - b.subject_id);
+        return {
+          class_id: section.class_id,
+          section_name: section.section_name,
+          grade_level: section.grade_level,
+          unique_student_count: students.length,
+          prediction_count: visiblePredictions.length,
+          subject_count: subjects.length,
+          high_risk_count: students.filter((student) => student.risk_level === "HIGH_RISK").length,
+          moderate_risk_count: students.filter((student) => student.risk_level === "MODERATE_RISK").length,
+          on_track_count: students.filter((student) => student.risk_level === "ON_TRACK").length,
+          students,
+          subjects,
+        };
+      })
+      .filter((section): section is AdminPredictionSectionSummary => section !== null)
+      .sort((a, b) => a.section_name.localeCompare(b.section_name));
+    return { grade_level: gradeLevel, sections };
+  });
 }
 
 export function formatSubjectDisplayName(subjectName: string, gradeLevel?: number | null): string {
