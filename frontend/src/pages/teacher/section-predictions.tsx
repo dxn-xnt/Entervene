@@ -43,9 +43,14 @@ import {
   type AuthorizedCurrentTermRow,
   type AssignedSubjectSectionScope,
 } from "@/components/predictions/current-term-dashboard-adapter";
+import { AdminCurrentTermGradePredictions } from "./grade-predictions";
 
 export default function SectionPredictions() {
   const { role } = useAuth();
+  const { subjectId } = useParams<{ subjectId?: string }>();
+  if (role === "admin" && !subjectId) {
+    return <AdminCurrentTermGradePredictions />;
+  }
   const viewerRole = role === "admin" ? "admin" : "teacher";
   return <TeacherCurrentTermSectionPredictions viewerRole={viewerRole} />;
 }
@@ -686,23 +691,49 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
                 </Breadcrumb.Link>
               </Breadcrumb.Item>
               <Breadcrumb.Separator />
-              <Breadcrumb.Item>
-                <Breadcrumb.Link asChild>
-                  <Link
-                    to={
-                      targetSubjectId
-                        ? `${predictionBasePath}/subject/${targetSubjectId}`
-                        : predictionBasePath
-                    }
-                  >
-                    {subjectDisplayName}
-                  </Link>
-                </Breadcrumb.Link>
-              </Breadcrumb.Item>
-              <Breadcrumb.Separator />
-              <Breadcrumb.Item>
-                <Breadcrumb.Page>{sectionName}</Breadcrumb.Page>
-              </Breadcrumb.Item>
+              {viewerRole === "admin" ? (
+                <>
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Link asChild>
+                      <Link to={`${predictionBasePath}/${matchingScope?.grade_level ?? rows[0]?.grade_level}`}>
+                        Grade {matchingScope?.grade_level ?? rows[0]?.grade_level}
+                      </Link>
+                    </Breadcrumb.Link>
+                  </Breadcrumb.Item>
+                  <Breadcrumb.Separator />
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Link asChild>
+                      <Link to={`${predictionBasePath}/${matchingScope?.grade_level ?? rows[0]?.grade_level}/${resolvedClassId}`}>
+                        {sectionName}
+                      </Link>
+                    </Breadcrumb.Link>
+                  </Breadcrumb.Item>
+                  <Breadcrumb.Separator />
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Page>{subjectDisplayName}</Breadcrumb.Page>
+                  </Breadcrumb.Item>
+                </>
+              ) : (
+                <>
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Link asChild>
+                      <Link
+                        to={
+                          targetSubjectId
+                            ? `${predictionBasePath}/subject/${targetSubjectId}`
+                            : predictionBasePath
+                        }
+                      >
+                        {subjectDisplayName}
+                      </Link>
+                    </Breadcrumb.Link>
+                  </Breadcrumb.Item>
+                  <Breadcrumb.Separator />
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Page>{sectionName}</Breadcrumb.Page>
+                  </Breadcrumb.Item>
+                </>
+              )}
             </Breadcrumb.List>
           </Breadcrumb>
         </header>

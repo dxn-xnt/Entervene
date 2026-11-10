@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -26,22 +26,329 @@ import {
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { BrainCircuit } from "lucide-react";
+import { BrainCircuit, School, TrendingUp } from "lucide-react";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
   buildCurrentTermDashboard,
   buildCurrentTermGradeSummaries,
+  currentTermRiskSummary,
   loadAuthorizedCurrentTermPredictions,
   currentTermPredictionErrorMessage,
   type AuthorizedCurrentTermRow,
+  type AssignedSubjectSectionScope,
 } from "@/components/predictions/current-term-dashboard-adapter";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
+import { Alert } from "@/components/retroui/Alert";
+import { Loader } from "@/components/retroui/Loader";
+import { Button } from "@/components/retroui/Button";
+import { Select } from "@/components/retroui/Select";
 
 export default function GradePredictions() {
   const { role } = useAuth();
-  return role === "teacher" ? <TeacherCurrentTermGradePredictions /> : <LegacyGradePredictions />;
+  return role === "admin" ? <AdminCurrentTermGradePredictions /> : <TeacherCurrentTermGradePredictions />;
 }
 
-function LegacyGradePredictions() {
+export function AdminCurrentTermGradePredictions() {
+  const { grade, classId: classSlug } = useParams<{ grade: string; classId?: string }>();
+  const { selectedPeriodId } = useAcademicPeriod();
+  const numericGrade = grade ? Number(grade) : undefined;
+  const routeClassId = classSlug && !Number.isNaN(Number(classSlug)) ? Number(classSlug) : undefined;
+  const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
+  const [assignedScopes, setAssignedScopes] = useState<AssignedSubjectSectionScope[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [classId, setClassId] = useState<number | undefined>(routeClassId);
+  const [subjectId, setSubjectId] = useState<number | undefined>();
+  const [riskLevel, setRiskLevel] = useState<string | undefined>();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
+
+  useEffect(() => {
+    if (!selectedPeriodId || numericGrade === undefined || numericGrade < 7 || numericGrade > 12) {
+      Promise.resolve().then(() => setLoading(false));
+      return;
+    }
+
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setLoading(true);
+        setLoadError(null);
+        setRows([]);
+        setAssignedScopes([]);
+        setSelected(null);
+        setClassId(routeClassId);
+        setSubjectId(undefined);
+      }
+    });
+    loadAuthorizedCurrentTermPredictions(
+      selectedPeriodId,
+      { gradeLevel: numericGrade },
+      "admin",
+    )
+      .then((result) => {
+        if (!cancelled) {
+          setRows(result.rows);
+          setAssignedScopes(result.assignedScopes);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setRows([]);
+          setAssignedScopes([]);
+          setLoadError(currentTermPredictionErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericGrade, routeClassId, selectedPeriodId]);
+
+  const sections = useMemo(() => {
+    const byId = new Map<number, { class_id: number; section_name: string }>();
+    assignedScopes.forEach((scope) => {
+      if (!byId.has(scope.class_id)) {
+        byId.set(scope.class_id, { class_id: scope.class_id, section_name: scope.section_name });
+      }
+    });
+    return [...byId.values()].sort((a, b) => a.section_name.localeCompare(b.section_name));
+  }, [assignedScopes]);
+
+  const selectedClassId = sections.some((section) => section.class_id === classId)
+    ? classId
+    : routeClassId && sections.some((section) => section.class_id === routeClassId)
+      ? routeClassId
+      : sections[0]?.class_id;
+
+  const availableSubjects = useMemo(() => {
+    const byId = new Map<number, AssignedSubjectSectionScope>();
+    assignedScopes
+      .filter((scope) => scope.class_id === selectedClassId)
+      .forEach((scope) => byId.set(scope.subject_id, scope));
+    return [...byId.values()].sort((a, b) => a.subject_name.localeCompare(b.subject_name));
+  }, [assignedScopes, selectedClassId]);
+
+  const effectiveSubjectId = availableSubjects.some((subject) => subject.subject_id === subjectId)
+    ? subjectId
+    : undefined;
+
+  const sectionRows = rows.filter((row) => row.class_id === selectedClassId);
+  const subjectRows = sectionRows.filter((row) => effectiveSubjectId === undefined || row.subject_id === effectiveSubjectId);
+  const data = buildCurrentTermDashboard(subjectRows, {
+    search,
+    interventionLevel: riskLevel,
+    limit: Math.max(10, subjectRows.length),
+  });
+  const selectedSection = sections.find((section) => section.class_id === selectedClassId);
+  const selectedSubject = availableSubjects.find((subject) => subject.subject_id === effectiveSubjectId);
+  const hasResultFilters = Boolean(search.trim() || riskLevel);
+
+  const clearResultFilters = () => {
+    setSearch("");
+    setRiskLevel(undefined);
+  };
+
+  return (
+    <AppLayout>
+      <div className="flex flex-1 flex-col">
+        <header className="flex items-center gap-3 bg-background px-4 py-4 md:px-6">
+          <SidebarTrigger className="md:hidden" />
+          <Breadcrumb>
+            <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
+              <Breadcrumb.Item>
+                <Breadcrumb.Link asChild>
+                  <Link to="/admin/predictions">AI Predictions</Link>
+                </Breadcrumb.Link>
+              </Breadcrumb.Item>
+              <Breadcrumb.Separator />
+              <Breadcrumb.Item>
+                <Breadcrumb.Page>Grade {grade}</Breadcrumb.Page>
+              </Breadcrumb.Item>
+            </Breadcrumb.List>
+          </Breadcrumb>
+        </header>
+
+        <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+          {loadError ? (
+            <Alert status="error" className="font-semibold">{loadError}</Alert>
+          ) : loading ? (
+            <div className="flex items-center justify-center gap-3 py-20 font-semibold text-gray-500">
+              <Loader size="md" />
+              <span>Loading Grade {grade} sections...</span>
+            </div>
+          ) : !selectedPeriodId ? (
+            <EmptyStateCard
+              icon={<School />}
+              title="Select an academic term"
+              description="Choose an academic year and term from the sidebar to view sections."
+            />
+          ) : numericGrade === undefined || numericGrade < 7 || numericGrade > 12 ? (
+            <EmptyStateCard
+              icon={<School />}
+              title="Grade level unavailable"
+              description="Admin prediction grades are available for Grades 7 through 12."
+            />
+          ) : !sections.length ? (
+            <EmptyStateCard
+              icon={<School />}
+              title={`No sections assigned to Grade ${grade}`}
+              description="Sections with valid subject assignments for the selected term will appear here."
+            />
+          ) : (
+            <div className="flex flex-col gap-4">
+              <Card className="flex flex-col gap-4 bg-background p-4 shadow-none hover:shadow-none">
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="admin-prediction-section" className="text-sm font-bold">Section</label>
+                  <Select
+                    value={selectedClassId === undefined ? "" : String(selectedClassId)}
+                    onValueChange={(value) => {
+                      setClassId(Number(value));
+                      setSubjectId(undefined);
+                      setSelected(null);
+                    }}
+                  >
+                    <Select.Trigger id="admin-prediction-section" className="w-full sm:max-w-sm">
+                      <Select.Value placeholder="Select section" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        {sections.map((section) => (
+                          <Select.Item key={section.class_id} value={String(section.class_id)}>
+                            {section.section_name}
+                          </Select.Item>
+                        ))}
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-bold">Subjects</p>
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Subject filters">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={effectiveSubjectId === undefined ? "default" : "outline"}
+                      aria-pressed={effectiveSubjectId === undefined}
+                      onClick={() => {
+                        setSubjectId(undefined);
+                        setSelected(null);
+                      }}
+                    >
+                      All Subjects
+                    </Button>
+                    {availableSubjects.map((subject) => (
+                      <Button
+                        key={subject.subject_id}
+                        type="button"
+                        size="sm"
+                        variant={effectiveSubjectId === subject.subject_id ? "default" : "outline"}
+                        aria-pressed={effectiveSubjectId === subject.subject_id}
+                        onClick={() => {
+                          setSubjectId(subject.subject_id);
+                          setSelected(null);
+                        }}
+                      >
+                        {subject.subject_name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+
+              <PredictionFilters
+                filters={null}
+                gradeLevel={numericGrade}
+                classId={selectedClassId}
+                subjectId={effectiveSubjectId}
+                academicPeriodId={selectedPeriodId ?? undefined}
+                riskLevel={riskLevel}
+                search={search}
+                hideGradeFilter
+                hideClassFilter
+                hideSubjectFilter
+                hidePeriodFilter
+                simplifiedTeacherRisk
+                riskSummary={currentTermRiskSummary(subjectRows)}
+                onSubjectChange={() => undefined}
+                onRiskChange={setRiskLevel}
+                onSearchChange={setSearch}
+                onClearAll={clearResultFilters}
+              />
+
+              <Card className="flex flex-col gap-4 bg-background p-4 shadow-none hover:shadow-none">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border pb-3">
+                  <h2 className="text-lg font-bold">Student Predictions</h2>
+                  <Badge size="sm" variant="outline" className="border-black bg-yellow-50">
+                    {selectedSubject?.subject_name ?? "All Subjects"}
+                  </Badge>
+                </div>
+
+                {!selectedSection ? (
+                  <EmptyStateCard
+                    compact
+                    icon={<School />}
+                    title="Select a section"
+                    description="Choose a section to view its assigned subjects and student predictions."
+                  />
+                ) : subjectRows.length === 0 ? (
+                  <EmptyStateCard
+                    compact
+                    icon={<TrendingUp />}
+                    title={selectedSubject
+                      ? `No predictions available for ${selectedSubject.subject_name}`
+                      : "No predictions available for this section"}
+                    description="There are currently no generated predictions for the selected scope and academic term."
+                  />
+                ) : data.items.length === 0 && hasResultFilters ? (
+                  <EmptyStateCard
+                    compact
+                    icon={<TrendingUp />}
+                    title="No predictions match these filters"
+                    description="Try another student search or risk level."
+                    actionLabel="Clear filters"
+                    onAction={clearResultFilters}
+                  />
+                ) : (
+                  <PredictionTable
+                    items={data.items}
+                    total={data.total}
+                    limit={Math.max(10, data.total)}
+                    offset={0}
+                    hideClass
+                    hideSubject={effectiveSubjectId !== undefined}
+                    hidePagination
+                    currentTerm
+                    simplifiedTeacherRisk
+                    onSort={() => undefined}
+                    onPageChange={() => undefined}
+                    onRowClick={(predictionId) =>
+                      setSelected(rows.find((row) => row.prediction_id === predictionId) || null)
+                    }
+                  />
+                )}
+              </Card>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <PredictionDetailSheet
+        predictionId={selected?.prediction_id ?? null}
+        currentTermPrediction={selected}
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+      />
+    </AppLayout>
+  );
+}
+
+export function LegacyGradePredictions() {
   const { role } = useAuth();
   const baseRole = role === "admin" ? "admin" : "teacher";
   const { grade } = useParams<{ grade: string }>();

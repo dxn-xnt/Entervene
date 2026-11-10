@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   fetchAdminCurrentTermScope: vi.fn(),
-  fetchApprovedCurrentTermPredictions: vi.fn(),
   fetchTeacherAcademicScope: vi.fn(),
   fetchCurrentTermPredictions: vi.fn(),
 }));
@@ -99,23 +98,23 @@ describe("loadAuthorizedCurrentTermPredictions", () => {
         { class_id: 20, section_name: "Archimedes", grade_level: 9, subject_id: 200, subject_name: "Science", subject_codename: "SCIENCE" },
       ],
     });
-    mocks.fetchApprovedCurrentTermPredictions
+    mocks.fetchCurrentTermPredictions
       .mockResolvedValueOnce({ items: [prediction(1, 10, 100)], total: 1 })
       .mockResolvedValueOnce({ items: [prediction(2, 20, 200)], total: 1 });
 
     const result = await loadAuthorizedCurrentTermPredictions(21, {}, "admin");
 
     expect(mocks.fetchAdminCurrentTermScope).toHaveBeenCalledWith(21);
-    expect(mocks.fetchApprovedCurrentTermPredictions).toHaveBeenNthCalledWith(1, {
+    expect(mocks.fetchCurrentTermPredictions).toHaveBeenNthCalledWith(1, {
       class_id: 10,
       subject_id: 100,
       academic_period_id: 21,
-    });
-    expect(mocks.fetchApprovedCurrentTermPredictions).toHaveBeenNthCalledWith(2, {
+    }, "admin");
+    expect(mocks.fetchCurrentTermPredictions).toHaveBeenNthCalledWith(2, {
       class_id: 20,
       subject_id: 200,
       academic_period_id: 21,
-    });
+    }, "admin");
     expect(result.filters).toBe(filters);
     expect(result.rows.map((row) => [row.prediction_id, row.grade_level])).toEqual([[1, 7], [2, 9]]);
     expect(result.assignedScopes).toHaveLength(2);
@@ -130,7 +129,7 @@ describe("loadAuthorizedCurrentTermPredictions", () => {
         { class_id: 20, section_name: "Archimedes", grade_level: 9, subject_id: 200, subject_name: "Science", subject_codename: "SCIENCE" },
       ],
     });
-    mocks.fetchApprovedCurrentTermPredictions.mockResolvedValue({ items: [prediction(2, 20, 200)], total: 1 });
+    mocks.fetchCurrentTermPredictions.mockResolvedValue({ items: [prediction(2, 20, 200)], total: 1 });
 
     const result = await loadAuthorizedCurrentTermPredictions(
       21,
@@ -138,7 +137,7 @@ describe("loadAuthorizedCurrentTermPredictions", () => {
       "admin",
     );
 
-    expect(mocks.fetchApprovedCurrentTermPredictions).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchCurrentTermPredictions).toHaveBeenCalledTimes(1);
     expect(result.rows.map((row) => row.prediction_id)).toEqual([2]);
     expect(result.assignedScopes.map((scope) => scope.class_id)).toEqual([20]);
   });
@@ -149,7 +148,27 @@ describe("loadAuthorizedCurrentTermPredictions", () => {
     const result = await loadAuthorizedCurrentTermPredictions(21, {}, "admin");
 
     expect(result).toEqual({ filters: emptyFilters, rows: [], assignedScopes: [] });
-    expect(mocks.fetchApprovedCurrentTermPredictions).not.toHaveBeenCalled();
+    expect(mocks.fetchCurrentTermPredictions).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty Admin result when valid scopes have no prediction records", async () => {
+    mocks.fetchAdminCurrentTermScope.mockResolvedValue({
+      filters: emptyFilters,
+      scopes: [
+        { class_id: 10, section_name: "Rizal", grade_level: 7, subject_id: 100, subject_name: "English 7", subject_codename: "ENG7" },
+      ],
+    });
+    mocks.fetchCurrentTermPredictions.mockResolvedValue({ items: [], total: 0 });
+
+    const result = await loadAuthorizedCurrentTermPredictions(21, {}, "admin");
+
+    expect(result.rows).toEqual([]);
+    expect(result.assignedScopes).toHaveLength(1);
+    expect(mocks.fetchCurrentTermPredictions).toHaveBeenCalledWith({
+      class_id: 10,
+      subject_id: 100,
+      academic_period_id: 21,
+    }, "admin");
   });
 
   it("preserves Teacher assignment discovery and Teacher-role prediction reads", async () => {
