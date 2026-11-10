@@ -564,7 +564,7 @@ function AvailableStudentsPanel({
                     </Text>
                   </span>
                   <Badge variant="outline">No section</Badge>
-                  {pending && <Badge variant="default">Pending save</Badge>}
+                  {pending && <Badge variant="default" size="sm">Pending save</Badge>}
                   <Button
                     size="sm"
                     variant={pending ? "outline" : "default"}

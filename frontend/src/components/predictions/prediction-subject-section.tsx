@@ -6,7 +6,7 @@ import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { SubjectSectionCard } from "./subject-section-card";
 import type { DashboardSubjectGroupSummary } from "./current-term-dashboard-adapter";
-import { getTeacherRiskDisplaySummary, getTeacherRiskPercentage } from "./teacher-risk-display";
+import { getTeacherRiskDisplaySummary } from "./teacher-risk-display";
 
 interface PredictionSubjectSectionProps {
   group: DashboardSubjectGroupSummary;
@@ -43,13 +43,10 @@ export function PredictionSubjectSection({
         </div>
         <div className="flex flex-row flex-wrap gap-2 items-center">
           <Badge size="sm" variant="solid">
-            {displaySummary.MODERATE_RISK} Moderate Risk ({Math.round(getTeacherRiskPercentage(displaySummary.MODERATE_RISK, displaySummary.assessedTotal))}%)
+            {displaySummary.MODERATE_RISK} Moderate Risk
           </Badge>
           <Badge size="sm" variant="destructive">
-            {displaySummary.HIGH_RISK} High Risk ({Math.round(getTeacherRiskPercentage(displaySummary.HIGH_RISK, displaySummary.assessedTotal))}%)
-          </Badge>
-          <Badge size="sm" variant="outline">
-            {displaySummary.ON_TRACK} On Track ({Math.round(getTeacherRiskPercentage(displaySummary.ON_TRACK, displaySummary.assessedTotal))}%)
+            {displaySummary.HIGH_RISK} High Risk
           </Badge>
           {navigationEnabled && <Tooltip>
             <TooltipTrigger render={

@@ -52,7 +52,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
 
       <SidebarContent>
-        <div className="grid grid-cols-2 border-y-2 border-border mb-1">
+        <div data-academic-selectors className="grid grid-cols-2 border-y-2 border-border mb-1">
           <Select
             value={selectedYearId ? String(selectedYearId) : undefined}
             onValueChange={(val) => {

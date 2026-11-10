@@ -709,9 +709,8 @@ function GradesTab({ classId }: { classId: number }) {
                               </div>
                             ) : (
                               <Badge
-                                variant="outline"
+                                variant="default"
                                 size="sm"
-                                className="font-semibold text-muted-foreground text-[10px] border-border"
                               >
                                 Pending
                               </Badge>

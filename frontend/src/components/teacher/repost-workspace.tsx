@@ -692,7 +692,7 @@ export function RepostWorkspace({
     switch (status) {
       case "PENDING_OWNER":
         return (
-          <Badge size="sm" variant="outline" className="shrink-0 gap-1.5">
+          <Badge size="sm" variant="default" className="shrink-0 gap-1.5">
             <Clock className="size-3" /> Pending Colleague
           </Badge>
         );
@@ -829,9 +829,9 @@ export function RepostWorkspace({
           <Inbox className="size-4 shrink-0" />
           <span className="truncate">Received Requests</span>
           {incomingData?.badges?.pending ? (
-            <span className="ml-1 size-5 rounded-full bg-amber-400 text-black text-[10px] font-black flex items-center justify-center border border-black">
+            <Badge variant="default" size="sm" className="ml-1">
               {incomingData.badges.pending}
-            </span>
+            </Badge>
           ) : null}
         </button>
         <button

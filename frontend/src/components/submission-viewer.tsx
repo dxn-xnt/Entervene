@@ -1,3 +1,4 @@
+import { Badge } from "@/components/retroui/Badge";
 import { useState } from "react";
 import { Trash2, AlertCircle } from "lucide-react";
 import AttachmentDisplay from "./attachment-display";
@@ -82,10 +83,13 @@ export default function SubmissionViewer({
         <div className="flex items-start justify-between">
           <div>
             <h3 className="font-semibold text-gray-900 mb-2">Submission Status</h3>
-            <div className={`inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium ${statusColor}`}>
-              {submission.status.charAt(0).toUpperCase() +
-                submission.status.slice(1)}
-            </div>
+            {submission.status === "pending" ? (
+              <Badge variant="default" size="sm">Pending</Badge>
+            ) : (
+              <div className={`inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium ${statusColor}`}>
+                {submission.status.charAt(0).toUpperCase() + submission.status.slice(1)}
+              </div>
+            )}
           </div>
           {!hideGrade && submission.grade !== undefined && submission.grade !== null && (
             <div className="text-right">
