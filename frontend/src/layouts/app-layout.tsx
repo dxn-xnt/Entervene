@@ -15,7 +15,7 @@ export default function AppLayout({
   useLayoutEffect(() => {
     const content = contentRef.current;
     const layout = content?.closest<HTMLElement>('[data-slot="sidebar-wrapper"]');
-    if (!content || !layout || !(pathname.startsWith('/admin') || pathname.startsWith('/teacher'))) return;
+    if (!content || !layout || !['/admin', '/teacher', '/student'].some((prefix) => pathname.startsWith(prefix))) return;
 
     let observedHeader: Element | null = null;
     const selectors = layout.querySelector<HTMLElement>('[data-academic-selectors]');

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Align sidebar borders with Admin and Teacher page headers. */
+/* Align sidebar borders with Admin, Teacher, and Student page headers. */
 @media (min-width: 768px) {
   [data-aligned-tabbed-header] [data-sidebar="header"] {
     height: var(--aligned-sidebar-brand-height);
