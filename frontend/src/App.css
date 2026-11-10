@@ -16,18 +16,63 @@
     flex-shrink: 0;
   }
 
-  [data-aligned-plain-header] [data-sidebar="header"] > [data-sidebar="menu"],
-  [data-aligned-plain-header] [data-sidebar="header"] [data-sidebar="menu-item"] {
+  [data-aligned-plain-header]:not([data-student-plain-header]) [data-sidebar="header"] > [data-sidebar="menu"],
+  [data-aligned-plain-header]:not([data-student-plain-header]) [data-sidebar="header"] [data-sidebar="menu-item"] {
     height: 100%;
   }
 
-  [data-aligned-plain-header] [data-sidebar="header"] [data-sidebar="menu-item"] {
+  [data-aligned-plain-header]:not([data-student-plain-header]) [data-sidebar="header"] [data-sidebar="menu-item"] {
     margin-bottom: 0;
   }
 
   [data-aligned-plain-header] [data-academic-selectors] {
     border-top-width: 0;
     flex-shrink: 0;
+  }
+
+  [data-student-plain-header] [data-academic-selectors] {
+    border-top-width: 2px;
+  }
+
+  /* A stable Student shell prevents selector movement between page types. */
+  [data-student-layout] {
+    --student-title-row-height: calc(var(--spacing) * 18);
+  }
+
+  [data-student-layout] [data-sidebar="header"] {
+    height: calc(var(--student-title-row-height) + var(--spacing) * 2);
+    flex-shrink: 0;
+  }
+
+  [data-student-layout] [data-sidebar="header"] > [data-sidebar="menu"],
+  [data-student-layout] [data-sidebar="header"] [data-sidebar="menu-item"] {
+    height: var(--student-title-row-height);
+  }
+
+  [data-student-layout] [data-sidebar="header"] [data-sidebar="menu-item"] {
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+
+  [data-student-layout] [data-academic-selectors] {
+    border-top-width: 2px;
+    flex-shrink: 0;
+  }
+
+  [data-student-layout] [data-app-content] header:has([data-sidebar="trigger"]) {
+    height: var(--student-title-row-height);
+    flex-shrink: 0;
+  }
+
+  [data-student-layout] [data-page-tabs-sticky-region] [role="tablist"] {
+    padding-top: calc(var(--spacing) * 2.5);
+  }
+
+  [data-student-layout] [data-page-tabs-sticky-region] > header + div {
+    margin-top: 0;
+  }
+
+  [data-student-layout] [data-page-tabs-sticky-region] [data-tabs-sentinel] {
+    height: 0;
   }
 }
 
