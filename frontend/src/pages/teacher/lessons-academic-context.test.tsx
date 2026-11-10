@@ -69,7 +69,7 @@ vi.mock("@/pages/teacher/subject-details/tos-generator-screen", () => ({
   default: () => <div data-testid="tos-generator-screen" />,
 }));
 
-vi.mock("@/components/teacher/repost-modal", () => ({
+vi.mock("@/pages/teacher/forms/repost-modal", () => ({
   RepostModal: () => null,
 }));
 

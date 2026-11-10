@@ -40,7 +40,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import SetLessonGoalModal from "./forms/set-lesson-goal-modal";
-import { RepostModal } from "@/components/teacher/repost-modal";
+import { RepostModal } from "@/pages/teacher/forms/repost-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
@@ -694,7 +694,7 @@ function LessonsTab({
         );
       }
       toast.success({
-        title: `Lesson "${lesson.title}" confirmed as taught.`,
+        title: `Lesson "${lesson.title}" confirmed as completed.`,
       });
     } catch (err) {
       setDeliveryError(

@@ -44,7 +44,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <Link to="#" className="group/brand flex items-center gap-3">
                 <EnterveneLogo className="size-10! drop-shadow-[0px_4px_0px_#000] transition-all duration-150 ease-out group-active/brand:translate-y-1 group-active/brand:drop-shadow-none" />
-                <span className="text-3xl! font-bold font-head">Entervene</span>
+                <div className="flex flex-col gap-0! -mb-1">
+                  <span className="text-3xl! font-bold font-head -mb-1.5">Entervene</span>
+                  <span className="text-sm font-semibold font-sans ">MNSTS Learning Hub</span>
+                </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

@@ -30,7 +30,7 @@ import ManageLessonModal from "./forms/manage-lesson";
 import SubjectLessonList from "./subject-details/subject-lesson-list";
 import SubjectClassworkTab from "./subject-details/subject-classwork-tab";
 import TeacherLessonDetailScreen from "./lesson-view";
-import { RepostModal } from "@/components/teacher/repost-modal";
+import { RepostModal } from "@/pages/teacher/forms/repost-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { academicContextState } from "@/lib/academic-context-state";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
@@ -536,7 +536,7 @@ export default function SubjectDetails() {
           prev ? { ...prev, delivery, is_taught: true } : null,
         );
       }
-      toast.success(`Lesson "${lesson.title}" confirmed as taught.`);
+      toast.success(`Lesson "${lesson.title}" confirmed as completed.`);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to confirm lesson delivery.",

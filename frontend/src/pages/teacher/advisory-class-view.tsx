@@ -15,7 +15,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Table } from "@/components/retroui/Table";
 import { OverviewCard } from "@/components/overview-cards";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
-import { SF9PreviewModal } from "@/components/teacher/sf9-preview-modal";
+import { SF9PreviewModal } from "@/pages/teacher/forms/sf9-preview-modal";
 import {
   exportTeacherAdvisoryBatchSF9,
   getClassSchedule,

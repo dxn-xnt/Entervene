@@ -89,7 +89,7 @@ afterEach(() => {
 });
 
 describe("PR 2B.2: Teacher Lesson Delivery UI — Component Level", () => {
-  it("renders Published and Taught as completely distinct statuses", () => {
+  it("renders Published and Completed as completely distinct statuses", () => {
     const publishedUntaughtLesson = {
       lesson_id: 1,
       title: "Cell Structure and Organelles",
@@ -110,15 +110,13 @@ describe("PR 2B.2: Teacher Lesson Delivery UI — Component Level", () => {
     );
 
     const pubBadge = screen.getByTestId("badge-published-1");
-    const taughtBadge = screen.getByTestId("badge-taught-1");
 
     expect(pubBadge.textContent).toBe("Published");
-    expect(taughtBadge.textContent).toBe("Not Taught");
-    // Does not treat published lesson as taught
-    expect(taughtBadge.textContent).not.toBe("Taught");
+    // Untaught lessons only show their publication badge
+    expect(screen.queryByTestId("badge-taught-1")).toBeNull();
   });
 
-  it("renders Draft and Taught as distinct statuses when delivered", () => {
+  it("renders Draft and Completed as distinct statuses when delivered", () => {
     const draftTaughtLesson = {
       lesson_id: 2,
       title: "Photosynthesis Reactions",
@@ -147,14 +145,14 @@ describe("PR 2B.2: Teacher Lesson Delivery UI — Component Level", () => {
       </MemoryRouter>,
     );
 
-    const pubBadge = screen.getByTestId("badge-published-2");
     const taughtBadge = screen.getByTestId("badge-taught-2");
 
-    expect(pubBadge.textContent).toBe("Draft");
-    expect(taughtBadge.textContent).toBe("Taught");
+    // Completed replaces the publication badge
+    expect(screen.queryByTestId("badge-published-2")).toBeNull();
+    expect(taughtBadge.textContent).toBe("Completed");
   });
 
-  it("shows 'Mark as Taught' action for untaught lessons and fires confirmation callback", async () => {
+  it("shows 'Mark as Completed' action for untaught lessons and fires confirmation callback", async () => {
     const lesson = {
       lesson_id: 3,
       title: "Newton's Laws of Motion",
@@ -177,7 +175,7 @@ describe("PR 2B.2: Teacher Lesson Delivery UI — Component Level", () => {
 
     const markBtn = screen.getByTestId("mark-taught-btn-3");
     expect(markBtn).toBeTruthy();
-    expect(markBtn.textContent).toContain("Mark as Taught");
+    expect(markBtn.textContent).toContain("Mark as Completed");
 
     fireEvent.click(markBtn);
     expect(onConfirmMock).toHaveBeenCalledTimes(1);
@@ -400,7 +398,7 @@ describe("PR 2B.2: Integration in Classes → Subject → Lessons Interface", ()
             academic_period_id: 1,
             is_active: false,
             revoked_at: "2026-10-28T09:15:00Z",
-            correction_reason: "Taught in Section Diamond instead",
+            correction_reason: "Completed in Section Diamond instead",
           }),
           { status: 200 },
         );
@@ -418,18 +416,18 @@ describe("PR 2B.2: Integration in Classes → Subject → Lessons Interface", ()
       </MemoryRouter>,
     );
 
-    // Lesson 101: Published, Not Taught
+    // Lesson 101: Published, Not Completed
     await waitFor(() => {
       expect(screen.getByTestId("badge-published-101").textContent).toBe("Published");
-      expect(screen.getByTestId("badge-taught-101").textContent).toBe("Not Taught");
+      expect(screen.queryByTestId("badge-taught-101")).toBeNull();
     });
 
-    // Lesson 102: Published, Taught (persisted from backend GET)
-    expect(screen.getByTestId("badge-published-102").textContent).toBe("Published");
-    expect(screen.getByTestId("badge-taught-102").textContent).toBe("Taught");
+    // Lesson 102: Completed (persisted from backend GET) replaces the publication badge
+    expect(screen.queryByTestId("badge-published-102")).toBeNull();
+    expect(screen.getByTestId("badge-taught-102").textContent).toBe("Completed");
   });
 
-  it("confirms lesson delivery via POST /api/v1/lesson-deliveries/confirm with exact payload and updates status to Taught", async () => {
+  it("confirms lesson delivery via POST /api/v1/lesson-deliveries/confirm with exact payload and updates status to Completed", async () => {
     render(
       <MemoryRouter initialEntries={["/teacher/classes/10/subjects/20"]}>
         <Routes>
@@ -439,15 +437,15 @@ describe("PR 2B.2: Integration in Classes → Subject → Lessons Interface", ()
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("badge-taught-101").textContent).toBe("Not Taught");
+      expect(screen.getByTestId("badge-published-101").textContent).toBe("Published");
     });
 
-    // Click quick Mark as Taught on lesson 101
+    // Click quick Mark as Completed on lesson 101
     const markBtn = screen.getByTestId("quick-mark-taught-101");
     fireEvent.click(markBtn);
 
     await waitFor(() => {
-      expect(screen.getByTestId("badge-taught-101").textContent).toBe("Taught");
+      expect(screen.getByTestId("badge-taught-101").textContent).toBe("Completed");
     });
 
     // Verify apiFetch was called with exact POST payload
@@ -463,7 +461,7 @@ describe("PR 2B.2: Integration in Classes → Subject → Lessons Interface", ()
     });
   });
 
-  it("corrects a delivery confirmation via correction dialog and updates status back to Not Taught", async () => {
+  it("corrects a delivery confirmation via correction dialog and updates status back to Not Completed", async () => {
     render(
       <MemoryRouter initialEntries={["/teacher/classes/10/subjects/20"]}>
         <Routes>
@@ -474,7 +472,7 @@ describe("PR 2B.2: Integration in Classes → Subject → Lessons Interface", ()
 
     // Lesson 102 is taught
     await waitFor(() => {
-      expect(screen.getByTestId("badge-taught-102").textContent).toBe("Taught");
+      expect(screen.getByTestId("badge-taught-102").textContent).toBe("Completed");
     });
 
     // Expand lesson 102 to see the Correct Confirmation button in accordion
@@ -486,14 +484,15 @@ describe("PR 2B.2: Integration in Classes → Subject → Lessons Interface", ()
 
     // Modal opens
     const textarea = await screen.findByPlaceholderText(/Explain why this delivery record is being corrected/i);
-    fireEvent.change(textarea, { target: { value: "Taught in Section Diamond instead" } });
+    fireEvent.change(textarea, { target: { value: "Completed in Section Diamond instead" } });
 
     const revokeBtn = screen.getByRole("button", { name: /Revoke Delivery/i });
     fireEvent.click(revokeBtn);
 
-    // Status updates back to Not Taught
+    // Status updates back to Not Completed
     await waitFor(() => {
-      expect(screen.getByTestId("badge-taught-102").textContent).toBe("Not Taught");
+      expect(screen.queryByTestId("badge-taught-102")).toBeNull();
+      expect(screen.getByTestId("badge-published-102").textContent).toBe("Published");
     });
 
     // Verify PUT call to /correct endpoint with payload
@@ -502,7 +501,7 @@ describe("PR 2B.2: Integration in Classes → Subject → Lessons Interface", ()
     expect(correctCall).toBeDefined();
     expect(correctCall![1]?.method).toBe("PUT");
     expect(JSON.parse(String(correctCall![1]?.body))).toEqual({
-      reason: "Taught in Section Diamond instead",
+      reason: "Completed in Section Diamond instead",
     });
   });
 
@@ -561,7 +560,7 @@ describe("PR 2B.2: Integration in Classes → Subject → Lessons Interface", ()
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("badge-taught-103")).toBeTruthy();
+      expect(screen.getByTestId("quick-mark-taught-103")).toBeTruthy();
     });
 
     const markBtn = screen.getByTestId("quick-mark-taught-103");
@@ -669,7 +668,7 @@ describe("PR 2B.2A: Teacher → Classes → Mathematics → Demo Archimedes (Tea
     });
   });
 
-  it("renders Mark as Taught in expanded lesson card on TeacherClassDetail (/teacher/classes/10/20)", async () => {
+  it("renders Mark as Completed in expanded lesson card on TeacherClassDetail (/teacher/classes/10/20)", async () => {
     render(
       <MemoryRouter initialEntries={["/teacher/classes/10/20"]}>
         <Routes>
@@ -681,8 +680,7 @@ describe("PR 2B.2A: Teacher → Classes → Mathematics → Demo Archimedes (Tea
     // Verify badges
     await waitFor(() => {
       expect(screen.getByTestId("badge-published-101")).toBeTruthy();
-      expect(screen.getByTestId("badge-taught-101")).toBeTruthy();
-      expect(screen.getByTestId("badge-taught-101").textContent).toContain("Not Taught");
+      expect(screen.queryByTestId("badge-taught-101")).toBeNull();
     });
 
     // Quick button is visible
@@ -692,18 +690,18 @@ describe("PR 2B.2A: Teacher → Classes → Mathematics → Demo Archimedes (Tea
     const expandBtn = screen.getByRole("button", { name: /Expand classworks/i });
     fireEvent.click(expandBtn);
 
-    // Verify Mark as Taught action inside expanded card
+    // Verify Mark as Completed action inside expanded card
     await waitFor(() => {
       expect(screen.getByTestId("mark-taught-btn-101")).toBeTruthy();
     });
 
-    // Click Mark as Taught
+    // Click Mark as Completed
     const markBtn = screen.getByTestId("mark-taught-btn-101");
     fireEvent.click(markBtn);
 
-    // Verify status updates to Taught
+    // Verify status updates to Completed
     await waitFor(() => {
-      expect(screen.getByTestId("badge-taught-101").textContent).toContain("Taught");
+      expect(screen.getByTestId("badge-taught-101").textContent).toContain("Completed");
       expect(screen.queryByTestId("mark-taught-btn-101")).toBeNull();
       expect(screen.getByTestId("correct-delivery-btn-101")).toBeTruthy();
     });
@@ -760,7 +758,7 @@ describe("PR 2B.2A: Teacher → Classes → Mathematics → Demo Archimedes (Tea
     });
   });
 
-  it("displays Mark as Taught on full Lesson Details screen when opened from TeacherClassDetail", async () => {
+  it("displays Mark as Completed on full Lesson Details screen when opened from TeacherClassDetail", async () => {
     render(
       <MemoryRouter initialEntries={["/teacher/classes/10/20"]}>
         <Routes>
@@ -776,7 +774,7 @@ describe("PR 2B.2A: Teacher → Classes → Mathematics → Demo Archimedes (Tea
     // Click on lesson title to open Lesson Details full view
     fireEvent.click(screen.getByText("Quadratic Equations"));
 
-    // Verify Mark as Taught in full screen header
+    // Verify Mark as Completed in full screen header
     await waitFor(() => {
       expect(screen.getByTestId("detail-mark-taught-101")).toBeTruthy();
     });

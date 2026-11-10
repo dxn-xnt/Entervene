@@ -119,7 +119,7 @@ export default function LessonDeliveryCorrectionModal({
                 </span>
                 {deliveredAt && (
                   <span className="text-xs text-muted-foreground font-medium">
-                    Taught on {formatDate(deliveredAt)}
+                    Completed on {formatDate(deliveredAt)}
                   </span>
                 )}
               </div>
@@ -131,7 +131,7 @@ export default function LessonDeliveryCorrectionModal({
             <div className="flex items-start gap-2.5 rounded! border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
               <AlertTriangle className="size-4 shrink-0 text-amber-600 mt-0.5" />
               <p>
-                Revoking this delivery confirmation removes the <strong>Taught</strong> status for this class and grading period. An auditable reason is required and preserved in the revision history.
+                Revoking this delivery confirmation removes the <strong>Completed</strong> status for this class and grading period. An auditable reason is required and preserved in the revision history.
               </p>
             </div>
 
