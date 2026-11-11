@@ -15,6 +15,7 @@ import {
   type DevelopmentInterventionLevel,
 } from "@/lib/prediction-api";
 import { Badge } from "@/components/retroui/Badge";
+import { getRiskBadgeMeta } from "@/lib/formatters";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
@@ -27,13 +28,7 @@ import { BLOCKED_MESSAGES, INTERVENTION_LABELS } from "./development-current-ter
 import { ExaminationEvidence } from "./prediction-detail-sheet";
 
 function InterventionBadge({ level }: { level: DevelopmentInterventionLevel }) {
-  const colors: Record<DevelopmentInterventionLevel, string> = {
-    HIGH_RISK: "bg-red-500 text-white",
-    MODERATE_RISK: "bg-amber-500 text-white",
-    NEEDS_MONITORING: "bg-yellow-400 text-black",
-    LOW_RISK: "bg-emerald-500 text-white",
-  };
-  return <Badge size="sm" variant="surface" className={`${colors[level]} border-2 border-black font-bold`}>{INTERVENTION_LABELS[level]}</Badge>;
+  return <Badge size="sm" className={getRiskBadgeMeta(level).bg}>{INTERVENTION_LABELS[level]}</Badge>;
 }
 
 export default function DevelopmentCurrentTermPanel({ periodId, termName, role }: { periodId: number | null; termName: string; role: "admin" | "teacher" }) {

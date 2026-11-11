@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { SubjectSectionCard } from "./subject-section-card";
 import type { DashboardSubjectGroupSummary } from "./current-term-dashboard-adapter";
 import { getTeacherRiskDisplaySummary } from "./teacher-risk-display";
+import { getRiskBadgeMeta } from "@/lib/formatters";
 
 interface PredictionSubjectSectionProps {
   group: DashboardSubjectGroupSummary;
@@ -42,10 +43,10 @@ export function PredictionSubjectSection({
           <h2 className="text-xl font-bold">{group.display_name}</h2>
         </div>
         <div className="flex flex-row flex-wrap gap-2 items-center">
-          <Badge size="sm" variant="solid">
+          <Badge size="sm" className={getRiskBadgeMeta("MODERATE_RISK").bg}>
             {displaySummary.MODERATE_RISK} Moderate Risk
           </Badge>
-          <Badge size="sm" variant="destructive">
+          <Badge size="sm" className={getRiskBadgeMeta("HIGH_RISK").bg}>
             {displaySummary.HIGH_RISK} High Risk
           </Badge>
           {navigationEnabled && <Tooltip>
