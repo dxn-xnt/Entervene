@@ -46,6 +46,23 @@ from app.services.academic.AcademicLifecycleService import resolve_active_academ
 
 router = APIRouter()
 
+JHS_TEMPLATE_GROUP = "JHS_45MIN"
+JHS_REQUIRED_SLOT_NAMES = (
+    "Homeroom Guidance",
+    "Period 1",
+    "Period 2",
+    "Morning Recess",
+    "Period 3",
+    "Period 4",
+    "Period 5",
+    "Lunch Break",
+    "Enhanced Period 1",
+    "Enhanced Period 2",
+    "Afternoon Recess",
+    "Period 6",
+    "Period 7",
+)
+
 
 def _resolve_requested_or_active_period(
     db: Session,
@@ -76,13 +93,6 @@ def ensure_default_period_templates(db: Session):
         PeriodTemplateSlot.__table__.create(bind=db.get_bind(), checkfirst=True)
     except Exception:
         pass
-
-    try:
-        existing = db.query(PeriodTemplateSlot).first()
-        if existing:
-            return
-    except Exception:
-        return
 
     defaults = [
         # JHS 45MIN
@@ -124,6 +134,12 @@ def ensure_default_period_templates(db: Session):
     ]
 
     for grp, name, stype, start, end, locked, ord_idx in defaults:
+        existing = db.query(PeriodTemplateSlot).filter(
+            PeriodTemplateSlot.template_group == grp,
+            PeriodTemplateSlot.slot_name == name,
+        ).first()
+        if existing:
+            continue
         db.add(
             PeriodTemplateSlot(
                 template_group=grp,
@@ -136,6 +152,178 @@ def ensure_default_period_templates(db: Session):
             )
         )
     db.commit()
+
+
+def ensure_jhs_template_assignments_and_backfill(db: Session) -> dict[str, Any]:
+    """Keep every active Grade 7-10 section on the shared JHS template.
+
+    Only draft rows are migrated. Published history is deliberately immutable;
+    it is interpreted against an exact slot match when read/validated instead.
+    """
+    jhs_level_ids = {
+        level_id for level_id, in db.query(AcademicLevel.academic_level_id).filter(
+            AcademicLevel.grade_level.between(7, 10)
+        ).all()
+    }
+    classes = db.query(Class).filter(
+        Class.class_status == "active",
+        Class.academic_level_id.in_(jhs_level_ids),
+    ).all() if jhs_level_ids else []
+
+    corrected_classes: list[str] = []
+    class_ids: list[int] = []
+    for cls in classes:
+        class_ids.append(cls.class_id)
+        if cls.period_template_group != JHS_TEMPLATE_GROUP:
+            cls.period_template_group = JHS_TEMPLATE_GROUP
+            corrected_classes.append(cls.section_name)
+
+    class_slots = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == JHS_TEMPLATE_GROUP,
+        PeriodTemplateSlot.slot_type == "CLASS",
+        PeriodTemplateSlot.is_locked_break.is_(False),
+    ).all()
+    by_time: dict[tuple[str, str], list[PeriodTemplateSlot]] = {}
+    for slot in class_slots:
+        by_time.setdefault((slot.start_time, slot.end_time), []).append(slot)
+
+    backfilled = 0
+    unmatched = 0
+    if class_ids:
+        legacy_drafts = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id.in_(class_ids),
+            SubjectLoad.status == "draft",
+            SubjectLoad.slot_id.is_(None),
+            SubjectLoad.start_time.is_not(None),
+            SubjectLoad.end_time.is_not(None),
+        ).all()
+        for load in legacy_drafts:
+            matches = by_time.get((load.start_time, load.end_time), [])
+            if len(matches) == 1:
+                load.slot_id = matches[0].slot_id
+                backfilled += 1
+            else:
+                unmatched += 1
+
+    if corrected_classes or backfilled:
+        db.commit()
+
+    return {
+        "template_group": JHS_TEMPLATE_GROUP,
+        "corrected_class_count": len(corrected_classes),
+        "corrected_classes": corrected_classes,
+        "draft_loads_backfilled": backfilled,
+        "draft_loads_unmatched": unmatched,
+    }
+
+
+def _normalize_jhs_load_slots(
+    db: Session,
+    loads: list[SubjectLoadItem],
+) -> list[SubjectLoadItem]:
+    """Derive JHS times from slot_id and reject client-authored bell times."""
+    ensure_default_period_templates(db)
+    class_ids = {item.class_id for item in loads}
+    classes = {
+        cls.class_id: cls
+        for cls in db.query(Class).filter(Class.class_id.in_(class_ids)).all()
+    } if class_ids else {}
+    level_ids = {cls.academic_level_id for cls in classes.values()}
+    grades = {
+        row.academic_level_id: row.grade_level
+        for row in db.query(AcademicLevel).filter(AcademicLevel.academic_level_id.in_(level_ids)).all()
+    } if level_ids else {}
+    slot_ids = {item.slot_id for item in loads if item.slot_id is not None}
+    slots = {
+        slot.slot_id: slot
+        for slot in db.query(PeriodTemplateSlot).filter(PeriodTemplateSlot.slot_id.in_(slot_ids)).all()
+    } if slot_ids else {}
+    exact_jhs_slots = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == JHS_TEMPLATE_GROUP,
+        PeriodTemplateSlot.slot_type == "CLASS",
+        PeriodTemplateSlot.is_locked_break.is_(False),
+    ).all()
+
+    normalized: list[SubjectLoadItem] = []
+    for item in loads:
+        cls = classes.get(item.class_id)
+        is_jhs = (
+            cls is not None
+            and cls.period_template_group == JHS_TEMPLATE_GROUP
+            and grades.get(cls.academic_level_id) in range(7, 11)
+        )
+        if not is_jhs:
+            normalized.append(item)
+            continue
+
+        has_schedule = bool(item.start_time or item.end_time or item.days_of_week)
+        slot = slots.get(item.slot_id) if item.slot_id is not None else None
+        # Preserve immutable legacy publications in validation requests by
+        # resolving an exact match in memory. Draft/client edits must send ID.
+        if slot is None and item.status in ("published", "active") and item.start_time and item.end_time:
+            matches = [
+                candidate for candidate in exact_jhs_slots
+                if candidate.start_time == item.start_time and candidate.end_time == item.end_time
+            ]
+            slot = matches[0] if len(matches) == 1 else None
+        if slot is None:
+            if item.status in ("published", "active") and item.is_locked:
+                normalized.append(item)
+                continue
+            if has_schedule:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Grade 7-10 load {item.class_id}_{item.subject_id} must select a valid JHS timetable slot.",
+                )
+            normalized.append(item.model_copy(update={"slot_id": None, "start_time": None, "end_time": None}))
+            continue
+        if (
+            slot.template_group != JHS_TEMPLATE_GROUP
+            or slot.slot_type != "CLASS"
+            or slot.is_locked_break
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Slot {slot.slot_id} is not an assignable Grade 7-10 class period.",
+            )
+        normalized.append(item.model_copy(update={
+            "slot_id": slot.slot_id,
+            "start_time": slot.start_time,
+            "end_time": slot.end_time,
+        }))
+    return normalized
+
+
+def _attach_server_generated_slot_ids(
+    db: Session,
+    loads: list[SubjectLoadItem],
+) -> list[SubjectLoadItem]:
+    """Attach the unique CLASS slot matching server-generated schedule times."""
+    class_ids = {item.class_id for item in loads}
+    classes = {
+        cls.class_id: cls
+        for cls in db.query(Class).filter(Class.class_id.in_(class_ids)).all()
+    } if class_ids else {}
+    groups = {cls.period_template_group or JHS_TEMPLATE_GROUP for cls in classes.values()}
+    candidates = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group.in_(groups),
+        PeriodTemplateSlot.slot_type == "CLASS",
+        PeriodTemplateSlot.is_locked_break.is_(False),
+    ).all() if groups else []
+    by_key: dict[tuple[str, str, str], list[PeriodTemplateSlot]] = {}
+    for slot in candidates:
+        by_key.setdefault((slot.template_group, slot.start_time, slot.end_time), []).append(slot)
+
+    result: list[SubjectLoadItem] = []
+    for item in loads:
+        cls = classes.get(item.class_id)
+        if not cls or not item.start_time or not item.end_time:
+            result.append(item.model_copy(update={"slot_id": None}) if not item.start_time else item)
+            continue
+        group = cls.period_template_group or JHS_TEMPLATE_GROUP
+        matches = by_key.get((group, item.start_time, item.end_time), [])
+        result.append(item.model_copy(update={"slot_id": matches[0].slot_id if len(matches) == 1 else None}))
+    return result
 
 
 def ensure_shs_template_groups_backfilled(db: Session):
@@ -271,6 +459,58 @@ def _serialize_load_item(sl: SubjectLoad, period_deps: dict[tuple[int, int], dic
     }
 
 
+def _to_subject_load_item(sl: SubjectLoad) -> SubjectLoadItem:
+    return SubjectLoadItem(
+        subject_load_id=sl.subject_load_id,
+        class_id=sl.class_id,
+        subject_id=sl.subject_id,
+        staff_id=sl.staff_id,
+        academic_period_id=sl.academic_period_id,
+        slot_id=sl.slot_id,
+        start_time=sl.start_time,
+        end_time=sl.end_time,
+        days_of_week=sl.days_of_week or [],
+        status=sl.status or "draft",
+        logical_load_id=sl.logical_load_id,
+        section_revision=sl.section_revision or 1,
+        base_revision=sl.base_revision,
+        is_active_version=bool(sl.is_active_version),
+        is_locked=bool(sl.is_locked),
+    )
+
+
+def _authoritative_period_snapshot(db: Session, academic_period_id: int) -> list[SubjectLoadItem]:
+    """Return the same per-section draft-or-published snapshot shown by Studio."""
+    rows = db.query(SubjectLoad).filter(
+        SubjectLoad.academic_period_id == academic_period_id,
+    ).all()
+    by_class: dict[int, list[SubjectLoad]] = {}
+    for row in rows:
+        by_class.setdefault(row.class_id, []).append(row)
+
+    snapshot: list[SubjectLoadItem] = []
+    for class_rows in by_class.values():
+        drafts = [row for row in class_rows if row.status == "draft"]
+        selected = drafts or [
+            row for row in class_rows
+            if row.is_active_version is True and row.status in ("published", "active")
+        ]
+        snapshot.extend(_to_subject_load_item(row) for row in selected)
+    return snapshot
+
+
+def _merge_proposed_period_snapshot(
+    db: Session,
+    academic_period_id: int,
+    proposed: list[SubjectLoadItem],
+) -> list[SubjectLoadItem]:
+    affected_class_ids = {item.class_id for item in proposed}
+    return list(proposed) + [
+        item for item in _authoritative_period_snapshot(db, academic_period_id)
+        if item.class_id not in affected_class_ids
+    ]
+
+
 @router.get("/teacher/scope", response_model=TeacherAcademicScopeResponse)
 def get_teacher_academic_scope_endpoint(
     class_id: int | None = Query(None, description="Optional class ID to scope subjects"),
@@ -296,6 +536,7 @@ def get_subject_load_studio_data(
 ):
     ensure_default_period_templates(db)
     ensure_shs_template_groups_backfilled(db)
+    jhs_template_audit = ensure_jhs_template_assignments_and_backfill(db)
     years = db.query(AcademicYear).all()
     periods = db.query(AcademicPeriod).all()
     
@@ -445,6 +686,7 @@ def get_subject_load_studio_data(
         ],
         "existing_loads": existing_loads,
         "has_pending_draft_by_class": has_pending_draft_by_class,
+        "jhs_template_audit": jhs_template_audit,
         "period_template_slots": [
             {
                 "slot_id": pts.slot_id,
@@ -476,6 +718,55 @@ def time_str_to_mins(t_str: str) -> int:
         return 9999
 
 
+def _validate_period_template_payload(
+    db: Session,
+    payload: list[PeriodTemplateSlotSchema],
+    min_mins: int,
+    max_mins: int,
+    school_start: str,
+    school_end: str,
+) -> None:
+    by_group: dict[str, list[PeriodTemplateSlotSchema]] = {}
+    for item in payload:
+        by_group.setdefault(item.template_group, []).append(item)
+
+    for group, items in by_group.items():
+        names = [item.slot_name.strip() for item in items]
+        if len(names) != len(set(names)):
+            raise HTTPException(status_code=400, detail=f"{group} contains duplicate slot names.")
+        orders = [item.display_order for item in items]
+        if len(orders) != len(set(orders)):
+            raise HTTPException(status_code=400, detail=f"{group} contains duplicate display order values.")
+        # The endpoint supports a one-slot PATCH-style update for internal and
+        # migration callers. The editor sends the complete template, where the
+        # canonical 13-slot shape is enforced.
+        if group == JHS_TEMPLATE_GROUP and len(items) > 1:
+            missing = [name for name in JHS_REQUIRED_SLOT_NAMES if name not in names]
+            if missing:
+                detail = "The shared Grade 7-10 timetable must keep its 13 required CTU slots."
+                if missing:
+                    detail += f" Missing: {', '.join(missing)}."
+                raise HTTPException(status_code=400, detail=detail)
+
+        intervals: list[tuple[int, int, str]] = []
+        for item in items:
+            start = time_str_to_mins(item.start_time)
+            end = time_str_to_mins(item.end_time)
+            if end <= start:
+                raise HTTPException(status_code=400, detail=f"{item.slot_name}: end time must be after start time.")
+            if start < min_mins or end > max_mins:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{item.slot_name} falls outside configured school hours ({school_start} - {school_end}).",
+                )
+            intervals.append((start, end, item.slot_name))
+        intervals.sort()
+        for previous, current in zip(intervals, intervals[1:]):
+            if current[0] < previous[1]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{group} has overlapping slots: {previous[2]} and {current[2]}.",
+                )
 @router.get("/period-templates")
 def get_period_templates(
     current_user: dict = Depends(require_role("admin")),
@@ -507,6 +798,10 @@ def update_period_templates(
     start_str, end_str = get_school_hours_settings(db)
     min_mins = time_str_to_mins(start_str)
     max_mins = time_str_to_mins(end_str)
+
+    _validate_period_template_payload(
+        db, payload, min_mins, max_mins, start_str, end_str
+    )
 
     for item in payload:
         s_mins = time_str_to_mins(item.start_time)
@@ -609,6 +904,13 @@ def update_class_template_group(
     ).first():
         raise HTTPException(status_code=409, detail="Section is locked. Unlock Section before changing its bell schedule template.")
 
+    level = db.get(AcademicLevel, cls.academic_level_id)
+    if level and 7 <= level.grade_level <= 10 and payload.template_group != JHS_TEMPLATE_GROUP:
+        raise HTTPException(
+            status_code=422,
+            detail="Grades 7-10 use the shared JHS timetable and cannot be assigned a custom template.",
+        )
+
     cls.period_template_group = payload.template_group
     db.commit()
 
@@ -667,8 +969,12 @@ def validate_subject_loads(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == payload.academic_period_id).first()
-    return ConflictDetectorService.validate_loads(db=db, loads=payload.loads, academic_period=period)
+    period = _resolve_requested_or_active_period(db, payload.academic_period_id)
+    if any(item.academic_period_id != period.academic_period_id for item in payload.loads):
+        raise HTTPException(status_code=422, detail="Every subject load must use the requested academic period.")
+    normalized = _normalize_jhs_load_slots(db, payload.loads)
+    merged = _merge_proposed_period_snapshot(db, period.academic_period_id, normalized)
+    return ConflictDetectorService.validate_loads(db=db, loads=merged, academic_period=period)
 
 
 @router.post("/auto-schedule", response_model=AutoScheduleResponse)
@@ -679,7 +985,8 @@ def auto_schedule_subject_loads(
     db: Session = Depends(get_db),
 ):
     period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == payload.academic_period_id).first()
-    class_ids = {item.class_id for item in payload.loads}
+    normalized_payload_loads = _normalize_jhs_load_slots(db, payload.loads)
+    class_ids = {item.class_id for item in normalized_payload_loads}
     published = db.query(SubjectLoad).filter(
         SubjectLoad.class_id.in_(class_ids),
         SubjectLoad.academic_period_id == payload.academic_period_id,
@@ -706,7 +1013,7 @@ def auto_schedule_subject_loads(
         is_locked=True,
         section_revision=load.section_revision or 1,
     ) for load in published if load.class_id in locked_class_ids]
-    scheduling_input = [item.model_copy(deep=True) for item in payload.loads if item.class_id not in locked_class_ids]
+    scheduling_input = [item.model_copy(deep=True) for item in normalized_payload_loads if item.class_id not in locked_class_ids]
     scheduling_input.extend(item.model_copy(deep=True) for item in protected_loads)
     if not any(item.class_id not in locked_class_ids for item in scheduling_input):
         auto_scheduled_loads = protected_loads
@@ -717,14 +1024,26 @@ def auto_schedule_subject_loads(
 
     auto_scheduled_loads = [item for item in auto_scheduled_loads if item.class_id not in locked_class_ids]
     auto_scheduled_loads.extend(protected_loads)
+    auto_scheduled_loads = _attach_server_generated_slot_ids(db, auto_scheduled_loads)
 
     validation_res = ConflictDetectorService.validate_loads(db=db, loads=auto_scheduled_loads, academic_period=period)
+    unscheduled_loads = [
+        {
+            "class_id": item.class_id,
+            "subject_id": item.subject_id,
+            "staff_id": item.staff_id,
+            "reason": "No conflict-free timetable slot is available.",
+        }
+        for item in auto_scheduled_loads
+        if not item.start_time or not item.end_time or not item.days_of_week
+    ]
     
     return AutoScheduleResponse(
         is_valid=validation_res.is_valid,
         conflicts=validation_res.conflicts,
         teacher_workloads=validation_res.teacher_workloads,
         scheduled_loads=auto_scheduled_loads,
+        unscheduled_loads=unscheduled_loads,
     )
 
 
@@ -989,33 +1308,35 @@ def batch_save_subject_loads(
             raise HTTPException(status_code=409, detail=f"Section {cid} is locked. Unlock Section before editing schedules or teacher assignments.")
         target_class_ids.remove(cid)
 
-    # 1. Validation across loads
-    # Fetch all active version DB loads for full-school merged validation
-    db_all_period_loads = (
-        db.query(SubjectLoad)
-        .filter(
+    # Authorization and revision checks intentionally run before timetable
+    # normalization so a forged edit to a locked publication is always a 409,
+    # never an opportunity to probe or bypass slot validation.
+    payload.loads = _normalize_jhs_load_slots(db, payload.loads)
+
+    # Serialize assignments for the same teacher. Two admins publishing
+    # different sections must not both validate against the same old snapshot.
+    incoming_staff_ids = {item.staff_id for item in payload.loads if item.staff_id}
+    existing_staff_ids = {
+        row[0]
+        for row in db.query(SubjectLoad.staff_id).filter(
             SubjectLoad.academic_period_id == payload.academic_period_id,
-            SubjectLoad.is_active_version.is_(True),
-        )
-        .all()
+            SubjectLoad.class_id.in_(affected_class_ids),
+            SubjectLoad.staff_id.is_not(None),
+        ).all()
+    }
+    staff_ids_to_lock = sorted(incoming_staff_ids | existing_staff_ids)
+    if staff_ids_to_lock:
+        db.query(AcademicStaff).filter(
+            AcademicStaff.staff_id.in_(staff_ids_to_lock),
+        ).order_by(AcademicStaff.staff_id).with_for_update().all()
+
+    # Re-read after acquiring teacher locks and merge each unaffected section's
+    # authoritative draft-or-published snapshot exactly once.
+    merged_validation_loads = _merge_proposed_period_snapshot(
+        db,
+        payload.academic_period_id,
+        payload.loads,
     )
-    merged_validation_loads: list[SubjectLoadItem] = list(payload.loads)
-    for sl in db_all_period_loads:
-        if sl.class_id not in affected_class_ids:
-            merged_validation_loads.append(
-                SubjectLoadItem(
-                    subject_load_id=sl.subject_load_id,
-                    class_id=sl.class_id,
-                    subject_id=sl.subject_id,
-                    staff_id=sl.staff_id,
-                    academic_period_id=sl.academic_period_id,
-                    start_time=getattr(sl, "start_time", None),
-                    end_time=getattr(sl, "end_time", None),
-                    days_of_week=getattr(sl, "days_of_week", []) or [],
-                    status=sl.status or "draft",
-                    is_locked=bool(getattr(sl, "is_locked", False)),
-                )
-            )
 
     if is_publishing:
         unassigned_in_target: list[str] = []
@@ -1037,6 +1358,20 @@ def batch_save_subject_loads(
             )
 
     validation_res = ConflictDetectorService.validate_loads(db=db, loads=merged_validation_loads, academic_period=period)
+    proposed_keys = {f"{item.class_id}_{item.subject_id}" for item in payload.loads}
+    proposed_teacher_overlaps = [
+        conflict for conflict in validation_res.conflicts
+        if conflict.rule == "TEACHER_OVERLAP"
+        and proposed_keys.intersection(
+            conflict.affected_keys
+            or [key for key in (conflict.affected_key, conflict.related_affected_key) if key]
+        )
+    ]
+    if proposed_teacher_overlaps and not is_publishing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot save a teacher double-booking: {proposed_teacher_overlaps[0].message}",
+        )
     if is_publishing:
         if scope in ("section", "level") and target_class_ids:
             target_staff_ids = {
@@ -1048,6 +1383,7 @@ def batch_save_subject_loads(
                 if c.severity == "error" and (
                     (c.class_id is not None and c.class_id in target_class_ids)
                     or (c.affected_key and any(c.affected_key.startswith(f"{cid}_") for cid in target_class_ids))
+                    or any(key.startswith(f"{cid}_") for key in c.affected_keys for cid in target_class_ids)
                     or (c.staff_id is not None and c.staff_id in target_staff_ids and c.rule in ("TEACHER_OVERLAP", "DAILY_WORKLOAD_EXCEEDED"))
                 )
             ]

@@ -165,6 +165,143 @@ def test_shared_jhs_template_across_grades_7_to_10(db):
         assert len(breaks) == 4
 
 
+def test_default_jhs_template_seed_is_idempotent_and_repairs_missing_slot(db):
+    from app.api.v1.routes.SubjectLoads import ensure_default_period_templates
+
+    missing = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN",
+        PeriodTemplateSlot.slot_name == "Period 7",
+    ).one()
+    db.delete(missing)
+    db.commit()
+
+    ensure_default_period_templates(db)
+    ensure_default_period_templates(db)
+
+    slots = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN"
+    ).all()
+    assert len(slots) == 13
+    assert len({slot.slot_name for slot in slots}) == 13
+
+
+def test_jhs_slot_id_is_authoritative_and_forged_times_are_ignored(db):
+    from app.api.v1.routes.SubjectLoads import _normalize_jhs_load_slots
+
+    level = AcademicLevel(level_name="Grade 8", grade_level=8)
+    db.add(level)
+    db.flush()
+    cls = Class(
+        class_id=80, section_name="Plato", academic_year_id=1,
+        academic_level_id=level.academic_level_id,
+        period_template_group="JHS_45MIN",
+    )
+    db.add(cls)
+    db.commit()
+    period_1 = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN",
+        PeriodTemplateSlot.slot_name == "Period 1",
+    ).one()
+
+    normalized = _normalize_jhs_load_slots(db, [SubjectLoadItem(
+        class_id=cls.class_id, subject_id=1, academic_period_id=1,
+        slot_id=period_1.slot_id, start_time="15:30", end_time="16:15",
+        days_of_week=["MON"], status="draft",
+    )])[0]
+
+    assert normalized.slot_id == period_1.slot_id
+    assert (normalized.start_time, normalized.end_time) == ("08:00", "08:45")
+
+
+def test_jhs_break_slot_cannot_be_assigned_to_subject_load(db):
+    from app.api.v1.routes.SubjectLoads import _normalize_jhs_load_slots
+
+    level = AcademicLevel(level_name="Grade 10", grade_level=10)
+    db.add(level)
+    db.flush()
+    cls = Class(
+        class_id=100, section_name="Newton", academic_year_id=1,
+        academic_level_id=level.academic_level_id,
+        period_template_group="JHS_45MIN",
+    )
+    db.add(cls)
+    db.commit()
+    recess = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN",
+        PeriodTemplateSlot.slot_name == "Morning Recess",
+    ).one()
+
+    with pytest.raises(Exception, match="not an assignable Grade 7-10 class period"):
+        _normalize_jhs_load_slots(db, [SubjectLoadItem(
+            class_id=cls.class_id, subject_id=1, academic_period_id=1,
+            slot_id=recess.slot_id, start_time=recess.start_time,
+            end_time=recess.end_time, days_of_week=["MON"], status="draft",
+        )])
+
+
+def test_jhs_backfill_updates_exact_drafts_but_not_published_history(db):
+    from app.api.v1.routes.SubjectLoads import ensure_jhs_template_assignments_and_backfill
+
+    level = AcademicLevel(level_name="Grade 9", grade_level=9)
+    db.add(level)
+    db.flush()
+    cls = Class(
+        class_id=90, section_name="Socrates", academic_year_id=1,
+        academic_level_id=level.academic_level_id,
+        period_template_group=None,
+    )
+    db.add(cls)
+    db.flush()
+    db.add_all([
+        Subject(subject_id=901, subject_name="Draft Subject"),
+        Subject(subject_id=902, subject_name="Published Subject"),
+    ])
+    db.flush()
+    draft = SubjectLoad(
+        class_id=cls.class_id, subject_id=901, academic_period_id=1,
+        start_time="08:00", end_time="08:45", days_of_week=["MON"], status="draft",
+    )
+    published = SubjectLoad(
+        class_id=cls.class_id, subject_id=902, academic_period_id=1,
+        start_time="08:00", end_time="08:45", days_of_week=["TUE"],
+        status="published", is_active_version=True, is_locked=True,
+    )
+    db.add_all([draft, published])
+    db.commit()
+
+    audit = ensure_jhs_template_assignments_and_backfill(db)
+    db.refresh(cls)
+    db.refresh(draft)
+    db.refresh(published)
+
+    assert cls.period_template_group == "JHS_45MIN"
+    assert draft.slot_id is not None
+    assert published.slot_id is None
+    assert audit["draft_loads_backfilled"] == 1
+
+
+def test_complete_jhs_template_rejects_overlapping_periods(db):
+    from app.api.v1.routes.SubjectLoads import _validate_period_template_payload
+    from app.schemas.SubjectLoad import PeriodTemplateSlotSchema
+
+    rows = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN"
+    ).order_by(PeriodTemplateSlot.display_order).all()
+    payload = [PeriodTemplateSlotSchema(
+        slot_id=row.slot_id,
+        template_group=row.template_group,
+        slot_name=row.slot_name,
+        slot_type=row.slot_type,
+        start_time="08:30" if row.slot_name == "Period 2" else row.start_time,
+        end_time=row.end_time,
+        is_locked_break=row.is_locked_break,
+        display_order=row.display_order,
+    ) for row in rows]
+
+    with pytest.raises(Exception, match="overlapping slots"):
+        _validate_period_template_payload(db, payload, 360, 1200, "06:00", "20:00")
+
+
 def test_db_is_math_or_science_flag_strictly_controls_enhanced_slots(db):
     """
     Asserts that subjects with is_math_or_science=True get the Enhanced slots,
@@ -381,6 +518,61 @@ def test_teacher_conflict_demotion_and_live_rebalance(db):
     ), "Expected CORE_SUBJECT_SPLIT_SCHEDULE warning for demoted core subject"
 
 
+def test_auto_scheduler_leaves_load_unscheduled_when_no_safe_slot_exists(db):
+    cls = Class(class_id=1, section_name="Full", academic_year_id=1, academic_level_id=9, period_template_group="JHS_45MIN")
+    occupied_subject = Subject(subject_id=1, subject_name="Occupied")
+    target_subject = Subject(subject_id=2, subject_name="Target")
+    db.add_all([cls, occupied_subject, target_subject])
+    db.commit()
+
+    _, standard_periods, _ = AutoSchedulerService.get_group_template_slots("JHS_45MIN", db)
+    locked = [
+        SubjectLoadItem(
+            class_id=1,
+            subject_id=1,
+            academic_period_id=1,
+            start_time=start,
+            end_time=end,
+            days_of_week=["MON", "TUE", "WED", "THU", "FRI"],
+            is_locked=True,
+        )
+        for start, end in standard_periods
+    ]
+    target = SubjectLoadItem(class_id=1, subject_id=2, academic_period_id=1)
+
+    AutoSchedulerService.auto_schedule_loads(db=db, loads=locked + [target])
+
+    assert target.start_time is None
+    assert target.end_time is None
+    assert target.days_of_week == []
+
+
+def test_teacher_overlap_identifies_both_affected_loads(db):
+    classes = [
+        Class(class_id=1, section_name="One", academic_year_id=1, academic_level_id=9),
+        Class(class_id=2, section_name="Two", academic_year_id=1, academic_level_id=9),
+    ]
+    subjects = [
+        Subject(subject_id=1, subject_name="First"),
+        Subject(subject_id=2, subject_name="Second"),
+    ]
+    teacher = AcademicStaff(staff_id="T001", first_name="Shared", last_name="Teacher")
+    db.add_all(classes + subjects + [teacher])
+    db.commit()
+
+    result = ConflictDetectorService.validate_loads(db=db, loads=[
+        SubjectLoadItem(class_id=1, subject_id=1, staff_id="T001", academic_period_id=1,
+                        start_time="08:00", end_time="08:45", days_of_week=["MON"]),
+        SubjectLoadItem(class_id=2, subject_id=2, staff_id="T001", academic_period_id=1,
+                        start_time="08:30", end_time="09:15", days_of_week=["MON"]),
+    ])
+
+    conflict = next(item for item in result.conflicts if item.rule == "TEACHER_OVERLAP")
+    assert set(conflict.affected_keys) == {"1_1", "2_2"}
+    assert conflict.related_class_id == 2
+    assert conflict.related_subject_id == 2
+
+
 def test_period_template_update_endpoint_cascades_to_unlocked_schedules(db):
     """
     Asserts that PUT /period-templates automatically cascades time changes
@@ -435,11 +627,10 @@ def test_period_template_update_endpoint_cascades_to_unlocked_schedules(db):
     assert existing_load.end_time == "17:01"
 
 
-def test_period_template_update_endpoint_cascades_to_locked_and_published_schedules(db):
+def test_period_template_update_endpoint_blocks_locked_published_schedules(db):
     """
-    Asserts that PUT /period-templates automatically cascades time changes
-    from a period slot (e.g. 08:00-08:45 -> 08:01-08:46) to locked and published
-    subject loads, updating times in place while keeping status='published' and is_locked=True.
+    Published schedules are immutable. The admin must unlock and create a
+    draft revision before changing a linked class period.
     """
     from app.schemas.SubjectLoad import PeriodTemplateSlotSchema
     from app.api.v1.routes.SubjectLoads import update_period_templates
@@ -481,13 +672,15 @@ def test_period_template_update_endpoint_cascades_to_locked_and_published_schedu
         )
     ]
 
-    res = update_period_templates(payload=payload, current_user={"role": "admin"}, db=db)
-    assert res["message"] == "Period templates updated and cascaded to schedules successfully."
+    with pytest.raises(Exception, match="locked published section"):
+        update_period_templates(payload=payload, current_user={"role": "admin"}, db=db)
 
-    # Verify that the locked subject load in DB has been cascaded to 08:01 - 08:46
+    # Verify that neither the template nor published history was changed.
+    db.refresh(p1)
     db.refresh(locked_load)
-    assert locked_load.start_time == "08:01"
-    assert locked_load.end_time == "08:46"
+    assert (p1.start_time, p1.end_time) == ("08:00", "08:45")
+    assert locked_load.start_time == "08:00"
+    assert locked_load.end_time == "08:45"
     assert locked_load.status == "published"
     assert locked_load.is_locked is True
 

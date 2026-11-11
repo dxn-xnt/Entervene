@@ -60,6 +60,7 @@ import {
   EllipsisIcon,
   User,
   X,
+  Clock,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { useSettings } from "@/context/SettingsContext";
@@ -69,6 +70,29 @@ import { cn } from "@/lib/utils";
 import { classPathwayLabel } from "@/lib/class-pathway";
 import { getLockedSectionIds } from "@/pages/admin/subject-load-lock";
 import { getSubjectColor } from "@/lib/subject-colors";
+import { teacherAssignmentConflict } from "@/pages/admin/teacher-availability";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
+
+function conflictKeys(conflict: ConflictItem): string[] {
+  return Array.from(new Set([
+    ...(conflict.affected_keys || []),
+    conflict.affected_key,
+    conflict.related_affected_key,
+  ].filter((key): key is string => Boolean(key))));
+}
+
+function conflictAffectsClass(conflict: ConflictItem, classId: number): boolean {
+  return conflict.class_id === classId
+    || conflict.related_class_id === classId
+    || conflictKeys(conflict).some((key) => key.startsWith(`${classId}_`));
+}
+
+function conflictAffectsLoad(conflict: ConflictItem, classId: number, subjectId: number): boolean {
+  const key = `${classId}_${subjectId}`;
+  return conflictKeys(conflict).includes(key)
+    || (conflict.class_id === classId && conflict.subject_id === subjectId)
+    || (conflict.related_class_id === classId && conflict.related_subject_id === subjectId);
+}
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
   if (!str) return { hour: fallbackHour, minute: 0, period: "AM" };
@@ -152,6 +176,13 @@ const DAYS = [
   { key: "WED", label: "W" },
   { key: "THU", label: "Th" },
   { key: "FRI", label: "F" },
+];
+
+const JHS_REQUIRED_SLOT_NAMES = [
+  "Homeroom Guidance", "Period 1", "Period 2", "Morning Recess",
+  "Period 3", "Period 4", "Period 5", "Lunch Break",
+  "Enhanced Period 1", "Enhanced Period 2", "Afternoon Recess",
+  "Period 6", "Period 7",
 ];
 
 /** A block (or empty cell) on the timetable grid: loads at one time slot across the given days. */
@@ -402,6 +433,32 @@ export default function AdminSubjectLoadStudio() {
   const lockedSectionIds = useMemo(() => getLockedSectionIds(studioData), [studioData]);
   const isSectionLocked = (classId: number) => lockedSectionIds.has(classId);
 
+  const isJhsClass = useCallback((classId: number) => {
+    const cls = studioData?.classes.find((item) => item.class_id === classId);
+    const grade = studioData?.academic_levels.find(
+      (level) => level.academic_level_id === cls?.academic_level_id
+    )?.grade_level;
+    return grade != null && grade >= 7 && grade <= 10;
+  }, [studioData]);
+
+  const classPeriodSlots = useCallback((classId: number) => {
+    const cls = studioData?.classes.find((item) => item.class_id === classId);
+    const group = cls?.period_template_group || "JHS_45MIN";
+    return periodTemplateSlots
+      .filter((slot) => slot.template_group === group && slot.slot_type === "CLASS" && !slot.is_locked_break && slot.slot_id != null)
+      .sort((a, b) => a.display_order - b.display_order);
+  }, [periodTemplateSlots, studioData]);
+
+  const withAuthoritativeJhsSlots = useCallback((items: SubjectLoadItem[]) => items.map((item) => {
+    if (!isJhsClass(item.class_id) || !item.start_time || !item.end_time) return item;
+    const matches = classPeriodSlots(item.class_id).filter(
+      (slot) => slot.start_time === item.start_time && slot.end_time === item.end_time
+    );
+    return matches.length === 1
+      ? { ...item, slot_id: matches[0].slot_id, start_time: matches[0].start_time, end_time: matches[0].end_time }
+      : item;
+  }), [classPeriodSlots, isJhsClass]);
+
   const gradeOptions = useMemo(() => {
     if (!studioData?.academic_levels) return [];
     const sorted = [...studioData.academic_levels].sort((a, b) => a.grade_level - b.grade_level);
@@ -454,25 +511,7 @@ export default function AdminSubjectLoadStudio() {
         }
       }
 
-      let groupSlots = periodTemplateSlots.filter((s) => s.template_group === groupKey);
-      if (groupSlots.length === 0) {
-        groupSlots = [
-          { template_group: groupKey, slot_name: "HOMEROOM GUIDANCE", slot_type: "HOMEROOM", start_time: "07:30", end_time: "08:00", is_locked_break: true, display_order: 1 },
-          { template_group: groupKey, slot_name: "Period 1", slot_type: "CLASS", start_time: "08:00", end_time: "08:45", is_locked_break: false, display_order: 2 },
-          { template_group: groupKey, slot_name: "Period 2", slot_type: "CLASS", start_time: "08:45", end_time: "09:30", is_locked_break: false, display_order: 3 },
-          { template_group: groupKey, slot_name: "MORNING RECESS", slot_type: "RECESS", start_time: "09:30", end_time: "09:45", is_locked_break: true, display_order: 4 },
-          { template_group: groupKey, slot_name: "Period 3", slot_type: "CLASS", start_time: "09:45", end_time: "10:30", is_locked_break: false, display_order: 5 },
-          { template_group: groupKey, slot_name: "Period 4", slot_type: "CLASS", start_time: "10:30", end_time: "11:15", is_locked_break: false, display_order: 6 },
-          { template_group: groupKey, slot_name: "Period 5", slot_type: "CLASS", start_time: "11:15", end_time: "12:00", is_locked_break: false, display_order: 7 },
-          { template_group: groupKey, slot_name: "LUNCH BREAK", slot_type: "LUNCH", start_time: "12:00", end_time: "13:00", is_locked_break: true, display_order: 8 },
-          { template_group: groupKey, slot_name: "Enhanced Period 1", slot_type: "CLASS", start_time: "13:00", end_time: "14:00", is_locked_break: false, display_order: 9 },
-          { template_group: groupKey, slot_name: "Enhanced Period 2", slot_type: "CLASS", start_time: "14:00", end_time: "15:00", is_locked_break: false, display_order: 10 },
-          { template_group: groupKey, slot_name: "AFTERNOON RECESS", slot_type: "RECESS", start_time: "15:00", end_time: "15:30", is_locked_break: true, display_order: 11 },
-          { template_group: groupKey, slot_name: "Period 6", slot_type: "CLASS", start_time: "15:30", end_time: "16:15", is_locked_break: false, display_order: 12 },
-          { template_group: groupKey, slot_name: "Period 7", slot_type: "CLASS", start_time: "16:15", end_time: "17:00", is_locked_break: false, display_order: 13 },
-        ];
-      }
-
+      const groupSlots = periodTemplateSlots.filter((s) => s.template_group === groupKey);
       const sorted = [...groupSlots].sort((a, b) => a.display_order - b.display_order);
 
       const sectionLoads = loads.filter((l) => l.class_id === cls.class_id && l.start_time && l.end_time);
@@ -541,8 +580,8 @@ export default function AdminSubjectLoadStudio() {
     try {
       const data = await getSubjectLoadStudioData(periodId);
       setStudioData(data);
-      if ((data as any).period_template_slots) {
-        setPeriodTemplateSlots((data as any).period_template_slots);
+      if (data.period_template_slots) {
+        setPeriodTemplateSlots(data.period_template_slots);
       }
 
       // Initialize subject loads: populate missing loads from section x subject combinations
@@ -588,6 +627,39 @@ export default function AdminSubjectLoadStudio() {
           isSubjectOfferedForClass(sub, cls, offerings, periodIdToUse)
         );
 
+        // Fresh sections receive a safe, deterministic draft timetable. If a
+        // section already has scheduled rows, preserve them and leave only new
+        // subjects unscheduled for explicit admin placement.
+        const hasExistingSchedule = existing.some(
+          (load) => load.class_id === cls.class_id && load.start_time && load.end_time
+        );
+        const templateGroup = cls.period_template_group || "JHS_45MIN";
+        const classSlots = (data.period_template_slots || [])
+          .filter((slot) => slot.template_group === templateGroup && slot.slot_type === "CLASS" && !slot.is_locked_break && slot.slot_id != null)
+          .sort((a, b) => a.display_order - b.display_order);
+        const enhancedSlots = classSlots.filter((slot) => slot.slot_name.toLowerCase().startsWith("enhanced"));
+        const standardSlots = classSlots.filter((slot) => !slot.slot_name.toLowerCase().startsWith("enhanced"));
+        const defaultSchedule = new Map<number, { slot: (typeof classSlots)[number]; days: string[] }>();
+
+        if (!hasExistingSchedule && classSlots.length > 0) {
+          const enhancedSubjects = levelSubjects.filter((subject) => subject.is_math_or_science);
+          const generalSubjects = levelSubjects.filter((subject) => !subject.is_math_or_science);
+          enhancedSubjects.slice(0, enhancedSlots.length).forEach((subject, index) => {
+            defaultSchedule.set(subject.subject_id, { slot: enhancedSlots[index], days: ["MON", "TUE", "WED", "THU", "FRI"] });
+          });
+          const standardSubjects = [...generalSubjects, ...enhancedSubjects.slice(enhancedSlots.length)];
+          standardSubjects.slice(0, standardSlots.length).forEach((subject, index) => {
+            defaultSchedule.set(subject.subject_id, { slot: standardSlots[index], days: ["MON", "TUE", "WED", "THU", "FRI"] });
+          });
+          standardSubjects.slice(standardSlots.length, standardSlots.length * 2).forEach((subject, index) => {
+            const paired = standardSubjects[index];
+            const slot = standardSlots[index];
+            if (!paired || !slot) return;
+            defaultSchedule.set(paired.subject_id, { slot, days: ["MON", "WED", "FRI"] });
+            defaultSchedule.set(subject.subject_id, { slot, days: ["TUE", "THU"] });
+          });
+        }
+
         levelSubjects.forEach((sub) => {
           const matched = existing.filter(
             (ex) => ex.class_id === cls.class_id && ex.subject_id === sub.subject_id
@@ -607,9 +679,10 @@ export default function AdminSubjectLoadStudio() {
               subject_id: sub.subject_id,
               staff_id: null,
               academic_period_id: periodIdToUse,
-              start_time: null,
-              end_time: null,
-              days_of_week: [],
+              slot_id: defaultSchedule.get(sub.subject_id)?.slot.slot_id ?? null,
+              start_time: defaultSchedule.get(sub.subject_id)?.slot.start_time ?? null,
+              end_time: defaultSchedule.get(sub.subject_id)?.slot.end_time ?? null,
+              days_of_week: defaultSchedule.get(sub.subject_id)?.days ?? [],
               status: "draft",
               is_locked: false,
             });
@@ -658,14 +731,14 @@ export default function AdminSubjectLoadStudio() {
     async (updatedLoads: SubjectLoadItem[]) => {
       if (!selectedPeriodId) return;
       try {
-        const valRes = await validateSubjectLoads(selectedPeriodId, updatedLoads);
+        const valRes = await validateSubjectLoads(selectedPeriodId, withAuthoritativeJhsSlots(updatedLoads));
         setConflicts(valRes.conflicts);
         setTeacherWorkloads(valRes.teacher_workloads);
       } catch (e) {
         console.error("Validation error:", e);
       }
     },
-    [selectedPeriodId]
+    [selectedPeriodId, withAuthoritativeJhsSlots]
   );
 
   // Load update handlers
@@ -725,6 +798,23 @@ export default function AdminSubjectLoadStudio() {
     void runValidation(updated);
   };
 
+  const handlePeriodSlotChange = (slotKey: string, slotId: string) => {
+    const item = loads.find((load) => load._key === slotKey);
+    if (!item || isSectionLocked(item.class_id)) return;
+    const selected = classPeriodSlots(item.class_id).find((slot) => String(slot.slot_id) === slotId);
+    if (!selected) return;
+    const updated = loads.map((load) => load._key === slotKey ? {
+      ...load,
+      slot_id: selected.slot_id,
+      start_time: selected.start_time,
+      end_time: selected.end_time,
+      status: "draft",
+      is_locked: false,
+    } : load);
+    setLoads(updated);
+    void runValidation(updated);
+  };
+
   const handleToggleDay = (slotKey: string, dayKey: string) => {
     if (loads.some((item) => item._key === slotKey && isSectionLocked(item.class_id))) return;
     const updated = loads.map((item) => {
@@ -754,6 +844,12 @@ export default function AdminSubjectLoadStudio() {
     const usedDays = new Set(existingSlots.flatMap((s) => s.days_of_week || []));
     const allDays = ["THU", "FRI", "TUE", "MON", "WED"];
     const defaultDay = allDays.find((d) => !usedDays.has(d)) || "THU";
+    const subject = studioData?.subjects.find((item) => item.subject_id === subjectId);
+    const availableSlots = classPeriodSlots(classId);
+    const preferredSlots = subject?.is_math_or_science
+      ? availableSlots.filter((slot) => slot.slot_name.toLowerCase().startsWith("enhanced"))
+      : availableSlots.filter((slot) => !slot.slot_name.toLowerCase().startsWith("enhanced"));
+    const selectedSlot = preferredSlots[0] || availableSlots[0];
 
     const newSlot: SubjectLoadItem = {
       _key: newKey,
@@ -761,8 +857,9 @@ export default function AdminSubjectLoadStudio() {
       subject_id: subjectId,
       staff_id: firstSlot?.staff_id || null,
       academic_period_id: selectedPeriodId || 1,
-      start_time: "13:00",
-      end_time: "14:00",
+      slot_id: selectedSlot?.slot_id ?? null,
+      start_time: selectedSlot?.start_time ?? null,
+      end_time: selectedSlot?.end_time ?? null,
       days_of_week: [defaultDay],
       status: "draft",
     };
@@ -826,6 +923,9 @@ export default function AdminSubjectLoadStudio() {
 
     for (const { startTime, endTime, days } of cellsBySlot.values()) {
       const sortedDays = sortDayKeys(days);
+      const authoritativeSlot = classPeriodSlots(classId).find(
+        (slot) => slot.start_time === startTime && slot.end_time === endTime
+      );
       const sameSlot = updated.find(
         (l) => l.class_id === classId && l.subject_id === subjectId && l.start_time === startTime && l.end_time === endTime
       );
@@ -847,7 +947,7 @@ export default function AdminSubjectLoadStudio() {
       } else if (unscheduled) {
         updated = updated.map((l) =>
           l === unscheduled
-            ? { ...l, start_time: startTime, end_time: endTime, days_of_week: sortedDays, status: "draft", is_locked: false }
+            ? { ...l, slot_id: authoritativeSlot?.slot_id ?? null, start_time: startTime, end_time: endTime, days_of_week: sortedDays, status: "draft", is_locked: false }
             : l
         );
       } else {
@@ -857,6 +957,7 @@ export default function AdminSubjectLoadStudio() {
           subject_id: subjectId,
           staff_id: defaultStaffId,
           academic_period_id: selectedPeriodId || 1,
+          slot_id: authoritativeSlot?.slot_id ?? null,
           start_time: startTime,
           end_time: endTime,
           days_of_week: sortedDays,
@@ -900,6 +1001,7 @@ export default function AdminSubjectLoadStudio() {
       updated = relocateLoads(updated, target, source);
     }
     updated = mergeAdjacentLoads(updated, classId);
+    updated = withAuthoritativeJhsSlots(updated);
 
     setLoads(updated);
     setCellSelection(null);
@@ -913,7 +1015,7 @@ export default function AdminSubjectLoadStudio() {
     setNotice(null);
     setAutoScheduleNotice(null);
     try {
-      let currentLoads = [...loads];
+      const currentLoads = [...loads];
 
       const isClassLocked = isSectionLocked;
 
@@ -975,7 +1077,7 @@ export default function AdminSubjectLoadStudio() {
         ? currentLoads.filter((l) => targetClassIds.includes(l.class_id) && l._offering_eligible !== false)
         : currentLoads.filter((l) => l._offering_eligible !== false);
 
-      const res = await autoScheduleSubjectLoads(selectedPeriodId, loadsToProcess, "standard");
+      const res = await autoScheduleSubjectLoads(selectedPeriodId, withAuthoritativeJhsSlots(loadsToProcess), "standard");
 
       // Merge updated scheduled loads back into full loads array (preserving locked sections)
       const scheduledMap = new Map(
@@ -993,6 +1095,7 @@ export default function AdminSubjectLoadStudio() {
         if (match && (targetClassId === undefined || targetClassIds.includes(item.class_id))) {
           return {
             ...item,
+            slot_id: match.slot_id ?? null,
             start_time: match.start_time || null,
             end_time: match.end_time || null,
             days_of_week: match.days_of_week || [],
@@ -1009,11 +1112,18 @@ export default function AdminSubjectLoadStudio() {
 
       const errCount = res.conflicts.filter((c) => c.severity === "error").length;
       const warnCount = res.conflicts.filter((c) => c.severity === "warning" && c.rule !== "UNASSIGNED_TEACHER").length;
+      const unscheduledCount = res.unscheduled_loads?.length ?? 0;
       const unlockedCount = unlockedTargetClasses.length;
       const lockedCount = lockedClassIds.size;
       const preservedNotice = lockedCount > 0 ? ` (${lockedCount} locked section${lockedCount > 1 ? "s" : ""} preserved)` : "";
 
-      if (errCount > 0) {
+      if (unscheduledCount > 0) {
+        setAutoScheduleNotice({
+          title: "Auto-fit Incomplete",
+          message: `${unscheduledCount} subject load${unscheduledCount === 1 ? " was" : "s were"} left unscheduled because no conflict-free slot is available${preservedNotice}.`,
+          type: "error",
+        });
+      } else if (errCount > 0) {
         setAutoScheduleNotice({
           title: "Auto-fit Complete",
           message: `Detected ${errCount} ${errCount === 1 ? "conflict" : "conflicts"}${preservedNotice}. Please review highlighted errors.`,
@@ -1100,7 +1210,7 @@ export default function AdminSubjectLoadStudio() {
           is_locked: false,
         }));
 
-      const finalLoads = [...currentLoads, ...newLoads];
+      const finalLoads = withAuthoritativeJhsSlots([...currentLoads, ...newLoads]);
       setLoads(finalLoads);
       await runValidation(finalLoads);
 
@@ -1504,8 +1614,9 @@ export default function AdminSubjectLoadStudio() {
       });
     }
 
-    setLoads(currentLoads);
-    void runValidation(currentLoads);
+    const normalizedLoads = withAuthoritativeJhsSlots(currentLoads);
+    setLoads(normalizedLoads);
+    void runValidation(normalizedLoads);
   };
 
   // Preset pattern applications
@@ -1529,7 +1640,7 @@ export default function AdminSubjectLoadStudio() {
 
     const updated = loads.map((l) =>
       l.class_id === classId && l.subject_id === subjectId
-        ? { ...l, days_of_week: days, start_time: defaultStart, end_time: defaultEnd, status: "draft", is_locked: false }
+        ? { ...l, days_of_week: days, slot_id: firstSlot?.slot_id ?? null, start_time: defaultStart, end_time: defaultEnd, status: "draft", is_locked: false }
         : l
     );
     setLoads(updated);
@@ -1552,8 +1663,8 @@ export default function AdminSubjectLoadStudio() {
         loads.filter((load) => !isSectionLocked(load.class_id) && (load.status === "draft" || !load.is_locked)).map((load) => load.class_id)
       );
       const loadsToSave = action === "draft"
-        ? loads.filter((load) => draftClassIds.has(load.class_id))
-        : loads.filter((load) => !isSectionLocked(load.class_id));
+        ? withAuthoritativeJhsSlots(loads.filter((load) => draftClassIds.has(load.class_id)))
+        : withAuthoritativeJhsSlots(loads.filter((load) => !isSectionLocked(load.class_id)));
       let baseRevToPass: number | null = null;
       if (publishScope === "section" && targetClassId) {
         const sectionLoads = loads.filter((l) => l.class_id === targetClassId);
@@ -1708,7 +1819,7 @@ export default function AdminSubjectLoadStudio() {
           if (isPublished && !hasPendingDraft) return false;
         } else if (norm === "conflicts") {
           const hasConflicts = conflicts.some(
-            (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
+            (c) => c.severity === "error" && conflictAffectsClass(c, cls.class_id)
           );
           if (!hasConflicts) return false;
         } else if (norm === "active") {
@@ -1730,33 +1841,14 @@ export default function AdminSubjectLoadStudio() {
 
   // Compute teacher availability helper
   const getTeacherAvailabilityStatus = (staffId: string, classId: number, subjectId: number) => {
-    const targetLoad = loads.find((l) => l.class_id === classId && l.subject_id === subjectId);
-    if (!targetLoad || !targetLoad.start_time || !targetLoad.end_time) return "Available";
-
-    // Check if staff has overlap at target time
-    const staffLoads = loads.filter(
-      (l) =>
-        l.staff_id === staffId &&
-        !(l.class_id === classId && l.subject_id === subjectId) &&
-        l.start_time &&
-        l.end_time
-    );
-
-    for (const sl of staffLoads) {
-      const commonDays = (targetLoad.days_of_week || []).filter((d) =>
-        (sl.days_of_week || []).includes(d)
-      );
-      if (commonDays.length > 0) {
-        const s1 = parseMin(targetLoad.start_time);
-        const e1 = parseMin(targetLoad.end_time);
-        const s2 = parseMin(sl.start_time);
-        const e2 = parseMin(sl.end_time);
-        if (s1 < e2 && s2 < e1) {
-          return `Conflict (Overlap at ${sl.start_time})`;
-        }
-      }
-    }
-    return "Available";
+    return teacherAssignmentConflict(
+      loads,
+      staffId,
+      classId,
+      subjectId,
+      studioData?.classes,
+      studioData?.subjects,
+    ) ?? "Available";
   };
 
   const parseMin = (t?: string | null) => {
@@ -1767,10 +1859,7 @@ export default function AdminSubjectLoadStudio() {
 
   // Check if a specific load has an error conflict
   const getLoadConflict = (classId: number, subjectId: number) => {
-    const key = `${classId}_${subjectId}`;
-    return conflicts.find(
-      (c) => c.affected_key === key || (c.class_id === classId && c.subject_id === subjectId)
-    );
+    return conflicts.find((conflict) => conflictAffectsLoad(conflict, classId, subjectId));
   };
 
   const errorConflictsCount = conflicts.filter((c) => c.severity === "error").length;
@@ -1806,8 +1895,7 @@ export default function AdminSubjectLoadStudio() {
     const staffIdsInClass = new Set(activeSectionLoads.map((l) => l.staff_id).filter(Boolean));
 
     return conflicts.filter((c) => {
-      if (c.class_id === clsId) return true;
-      if (c.affected_key && c.affected_key.startsWith(`${clsId}_`)) return true;
+      if (conflictAffectsClass(c, clsId)) return true;
       if (c.staff_id && staffIdsInClass.has(c.staff_id)) {
         if (c.rule === "TEACHER_OVERLAP") {
           return activeSectionLoads.some(
@@ -1863,13 +1951,15 @@ export default function AdminSubjectLoadStudio() {
           : c.severity === "error"
       );
       const subIds = filtered
-        .map((c) => {
-          if (c.subject_id) return c.subject_id;
-          if (c.affected_key) {
-            const parts = c.affected_key.split("_");
-            if (parts.length >= 2 && Number(parts[0]) === clsId) return Number(parts[1]);
+        .flatMap((c) => {
+          const ids: number[] = [];
+          if (c.class_id === clsId && c.subject_id) ids.push(c.subject_id);
+          if (c.related_class_id === clsId && c.related_subject_id) ids.push(c.related_subject_id);
+          for (const key of conflictKeys(c)) {
+            const parts = key.split("_");
+            if (parts.length >= 2 && Number(parts[0]) === clsId) ids.push(Number(parts[1]));
           }
-          return null;
+          return ids;
         })
         .filter((id): id is number => id !== null);
 
@@ -1967,7 +2057,7 @@ export default function AdminSubjectLoadStudio() {
                   size="header"
                   className="col-span-2 gap-2 md:col-auto"
                   variant={isMasterPublishDisabled ? "default" : "outline"}
-                  disabled={isSaving}
+                  disabled={isMasterPublishDisabled}
                   onClick={() => {
                     if (unassignedTotal > 0) {
                       toast.error({
@@ -2226,7 +2316,7 @@ export default function AdminSubjectLoadStudio() {
                       const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
                       const isSectionPublished = isSectionLocked(cls.class_id);
                       const sectionErrors = conflicts.filter(
-                        (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
+                        (c) => c.severity === "error" && conflictAffectsClass(c, cls.class_id)
                       );
                       const sectionHasErrors = sectionErrors.length > 0;
                       const isPublishSectionDisabled = isSaving || sectionHasErrors || sectionUnassignedCount > 0;
@@ -2292,7 +2382,7 @@ export default function AdminSubjectLoadStudio() {
                               <Button
                                 size="sm"
                                 variant={isPublishSectionDisabled ? "default" : "outline"}
-                                disabled={isSaving}
+                                disabled={isPublishSectionDisabled}
                                 className="gap-2 shadow-none"
                                 onClick={handlePublishSectionClick}
                               >
@@ -2304,7 +2394,7 @@ export default function AdminSubjectLoadStudio() {
                             <Button
                               size="sm"
                               variant={isPublishSectionDisabled ? "default" : "outline"}
-                              disabled={isSaving}
+                              disabled={isPublishSectionDisabled}
                               className="gap-2"
                               onClick={handlePublishSectionClick}
                             >
@@ -2467,6 +2557,15 @@ export default function AdminSubjectLoadStudio() {
                             invalidDraftSubjectIds.has(sub.subject_id)
                           );
                           const sectionLocked = isSectionLocked(cls.class_id);
+                          const sectionTemplateSlots = getSectionSlots(cls);
+                          const configuredNames = new Set(sectionTemplateSlots.map((slot) => slot.slot_name));
+                          const hasValidTimetable = isJhsClass(cls.class_id)
+                            ? cls.period_template_group === "JHS_45MIN" &&
+                              (studioData?.jhs_template_audit
+                                ? sectionTemplateSlots.length >= JHS_REQUIRED_SLOT_NAMES.length &&
+                                  JHS_REQUIRED_SLOT_NAMES.every((name) => configuredNames.has(name))
+                                : sectionTemplateSlots.some((slot) => slot.slot_type === "CLASS" && !slot.is_locked_break))
+                            : sectionTemplateSlots.some((slot) => slot.slot_type === "CLASS" && !slot.is_locked_break);
 
                           const timesBySubject = new Map<string, { start: number; end: number }>();
                           for (const l of sectionLoads) {
@@ -2524,7 +2623,15 @@ export default function AdminSubjectLoadStudio() {
                                   </div>
                                 </div> */}
 
-                                {classSubjects.length === 0 ? (
+                                {!hasValidTimetable ? (
+                                  <EmptyStateCard
+                                    title="Configure the timetable first"
+                                    description={`Subject Load for ${cls.section_name} is unavailable until its complete bell schedule is configured. The timetable controls every assignable class period and break.`}
+                                    actionLabel="Configure timetable"
+                                    onAction={() => setIsBreakDrawerOpen(true)}
+                                    icon={<Clock className="size-5" />}
+                                  />
+                                ) : classSubjects.length === 0 ? (
                                   <Empty className="my-2 shadow-none hover:shadow-none">
                                     <EmptyHeader>
                                       <EmptyMedia><div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><Search className="size-5" /></div></EmptyMedia>
@@ -2610,7 +2717,7 @@ export default function AdminSubjectLoadStudio() {
                                       </Table.Row>
                                     </Table.Header>
                                     <Table.Body>
-                                      {getSectionSlots(cls).map((slot, sIdx) => {
+                                      {sectionTemplateSlots.map((slot, sIdx) => {
                                         const isBreak = slot.is_locked_break || slot.slot_type !== "CLASS";
                                         const timeLabel = `${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}`;
 
@@ -3016,6 +3123,11 @@ export default function AdminSubjectLoadStudio() {
                                                 <div className="flex flex-col gap-2">
                                                   {subjectSlots.map((slot, sIdx) => {
                                                     const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
+                                                    const resolvedPeriodSlot = classPeriodSlots(cls.class_id).find(
+                                                      (period) => period.slot_id === slot.slot_id || (
+                                                        period.start_time === slot.start_time && period.end_time === slot.end_time
+                                                      )
+                                                    );
                                                     return (
                                                       <div key={slotKey} className="flex flex-wrap items-center gap-2.5">
                                                         {/* Days Chips */}
@@ -3039,8 +3151,25 @@ export default function AdminSubjectLoadStudio() {
                                                           })}
                                                         </div>
 
-                                                        {/* Time Picker */}
-                                                        <div className="grid gap-1">
+                                                        {/* JHS uses the shared timetable; SHS retains its existing editor. */}
+                                                        {isJhsClass(cls.class_id) ? (
+                                                          <Select
+                                                            value={resolvedPeriodSlot?.slot_id != null ? String(resolvedPeriodSlot.slot_id) : ""}
+                                                            onValueChange={(value) => handlePeriodSlotChange(slotKey, value)}
+                                                            disabled={sectionLocked}
+                                                          >
+                                                            <Select.Trigger className="min-w-52 rounded shadow-none">
+                                                              <Select.Value placeholder="Select timetable period" />
+                                                            </Select.Trigger>
+                                                            <Select.Content className="rounded">
+                                                              {classPeriodSlots(cls.class_id).map((period) => (
+                                                                <Select.Item key={period.slot_id} value={String(period.slot_id)}>
+                                                                  {period.slot_name} — {formatTime12h(period.start_time)}–{formatTime12h(period.end_time)}
+                                                                </Select.Item>
+                                                              ))}
+                                                            </Select.Content>
+                                                          </Select>
+                                                        ) : <div className="grid gap-1">
                                                           <fieldset id={`schedule-time-${slotKey}`} tabIndex={-1} disabled={sectionLocked} aria-invalid={timeValidationError?.slotKey === slotKey} className={`flex items-center gap-1 ${timeValidationError?.slotKey === slotKey ? "rounded border-2 border-destructive" : ""}`}>
                                                             <TimePickerSingle
                                                               value={stringToTimeValue(slot.start_time, 8)}
@@ -3058,7 +3187,7 @@ export default function AdminSubjectLoadStudio() {
                                                             />
                                                           </fieldset>
                                                           {timeValidationError?.slotKey === slotKey && <FormMessage>{timeValidationError.message}</FormMessage>}
-                                                        </div>
+                                                        </div>}
 
                                                         {/* Delete slot button */}
                                                         {subjectSlots.length > 1 && (
@@ -3354,6 +3483,16 @@ export default function AdminSubjectLoadStudio() {
             loads={loads}
             getTeacherAvailabilityStatus={getTeacherAvailabilityStatus}
             onAssign={(classId, subjectId, staffId) => {
+              if (staffId !== "none") {
+                const conflict = getTeacherAvailabilityStatus(staffId, classId, subjectId);
+                if (conflict.includes("Conflict")) {
+                  toast.error({
+                    title: "Teacher unavailable",
+                    description: conflict,
+                  });
+                  return;
+                }
+              }
               handleTeacherChange(classId, subjectId, staffId);
               setTeacherModalTarget(null);
             }}
