@@ -3,9 +3,10 @@ import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { NoChangesMessage } from "@/components/retroui/FormMessage";
 import {
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
-  ChevronDown,
-  ChevronRight,
+  ClipboardList,
   Target,
   Trash2,
 } from "lucide-react";
@@ -16,6 +17,8 @@ import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
+import LessonItemLine from "@/components/item-line/lesson";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import { toast } from "sonner";
 import {
   apiFetch,
@@ -79,11 +82,18 @@ export function SetLessonGoalModal({
   currentGoals,
   onSaved,
 }: SetLessonGoalModalProps) {
+  const [step, setStep] = useState<1 | 2>(1);
   const [selectedItems, setSelectedItems] = useState<SelectedGoalItem[]>([]);
   const [subjectLevelExams, setSubjectLevelExams] = useState<SetGoalClassworkItem[]>([]);
   const [isLoadingExams, setIsLoadingExams] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [expandedLessons, setExpandedLessons] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    if (isOpen) {
+      setStep(1);
+    }
+  }, [isOpen]);
 
   // 1. Fetch subject-level exams & classworks on open
   useEffect(() => {
@@ -283,320 +293,382 @@ export function SetLessonGoalModal({
       <Dialog.Content size="xl">
         {/* Header */}
         <Dialog.Header>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center justify-between gap-2">
             <div>
               <Dialog.Title className="text-lg font-black">
-                Set Lesson Goals {periodName ? `— ${periodName}` : ""}
+                Set Lesson Goal{periodName ? ` · ${periodName}` : ""}
               </Dialog.Title>
+              <Dialog.Description className="text-xs text-muted-foreground mt-0.5">
+                {step === 1
+                  ? "Step 1: Choose the lessons and classworks you want to set as goals."
+                  : "Step 2: Arrange and order the goals in the sequence students will see them."}
+              </Dialog.Description>
             </div>
+            <Badge variant="outline" size="sm" className="font-bold shrink-0">
+              Step {step} of 2
+            </Badge>
           </div>
         </Dialog.Header>
 
-        {/* Modal Body - stacked sections */}
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
+        {/* Step 1: Available source items */}
+        {step === 1 && (
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pr-2 sm:p-5 sm:pr-3">
+            <Card className="block w-full min-w-0 bg-card border-0 p-0 shadow-none hover:shadow-none">
+              <Card.Header className="mb-4 gap-1">
+                <Card.Title className="text-base font-bold">
+                  <div className="flex items-center gap-2">
+                    Available Lessons
+                    <Badge variant="secondary" size="sm">
+                      {lessons.length}
+                    </Badge>
+                  </div>
+                </Card.Title>
+              </Card.Header>
+              <Card.Content className="min-w-0">
+                {/* GROUP 1: Lessons & Linked Classworks */}
+                <div className="flex flex-col gap-3">
+                  {lessons.length === 0 ? (
+                    <Empty className="border-2 border-dashed border-border bg-background px-4 py-6 shadow-none hover:shadow-none">
+                      <Empty.Content>
+                        <Empty.Title className="text-sm font-bold">No lessons found</Empty.Title>
+                        <Empty.Description className="text-xs text-muted-foreground">
+                          No lessons found in this subject.
+                        </Empty.Description>
+                      </Empty.Content>
+                    </Empty>
+                  ) : (
+                    lessons.map((lesson) => {
+                      const isLessonSelected = selectedKeySet.has(`lesson-${lesson.lesson_id}`);
+                      const cws = linkedClassworks[lesson.lesson_id] || [];
+                      const isExpanded = expandedLessons[lesson.lesson_id] ?? true;
 
-          {/* Available source items */}
-          <Card className="block w-full min-w-0 bg-card p-4 shadow-none hover:shadow-none">
-            <Card.Header className="mb-4 gap-1">
-              <Card.Title className="text-base font-bold">
-                <div className="flex items-center gap-2">
-                  Available Lessons
+                      return (
+                        <LessonItemLine
+                          key={lesson.lesson_id}
+                          id={`modal-lesson-${lesson.lesson_id}`}
+                          lesson={{
+                            lesson_id: lesson.lesson_id,
+                            title: lesson.title,
+                            is_published: lesson.is_published,
+                          }}
+                          isExpanded={isExpanded}
+                          onToggle={() =>
+                            setExpandedLessons((prev) => ({
+                              ...prev,
+                              [lesson.lesson_id]: !isExpanded,
+                            }))
+                          }
+                          onOpenLessonDetail={() => toggleLesson(lesson)}
+                          showPublicationStatus={false}
+                          showDeliveryStatus={false}
+                          withShadow={false}
+                          badge={
+                            <div
+                              className="flex items-center gap-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {isLessonSelected && (
+                                <Badge variant="solid" size="sm" className="shrink-0 text-xs font-bold">
+                                  Goal
+                                </Badge>
+                              )}
+                              <Checkbox
+                                size="sm"
+                                checked={isLessonSelected}
+                                onCheckedChange={() => toggleLesson(lesson)}
+                                aria-label={`Add ${lesson.title} to lesson goals`}
+                                className="shrink-0 cursor-pointer"
+                              />
+                            </div>
+                          }
+                        >
+                          {cws.length === 0 ? (
+                            <TeacherEmptyState
+                              icon={<ClipboardList />}
+                              title="No classworks yet"
+                              description="No classworks linked to this lesson."
+                              compact
+                              className="bg-background shadow-none hover:shadow-none"
+                            />
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              {cws.map((cw) => {
+                                const isCwSelected = selectedKeySet.has(`cw-${cw.classwork_id}`);
+                                return (
+                                  <ClassworkItemLine
+                                    key={cw.classwork_id}
+                                    size="sm"
+                                    className={`border-2! shadow-none! ${isCwSelected ? "bg-primary!" : ""}`}
+                                    item={{
+                                      classwork_id: cw.classwork_id,
+                                      classwork_assignment_id: cw.classwork_assignment_id,
+                                      title: cw.title,
+                                      classwork_type: cw.classwork_type,
+                                      classwork_category: cw.classwork_category,
+                                      due_date: cw.due_date,
+                                    }}
+                                    showPublicationStatus={false}
+                                    showCategory={false}
+                                    showType={false}
+                                    onClick={() => toggleClasswork(cw, false)}
+                                    rightContent={
+                                      <div className="flex items-center gap-2">
+                                        {isCwSelected && (
+                                          <Badge variant="solid" size="sm" className="shrink-0 text-xs font-bold">
+                                            Goal
+                                          </Badge>
+                                        )}
+                                        <Badge variant="outline" size="sm" className="shrink-0">
+                                          {formatToTitleCase(cw.classwork_type) || "Task"}
+                                        </Badge>
+                                        <div onClick={(e) => e.stopPropagation()}>
+                                          <Checkbox
+                                            size="sm"
+                                            checked={isCwSelected}
+                                            onCheckedChange={() => toggleClasswork(cw, false)}
+                                            aria-label={`Add ${cw.title} to lesson goals`}
+                                            className="shrink-0 cursor-pointer"
+                                          />
+                                        </div>
+                                      </div>
+                                    }
+                                  />
+                                );
+                              })}
+                            </div>
+                          )}
+                        </LessonItemLine>
+                      );
+                    })
+                  )}
 
-                  <Badge variant="secondary" size="sm">
-                    {lessons.length}
-                  </Badge>
-                </div>
-              </Card.Title>
+                  {/* GROUP 2: Clearly-labeled Exams / Term Assessments */}
+                  <div className="mt-4 flex items-center gap-2">
+                    <span className="text-sm font-bold text-foreground">
+                      Exams / Term Assessments
+                    </span>
+                    <Badge variant="secondary" size="sm">
+                      {subjectLevelExams.length}
+                    </Badge>
+                  </div>
 
-            </Card.Header>
-            <Card.Content className="min-w-0">
-
-              {/* GROUP 1: Lessons & Linked Classworks */}
-              <div className="flex flex-col gap-3">
-
-
-                {lessons.length === 0 ? (
-                  <Empty className="border-2 border-dashed border-border bg-background px-4 py-6 shadow-none hover:shadow-none">
-                    <Empty.Content>
-                      <Empty.Title className="text-sm font-bold">No lessons found</Empty.Title>
-                      <Empty.Description className="text-xs text-muted-foreground">
-                        No lessons found in this subject.
-                      </Empty.Description>
-                    </Empty.Content>
-                  </Empty>
-                ) : (
-                  lessons.map((lesson) => {
-                    const isLessonSelected = selectedKeySet.has(`lesson-${lesson.lesson_id}`);
-                    const cws = linkedClassworks[lesson.lesson_id] || [];
-                    const isExpanded = expandedLessons[lesson.lesson_id] ?? true;
-
-                    return (
-                      <div
-                        key={lesson.lesson_id}
-                        className="w-full overflow-hidden rounded! border-2 border-border bg-background"
-                      >
-                        {/* Lesson Row */}
-                        <div className="flex items-center justify-between bg-muted/50 p-2.5">
-                          <label className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer select-none">
+                  {isLoadingExams ? (
+                    <p className="text-xs text-muted-foreground animate-pulse pl-2 py-2">
+                      Loading assessments...
+                    </p>
+                  ) : subjectLevelExams.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic pl-2 py-1">
+                      No subject-level exams found.
+                    </p>
+                  ) : (
+                    subjectLevelExams.map((exam) => {
+                      const isExamSelected = selectedKeySet.has(`cw-${exam.classwork_id}`);
+                      return (
+                        <label
+                          key={exam.classwork_id}
+                          className="flex cursor-pointer select-none items-center justify-between gap-2 rounded! border-2 border-border bg-background p-3"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
                             <Checkbox
                               size="sm"
-                              checked={isLessonSelected}
-                              onCheckedChange={() => toggleLesson(lesson)}
-                              aria-label={`Add ${lesson.title} to lesson goals`}
+                              checked={isExamSelected}
+                              onCheckedChange={() => toggleClasswork(exam, true)}
+                              aria-label={`Add ${exam.title} to lesson goals`}
                               className="shrink-0 cursor-pointer"
                             />
-                            <span className="truncate text-xs font-bold text-foreground">
-                              {lesson.title}
-                            </span>
-                          </label>
-                          {cws.length > 0 && (
-                            <Tooltip>
-                              <TooltipTrigger render={<Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() =>
-                                  setExpandedLessons((prev) => ({
-                                    ...prev,
-                                    [lesson.lesson_id]: !prev[lesson.lesson_id],
-                                  }))
-                                }
-                                className="size-7 p-1 text-muted-foreground"
-                                aria-label={isExpanded ? "Hide classworks" : "Show classworks"}
-                              >
-                                {isExpanded ? (
-                                  <ChevronDown className="size-3.5" />
-                                ) : (
-                                  <ChevronRight className="size-3.5" />
-                                )}
-                              </Button>} />
-                              <TooltipContent>{isExpanded ? "Hide classworks" : "Show classworks"}</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-
-                        {/* Linked Classworks (Indented under parent lesson) */}
-                        {isExpanded && cws.length > 0 && (
-                          <div className="flex flex-col gap-1.5 border-t border-border bg-background py-2 pl-6 pr-2">
-                            {cws.map((cw) => {
-                              const isCwSelected = selectedKeySet.has(`cw-${cw.classwork_id}`);
-                              return (
-                                <label
-                                  key={cw.classwork_id}
-                                  className="flex cursor-pointer select-none items-center justify-between gap-2 p-1.5 text-xs hover:bg-muted/50"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <Checkbox
-                                      size="sm"
-                                      checked={isCwSelected}
-                                      onCheckedChange={() => toggleClasswork(cw, false)}
-                                      aria-label={`Add ${cw.title} to lesson goals`}
-                                      className="shrink-0 cursor-pointer"
-                                    />
-                                    <span className="truncate font-medium text-foreground">
-                                      {cw.title}
-                                    </span>
-                                  </div>
-                                  <Badge variant="outline" size="sm" className="shrink-0">
-                                    {formatToTitleCase(cw.classwork_type) || "Task"}
-                                  </Badge>
-                                </label>
-                              );
-                            })}
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-bold text-foreground">{exam.title}</p>
+                              {exam.due_date && (
+                                <p className="text-[10px] text-muted-foreground">
+                                  Due {new Date(exam.due_date).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
+                          <Badge variant="outline" size="sm" className="shrink-0">
+                            Exam
+                          </Badge>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </Card.Content>
+            </Card>
+          </div>
+        )}
 
-                {/* GROUP 2: Clearly-labeled Exams / Term Assessments */}
-                <div className="mt-4 flex items-center gap-2">
-                  <span className="text-sm font-bold text-foreground">
-                    Exams / Term Assessments
-                  </span>
+        {/* Step 2: Selected and ordered goals */}
+        {step === 2 && (
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pr-2 sm:p-5 sm:pr-3">
+            <Card className="block w-full min-w-0 bg-card p-4 shadow-none hover:shadow-none">
+              <Card.Header className="mb-4 flex-row flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Card.Title className="text-base font-bold">
+                    Curated Goal Layout
+                  </Card.Title>
                   <Badge variant="secondary" size="sm">
-                    {subjectLevelExams.length}
+                    {selectedItems.length}
                   </Badge>
                 </div>
-
-                {isLoadingExams ? (
-                  <p className="text-xs text-muted-foreground animate-pulse pl-2 py-2">
-                    Loading assessments...
-                  </p>
-                ) : subjectLevelExams.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic pl-2 py-1">
-                    No subject-level exams found.
-                  </p>
+                {selectedItems.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedItems([])}
+                  >
+                    Clear All
+                  </Button>
+                )}
+              </Card.Header>
+              <Card.Content className="min-w-0">
+                {selectedItems.length === 0 ? (
+                  <TeacherEmptyState
+                    icon={<Target />}
+                    title="No goals selected yet"
+                    description="Go back to Step 1 to select lessons or classworks, then arrange their order here."
+                    action={{
+                      label: "Back to Step 1",
+                      icon: <ArrowLeft className="size-4" />,
+                      onClick: () => setStep(1),
+                    }}
+                    compact
+                    className="rounded! border-2 border-border bg-card shadow-none hover:shadow-none"
+                  />
                 ) : (
-                  subjectLevelExams.map((exam) => {
-                    const isExamSelected = selectedKeySet.has(`cw-${exam.classwork_id}`);
-                    return (
-                      <label
-                        key={exam.classwork_id}
-                        className="flex cursor-pointer select-none items-center justify-between gap-2 rounded! border-2 border-border bg-background p-3"
+                  <div className="flex flex-col gap-2">
+                    {selectedItems.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded! border-2 border-border bg-background p-3 text-card-foreground"
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <Checkbox
-                            size="sm"
-                            checked={isExamSelected}
-                            onCheckedChange={() => toggleClasswork(exam, true)}
-                            aria-label={`Add ${exam.title} to lesson goals`}
-                            className="shrink-0 cursor-pointer"
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-bold text-foreground">{exam.title}</p>
-                            {exam.due_date && (
-                              <p className="text-[10px] text-muted-foreground">
-                                Due {new Date(exam.due_date).toLocaleDateString()}
-                              </p>
+                        {/* Index & Title */}
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <Badge variant="solid" size="sm" className="shrink-0">
+                            {index + 1}
+                          </Badge>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate text-xs font-bold text-foreground">{item.title}</p>
+                              <Badge variant="outline" size="sm" className="shrink-0">
+                                {item.typeBadge}
+                              </Badge>
+                            </div>
+                            {item.subtitle && (
+                              <p className="text-[10px] text-muted-foreground">{item.subtitle}</p>
                             )}
                           </div>
                         </div>
-                        <Badge variant="outline" size="sm" className="shrink-0">
-                          Exam
-                        </Badge>
-                      </label>
-                    );
-                  })
-                )}
-              </div>
-            </Card.Content>
-          </Card>
 
-          {/* Selected and ordered goals */}
-          <Card className="block w-full min-w-0 bg-card p-4 shadow-none hover:shadow-none">
-            <Card.Header className="mb-4 flex-row flex-wrap items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <Card.Title className="text-base font-bold">
-                  Curated Goal Layout
-                </Card.Title>
-                <Badge variant="secondary" size="sm">
-                  {selectedItems.length}
-                </Badge>
-              </div>
-              {selectedItems.length > 0 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedItems([])}
-                >
-                  Clear All
-                </Button>
-              )}
-            </Card.Header>
-            <Card.Content className="min-w-0">
-
-              {selectedItems.length === 0 ? (
-                <TeacherEmptyState
-                  icon={<Target />}
-                  title="No goals selected yet"
-                  description="Select items above to add goals, then arrange the order students will see."
-                  compact
-                  className="rounded! border-2 border-border bg-card shadow-none hover:shadow-none"
-                />
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {selectedItems.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded! border-2 border-border bg-background p-3 text-card-foreground"
-                    >
-                      {/* Index & Title */}
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <Badge variant="solid" size="sm" className="shrink-0">
-                          {index + 1}
-                        </Badge>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <p className="truncate text-xs font-bold text-foreground">{item.title}</p>
-                            <Badge variant="outline" size="sm" className="shrink-0">
-                              {item.typeBadge}
-                            </Badge>
-                          </div>
-                          {item.subtitle && (
-                            <p className="text-[10px] text-muted-foreground">{item.subtitle}</p>
-                          )}
+                        {/*Reorder & Remove Controls*/}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex"><Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              disabled={index === 0}
+                              onClick={() => moveItem(index, "up")}
+                              className="size-7 p-1 text-foreground disabled:opacity-30"
+                              aria-label="Move up"
+                            >
+                              <ArrowUp className="size-3.5" />
+                            </Button></span>} />
+                            <TooltipContent>{index === 0 ? "Already first" : "Move up"}</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex"><Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              disabled={index === selectedItems.length - 1}
+                              onClick={() => moveItem(index, "down")}
+                              className="size-7 p-1 text-foreground disabled:opacity-30"
+                              aria-label="Move down"
+                            >
+                              <ArrowDown className="size-3.5" />
+                            </Button></span>} />
+                            <TooltipContent>{index === selectedItems.length - 1 ? "Already last" : "Move down"}</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger render={<Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeItem(item.id)}
+                              className="size-7 p-1 text-destructive hover:bg-destructive/10"
+                              aria-label="Remove goal item"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>} />
+                            <TooltipContent>Remove item</TooltipContent>
+                          </Tooltip>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                )}
+              </Card.Content>
+            </Card>
+          </div>
+        )}
 
-                      {/*Reorder & Remove Controls*/}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Tooltip>
-                          <TooltipTrigger render={<span className="inline-flex"><Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            disabled={index === 0}
-                            onClick={() => moveItem(index, "up")}
-                            className="size-7 p-1 text-foreground disabled:opacity-30"
-                            aria-label="Move up"
-                          >
-                            <ArrowUp className="size-3.5" />
-                          </Button></span>} />
-                          <TooltipContent>{index === 0 ? "Already first" : "Move up"}</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger render={<span className="inline-flex"><Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            disabled={index === selectedItems.length - 1}
-                            onClick={() => moveItem(index, "down")}
-                            className="size-7 p-1 text-foreground disabled:opacity-30"
-                            aria-label="Move down"
-                          >
-                            <ArrowDown className="size-3.5" />
-                          </Button></span>} />
-                          <TooltipContent>{index === selectedItems.length - 1 ? "Already last" : "Move down"}</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger render={<Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeItem(item.id)}
-                            className="size-7 p-1 text-destructive hover:bg-destructive/10"
-                            aria-label="Remove goal item"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>} />
-                          <TooltipContent>Remove item</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card.Content>
-          </Card>
-
-          <Dialog.Description className="text-sm text-muted-foreground">
-            Choose and order the goals students will see.
-          </Dialog.Description>
-        </div>
-
-        <Dialog.Footer className="mt-0 justify-end">
-          <NoChangesMessage message={changes.noChangesMessage} />
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        {/* Footer */}
+        {step === 1 ? (
+          <Dialog.Footer className="mt-0 justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              {selectedItems.length} goal item{selectedItems.length === 1 ? "" : "s"} selected
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setStep(2)}
+              >
+                <span>Next</span>
+                <ArrowRight className="size-4" />
+              </Button>
+            </div>
+          </Dialog.Footer>
+        ) : (
+          <Dialog.Footer className="mt-0 justify-between">
             <Button
               type="button"
               variant="outline"
-              onClick={onClose}
+              onClick={() => setStep(1)}
               disabled={isSaving}
             >
-              Cancel
+              <ArrowLeft className="size-4" />
+              <span>Back</span>
             </Button>
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || !changes.hasChanges}
-            >
-              Save Lesson Goals
-            </Button>
-          </div>
-        </Dialog.Footer>
+            <div className="flex flex-col-reverse items-center gap-2 sm:flex-row">
+              <NoChangesMessage message={changes.noChangesMessage} />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving || !changes.hasChanges}
+              >
+                {isSaving ? "Saving..." : "Save Lesson Goals"}
+              </Button>
+            </div>
+          </Dialog.Footer>
+        )}
       </Dialog.Content>
     </Dialog>
   );
