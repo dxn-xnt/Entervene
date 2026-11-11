@@ -179,6 +179,7 @@ def test_quiz_manual_grading_essay_questions(db_session):
             TeacherQuizAnswerGradeItem(quiz_question_id=link2.quiz_question_id, points_awarded=5.0),
         ],
         feedback="Great explanation of base conditions!",
+        expected_feedback_fingerprint=detail.feedback_fingerprint,
     )
     graded_detail = grade_teacher_quiz_submission(db_session, staff.staff_id, submission.submission_id, grade_req)
 

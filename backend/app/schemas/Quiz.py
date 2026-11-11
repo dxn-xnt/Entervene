@@ -236,6 +236,7 @@ class TeacherQuizSubmissionDetailResponse(BaseModel):
     total_points: float
     grade: Optional[float] = None
     feedback: Optional[str] = None
+    feedback_fingerprint: str = Field(min_length=64, max_length=64)
     submitted_at: Optional[datetime] = None
     graded_at: Optional[datetime] = None
     needs_grading: bool = False
@@ -251,4 +252,5 @@ class TeacherQuizAnswerGradeItem(BaseModel):
 class TeacherGradeQuizSubmissionRequest(BaseModel):
     answers: list[TeacherQuizAnswerGradeItem] = Field(default_factory=list)
     feedback: Optional[str] = None
+    expected_feedback_fingerprint: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     override_total_grade: Optional[float] = None

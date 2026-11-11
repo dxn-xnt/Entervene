@@ -33,6 +33,7 @@ from app.services.prediction.DevelopmentGradeRefreshService import refresh_after
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.quiz.quiz_normalization import normalize_answer
+from app.services.submission.SubmissionService import feedback_fingerprint
 
 
 TURNED_IN_STATUSES = {"submitted", "late", "graded"}
@@ -393,6 +394,7 @@ def get_teacher_quiz_submission_detail(
         total_points=total_pts,
         grade=grade_val,
         feedback=submission.feedback,
+        feedback_fingerprint=feedback_fingerprint(submission.feedback),
         submitted_at=submission.submitted_at,
         graded_at=submission.graded_at,
         needs_grading=needs_g,
@@ -406,7 +408,9 @@ def grade_teacher_quiz_submission(
     submission_id: int,
     payload: TeacherGradeQuizSubmissionRequest,
 ) -> TeacherQuizSubmissionDetailResponse:
-    submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
+    submission = db.query(StudentSubmission).filter(
+        StudentSubmission.submission_id == submission_id,
+    ).with_for_update().first()
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     assignment = db.query(ClassworkAssignment).filter(
@@ -450,6 +454,26 @@ def grade_teacher_quiz_submission(
     ).first()
     if finalized is not None:
         raise HTTPException(status_code=409, detail="The period grade is finalized")
+
+    if payload.feedback is not None:
+        current_feedback_fingerprint = feedback_fingerprint(submission.feedback)
+        expected_feedback_fingerprint = payload.expected_feedback_fingerprint
+        # Older clients may create the first comment without a token, but they
+        # must never overwrite an already saved (including AI-assisted) comment.
+        if (
+            expected_feedback_fingerprint is None
+            and submission.feedback is not None
+        ) or (
+            expected_feedback_fingerprint is not None
+            and expected_feedback_fingerprint != current_feedback_fingerprint
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "FEEDBACK_COMMENT_STALE",
+                    "message": "Saved teacher feedback changed elsewhere. Reload before saving the grade.",
+                },
+            )
 
     ensure_remedial_period_open(db, assignment, submission.student_id)
     quiz = _quiz_with_questions(db, classwork.classwork_id)

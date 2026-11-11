@@ -84,7 +84,7 @@ def start_student_quiz_attempt(
     _ensure_before_due(assignment)
     ensure_remedial_period_open(db, assignment, student.student_id)
 
-    submission = _submission_for(db, student, assignment_id)
+    submission = _submission_for(db, student, assignment_id, lock_for_update=True)
     previous_grade = submission.grade if submission else None
     max_attempts = _max_attempts(db, assignment, classwork)
     if submission and submission.status != "pending" and submission.attempt_count >= max_attempts:
@@ -129,7 +129,7 @@ def submit_student_quiz_attempt(
     _assert_student_quiz_write_scope(db, student, assignment, classwork)
     require_remediation_prerequisite(db, assignment, student)
     ensure_remedial_period_open(db, assignment, student.student_id)
-    submission = _submission_for(db, student, assignment_id)
+    submission = _submission_for(db, student, assignment_id, lock_for_update=True)
     previous_grade = submission.grade if submission else None
     if not submission:
         _ensure_before_due(assignment)
@@ -365,11 +365,20 @@ def _assert_student_quiz_write_scope(
         raise HTTPException(status_code=409, detail="The period grade is finalized")
 
 
-def _submission_for(db: Session, student: Student, assignment_id: int) -> StudentSubmission | None:
-    return db.query(StudentSubmission).filter(
+def _submission_for(
+    db: Session,
+    student: Student,
+    assignment_id: int,
+    *,
+    lock_for_update: bool = False,
+) -> StudentSubmission | None:
+    query = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id == assignment_id,
         StudentSubmission.student_id == student.student_id,
-    ).first()
+    )
+    if lock_for_update:
+        query = query.with_for_update()
+    return query.first()
 
 
 def _max_attempts(db: Session, assignment: ClassworkAssignment, classwork: Classwork) -> int:
