@@ -36,6 +36,18 @@ export type PeriodTemplateSlotItem = {
   display_order: number;
 };
 
+const REQUIRED_JHS_SLOT_NAMES = new Set([
+  "Homeroom Guidance", "Period 1", "Period 2", "Morning Recess",
+  "Period 3", "Period 4", "Period 5", "Lunch Break",
+  "Enhanced Period 1", "Enhanced Period 2", "Afternoon Recess",
+  "Period 6", "Period 7",
+]);
+
+function minutesToTime(total: number): string {
+  const bounded = Math.max(0, Math.min(total, 23 * 60 + 59));
+  return `${String(Math.floor(bounded / 60)).padStart(2, "0")}:${String(bounded % 60).padStart(2, "0")}`;
+}
+
 interface BreakConfigDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -231,12 +243,16 @@ export default function BreakConfigDrawer({
 
   const handleAddSlot = () => {
     const nextOrder = activeSlots.length > 0 ? Math.max(...activeSlots.map((s) => s.display_order)) + 1 : 1;
+    const latestEnd = activeSlots.reduce((latest, slot) => {
+      const [hour, minute] = slot.end_time.split(":").map(Number);
+      return Math.max(latest, hour * 60 + minute);
+    }, 8 * 60);
     const newSlot: PeriodTemplateSlotItem = {
       template_group: activeGroup,
-      slot_name: "New Time Slot",
+      slot_name: activeGroup === "JHS_45MIN" ? `Additional Period ${Math.max(1, activeSlots.length - 12)}` : "New Time Slot",
       slot_type: "CLASS",
-      start_time: "15:30",
-      end_time: "16:15",
+      start_time: minutesToTime(latestEnd),
+      end_time: minutesToTime(latestEnd + 45),
       is_locked_break: false,
       display_order: nextOrder,
     };
@@ -305,7 +321,8 @@ export default function BreakConfigDrawer({
       });
 
       if (!res.ok) {
-        throw new Error("Failed to save period template break settings.");
+        const errorBody = await res.json().catch(() => null) as { detail?: string } | null;
+        throw new Error(errorBody?.detail || "Failed to save period template break settings.");
       }
 
       setShowConfirmModal(false);
@@ -326,8 +343,48 @@ export default function BreakConfigDrawer({
   }, [studioData, activeGroup]);
 
   const otherClasses = useMemo(() => {
-    return (studioData?.classes || []).filter((c) => c.period_template_group !== activeGroup);
+    return (studioData?.classes || []).filter((c) => {
+      const grade = studioData?.academic_levels.find(
+        (level) => level.academic_level_id === c.academic_level_id
+      )?.grade_level;
+      return c.period_template_group !== activeGroup && !(grade && grade >= 7 && grade <= 10);
+    });
   }, [studioData, activeGroup]);
+
+  const impactSummary = useMemo(() => {
+    const originalById = new Map(
+      savedSlots.filter((slot) => slot.slot_id).map((slot) => [slot.slot_id, slot])
+    );
+    const changedIds = new Set(
+      slots
+        .filter((slot) => {
+          if (slot.template_group !== activeGroup || !slot.slot_id) return false;
+          const original = originalById.get(slot.slot_id);
+          return Boolean(original && (
+            original.start_time !== slot.start_time ||
+            original.end_time !== slot.end_time ||
+            original.slot_type !== slot.slot_type ||
+            original.slot_name !== slot.slot_name
+          ));
+        })
+        .map((slot) => slot.slot_id)
+    );
+    const changedLegacyTimes = new Set(
+      [...changedIds]
+        .map((slotId) => originalById.get(slotId))
+        .filter((slot): slot is PeriodTemplateSlotItem => Boolean(slot))
+        .map((slot) => `${slot.start_time}|${slot.end_time}`)
+    );
+    const affectedLoads = (studioData?.existing_loads || []).filter((load) =>
+      (load.slot_id != null && changedIds.has(load.slot_id)) ||
+      (load.slot_id == null && changedLegacyTimes.has(`${load.start_time}|${load.end_time}`))
+    );
+    return {
+      sectionCount: assignedClasses.length,
+      draftCount: affectedLoads.filter((load) => load.status === "draft").length,
+      publishedCount: affectedLoads.filter((load) => load.status === "published" || load.status === "active").length,
+    };
+  }, [activeGroup, assignedClasses.length, savedSlots, slots, studioData]);
 
   const handleReassignClass = async (classId: number, targetGroup: string) => {
     setIsReassigning(true);
@@ -427,7 +484,7 @@ export default function BreakConfigDrawer({
                 </div>
 
                 {/* Quick Reassign Dropdown */}
-                {otherClasses.length > 0 && (
+                {activeGroup !== "JHS_45MIN" && otherClasses.length > 0 && (
                   <div className="flex items-center gap-1.5">
                     <Select
                       value=""
@@ -478,6 +535,7 @@ export default function BreakConfigDrawer({
               ) : (
                 <div className="space-y-2">
                   {activeSlots.map((slot) => {
+                    const isRequiredJhsSlot = activeGroup === "JHS_45MIN" && REQUIRED_JHS_SLOT_NAMES.has(slot.slot_name);
                     return (
                       <Card
                         key={`${slot.template_group}_${slot.display_order}_${slot.slot_id || slot.slot_name}`}
@@ -506,6 +564,7 @@ export default function BreakConfigDrawer({
                           }
                           className="rounded! h-8 text-xs font-bold w-full bg-background shadow-none"
                           placeholder="Slot Label (e.g. Morning Recess)"
+                          disabled={isRequiredJhsSlot}
                         />
 
                         <Select
@@ -515,6 +574,7 @@ export default function BreakConfigDrawer({
                             handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "slot_type", newType);
                             handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "is_locked_break", isLocked);
                           }}
+                          disabled={isRequiredJhsSlot}
                         >
                           <Select.Trigger className="rounded! min-w-28 shadow-none">
                             <Select.Value />
@@ -565,6 +625,7 @@ export default function BreakConfigDrawer({
                               onClick={() => handleRemoveSlot(slot.display_order, slot.slot_id)}
                               className="h-7 w-7 p-0 text-destructive hover:bg-destructive hover:text-destructive-foreground ml-1 shadow-none"
                               aria-label="Remove slot"
+                              disabled={isRequiredJhsSlot}
                             >
                               <Trash2 className="size-4" />
                             </Button>} />
@@ -629,6 +690,17 @@ export default function BreakConfigDrawer({
             <Text className="text-xs text-muted-foreground font-medium">
               This will update the bell schedule and apply new times across all matching subject loads and active timetables in this group.
             </Text>
+            <Card className="p-3 shadow-none bg-muted/40">
+              <Text as="p" className="text-xs font-bold">Impact summary</Text>
+              <Text as="p" className="text-xs text-muted-foreground">
+                {impactSummary.sectionCount} section(s) use this template; {impactSummary.draftCount} linked draft load(s) will follow changed class periods.
+              </Text>
+              {impactSummary.publishedCount > 0 && (
+                <Alert status="warning">
+                  {impactSummary.publishedCount} linked published load(s) are locked. Unlock and revise those sections before saving this change.
+                </Alert>
+              )}
+            </Card>
 
           </section>
 
@@ -641,7 +713,7 @@ export default function BreakConfigDrawer({
               Cancel
             </Button>
             <Button
-              disabled={isSaving}
+              disabled={isSaving || impactSummary.publishedCount > 0}
               onClick={() => void executeSave()}
             >
               <Save className="size-4 mr-1.5" />

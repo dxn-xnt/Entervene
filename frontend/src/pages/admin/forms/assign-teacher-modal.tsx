@@ -11,6 +11,7 @@ import { Text } from "@/components/retroui/Text";
 import { AlertTriangle, Check, Search, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SubjectLoadItem, TeacherWorkloadItem } from "@/lib/api";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 
 export interface TeacherModalTarget {
   classId: number;
@@ -164,8 +165,13 @@ export default function AssignTeacherModal({
             <Table.Body>
               {sortedTeachers.length === 0 ? (
                 <Table.Row>
-                  <Table.Cell colSpan={4} className="text-center py-6 text-muted-foreground">
-                    No teachers found matching &quot;{searchQuery}&quot;
+                  <Table.Cell colSpan={4} className="p-3">
+                    <EmptyStateCard
+                      compact
+                      icon={<Search />}
+                      title="No teachers found"
+                      description={`No teacher matches “${searchQuery}”. Try another name or staff ID.`}
+                    />
                   </Table.Cell>
                 </Table.Row>
               ) : (
@@ -258,6 +264,7 @@ export default function AssignTeacherModal({
                       <Table.Cell className="py-2.5">
                         {hasConflict ? (
                           <Badge
+                            id={`teacher-status-${t.staff_id}`}
                             size="sm"
                             variant="surface"
                             className="bg-destructive/10 border-destructive! rounded text-destructive! inline-flex items-center gap-1 font-semibold text-[11px]"
@@ -267,6 +274,7 @@ export default function AssignTeacherModal({
                           </Badge>
                         ) : (
                           <Badge
+                            id={`teacher-status-${t.staff_id}`}
                             size="sm"
                             variant="surface"
                             className="text-emerald-800 rounded bg-emerald-100 border-emerald-300 inline-flex items-center gap-1 font-semibold text-[11px]"
@@ -287,12 +295,15 @@ export default function AssignTeacherModal({
                             size="sm"
                             variant={hasConflict ? "outline" : "default"}
                             className={cn(
-                              "h-7 text-xs px-3 font-bold rounded! cursor-pointer shadow-none",
+                              "h-7 text-xs px-3 font-bold rounded! shadow-none",
                               hasConflict
-                                ? "border-destructive text-destructive hover:bg-destructive/10"
-                                : ""
+                                ? "border-destructive text-destructive disabled:cursor-not-allowed disabled:opacity-60"
+                                : "cursor-pointer"
                             )}
-                            onClick={() => {
+                            disabled={hasConflict}
+                            title={hasConflict ? statusText : `Assign ${t.name}`}
+                            aria-describedby={`teacher-status-${t.staff_id}`}
+                            onClick={hasConflict ? undefined : () => {
                               onAssign(target.classId, target.subjectId, t.staff_id);
                             }}
                           >

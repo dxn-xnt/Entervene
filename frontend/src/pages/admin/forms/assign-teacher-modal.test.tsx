@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Dialog } from "@/components/retroui/Dialog";
 import AssignTeacherModal, { type StudioTeacher, type TeacherModalTarget } from "./assign-teacher-modal";
+
+afterEach(cleanup);
 
 describe("AssignTeacherModal sorting and prioritization", () => {
   const teachers: StudioTeacher[] = [
@@ -90,5 +92,69 @@ describe("AssignTeacherModal sorting and prioritization", () => {
     expect(dataRows[1].textContent).toContain("Charlie Assigned");
     expect(dataRows[2].textContent).toContain("Zack Available");
     expect(dataRows[3].textContent).toContain("Alice Conflicted");
+  });
+
+  it("disables a conflicted assignment and never calls onAssign", () => {
+    const onAssign = vi.fn();
+    render(
+      <Dialog open>
+        <AssignTeacherModal
+          target={{ ...target, currentStaffId: null }}
+          teachers={teachers}
+          teacherWorkloads={[]}
+          loads={[]}
+          getTeacherAvailabilityStatus={getTeacherAvailabilityStatus}
+          onAssign={onAssign}
+          onClose={vi.fn()}
+        />
+      </Dialog>
+    );
+
+    const row = screen.getByText("Alice Conflicted").closest("tr") as HTMLElement;
+    const assign = within(row).getByRole("button", { name: "Assign" }) as HTMLButtonElement;
+    expect(assign.disabled).toBe(true);
+    fireEvent.click(assign);
+    expect(onAssign).not.toHaveBeenCalled();
+  });
+
+  it("assigns an available teacher", () => {
+    const onAssign = vi.fn();
+    render(
+      <Dialog open>
+        <AssignTeacherModal
+          target={{ ...target, currentStaffId: null }}
+          teachers={teachers}
+          teacherWorkloads={[]}
+          loads={[]}
+          getTeacherAvailabilityStatus={getTeacherAvailabilityStatus}
+          onAssign={onAssign}
+          onClose={vi.fn()}
+        />
+      </Dialog>
+    );
+
+    const row = screen.getByText("Bob Available").closest("tr") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Assign" }));
+    expect(onAssign).toHaveBeenCalledWith(101, 1, "T_AVAIL_B");
+  });
+
+  it("keeps Unassign available for the current teacher", () => {
+    const onAssign = vi.fn();
+    render(
+      <Dialog open>
+        <AssignTeacherModal
+          target={target}
+          teachers={teachers}
+          teacherWorkloads={[]}
+          loads={[]}
+          getTeacherAvailabilityStatus={getTeacherAvailabilityStatus}
+          onAssign={onAssign}
+          onClose={vi.fn()}
+        />
+      </Dialog>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Unassign" }));
+    expect(onAssign).toHaveBeenCalledWith(101, 1, "none");
   });
 });

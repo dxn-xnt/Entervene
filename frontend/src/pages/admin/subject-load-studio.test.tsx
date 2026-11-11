@@ -7,6 +7,24 @@ import AdminSubjectLoadStudio from "./subject-load-studio";
 const getStudio = vi.hoisted(() => vi.fn());
 const validate = vi.hoisted(() => vi.fn());
 const unlock = vi.hoisted(() => vi.fn());
+const jhsSlots = vi.hoisted(() => [
+  [1, "Homeroom Guidance", "HOMEROOM", "07:30", "08:00", true],
+  [2, "Period 1", "CLASS", "08:00", "08:45", false],
+  [3, "Period 2", "CLASS", "08:45", "09:30", false],
+  [4, "Morning Recess", "RECESS", "09:30", "09:45", true],
+  [5, "Period 3", "CLASS", "09:45", "10:30", false],
+  [6, "Period 4", "CLASS", "10:30", "11:15", false],
+  [7, "Period 5", "CLASS", "11:15", "12:00", false],
+  [8, "Lunch Break", "LUNCH", "12:00", "13:00", true],
+  [9, "Enhanced Period 1", "CLASS", "13:00", "14:00", false],
+  [10, "Enhanced Period 2", "CLASS", "14:00", "15:00", false],
+  [11, "Afternoon Recess", "RECESS", "15:00", "15:30", true],
+  [12, "Period 6", "CLASS", "15:30", "16:15", false],
+  [13, "Period 7", "CLASS", "16:15", "17:00", false],
+].map(([slot_id, slot_name, slot_type, start_time, end_time, is_locked_break], index) => ({
+  slot_id, slot_name, slot_type, start_time, end_time, is_locked_break,
+  template_group: "JHS_45MIN", display_order: index + 1,
+})));
 
 vi.mock("@/layouts/app-layout", () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("@/components/ui/sidebar", () => ({ SidebarTrigger: () => null }));
@@ -15,7 +33,7 @@ vi.mock("@/context/AcademicPeriodContext", () => ({ useAcademicPeriod: () => ({ 
 vi.mock("@/components/retroui/use-toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock("@/components/retroui/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock("@/lib/api", () => ({
-  apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => [] }),
+  apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => jhsSlots }),
   getSubjectLoadStudioData: getStudio,
   validateSubjectLoads: validate,
   unlockSection: unlock,
@@ -34,8 +52,9 @@ const baseline = {
   subject_offerings: [{ subject_offering_id: 30, subject_id: 3, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [] }],
   teachers: [{ staff_id: "T1", name: "Maria Cruz", department: "Filipino", specialization: "Filipino" }],
   existing_loads: [{ subject_load_id: 12, class_id: 8, subject_id: 3, staff_id: "T1", academic_period_id: 1,
-    start_time: "08:00", end_time: "08:45", days_of_week: ["MON"], status: "published", is_locked: true, section_revision: 1 }],
+    slot_id: 2, start_time: "08:00", end_time: "08:45", days_of_week: ["MON"], status: "published", is_locked: true, section_revision: 1 }],
   has_pending_draft_by_class: {},
+  period_template_slots: jhsSlots,
 };
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -117,6 +136,19 @@ describe("Subject Load Studio locked section", () => {
 });
 
 describe("Subject Load Studio offering eligibility", () => {
+  it("gives a fresh JHS subject an authoritative default period", async () => {
+    getStudio.mockResolvedValue({ ...baseline, existing_loads: [] });
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+
+    render(<AdminSubjectLoadStudio />);
+    fireEvent.click(await screen.findByText("List"));
+
+    expect(await screen.findByText(/Period 1.*8:00 AM.*8:45 AM/)).toBeTruthy();
+    expect(validate).toHaveBeenCalledWith(1, expect.arrayContaining([
+      expect.objectContaining({ subject_id: 3, slot_id: 2, start_time: "08:00", end_time: "08:45" }),
+    ]));
+  });
+
   it("shows a configured empty state instead of treating zero offerings as all subjects", async () => {
     getStudio.mockResolvedValue({
       ...baseline,
@@ -288,6 +320,19 @@ describe("Subject Load Studio timetable grid editing", () => {
     ],
     has_pending_draft_by_class: { 8: true },
   };
+
+  it("genuinely disables section and master publish while a subject is unassigned", async () => {
+    getStudio.mockResolvedValue({
+      ...draftGridData,
+      existing_loads: [{ ...draftGridData.existing_loads[0], staff_id: null }],
+    });
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+
+    render(<AdminSubjectLoadStudio />);
+
+    expect((await screen.findByRole("button", { name: "Publish Master Schedule" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Publish" }) as HTMLButtonElement).disabled).toBe(true);
+  });
 
   it("swaps two subject blocks when one is dragged onto the other", async () => {
     getStudio.mockResolvedValue(draftGridData);
