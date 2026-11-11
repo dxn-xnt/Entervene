@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Pencil, Search, Users } from "lucide-react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { BookOpen, CalendarDays, Pencil, Search, Users } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -9,7 +11,7 @@ import { Avatar } from "@/components/retroui/Avatar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
@@ -27,6 +29,7 @@ import {
   getUnassignedClassStudents,
   updateClassStudentList,
   getClassSchedule,
+  getOverviewStats,
   type DynamicScheduleResponse,
 } from "@/lib/api";
 import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
@@ -386,8 +389,9 @@ export default function AdminClassDetail() {
 
                 <div className="flex w-full items-center gap-2 md:w-auto">
                   {!isArchived && (
-                    <Button size="header" onClick={() => setShowEditClass(true)} className="w-full whitespace-nowrap md:w-auto">
-                      <Pencil className="size-4" /> Edit Class
+                    <Button size="header" onClick={() => tab === "students" ? void openEditStudentList() : setShowEditClass(true)} className="w-full whitespace-nowrap md:w-auto">
+                      {tab === "students" ? <Users className="size-4" /> : <Pencil className="size-4" />}
+                      {tab === "students" ? "Add / Manage Students" : "Edit Class"}
                     </Button>
                   )}
                 </div>
@@ -499,6 +503,35 @@ function OverviewTab({
   activeSince: string;
 }) {
   const { classId } = useParams();
+  const { selectedPeriodId, selectedYearId } = useAcademicPeriod();
+  const [performance, setPerformance] = useState<{
+    performance_trend: { period_id: number; period_name: string; average: number | null }[];
+    subject_breakdown: { subject_id: number; subject_name: string; average: number | null }[];
+  } | null>(null);
+  const [performanceLoading, setPerformanceLoading] = useState(true);
+  const [performanceError, setPerformanceError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPerformance() {
+      setPerformanceLoading(true);
+      setPerformanceError("");
+      setPerformance(null);
+      try {
+        const data = await getOverviewStats({ scope: "class", class_id: Number(classId),
+          academic_period_id: selectedPeriodId ?? undefined,
+          academic_year_id: selectedYearId ?? undefined,
+        });
+        if (!cancelled) setPerformance(data.details as NonNullable<typeof performance>);
+      } catch (error) {
+        if (!cancelled) setPerformanceError(error instanceof Error ? error.message : "Unable to load class performance.");
+      } finally {
+        if (!cancelled) setPerformanceLoading(false);
+      }
+    }
+    void loadPerformance();
+    return () => { cancelled = true; };
+  }, [classId, selectedPeriodId, selectedYearId]);
   const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
 
   useEffect(() => {
@@ -526,72 +559,60 @@ function OverviewTab({
       <div className="grid gap-4">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
           {/* Performance chart */}
-          <RetroCard className="p-4">
-            <div className="mb-2">
+          <RetroCard className="flex flex-col gap-2 p-4">
+            <div>
             <Text as="h4" className="font-sans text-lg font-bold">
                 Period Class Performance
               </Text>
               <Text as="p" className="text-sm text-muted-foreground">
-                Average class mastery across all subjects
+                Average recorded grade across subjects by term
               </Text>
             </div>
-            <svg
-              viewBox="0 0 620 170"
-              className="h-40 w-full rounded border border-border bg-background"
-              role="img"
-              aria-label="Period class performance graph"
-            >
-              {[35, 65, 95, 125].map((y) => (
-                <line key={y} x1="38" x2="596" y1={y} y2={y} stroke="#dfd8bf" strokeWidth="1" />
-              ))}
-              <line x1="38" x2="596" y1="140" y2="140" stroke="#222" strokeWidth="1" opacity=".35" />
-              <polyline points="60,102 300,88 540,74" fill="none" stroke="#4f8b5f" strokeWidth="4" />
-              <polyline
-                points="60,114 210,108 360,102 540,96"
-                fill="none"
-                stroke="#e0be5a"
-                strokeDasharray="5 4"
-                strokeWidth="2"
-              />
-              {(
-                [
-                  ["T1", 58],
-                  ["T2", 298],
-                  ["T3", 538],
-                ] as [string, number][]
-              ).map(([label, x]) => (
-                <text key={label} x={x} y="158" fontSize="10" fontWeight="700" fill="#555">
-                  {label}
-                </text>
-              ))}
-              <rect x="512" y="54" width="54" height="18" rx="8" fill="#4f8b5f" />
-              <text x="526" y="67" fontSize="9" fontWeight="700" fill="white">
-                88.4%
-              </text>
-            </svg>
+            {performanceLoading ? (
+              <div role="status" className="flex h-40 items-center justify-center gap-3 text-sm text-muted-foreground"><Loader size="sm" />Loading class performance...</div>
+            ) : performanceError ? (
+              <p role="alert" className="text-sm text-destructive">{performanceError}</p>
+            ) : performance?.performance_trend.some((point) => point.average !== null) ? (
+              <div className="h-56 w-full" aria-label="Average recorded class grade by term">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={performance.performance_trend} margin={{ top: 12, right: 20, bottom: 8, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period_name" />
+                    <YAxis domain={[0, 100]} />
+                    <ChartTooltip formatter={(value) => [value == null ? "No recorded grades" : String(value) + "%", "Average grade"]} />
+                    <Line type="linear" dataKey="average" name="Average grade" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4 }} connectNulls={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <EmptyStateCard compact className="min-h-56 flex-1" icon={<BookOpen />} title="No recorded grades yet" description="Class performance will appear when period grades are recorded." />
+            )}
           </RetroCard>
 
           {/* Subject breakdown */}
-          <RetroCard className="p-4">
+          <RetroCard className="flex flex-col p-4">
             <Text as="h4" className="font-sans text-lg font-bold">
               Subject Breakdown
             </Text>
             <Text as="p" className="mb-3 text-xs font-semibold text-black/65">
-              Average mastery per subject load
+              Average recorded grade in the selected term
             </Text>
-            <div className="grid gap-2">
-              {(classSubjects.length > 0 ? classSubjects : selectedClass.subjects).map((subjectItem) => {
-                const subject = subjectItem as { subject?: string; name?: string; progress?: number };
-                const name = subject.subject || subject.name || "Subject";
-                const progress = subject.progress || 90;
-                return (
-                  <div key={name} className="grid grid-cols-[80px_1fr_34px] items-center gap-2 text-xs">
-                    <span className="truncate font-semibold">{name}</span>
-                    <Progress value={progress} className="h-2" aria-label={`${name} mastery: ${progress}%`} />
-                    <span className="text-right font-bold">{progress}%</span>
+            <div className="flex flex-1 flex-col gap-2">
+              {performanceLoading ? (
+                <p role="status" className="text-sm text-muted-foreground">Loading subject averages...</p>
+              ) : performanceError ? (
+                <p className="text-sm text-muted-foreground">Subject averages are unavailable.</p>
+              ) : performance?.subject_breakdown.some((subject) => subject.average !== null) ? (
+                performance.subject_breakdown.filter((subject) => subject.average !== null).map((subject) => (
+                  <div key={subject.subject_id} className="grid grid-cols-[80px_1fr_40px] items-center gap-2 text-sm">
+                    <span className="truncate font-semibold" title={subject.subject_name}>{subject.subject_name}</span>
+                    <Progress value={subject.average ?? 0} className="h-2" aria-label={subject.subject_name + " average grade"} />
+                    <span className="text-right font-bold">{subject.average}%</span>
                   </div>
-                );
-              })}
+                ))
+              ) : (
+                <EmptyStateCard compact className="flex-1" icon={<BookOpen />} title="No subject grades yet" description="Recorded grades for the selected term will appear here." />
+              )}
             </div>
           </RetroCard>
         </div>
@@ -651,6 +672,7 @@ function OverviewTab({
             ) : (
               <EmptyStateCard
                 icon={<BookOpen />}
+                shadow
                 title="No published subjects for this section yet"
                 description="Subjects will appear here once their subject loads are published."
               />
@@ -705,12 +727,6 @@ function StudentsTab({
                 className="w-full"
               />
             </label>
-            {!isReadOnly && (
-              <Button onClick={onEdit} size="header" className="whitespace-nowrap">
-                <Users className="size-4" />
-                Add / Manage Students
-              </Button>
-            )}
           </div>
         </div>
 
@@ -722,7 +738,7 @@ function StudentsTab({
           </RetroCard>
         )}
 
-        <RetroCard className="max-h-[520px] overflow-y-auto p-4">
+        <div className="min-w-0">
           {isLoading ? (
             <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted-foreground" role="status">
               <Loader size="sm" />
@@ -736,7 +752,7 @@ function StudentsTab({
               </div>
             </div>
           ) : !students.length || !filteredStudents.length ? (
-            <EmptyState className="border-0 bg-transparent shadow-none">
+            <EmptyState className="rounded border-2 border-border bg-background">
               <EmptyHeader>
                 <EmptyMedia>
                   <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background" aria-hidden="true">
@@ -767,9 +783,9 @@ function StudentsTab({
                 <AccordionItem
                   key={gender}
                   value={gender}
-                  className="border-2 border-border bg-background shadow-none overflow-hidden"
+                  className="rounded border-2 border-border bg-background shadow-none overflow-hidden"
                 >
-                  <AccordionTrigger className="items-center bg-accent px-4 py-3 text-base font-bold">
+                  <AccordionTrigger className="items-center bg-primary px-4 py-3 text-base font-black">
                     <div className="flex items-center justify-between w-full mr-2">
                       <span>{gender}</span>
                       <Badge variant="outline" size="sm">
@@ -779,7 +795,7 @@ function StudentsTab({
                   </AccordionTrigger>
                   <AccordionContent className="p-0 border-t-2 border-border">
                     <Table wrapperClassName="border-0 shadow-none">
-                      <Table.Header className="font-sans">
+                      <Table.Header className="sr-only">
                         <Table.Row>
                           <Table.Head>Name</Table.Head>
                           <Table.Head className="text-right w-36">Status</Table.Head>
@@ -842,7 +858,7 @@ function StudentsTab({
               ))}
             </Accordion>
           )}
-        </RetroCard>
+        </div>
       </section>
     </div>
   );
@@ -879,12 +895,20 @@ function SubjectLoadTab({ selectedClass }: { selectedClass?: ClassRecord }) {
       <Text as="h3" className="font-sans text-xl font-bold">
         Subject Load Schedule
       </Text>
-      <DynamicScheduleTable
-        schedule={scheduleData?.schedule || []}
-        isPublished={scheduleData?.is_published}
-        isLoading={isLoading}
-        emptyMessage="No published schedule assigned yet for this section."
-      />
+      {!isLoading && (!scheduleData?.is_published || !scheduleData.schedule.length) ? (
+        <EmptyStateCard
+          icon={<CalendarDays />}
+          shadow
+          title="No published schedule yet"
+          description="This section’s schedule will appear here once its subject loads are published."
+        />
+      ) : (
+        <DynamicScheduleTable
+          schedule={scheduleData?.schedule || []}
+          isPublished={scheduleData?.is_published}
+          isLoading={isLoading}
+        />
+      )}
     </section>
   );
 }

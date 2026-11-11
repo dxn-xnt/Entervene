@@ -66,7 +66,7 @@ export function Tabs<T extends string = string>({
 
   return (
     <>
-      <div ref={sentinelRef} aria-hidden="true" className="h-px w-full" />
+      <div ref={sentinelRef} data-tabs-sentinel aria-hidden="true" className="h-px w-full" />
       {isPinned ? <div aria-hidden="true" className="h-[50px] sm:hidden" /> : null}
       <div
         className={cn(

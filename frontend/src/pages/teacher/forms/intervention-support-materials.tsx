@@ -1149,9 +1149,6 @@ const InterventionSupportMaterials = forwardRef<
       : null;
 
 
-  const focusPercent = focus?.component
-    ? detail.diagnosis_snapshot.components?.[focus.component]?.percent
-    : null;
 
   const strongestEvidenceText =
     focus?.evidence_level === "QUESTION_SCORE"
@@ -1770,6 +1767,7 @@ const InterventionSupportMaterials = forwardRef<
                   <p className="text-base col-span-3">
                     Strongest available evidence: <strong>{strongestEvidenceText}</strong>
                   </p>
+
                   {focus?.evidence_level === "QUESTION_SCORE" && (
                     <>
                       <p className="text-base">
@@ -1791,19 +1789,6 @@ const InterventionSupportMaterials = forwardRef<
                     <p className="text-base">
                       Scored competency focus:{" "}
                       {focus.competencies.map((item) => item.label).join("; ")}
-                    </p>
-                  )}
-                  {focus?.evidence_level === "ACTIVITY_COVERAGE" && (
-                    <p className="text-sm text-muted-foreground col-span-4">
-                      Covered competencies are study context. The assessment total does not
-                      identify which one was difficult.
-                    </p>
-                  )}
-                  {focusPercent != null && (
-                    <p className="text-base col-span-4">
-                      Weakest component:{" "}
-                      <strong>{focusName}{" "}</strong>
-                      <span className="text-sm text-muted-foreground">({focusPercent.toFixed(0)}%)</span>
                     </p>
                   )}
                 </Card>
@@ -1862,9 +1847,6 @@ const InterventionSupportMaterials = forwardRef<
                                   : "grid grid-cols-1 sm:grid-cols-2 gap-2"
                               }
                             >
-                              <p className="col-span-full">
-                                Activity: <strong>{item.title}</strong>
-                              </p>
                               <div className="grid grid-cols-2 col-span-full w-full">
                                 <p>
                                   Method: <strong>{methodLabel}</strong>
@@ -2008,6 +1990,7 @@ const InterventionSupportMaterials = forwardRef<
                   {/* Current Support */}
                   {assigned.length > 0 ? (
                     <div className="flex flex-col gap-2">
+                      <span className="text-base">Remediation Activity:</span>
                       {assigned.map((item) => (
                         <div key={item.assignment_id} className="flex flex-col gap-1.5">
                           <ClassworkItemLine

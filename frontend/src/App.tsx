@@ -122,6 +122,8 @@ const App = () => {
                   <Route path={routes.admin.predictions} element={<PredictionsDashboard />} />
                   <Route path={routes.admin.gradePredictions} element={<GradesPredictions />} />
                   <Route path={routes.admin.sectionPredictions} element={<SectionPredictions />} />
+                  <Route path={routes.admin.subjectPredictions} element={<SubjectPrediction />} />
+                  <Route path={routes.admin.subjectSectionPredictions} element={<SectionPredictions />} />
                   <Route path={routes.admin.substitutions} element={<AdminSubstitutions />} />
                 </Route>
 

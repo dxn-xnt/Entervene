@@ -409,9 +409,8 @@ export function LessonStatisticalOverview({
                                         </p>
                                     </div>
                                     <Badge
-                                        variant={student.badgeType === "Flag" ? "destructive" : "outline"}
+                                        variant={student.badgeType === "Flag" ? "destructive" : "default"}
                                         size="sm"
-                                        className={student.badgeType === "Pending" ? "bg-white text-black" : undefined}
                                     >
                                         {student.badgeType}
                                     </Badge>
@@ -479,7 +478,7 @@ export function LessonStatisticalOverview({
                         <Progress value={stats.completionRate} className="h-2" aria-label={`Classwork completion: ${stats.completionRate}%`} />
                         <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
                             <Badge variant="success" size="sm">Submitted · {stats.submittedCount}</Badge>
-                            <Badge variant="outline" size="sm" className="bg-white text-black">Pending · {stats.pendingCount}</Badge>
+                            <Badge variant="default" size="sm">Pending · {stats.pendingCount}</Badge>
                             <Badge variant="destructive" size="sm">Late · {stats.lateCount}</Badge>
                         </div>
                     </Card.Content>
@@ -603,7 +602,7 @@ export function TeacherLessonView({
                                 ) : (
                                     <CheckCircle2 size={16} />
                                 )}
-                                Mark as Taught
+                                Mark as Completed
                             </Button>
                         )}
                         {!isReadOnly && isTaught && onOpenCorrectionDialog && (
@@ -617,7 +616,7 @@ export function TeacherLessonView({
                                 data-testid={`detail-correct-delivery-${lesson.lesson_id}`}
                             >
                                 <RotateCcw size={16} />
-                                Correct Delivery
+                                Revoke Completion
                             </Button>
                         )}
                         {!isReadOnly && (
@@ -629,7 +628,7 @@ export function TeacherLessonView({
                                 className="w-full whitespace-nowrap md:w-auto"
                             >
                                 <Pencil size={16} />
-                                Edit Lesson
+                                Edit
                             </Button>
                         )}
                         {!isReadOnly && onArchiveLesson && (
@@ -642,7 +641,7 @@ export function TeacherLessonView({
                                 className="w-full whitespace-nowrap md:w-auto"
                             >
                                 <Archive size={16} />
-                                Archive Lesson
+                                Archive
                             </Button>
                         )}
                     </div>
@@ -661,38 +660,34 @@ export function TeacherLessonView({
                                         {lesson.title}
                                     </h1>
                                     {(lesson.competency_statement || lesson.competency_code) && (
-                                        <div className="flex flex-row gap-2 items-center">
-                                            <p className="text-sm font-normal text-foreground">Competency:</p>
+                                        <div className="flex flex-row gap-2 items-start">
+                                            <p className="text-sm font-normal text-foreground mt-0.5">Competency:</p>
                                             <p className="text-sm font-semibold text-foreground break-words sm:text-base">
                                                 {lesson.competency_statement || lesson.competency_code}
                                             </p>
                                         </div>
                                     )}
-                                    {isTaught && activeDelivery?.delivered_at && (
-                                        <p className="text-xs text-foreground/80 font-medium pt-0.5">
-                                            Confirmed taught {formatDate(activeDelivery.delivered_at)}
-                                        </p>
-                                    )}
                                 </div>
                             </div>
 
                             <div className="flex flex-row items-center gap-2">
-                                <Badge
-                                    variant={lesson.is_published ? "solid" : "default"}
-                                    size="sm"
-                                    className="py-1"
-                                    data-testid={`detail-badge-published-${lesson.lesson_id}`}
-                                >
-                                    {lesson.is_published ? "Published" : "Draft"}
-                                </Badge>
-                                <Badge
-                                    variant={isTaught ? "success" : "outline"}
-                                    size="sm"
-                                    className={cn("py-1", !isTaught && "text-muted-foreground border-border bg-background")}
-                                    data-testid={`detail-badge-taught-${lesson.lesson_id}`}
-                                >
-                                    {isTaught ? "Taught" : "Not Taught"}
-                                </Badge>
+                                {isTaught ? (
+                                    <Badge
+                                        variant="outline"
+                                        className="py-1 font-bold"
+                                        data-testid={`detail-badge-taught-${lesson.lesson_id}`}
+                                    >
+                                        Completed
+                                    </Badge>
+                                ) : (
+                                    <Badge
+                                        variant={lesson.is_published ? "solid" : "default"}
+                                        className="py-1 font-bold"
+                                        data-testid={`detail-badge-published-${lesson.lesson_id}`}
+                                    >
+                                        {lesson.is_published ? "Published" : "Draft"}
+                                    </Badge>
+                                )}
                             </div>
                         </div>
 
@@ -702,7 +697,6 @@ export function TeacherLessonView({
                                 <div className="flex flex-col gap-1.5">
                                     <div className="flex items-end justify-between px-2">
                                         <span className="text-base font-semibold">Lesson Content</span>
-
                                     </div>
                                     <Card
                                         className={cn(
@@ -719,33 +713,43 @@ export function TeacherLessonView({
                                     </Card>
                                 </div>
                             )}
-                            <div className="flex flex-row gap-3 px-2 justify-between -mt-1">
-                                {(lesson.updated_at || lesson.created_at) && (
-                                    <p className="text-sm text-foreground/80">
-                                        {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
-                                            ? `Updated ${formatDate(lesson.updated_at)}`
-                                            : `Created ${formatDate(lesson.created_at)}`}
-                                    </p>
-                                )}
-                                <Button
-                                    type="button"
-                                    variant="link"
-                                    size="sm"
-                                    onClick={() => setIsContentExpanded((prev) => !prev)}
-                                    className="text-foreground p-0 text-sm gap-1 shadow-none"
-                                >
-                                    {isContentExpanded ? (
+                            <div className="flex flex-row gap-3 px-2 justify-between items-center -mt-1">
+                                <p className="text-sm text-foreground/80">
+                                    {(lesson.updated_at || lesson.created_at) && (
+                                        <span>
+                                            {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
+                                                ? `Updated ${formatDate(lesson.updated_at)}`
+                                                : `Created ${formatDate(lesson.created_at)}`}
+                                        </span>
+                                    )}
+                                    {isTaught && activeDelivery?.delivered_at && (
                                         <>
-                                            Show less
-                                            <ChevronUp size={14} />
-                                        </>
-                                    ) : (
-                                        <>
-                                            See more
-                                            <ChevronDown size={14} />
+                                            {(lesson.updated_at || lesson.created_at) && <span> | </span>}
+                                            <span>Completed {formatDate(activeDelivery.delivered_at)}</span>
                                         </>
                                     )}
-                                </Button>
+                                </p>
+                                {lesson.content && (
+                                    <Button
+                                        type="button"
+                                        variant="link"
+                                        size="sm"
+                                        onClick={() => setIsContentExpanded((prev) => !prev)}
+                                        className="text-foreground p-0 text-sm gap-1 shadow-none"
+                                    >
+                                        {isContentExpanded ? (
+                                            <>
+                                                Show less
+                                                <ChevronUp size={14} />
+                                            </>
+                                        ) : (
+                                            <>
+                                                See more
+                                                <ChevronDown size={14} />
+                                            </>
+                                        )}
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>

@@ -4,7 +4,7 @@ import { Text } from "@/components/retroui/Text";
 import AppLayout from "@/layouts/app-layout";
 import { useNavigate } from "react-router-dom";
 import { Select } from "@/components/retroui/Select";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";

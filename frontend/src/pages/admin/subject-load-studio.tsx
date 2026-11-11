@@ -11,7 +11,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuPortal
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
@@ -58,11 +58,9 @@ import {
   Unlock,
   RotateCcw,
   EllipsisIcon,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   User,
+  X,
+  Clock,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { useSettings } from "@/context/SettingsContext";
@@ -71,6 +69,30 @@ import { timeStringToMinutes, validatePeriodTimeRange } from "@/lib/time-utils";
 import { cn } from "@/lib/utils";
 import { classPathwayLabel } from "@/lib/class-pathway";
 import { getLockedSectionIds } from "@/pages/admin/subject-load-lock";
+import { getSubjectColor } from "@/lib/subject-colors";
+import { teacherAssignmentConflict } from "@/pages/admin/teacher-availability";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
+
+function conflictKeys(conflict: ConflictItem): string[] {
+  return Array.from(new Set([
+    ...(conflict.affected_keys || []),
+    conflict.affected_key,
+    conflict.related_affected_key,
+  ].filter((key): key is string => Boolean(key))));
+}
+
+function conflictAffectsClass(conflict: ConflictItem, classId: number): boolean {
+  return conflict.class_id === classId
+    || conflict.related_class_id === classId
+    || conflictKeys(conflict).some((key) => key.startsWith(`${classId}_`));
+}
+
+function conflictAffectsLoad(conflict: ConflictItem, classId: number, subjectId: number): boolean {
+  const key = `${classId}_${subjectId}`;
+  return conflictKeys(conflict).includes(key)
+    || (conflict.class_id === classId && conflict.subject_id === subjectId)
+    || (conflict.related_class_id === classId && conflict.related_subject_id === subjectId);
+}
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
   if (!str) return { hour: fallbackHour, minute: 0, period: "AM" };
@@ -156,6 +178,113 @@ const DAYS = [
   { key: "FRI", label: "F" },
 ];
 
+const JHS_REQUIRED_SLOT_NAMES = [
+  "Homeroom Guidance", "Period 1", "Period 2", "Morning Recess",
+  "Period 3", "Period 4", "Period 5", "Lunch Break",
+  "Enhanced Period 1", "Enhanced Period 2", "Afternoon Recess",
+  "Period 6", "Period 7",
+];
+
+/** A block (or empty cell) on the timetable grid: loads at one time slot across the given days. */
+type GridBlockRef = {
+  classId: number;
+  loadKeys: string[];
+  startTime: string;
+  endTime: string;
+  days: string[];
+};
+
+const GRID_DAY_ORDER = ["MON", "TUE", "WED", "THU", "FRI"];
+
+function normalizeDayKey(day: string): string {
+  if (day === "M") return "MON";
+  if (day === "T") return "TUE";
+  if (day === "W") return "WED";
+  if (day === "Th") return "THU";
+  if (day === "F") return "FRI";
+  return day;
+}
+
+function sortDayKeys(days: string[]): string[] {
+  return [...new Set(days.map(normalizeDayKey))].sort(
+    (a, b) => GRID_DAY_ORDER.indexOf(a) - GRID_DAY_ORDER.indexOf(b)
+  );
+}
+
+function makeLoadKey(classId: number, subjectId: number): string {
+  return `slot_${classId}_${subjectId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+}
+
+function gridCellId(startTime: string, endTime: string, day: string): string {
+  return `${startTime}|${endTime}|${day}`;
+}
+
+function parseGridCellId(cellId: string): { startTime: string; endTime: string; day: string } {
+  const [startTime, endTime, day] = cellId.split("|");
+  return { startTime, endTime, day };
+}
+
+/** Moves the `from` days of each load in `from.loadKeys` to the `to` slot/days, splitting loads when needed. */
+function relocateLoads(items: SubjectLoadItem[], from: GridBlockRef, to: GridBlockRef): SubjectLoadItem[] {
+  const keys = new Set(from.loadKeys);
+  const result: SubjectLoadItem[] = [];
+  for (const item of items) {
+    if (!item._key || !keys.has(item._key)) {
+      result.push(item);
+      continue;
+    }
+    const itemDays = (item.days_of_week || []).map(normalizeDayKey);
+    const remaining = itemDays.filter((d) => !from.days.includes(d));
+    const moved: SubjectLoadItem = {
+      ...item,
+      start_time: to.startTime,
+      end_time: to.endTime,
+      days_of_week: sortDayKeys(to.days),
+      status: "draft",
+      is_locked: false,
+    };
+    if (remaining.length === 0) {
+      result.push(moved);
+    } else {
+      result.push({ ...item, days_of_week: sortDayKeys(remaining), status: "draft", is_locked: false });
+      result.push({ ...moved, _key: makeLoadKey(item.class_id, item.subject_id), subject_load_id: null });
+    }
+  }
+  return result;
+}
+
+/** Combines a class's loads that share subject, teacher, and time slot into one multi-day load. */
+function mergeAdjacentLoads(items: SubjectLoadItem[], classId: number): SubjectLoadItem[] {
+  const merged: SubjectLoadItem[] = [];
+  for (const item of items) {
+    if (item.class_id !== classId || !item.start_time) {
+      merged.push(item);
+      continue;
+    }
+    const idx = merged.findIndex(
+      (m) =>
+        m.class_id === classId &&
+        m.subject_id === item.subject_id &&
+        (m.staff_id ?? null) === (item.staff_id ?? null) &&
+        m.start_time === item.start_time &&
+        m.end_time === item.end_time &&
+        !(m.subject_load_id && item.subject_load_id)
+    );
+    if (idx === -1) {
+      merged.push(item);
+      continue;
+    }
+    const existing = merged[idx];
+    merged[idx] = {
+      ...(existing.subject_load_id ? existing : item),
+      days_of_week: sortDayKeys([...(existing.days_of_week || []), ...(item.days_of_week || [])]),
+      status: "draft",
+      is_locked: false,
+    };
+  }
+  return merged;
+}
+
 const TIMETABLE_DAYS = [
   { key: "MON", short: "M", full: "Monday" },
   { key: "TUE", short: "T", full: "Tuesday" },
@@ -170,11 +299,6 @@ function GradeGroupCarousel({
   viewMode = "grid",
   onViewModeChange,
   renderHeaderActions,
-  onPrevGradeExternal,
-  onNextGradeExternal,
-  hasPrevGradeExternal,
-  hasNextGradeExternal,
-  hideGradeNav = false,
   hideSectionNav = false,
   activeIdx: controlledActiveIdx,
   onActiveIdxChange,
@@ -185,11 +309,6 @@ function GradeGroupCarousel({
   viewMode?: "grid" | "list";
   onViewModeChange?: (mode: "grid" | "list") => void;
   renderHeaderActions?: (activeIdx: number) => React.ReactNode;
-  onPrevGradeExternal?: () => void;
-  onNextGradeExternal?: () => void;
-  hasPrevGradeExternal?: boolean;
-  hasNextGradeExternal?: boolean;
-  hideGradeNav?: boolean;
   hideSectionNav?: boolean;
   activeIdx?: number;
   onActiveIdxChange?: (idx: number) => void;
@@ -213,149 +332,56 @@ function GradeGroupCarousel({
     }
   }, [classes.length, activeIdx]);
 
-  const activeClass = classes[activeIdx] || classes[0];
-  const currentSectionName = activeClass?.section_name || (classes.length > 0 ? `Section ${activeIdx + 1}` : "No Sections");
-  const currentPathwayLabel = activeClass ? studioClassPathwayLabel(activeClass, academicLevels) : null;
-
-  // Distinct grade levels in the current classes list in order of appearance
-  const distinctGradeLevelIds = useMemo(() => {
-    const ids: number[] = [];
-    for (const c of classes) {
-      if (c && !ids.includes(c.academic_level_id)) {
-        ids.push(c.academic_level_id);
-      }
-    }
-    return ids;
-  }, [classes]);
-
-  const currentGradeIdx = activeClass ? distinctGradeLevelIds.indexOf(activeClass.academic_level_id) : -1;
-
-  const hasPrevGrade = hasPrevGradeExternal !== undefined ? hasPrevGradeExternal : currentGradeIdx > 0;
-  const hasNextGrade =
-    hasNextGradeExternal !== undefined
-      ? hasNextGradeExternal
-      : currentGradeIdx !== -1 && currentGradeIdx < distinctGradeLevelIds.length - 1;
-
-  const canScrollPrev = activeIdx > 0;
-  const canScrollNext = activeIdx < classes.length - 1;
-
-  const handlePrevGrade = () => {
-    if (onPrevGradeExternal) {
-      onPrevGradeExternal();
-      return;
-    }
-    if (currentGradeIdx > 0) {
-      const targetLevelId = distinctGradeLevelIds[currentGradeIdx - 1];
-      const targetIdx = classes.findIndex((c) => c.academic_level_id === targetLevelId);
-      if (targetIdx !== -1) {
-        setActiveIdx(targetIdx);
-      }
-    }
-  };
-
-  const handleNextGrade = () => {
-    if (onNextGradeExternal) {
-      onNextGradeExternal();
-      return;
-    }
-    if (currentGradeIdx !== -1 && currentGradeIdx < distinctGradeLevelIds.length - 1) {
-      const targetLevelId = distinctGradeLevelIds[currentGradeIdx + 1];
-      const targetIdx = classes.findIndex((c) => c.academic_level_id === targetLevelId);
-      if (targetIdx !== -1) {
-        setActiveIdx(targetIdx);
-      }
-    }
-  };
-
   return (
     <Card className="@container/card flex min-w-0 w-full flex-col gap-1! overflow-hidden bg-background">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex flex-row items-center gap-2">
-          {!hideGradeNav && (
-            <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex"><Button
-                size="sm"
-                variant="outline"
-                disabled={!hasPrevGrade}
-                onClick={handlePrevGrade}
-                className="size-8 p-0 border-black shadow-none disabled:opacity-40"
-                aria-label="Previous grade level"
-              >
-                <ChevronsLeft className="size-4" />
-              </Button></span>} />
-              <TooltipContent>Previous grade</TooltipContent>
-            </Tooltip>
-          )}
-          {!hideSectionNav && (
-            <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex"><Button
-                size="sm"
-                variant="outline"
-                disabled={!canScrollPrev}
-                onClick={() => setActiveIdx((prev) => Math.max(0, prev - 1))}
-                className="size-8 p-0 border-black shadow-none disabled:opacity-40"
-                aria-label="Previous section"
-              >
-                <ChevronLeft className="size-4" />
-              </Button></span>} />
-              <TooltipContent>Previous section</TooltipContent>
-            </Tooltip>
-          )}
-          <Badge size="md" variant="outline" className="border-border font-bold px-5">
-            <div className="flex flex-col text-left">
-              <span className="text-left">
-                {currentSectionName}
-              </span>
-              {currentPathwayLabel && <span className="max-w-64 text-left text-xs font-medium whitespace-normal">{currentPathwayLabel}</span>}
-            </div>
-          </Badge>
-          {!hideSectionNav && (
-            <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex"><Button
-                size="sm"
-                variant="outline"
-                disabled={!canScrollNext}
-                onClick={() => setActiveIdx((prev) => Math.min(classes.length - 1, prev + 1))}
-                className="size-8 p-0 border-black shadow-none disabled:opacity-40"
-                aria-label="Next section"
-              >
-                <ChevronRight className="size-4" />
-              </Button></span>} />
-              <TooltipContent>Next section</TooltipContent>
-            </Tooltip>
-          )}
-          {!hideGradeNav && (
-            <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex"><Button
-                size="sm"
-                variant="outline"
-                disabled={!hasNextGrade}
-                onClick={handleNextGrade}
-                className="size-8 p-0 border-black shadow-none disabled:opacity-40"
-                aria-label="Next grade level"
-              >
-                <ChevronsRight className="size-4" />
-              </Button></span>} />
-              <TooltipContent>Next grade</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-        {/* View Switcher: Timetable Grid vs List */}
-        {onViewModeChange && (
-          <SegmentedControl
-            size="sm"
-            value={viewMode}
-            onValueChange={(val) => onViewModeChange(val as "grid" | "list")}
-          >
-            <SegmentedControl.Item value="grid">
-              Timetable
-            </SegmentedControl.Item>
-            <SegmentedControl.Item value="list">
-              List
-            </SegmentedControl.Item>
-          </SegmentedControl>
+        {!hideSectionNav && (
+          <div className="flex items-center gap-2 pb-1">
+            <span className="shrink-0 text-sm font-regular text-muted-foreground">
+              Section:
+            </span>
+            {classes.length === 0 ? (
+              <span className="text-sm text-muted-foreground italic">No sections</span>
+            ) : (
+              classes.map((cls, idx) => {
+                const pathway = studioClassPathwayLabel(cls, academicLevels);
+                return (
+                  <Button
+                    key={cls.class_id || idx}
+                    autoIcon={false}
+                    variant={activeIdx === idx ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveIdx(idx)}
+                    className="shrink-0 border-black shadow-none"
+                  >
+                    <span>{cls.section_name}</span>
+                    {pathway && (
+                      <span className="font-normal opacity-90">
+                        {" "}— <span>{pathway}</span>
+                      </span>
+                    )}
+                  </Button>
+                );
+              })
+            )}
+          </div>
         )}
+        {/* View Switcher: Timetable Grid vs List & Section Actions */}
         <div className="flex items-center gap-2 flex-wrap">
+          {onViewModeChange && (
+            <SegmentedControl
+              size="sm"
+              value={viewMode}
+              onValueChange={(val) => onViewModeChange(val as "grid" | "list")}
+            >
+              <SegmentedControl.Item value="grid">
+                Timetable
+              </SegmentedControl.Item>
+              <SegmentedControl.Item value="list">
+                List
+              </SegmentedControl.Item>
+            </SegmentedControl>
+          )}
           {renderHeaderActions ? renderHeaderActions(activeIdx) : null}
         </div>
       </div>
@@ -383,6 +409,16 @@ export default function AdminSubjectLoadStudio() {
   const [loadError, setLoadError] = useState(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [notice, setNotice] = useState<{ title?: string; message: string; type: "success" | "error" } | null>(null);
+  const [autoScheduleNotice, setAutoScheduleNotice] = useState<{ title?: string; message: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (autoScheduleNotice?.type === "success") {
+      const timer = setTimeout(() => {
+        setAutoScheduleNotice(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [autoScheduleNotice]);
   const [timeValidationError, setTimeValidationError] = useState<{ slotKey: string; message: string } | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [jumpIndex, setJumpIndex] = useState<{ type: "error" | "warning" | "unassigned"; idx: number } | null>(null);
@@ -397,17 +433,51 @@ export default function AdminSubjectLoadStudio() {
   const lockedSectionIds = useMemo(() => getLockedSectionIds(studioData), [studioData]);
   const isSectionLocked = (classId: number) => lockedSectionIds.has(classId);
 
+  const isJhsClass = useCallback((classId: number) => {
+    const cls = studioData?.classes.find((item) => item.class_id === classId);
+    const grade = studioData?.academic_levels.find(
+      (level) => level.academic_level_id === cls?.academic_level_id
+    )?.grade_level;
+    return grade != null && grade >= 7 && grade <= 10;
+  }, [studioData]);
+
+  const classPeriodSlots = useCallback((classId: number) => {
+    const cls = studioData?.classes.find((item) => item.class_id === classId);
+    const group = cls?.period_template_group || "JHS_45MIN";
+    return periodTemplateSlots
+      .filter((slot) => slot.template_group === group && slot.slot_type === "CLASS" && !slot.is_locked_break && slot.slot_id != null)
+      .sort((a, b) => a.display_order - b.display_order);
+  }, [periodTemplateSlots, studioData]);
+
+  const withAuthoritativeJhsSlots = useCallback((items: SubjectLoadItem[]) => items.map((item) => {
+    if (!isJhsClass(item.class_id) || !item.start_time || !item.end_time) return item;
+    const matches = classPeriodSlots(item.class_id).filter(
+      (slot) => slot.start_time === item.start_time && slot.end_time === item.end_time
+    );
+    return matches.length === 1
+      ? { ...item, slot_id: matches[0].slot_id, start_time: matches[0].start_time, end_time: matches[0].end_time }
+      : item;
+  }), [classPeriodSlots, isJhsClass]);
+
   const gradeOptions = useMemo(() => {
-    if (!studioData?.academic_levels) return [{ id: "all", label: "All" }];
+    if (!studioData?.academic_levels) return [];
     const sorted = [...studioData.academic_levels].sort((a, b) => a.grade_level - b.grade_level);
-    return [
-      { id: "all", label: "All" },
-      ...sorted.map((lvl) => ({
-        id: String(lvl.academic_level_id),
-        label: lvl.level_name,
-      })),
-    ];
+    return sorted.map((lvl) => ({
+      id: String(lvl.academic_level_id),
+      label: lvl.level_name,
+    }));
   }, [studioData?.academic_levels]);
+
+  const activeGradeId =
+    selectedGradeId && gradeOptions.some((g) => g.id === selectedGradeId)
+      ? selectedGradeId
+      : gradeOptions[0]?.id || "";
+
+  useEffect(() => {
+    if (gradeOptions.length > 0 && (!selectedGradeId || !gradeOptions.some((g) => g.id === selectedGradeId))) {
+      setSelectedGradeId(gradeOptions[0].id);
+    }
+  }, [gradeOptions, selectedGradeId]);
 
   // Fetch period templates directly on mount
   useEffect(() => {
@@ -441,25 +511,7 @@ export default function AdminSubjectLoadStudio() {
         }
       }
 
-      let groupSlots = periodTemplateSlots.filter((s) => s.template_group === groupKey);
-      if (groupSlots.length === 0) {
-        groupSlots = [
-          { template_group: groupKey, slot_name: "HOMEROOM GUIDANCE", slot_type: "HOMEROOM", start_time: "07:30", end_time: "08:00", is_locked_break: true, display_order: 1 },
-          { template_group: groupKey, slot_name: "Period 1", slot_type: "CLASS", start_time: "08:00", end_time: "08:45", is_locked_break: false, display_order: 2 },
-          { template_group: groupKey, slot_name: "Period 2", slot_type: "CLASS", start_time: "08:45", end_time: "09:30", is_locked_break: false, display_order: 3 },
-          { template_group: groupKey, slot_name: "MORNING RECESS", slot_type: "RECESS", start_time: "09:30", end_time: "09:45", is_locked_break: true, display_order: 4 },
-          { template_group: groupKey, slot_name: "Period 3", slot_type: "CLASS", start_time: "09:45", end_time: "10:30", is_locked_break: false, display_order: 5 },
-          { template_group: groupKey, slot_name: "Period 4", slot_type: "CLASS", start_time: "10:30", end_time: "11:15", is_locked_break: false, display_order: 6 },
-          { template_group: groupKey, slot_name: "Period 5", slot_type: "CLASS", start_time: "11:15", end_time: "12:00", is_locked_break: false, display_order: 7 },
-          { template_group: groupKey, slot_name: "LUNCH BREAK", slot_type: "LUNCH", start_time: "12:00", end_time: "13:00", is_locked_break: true, display_order: 8 },
-          { template_group: groupKey, slot_name: "Enhanced Period 1", slot_type: "CLASS", start_time: "13:00", end_time: "14:00", is_locked_break: false, display_order: 9 },
-          { template_group: groupKey, slot_name: "Enhanced Period 2", slot_type: "CLASS", start_time: "14:00", end_time: "15:00", is_locked_break: false, display_order: 10 },
-          { template_group: groupKey, slot_name: "AFTERNOON RECESS", slot_type: "RECESS", start_time: "15:00", end_time: "15:30", is_locked_break: true, display_order: 11 },
-          { template_group: groupKey, slot_name: "Period 6", slot_type: "CLASS", start_time: "15:30", end_time: "16:15", is_locked_break: false, display_order: 12 },
-          { template_group: groupKey, slot_name: "Period 7", slot_type: "CLASS", start_time: "16:15", end_time: "17:00", is_locked_break: false, display_order: 13 },
-        ];
-      }
-
+      const groupSlots = periodTemplateSlots.filter((s) => s.template_group === groupKey);
       const sorted = [...groupSlots].sort((a, b) => a.display_order - b.display_order);
 
       const sectionLoads = loads.filter((l) => l.class_id === cls.class_id && l.start_time && l.end_time);
@@ -493,17 +545,17 @@ export default function AdminSubjectLoadStudio() {
   const [isCopying, setIsCopying] = useState<boolean>(false);
 
   const activeGroupKey = useMemo(() => {
-    if (selectedGradeId === "all") return "JHS_45MIN";
-    const levelObj = studioData?.academic_levels.find((l) => String(l.academic_level_id) === selectedGradeId);
+    if (!activeGradeId) return "JHS_45MIN";
+    const levelObj = studioData?.academic_levels.find((l) => String(l.academic_level_id) === activeGradeId);
     const grade = levelObj?.grade_level || 7;
     if (grade >= 11) {
-      const classInLevel = studioData?.classes.find((c) => String(c.academic_level_id) === selectedGradeId);
+      const classInLevel = studioData?.classes.find((c) => String(c.academic_level_id) === activeGradeId);
       const name = (classInLevel?.section_name || "").toLowerCase();
       if (name.includes("del mundo") || name.includes("reyes")) return "SHS_DELMUNDO_REYES";
       return "SHS_CAMPOS_ZARA";
     }
     return "JHS_45MIN";
-  }, [selectedGradeId, studioData]);
+  }, [activeGradeId, studioData]);
 
 
   const previousPeriods = useMemo(() => {
@@ -521,12 +573,15 @@ export default function AdminSubjectLoadStudio() {
   const loadStudio = useCallback(async (periodId?: number, preserveNotice = false) => {
     setIsLoading(true);
     setLoadError(false);
-    if (!preserveNotice) setNotice(null);
+    if (!preserveNotice) {
+      setNotice(null);
+      setAutoScheduleNotice(null);
+    }
     try {
       const data = await getSubjectLoadStudioData(periodId);
       setStudioData(data);
-      if ((data as any).period_template_slots) {
-        setPeriodTemplateSlots((data as any).period_template_slots);
+      if (data.period_template_slots) {
+        setPeriodTemplateSlots(data.period_template_slots);
       }
 
       // Initialize subject loads: populate missing loads from section x subject combinations
@@ -572,6 +627,39 @@ export default function AdminSubjectLoadStudio() {
           isSubjectOfferedForClass(sub, cls, offerings, periodIdToUse)
         );
 
+        // Fresh sections receive a safe, deterministic draft timetable. If a
+        // section already has scheduled rows, preserve them and leave only new
+        // subjects unscheduled for explicit admin placement.
+        const hasExistingSchedule = existing.some(
+          (load) => load.class_id === cls.class_id && load.start_time && load.end_time
+        );
+        const templateGroup = cls.period_template_group || "JHS_45MIN";
+        const classSlots = (data.period_template_slots || [])
+          .filter((slot) => slot.template_group === templateGroup && slot.slot_type === "CLASS" && !slot.is_locked_break && slot.slot_id != null)
+          .sort((a, b) => a.display_order - b.display_order);
+        const enhancedSlots = classSlots.filter((slot) => slot.slot_name.toLowerCase().startsWith("enhanced"));
+        const standardSlots = classSlots.filter((slot) => !slot.slot_name.toLowerCase().startsWith("enhanced"));
+        const defaultSchedule = new Map<number, { slot: (typeof classSlots)[number]; days: string[] }>();
+
+        if (!hasExistingSchedule && classSlots.length > 0) {
+          const enhancedSubjects = levelSubjects.filter((subject) => subject.is_math_or_science);
+          const generalSubjects = levelSubjects.filter((subject) => !subject.is_math_or_science);
+          enhancedSubjects.slice(0, enhancedSlots.length).forEach((subject, index) => {
+            defaultSchedule.set(subject.subject_id, { slot: enhancedSlots[index], days: ["MON", "TUE", "WED", "THU", "FRI"] });
+          });
+          const standardSubjects = [...generalSubjects, ...enhancedSubjects.slice(enhancedSlots.length)];
+          standardSubjects.slice(0, standardSlots.length).forEach((subject, index) => {
+            defaultSchedule.set(subject.subject_id, { slot: standardSlots[index], days: ["MON", "TUE", "WED", "THU", "FRI"] });
+          });
+          standardSubjects.slice(standardSlots.length, standardSlots.length * 2).forEach((subject, index) => {
+            const paired = standardSubjects[index];
+            const slot = standardSlots[index];
+            if (!paired || !slot) return;
+            defaultSchedule.set(paired.subject_id, { slot, days: ["MON", "WED", "FRI"] });
+            defaultSchedule.set(subject.subject_id, { slot, days: ["TUE", "THU"] });
+          });
+        }
+
         levelSubjects.forEach((sub) => {
           const matched = existing.filter(
             (ex) => ex.class_id === cls.class_id && ex.subject_id === sub.subject_id
@@ -591,9 +679,10 @@ export default function AdminSubjectLoadStudio() {
               subject_id: sub.subject_id,
               staff_id: null,
               academic_period_id: periodIdToUse,
-              start_time: null,
-              end_time: null,
-              days_of_week: [],
+              slot_id: defaultSchedule.get(sub.subject_id)?.slot.slot_id ?? null,
+              start_time: defaultSchedule.get(sub.subject_id)?.slot.start_time ?? null,
+              end_time: defaultSchedule.get(sub.subject_id)?.slot.end_time ?? null,
+              days_of_week: defaultSchedule.get(sub.subject_id)?.days ?? [],
               status: "draft",
               is_locked: false,
             });
@@ -642,14 +731,14 @@ export default function AdminSubjectLoadStudio() {
     async (updatedLoads: SubjectLoadItem[]) => {
       if (!selectedPeriodId) return;
       try {
-        const valRes = await validateSubjectLoads(selectedPeriodId, updatedLoads);
+        const valRes = await validateSubjectLoads(selectedPeriodId, withAuthoritativeJhsSlots(updatedLoads));
         setConflicts(valRes.conflicts);
         setTeacherWorkloads(valRes.teacher_workloads);
       } catch (e) {
         console.error("Validation error:", e);
       }
     },
-    [selectedPeriodId]
+    [selectedPeriodId, withAuthoritativeJhsSlots]
   );
 
   // Load update handlers
@@ -709,6 +798,23 @@ export default function AdminSubjectLoadStudio() {
     void runValidation(updated);
   };
 
+  const handlePeriodSlotChange = (slotKey: string, slotId: string) => {
+    const item = loads.find((load) => load._key === slotKey);
+    if (!item || isSectionLocked(item.class_id)) return;
+    const selected = classPeriodSlots(item.class_id).find((slot) => String(slot.slot_id) === slotId);
+    if (!selected) return;
+    const updated = loads.map((load) => load._key === slotKey ? {
+      ...load,
+      slot_id: selected.slot_id,
+      start_time: selected.start_time,
+      end_time: selected.end_time,
+      status: "draft",
+      is_locked: false,
+    } : load);
+    setLoads(updated);
+    void runValidation(updated);
+  };
+
   const handleToggleDay = (slotKey: string, dayKey: string) => {
     if (loads.some((item) => item._key === slotKey && isSectionLocked(item.class_id))) return;
     const updated = loads.map((item) => {
@@ -738,6 +844,12 @@ export default function AdminSubjectLoadStudio() {
     const usedDays = new Set(existingSlots.flatMap((s) => s.days_of_week || []));
     const allDays = ["THU", "FRI", "TUE", "MON", "WED"];
     const defaultDay = allDays.find((d) => !usedDays.has(d)) || "THU";
+    const subject = studioData?.subjects.find((item) => item.subject_id === subjectId);
+    const availableSlots = classPeriodSlots(classId);
+    const preferredSlots = subject?.is_math_or_science
+      ? availableSlots.filter((slot) => slot.slot_name.toLowerCase().startsWith("enhanced"))
+      : availableSlots.filter((slot) => !slot.slot_name.toLowerCase().startsWith("enhanced"));
+    const selectedSlot = preferredSlots[0] || availableSlots[0];
 
     const newSlot: SubjectLoadItem = {
       _key: newKey,
@@ -745,8 +857,9 @@ export default function AdminSubjectLoadStudio() {
       subject_id: subjectId,
       staff_id: firstSlot?.staff_id || null,
       academic_period_id: selectedPeriodId || 1,
-      start_time: "13:00",
-      end_time: "14:00",
+      slot_id: selectedSlot?.slot_id ?? null,
+      start_time: selectedSlot?.start_time ?? null,
+      end_time: selectedSlot?.end_time ?? null,
       days_of_week: [defaultDay],
       status: "draft",
     };
@@ -763,13 +876,146 @@ export default function AdminSubjectLoadStudio() {
     void runValidation(updated);
   };
 
+  // ── Timetable grid: drag-to-swap and manual cell assignment ──────────────
+  const [gridDragSource, setGridDragSource] = useState<GridBlockRef | null>(null);
+  const [gridDragOverId, setGridDragOverId] = useState<string | null>(null);
+  const [cellSelection, setCellSelection] = useState<{ classId: number; cells: string[] } | null>(null);
+
+  useEffect(() => {
+    if (!cellSelection) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCellSelection(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [cellSelection]);
+
+  const handleToggleGridCell = (classId: number, cellId: string, additive: boolean) => {
+    if (isSectionLocked(classId)) return;
+    setCellSelection((prev) => {
+      if (!prev || prev.classId !== classId) return { classId, cells: [cellId] };
+      const isSelected = prev.cells.includes(cellId);
+      if (additive) {
+        const cells = isSelected ? prev.cells.filter((c) => c !== cellId) : [...prev.cells, cellId];
+        return cells.length > 0 ? { classId, cells } : null;
+      }
+      if (isSelected && prev.cells.length === 1) return null;
+      return { classId, cells: [cellId] };
+    });
+  };
+
+  const handleAssignSubjectToCells = (classId: number, subjectId: number) => {
+    if (isSectionLocked(classId) || !cellSelection || cellSelection.classId !== classId) return;
+
+    // Group selected cells by time slot so adjacent days become a single grouped load.
+    const cellsBySlot = new Map<string, { startTime: string; endTime: string; days: string[] }>();
+    for (const cellId of cellSelection.cells) {
+      const cell = parseGridCellId(cellId);
+      const slotKey = `${cell.startTime}|${cell.endTime}`;
+      const entry = cellsBySlot.get(slotKey) ?? { startTime: cell.startTime, endTime: cell.endTime, days: [] };
+      if (!entry.days.includes(cell.day)) entry.days.push(cell.day);
+      cellsBySlot.set(slotKey, entry);
+    }
+
+    let updated = [...loads];
+    const subjectLoads = updated.filter((l) => l.class_id === classId && l.subject_id === subjectId);
+    const defaultStaffId = subjectLoads.find((l) => l.staff_id)?.staff_id ?? null;
+
+    for (const { startTime, endTime, days } of cellsBySlot.values()) {
+      const sortedDays = sortDayKeys(days);
+      const authoritativeSlot = classPeriodSlots(classId).find(
+        (slot) => slot.start_time === startTime && slot.end_time === endTime
+      );
+      const sameSlot = updated.find(
+        (l) => l.class_id === classId && l.subject_id === subjectId && l.start_time === startTime && l.end_time === endTime
+      );
+      const unscheduled = updated.find(
+        (l) => l.class_id === classId && l.subject_id === subjectId && !l.start_time && (l.days_of_week || []).length === 0
+      );
+
+      if (sameSlot) {
+        updated = updated.map((l) =>
+          l === sameSlot
+            ? {
+                ...l,
+                days_of_week: sortDayKeys([...(l.days_of_week || []).map(normalizeDayKey), ...sortedDays]),
+                status: "draft",
+                is_locked: false,
+              }
+            : l
+        );
+      } else if (unscheduled) {
+        updated = updated.map((l) =>
+          l === unscheduled
+            ? { ...l, slot_id: authoritativeSlot?.slot_id ?? null, start_time: startTime, end_time: endTime, days_of_week: sortedDays, status: "draft", is_locked: false }
+            : l
+        );
+      } else {
+        updated.push({
+          _key: makeLoadKey(classId, subjectId),
+          class_id: classId,
+          subject_id: subjectId,
+          staff_id: defaultStaffId,
+          academic_period_id: selectedPeriodId || 1,
+          slot_id: authoritativeSlot?.slot_id ?? null,
+          start_time: startTime,
+          end_time: endTime,
+          days_of_week: sortedDays,
+          status: "draft",
+          is_locked: false,
+        });
+      }
+    }
+
+    const subjectName = studioData?.subjects.find((s) => s.subject_id === subjectId)?.subject_name ?? "Subject";
+    const cellCount = cellSelection.cells.length;
+    setLoads(updated);
+    setCellSelection(null);
+    void runValidation(updated);
+    toast.success({
+      title: "Subject added",
+      description: `${subjectName} was added to ${cellCount} cell${cellCount === 1 ? "" : "s"}.`,
+    });
+  };
+
+  const handleGridDrop = (classId: number, source: GridBlockRef, target: GridBlockRef) => {
+    if (isSectionLocked(classId) || source.classId !== classId || target.classId !== classId) return;
+    if (source.startTime === target.startTime && source.days.join() === target.days.join()) return;
+    // The same load cannot be swapped with itself (e.g. one load split across non-adjacent days).
+    if (source.loadKeys.some((key) => target.loadKeys.includes(key))) return;
+
+    let targetDays = target.days;
+    if (target.loadKeys.length === 0) {
+      // Dropping on an empty cell keeps the block's length, starting at the dropped day when it fits.
+      const dayOrder = TIMETABLE_DAYS.map((d) => d.key);
+      const srcIdx = source.days.map((d) => dayOrder.indexOf(d));
+      const minIdx = Math.min(...srcIdx);
+      const maxIdx = Math.max(...srcIdx);
+      const rawOffset = dayOrder.indexOf(target.days[0]) - minIdx;
+      const offset = Math.max(-minIdx, Math.min(rawOffset, dayOrder.length - 1 - maxIdx));
+      targetDays = srcIdx.map((i) => dayOrder[i + offset]);
+    }
+
+    let updated = relocateLoads(loads, source, { ...target, days: targetDays });
+    if (target.loadKeys.length > 0) {
+      updated = relocateLoads(updated, target, source);
+    }
+    updated = mergeAdjacentLoads(updated, classId);
+    updated = withAuthoritativeJhsSlots(updated);
+
+    setLoads(updated);
+    setCellSelection(null);
+    void runValidation(updated);
+  };
+
   // Auto-schedule entire studio or single section
   const handleAutoSchedule = async (targetClassId?: number) => {
     if (!selectedPeriodId) return;
     setIsLoading(true);
     setNotice(null);
+    setAutoScheduleNotice(null);
     try {
-      let currentLoads = [...loads];
+      const currentLoads = [...loads];
 
       const isClassLocked = isSectionLocked;
 
@@ -788,11 +1034,11 @@ export default function AdminSubjectLoadStudio() {
       const unlockedTargetClasses = candidateClasses.filter((cls) => !lockedClassIds.has(cls.class_id));
 
       if (unlockedTargetClasses.length === 0) {
-        setNotice({
+        setAutoScheduleNotice({
           title: "All Sections Locked",
           message: targetClassId
-            ? "This section is locked. Unlock the section to auto-fit."
-            : "All sections in this scope are locked. Unlock sections to auto-generate.",
+            ? "Unlock this section to auto-fit."
+            : "Unlock sections to auto-generate.",
           type: "error",
         });
         setIsLoading(false);
@@ -831,7 +1077,7 @@ export default function AdminSubjectLoadStudio() {
         ? currentLoads.filter((l) => targetClassIds.includes(l.class_id) && l._offering_eligible !== false)
         : currentLoads.filter((l) => l._offering_eligible !== false);
 
-      const res = await autoScheduleSubjectLoads(selectedPeriodId, loadsToProcess, "standard");
+      const res = await autoScheduleSubjectLoads(selectedPeriodId, withAuthoritativeJhsSlots(loadsToProcess), "standard");
 
       // Merge updated scheduled loads back into full loads array (preserving locked sections)
       const scheduledMap = new Map(
@@ -849,6 +1095,7 @@ export default function AdminSubjectLoadStudio() {
         if (match && (targetClassId === undefined || targetClassIds.includes(item.class_id))) {
           return {
             ...item,
+            slot_id: match.slot_id ?? null,
             start_time: match.start_time || null,
             end_time: match.end_time || null,
             days_of_week: match.days_of_week || [],
@@ -864,36 +1111,43 @@ export default function AdminSubjectLoadStudio() {
       setTeacherWorkloads(res.teacher_workloads);
 
       const errCount = res.conflicts.filter((c) => c.severity === "error").length;
-      const warnCount = res.conflicts.filter((c) => c.severity === "warning").length;
+      const warnCount = res.conflicts.filter((c) => c.severity === "warning" && c.rule !== "UNASSIGNED_TEACHER").length;
+      const unscheduledCount = res.unscheduled_loads?.length ?? 0;
       const unlockedCount = unlockedTargetClasses.length;
       const lockedCount = lockedClassIds.size;
       const preservedNotice = lockedCount > 0 ? ` (${lockedCount} locked section${lockedCount > 1 ? "s" : ""} preserved)` : "";
 
-      if (errCount > 0) {
-        setNotice({
+      if (unscheduledCount > 0) {
+        setAutoScheduleNotice({
+          title: "Auto-fit Incomplete",
+          message: `${unscheduledCount} subject load${unscheduledCount === 1 ? " was" : "s were"} left unscheduled because no conflict-free slot is available${preservedNotice}.`,
+          type: "error",
+        });
+      } else if (errCount > 0) {
+        setAutoScheduleNotice({
           title: "Auto-fit Complete",
-          message: `Auto-fit complete${preservedNotice}. Detected ${errCount} conflict(s). Please review highlighted errors.`,
+          message: `Detected ${errCount} ${errCount === 1 ? "conflict" : "conflicts"}${preservedNotice}. Please review highlighted errors.`,
           type: "error",
         });
       } else if (warnCount > 0) {
-        setNotice({
+        setAutoScheduleNotice({
           title: "Auto-fit with Warnings",
-          message: `Auto-fit complete${preservedNotice} with ${warnCount} warning(s). Please check conflict tracker.`,
+          message: `Detected ${warnCount} ${warnCount === 1 ? "warning" : "warnings"}${preservedNotice}. Please check conflict tracker.`,
           type: "error",
         });
       } else {
-        setNotice({
+        setAutoScheduleNotice({
           title: "Auto-fit Successful",
           message: targetClassId
-            ? "Successfully auto-fitted section timetable without conflicts!"
-            : `Successfully auto-generated timetables for ${unlockedCount} section(s).${lockedCount > 0 ? ` ${lockedCount} locked section(s) were preserved.` : ""}`,
+            ? "Section timetable auto-fitted without conflicts!"
+            : `Generated timetables for ${unlockedCount} section(s).${lockedCount > 0 ? ` ${lockedCount} locked section(s) preserved.` : ""}`,
           type: "success",
         });
       }
     } catch (err) {
-      setNotice({
+      setAutoScheduleNotice({
         title: "Auto-fit Failed",
-        message: err instanceof Error ? err.message : "Failed to auto-generate timetable.",
+        message: err instanceof Error ? err.message : "Unable to generate timetable.",
         type: "error",
       });
     } finally {
@@ -914,15 +1168,15 @@ export default function AdminSubjectLoadStudio() {
       const sourceData = (await res.json()) as SubjectLoadStudioData;
 
       let sourceLoads = sourceData.existing_loads || [];
-      if (selectedGradeId !== "all") {
-        const levelId = parseInt(selectedGradeId);
+      if (activeGradeId) {
+        const levelId = parseInt(activeGradeId);
         const classIds = new Set(sourceData.classes.filter(c => c.academic_level_id === levelId).map(c => c.class_id));
         sourceLoads = sourceLoads.filter(l => classIds.has(l.class_id));
       }
 
       let currentLoads = [...loads];
-      if (selectedGradeId !== "all") {
-        const levelId = parseInt(selectedGradeId);
+      if (activeGradeId) {
+        const levelId = parseInt(activeGradeId);
         const classIds = new Set(studioData?.classes.filter(c => c.academic_level_id === levelId).map(c => c.class_id));
         currentLoads = currentLoads.filter(l => !classIds.has(l.class_id) || isSectionLocked(l.class_id));
       } else {
@@ -956,7 +1210,7 @@ export default function AdminSubjectLoadStudio() {
           is_locked: false,
         }));
 
-      const finalLoads = [...currentLoads, ...newLoads];
+      const finalLoads = withAuthoritativeJhsSlots([...currentLoads, ...newLoads]);
       setLoads(finalLoads);
       await runValidation(finalLoads);
 
@@ -1360,8 +1614,9 @@ export default function AdminSubjectLoadStudio() {
       });
     }
 
-    setLoads(currentLoads);
-    void runValidation(currentLoads);
+    const normalizedLoads = withAuthoritativeJhsSlots(currentLoads);
+    setLoads(normalizedLoads);
+    void runValidation(normalizedLoads);
   };
 
   // Preset pattern applications
@@ -1385,7 +1640,7 @@ export default function AdminSubjectLoadStudio() {
 
     const updated = loads.map((l) =>
       l.class_id === classId && l.subject_id === subjectId
-        ? { ...l, days_of_week: days, start_time: defaultStart, end_time: defaultEnd, status: "draft", is_locked: false }
+        ? { ...l, days_of_week: days, slot_id: firstSlot?.slot_id ?? null, start_time: defaultStart, end_time: defaultEnd, status: "draft", is_locked: false }
         : l
     );
     setLoads(updated);
@@ -1403,13 +1658,13 @@ export default function AdminSubjectLoadStudio() {
     setNotice(null);
 
     try {
-      const levelIdToSave = selectedGradeId !== "all" ? Number(selectedGradeId) : 1;
+      const levelIdToSave = activeGradeId ? Number(activeGradeId) : 1;
       const draftClassIds = new Set(
         loads.filter((load) => !isSectionLocked(load.class_id) && (load.status === "draft" || !load.is_locked)).map((load) => load.class_id)
       );
       const loadsToSave = action === "draft"
-        ? loads.filter((load) => draftClassIds.has(load.class_id))
-        : loads.filter((load) => !isSectionLocked(load.class_id));
+        ? withAuthoritativeJhsSlots(loads.filter((load) => draftClassIds.has(load.class_id)))
+        : withAuthoritativeJhsSlots(loads.filter((load) => !isSectionLocked(load.class_id)));
       let baseRevToPass: number | null = null;
       if (publishScope === "section" && targetClassId) {
         const sectionLoads = loads.filter((l) => l.class_id === targetClassId);
@@ -1537,15 +1792,15 @@ export default function AdminSubjectLoadStudio() {
   // Available sections list for section dropdown
   const availableSections = useMemo(() => {
     if (!studioData) return [];
-    if (selectedGradeId === "all") return studioData.classes;
-    return studioData.classes.filter((cls) => String(cls.academic_level_id) === selectedGradeId);
-  }, [studioData, selectedGradeId]);
+    if (!activeGradeId) return studioData.classes;
+    return studioData.classes.filter((cls) => String(cls.academic_level_id) === activeGradeId);
+  }, [studioData, activeGradeId]);
 
   // Filtered classes to display in Left Pane
   const filteredClasses = useMemo(() => {
     if (!studioData) return [];
     return studioData.classes.filter((cls) => {
-      if (selectedGradeId !== "all" && String(cls.academic_level_id) !== selectedGradeId) {
+      if (activeGradeId && String(cls.academic_level_id) !== activeGradeId) {
         return false;
       }
       if (selectedSectionId !== "all" && String(cls.class_id) !== selectedSectionId) {
@@ -1564,7 +1819,7 @@ export default function AdminSubjectLoadStudio() {
           if (isPublished && !hasPendingDraft) return false;
         } else if (norm === "conflicts") {
           const hasConflicts = conflicts.some(
-            (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
+            (c) => c.severity === "error" && conflictAffectsClass(c, cls.class_id)
           );
           if (!hasConflicts) return false;
         } else if (norm === "active") {
@@ -1582,37 +1837,18 @@ export default function AdminSubjectLoadStudio() {
       }
       return true;
     });
-  }, [studioData, selectedGradeId, selectedSectionId, statusFilter, searchQuery, lockedSectionIds, conflicts]);
+  }, [studioData, activeGradeId, selectedSectionId, statusFilter, searchQuery, lockedSectionIds, conflicts]);
 
   // Compute teacher availability helper
   const getTeacherAvailabilityStatus = (staffId: string, classId: number, subjectId: number) => {
-    const targetLoad = loads.find((l) => l.class_id === classId && l.subject_id === subjectId);
-    if (!targetLoad || !targetLoad.start_time || !targetLoad.end_time) return "Available";
-
-    // Check if staff has overlap at target time
-    const staffLoads = loads.filter(
-      (l) =>
-        l.staff_id === staffId &&
-        !(l.class_id === classId && l.subject_id === subjectId) &&
-        l.start_time &&
-        l.end_time
-    );
-
-    for (const sl of staffLoads) {
-      const commonDays = (targetLoad.days_of_week || []).filter((d) =>
-        (sl.days_of_week || []).includes(d)
-      );
-      if (commonDays.length > 0) {
-        const s1 = parseMin(targetLoad.start_time);
-        const e1 = parseMin(targetLoad.end_time);
-        const s2 = parseMin(sl.start_time);
-        const e2 = parseMin(sl.end_time);
-        if (s1 < e2 && s2 < e1) {
-          return `Conflict (Overlap at ${sl.start_time})`;
-        }
-      }
-    }
-    return "Available";
+    return teacherAssignmentConflict(
+      loads,
+      staffId,
+      classId,
+      subjectId,
+      studioData?.classes,
+      studioData?.subjects,
+    ) ?? "Available";
   };
 
   const parseMin = (t?: string | null) => {
@@ -1623,10 +1859,7 @@ export default function AdminSubjectLoadStudio() {
 
   // Check if a specific load has an error conflict
   const getLoadConflict = (classId: number, subjectId: number) => {
-    const key = `${classId}_${subjectId}`;
-    return conflicts.find(
-      (c) => c.affected_key === key || (c.class_id === classId && c.subject_id === subjectId)
-    );
+    return conflicts.find((conflict) => conflictAffectsLoad(conflict, classId, subjectId));
   };
 
   const errorConflictsCount = conflicts.filter((c) => c.severity === "error").length;
@@ -1645,7 +1878,7 @@ export default function AdminSubjectLoadStudio() {
     if (carouselActiveIdx >= filteredClasses.length) {
       setCarouselActiveIdx(0);
     }
-  }, [selectedSectionId, selectedGradeId, statusFilter, searchQuery, filteredClasses.length]);
+  }, [selectedSectionId, activeGradeId, statusFilter, searchQuery, filteredClasses.length]);
 
   // Active section currently displayed on the interface/table
   const activeDisplayedClass = filteredClasses[carouselActiveIdx] || filteredClasses[0] || null;
@@ -1662,8 +1895,7 @@ export default function AdminSubjectLoadStudio() {
     const staffIdsInClass = new Set(activeSectionLoads.map((l) => l.staff_id).filter(Boolean));
 
     return conflicts.filter((c) => {
-      if (c.class_id === clsId) return true;
-      if (c.affected_key && c.affected_key.startsWith(`${clsId}_`)) return true;
+      if (conflictAffectsClass(c, clsId)) return true;
       if (c.staff_id && staffIdsInClass.has(c.staff_id)) {
         if (c.rule === "TEACHER_OVERLAP") {
           return activeSectionLoads.some(
@@ -1680,12 +1912,30 @@ export default function AdminSubjectLoadStudio() {
   }, [activeSectionConflicts]);
 
   const activeSectionWarningConflictsCount = useMemo(() => {
-    return activeSectionConflicts.filter((c) => c.severity === "warning").length;
+    return activeSectionConflicts.filter(
+      (c) => c.severity === "warning" && c.rule !== "UNASSIGNED_TEACHER"
+    ).length;
   }, [activeSectionConflicts]);
 
   const activeSectionUnassignedTotal = useMemo(() => {
     return activeSectionLoads.filter((l) => !l.staff_id).length;
   }, [activeSectionLoads]);
+
+  const formattedAutoScheduleMessage = useMemo(() => {
+    if (!autoScheduleNotice?.message) return "";
+    let msg = autoScheduleNotice.message;
+    if (autoScheduleNotice.title) {
+      const escapedTitle = autoScheduleNotice.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      msg = msg.replace(new RegExp(`^${escapedTitle}[.:,\\s-]*`, "i"), "");
+      msg = msg.replace(/^auto-fit complete[.:,\s-]*/i, "");
+      msg = msg.replace(/^successfully\s+/i, "");
+      msg = msg.replace(/^all sections (in this scope )?are locked[.:,\s-]*/i, "");
+      if (msg.length > 0) {
+        msg = msg.charAt(0).toUpperCase() + msg.slice(1);
+      }
+    }
+    return msg || autoScheduleNotice.message;
+  }, [autoScheduleNotice]);
 
   // Jump to and highlight conflicting/warning/unassigned slots or rows
   const handleJumpToItem = (type: "error" | "warning" | "unassigned") => {
@@ -1695,15 +1945,21 @@ export default function AdminSubjectLoadStudio() {
     let targetSubjectIds: number[] = [];
 
     if (type === "error" || type === "warning") {
-      const filtered = activeSectionConflicts.filter((c) => c.severity === type);
+      const filtered = activeSectionConflicts.filter((c) =>
+        type === "warning"
+          ? c.severity === "warning" && c.rule !== "UNASSIGNED_TEACHER"
+          : c.severity === "error"
+      );
       const subIds = filtered
-        .map((c) => {
-          if (c.subject_id) return c.subject_id;
-          if (c.affected_key) {
-            const parts = c.affected_key.split("_");
-            if (parts.length >= 2 && Number(parts[0]) === clsId) return Number(parts[1]);
+        .flatMap((c) => {
+          const ids: number[] = [];
+          if (c.class_id === clsId && c.subject_id) ids.push(c.subject_id);
+          if (c.related_class_id === clsId && c.related_subject_id) ids.push(c.related_subject_id);
+          for (const key of conflictKeys(c)) {
+            const parts = key.split("_");
+            if (parts.length >= 2 && Number(parts[0]) === clsId) ids.push(Number(parts[1]));
           }
-          return null;
+          return ids;
         })
         .filter((id): id is number => id !== null);
 
@@ -1776,7 +2032,7 @@ export default function AdminSubjectLoadStudio() {
                   onClick={() => setIsBreakDrawerOpen(true)}
                   className="gap-2 cursor-pointer"
                 >
-                  <Settings className="size-3.5 text-purple-900" />
+                  <Settings className="size-3.5 text-black" />
                   <span>Edit Break Timelines</span>
                 </Button>
 
@@ -1801,21 +2057,19 @@ export default function AdminSubjectLoadStudio() {
                   size="header"
                   className="col-span-2 gap-2 md:col-auto"
                   variant={isMasterPublishDisabled ? "default" : "outline"}
-                  disabled={isSaving}
+                  disabled={isMasterPublishDisabled}
                   onClick={() => {
                     if (unassignedTotal > 0) {
-                      setNotice({
+                      toast.error({
                         title: "Cannot Publish Master Schedule",
-                        message: `Cannot publish master schedule: ${unassignedTotal} subject(s) school-wide have no assigned teacher`,
-                        type: "error",
+                        description: `Cannot publish master schedule: ${unassignedTotal} subject(s) school-wide have no assigned teacher`,
                       });
                       return;
                     }
                     if (errorConflictsCount > 0) {
-                      setNotice({
+                      toast.error({
                         title: "Cannot Publish Master Schedule",
-                        message: "Fix all schedule conflicts before publishing master schedule",
-                        type: "error",
+                        description: "Fix all schedule conflicts before publishing master schedule",
                       });
                       return;
                     }
@@ -1913,83 +2167,122 @@ export default function AdminSubjectLoadStudio() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 justify-between">
-                      <div className="flex flex-wrap items-center gap-2 font-bold">
-                        {activeSectionErrorConflictsCount > 0 && (
-                          <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex"><Badge
-                              size="sm"
-                              variant="solid"
-                              onClick={() => handleJumpToItem("error")}
-                              className="bg-destructive inline-flex items-center gap-1.5 cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
-                            >
-                              <AlertCircle className="size-3.5" />
-                              {activeSectionErrorConflictsCount} conflicts — must resolve to publish
-                            </Badge></span>} />
-                            <TooltipContent>Jump to conflict</TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {activeSectionWarningConflictsCount > 0 && (
-                          <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex"><Badge
-                              size="sm"
-                              variant="surface"
-                              onClick={() => handleJumpToItem("warning")}
-                              className="inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
-                            >
-                              <AlertTriangle className="size-3.5" />
-                              {activeSectionWarningConflictsCount} warnings
-                            </Badge></span>} />
-                            <TooltipContent>Jump to warning</TooltipContent>
-                          </Tooltip>
-                        )}
-
-                        {activeSectionUnassignedTotal > 0 && (
-                          <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex"><Badge
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleJumpToItem("unassigned")}
-                              className="cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
-                            >
-                              {activeSectionUnassignedTotal} unassigned
-                            </Badge></span>} />
-                            <TooltipContent>Jump to unassigned</TooltipContent>
-                          </Tooltip>
-                        )}
+                      <div className="flex items-center gap-2 pb-1">
+                        <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                          Grade:
+                        </span>
+                        {gradeOptions.map((grade) => (
+                          <Button
+                            key={grade.id}
+                            autoIcon={false}
+                            variant={activeGradeId === grade.id ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => {
+                              setSelectedGradeId(grade.id);
+                              setSelectedSectionId("all");
+                              setCarouselActiveIdx(0);
+                              setAutoScheduleNotice(null);
+                            }}
+                            className="shrink-0 border-black shadow-none"
+                          >
+                            {grade.label}
+                          </Button>
+                        ))}
                       </div>
-                      
-                      {/* Auto-Generate All */}
-                      <Button
-                        size="sm"
-                        disabled={isLoading || isSaving}
-                        onClick={() => void handleAutoSchedule()}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <Sparkles className="size-3" />
-                        <span>Auto-Generate</span>
-                      </Button>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Auto-Generate All */}
+                        <Button
+                          size="sm"
+                          disabled={isLoading || isSaving}
+                          onClick={() => void handleAutoSchedule()}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <Sparkles className="size-3" />
+                          <span>Auto-Generate</span>
+                        </Button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                      <span className="shrink-0 text-sm font-regular text-muted-foreground">
-                        Grade:
-                      </span>
-                      {gradeOptions.map((grade) => (
-                        <Button
-                          key={grade.id}
-                          autoIcon={false}
-                          variant={selectedGradeId === grade.id ? "default" : "outline"}
+                    <div className="flex flex-wrap items-center gap-2 font-bold">
+                      {autoScheduleNotice && (
+                        <Badge
                           size="sm"
-                          onClick={() => {
-                            setSelectedGradeId(grade.id);
-                            setSelectedSectionId("all");
-                          }}
-                          className="shrink-0 border-black shadow-none"
+                          variant="outline"
+                          className={cn(
+                            "inline-flex items-center gap-1.5 font-bold select-none px-2.5 max-w-full",
+                            autoScheduleNotice.type === "success"
+                              ? "bg-emerald-50 text-emerald-950 border-emerald-600"
+                              : "bg-red-50 text-destructive border-destructive"
+                          )}
+                          role="status"
+                          aria-live="polite"
                         >
-                          {grade.label}
-                        </Button>
-                      ))}
+                          {autoScheduleNotice.type === "success" ? (
+                            <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                          ) : (
+                            <AlertCircle className="size-3.5 shrink-0 text-destructive" />
+                          )}
+                          <span className="truncate max-w-xs sm:max-w-md md:max-w-lg" title={formattedAutoScheduleMessage}>
+                            {autoScheduleNotice.title && (
+                              <strong className="font-bold mr-1">{autoScheduleNotice.title}:</strong>
+                            )}
+                            {formattedAutoScheduleMessage}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setAutoScheduleNotice(null)}
+                            className="ml-1 text-muted-foreground hover:text-black cursor-pointer p-0.5 rounded transition-colors shrink-0"
+                            aria-label="Dismiss notice"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {activeSectionErrorConflictsCount > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="inline-flex"><Badge
+                            size="sm"
+                            variant="solid"
+                            onClick={() => handleJumpToItem("error")}
+                            className="bg-destructive inline-flex items-center gap-1.5 cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
+                          >
+                            <AlertCircle className="size-3.5" />
+                            {activeSectionErrorConflictsCount} {activeSectionErrorConflictsCount === 1 ? "conflict" : "conflicts"} — must resolve to publish
+                          </Badge></span>} />
+                          <TooltipContent>Jump to conflict</TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {activeSectionWarningConflictsCount > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="inline-flex"><Badge
+                            size="sm"
+                            variant="surface"
+                            onClick={() => handleJumpToItem("warning")}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer hover:opacity-85 bg-yellow transition-all active:scale-95 select-none"
+                          >
+                            <AlertTriangle className="size-3.5" />
+                            {activeSectionWarningConflictsCount} {activeSectionWarningConflictsCount === 1 ? "warning" : "warnings"}
+                          </Badge></span>} />
+                          <TooltipContent>Jump to warning</TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {activeSectionUnassignedTotal > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="inline-flex"><Badge
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleJumpToItem("unassigned")}
+                            className="cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
+                          >
+                            {activeSectionUnassignedTotal} unassigned
+                          </Badge></span>} />
+                          <TooltipContent>Jump to unassigned</TooltipContent>
+                        </Tooltip>
+                      )}
                     </div>
                   </section>
 
@@ -2011,8 +2304,8 @@ export default function AdminSubjectLoadStudio() {
                         <EmptyTitle>{searchQuery.trim() ? "No classes match your search" : studioData?.classes.length ? "No class sections match these filters" : "No class sections yet"}</EmptyTitle>
                         <EmptyDescription>{searchQuery.trim() ? "Try a different class name or clear the search." : studioData?.classes.length ? "Choose another grade level or section to see class schedules." : "Create a class in the Admin Classes page to start assigning subjects."}</EmptyDescription>
                       </EmptyHeader>
-                      {(searchQuery.trim() || selectedGradeId !== "all" || selectedSectionId !== "all" || statusFilter !== "all") && (
-                        <Button size="sm" onClick={() => { setSearchQuery(""); setSelectedGradeId("all"); setSelectedSectionId("all"); setStatusFilter("all"); }}>Clear filters</Button>
+                      {(searchQuery.trim() || (gradeOptions.length > 0 && activeGradeId !== gradeOptions[0].id) || selectedSectionId !== "all" || statusFilter !== "all") && (
+                        <Button size="sm" onClick={() => { setSearchQuery(""); setSelectedGradeId(gradeOptions[0]?.id || ""); setSelectedSectionId("all"); setStatusFilter("all"); setCarouselActiveIdx(0); }}>Clear filters</Button>
                       )}
                     </Empty>
                   ) : (() => {
@@ -2023,26 +2316,24 @@ export default function AdminSubjectLoadStudio() {
                       const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
                       const isSectionPublished = isSectionLocked(cls.class_id);
                       const sectionErrors = conflicts.filter(
-                        (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
+                        (c) => c.severity === "error" && conflictAffectsClass(c, cls.class_id)
                       );
                       const sectionHasErrors = sectionErrors.length > 0;
                       const isPublishSectionDisabled = isSaving || sectionHasErrors || sectionUnassignedCount > 0;
 
                       const handlePublishSectionClick = () => {
                         if (sectionUnassignedCount > 0) {
-                          setNotice({
+                          toast.error({
                             title: "Cannot Publish Section",
-                            message: `Section "${cls.section_name}" has ${sectionUnassignedCount} subject(s) without an assigned teacher. Please assign all teachers first.`,
-                            type: "error",
+                            description: `Section "${cls.section_name}" has ${sectionUnassignedCount} subject(s) without an assigned teacher. Please assign all teachers first.`,
                           });
                           return;
                         }
                         if (sectionHasErrors) {
                           const errorMsg = sectionErrors[0]?.message || "This section has unresolved schedule conflicts.";
-                          setNotice({
+                          toast.error({
                             title: "Cannot Publish Section",
-                            message: `Section "${cls.section_name}" cannot be published: ${errorMsg}`,
-                            type: "error",
+                            description: `Section "${cls.section_name}" cannot be published: ${errorMsg}`,
                           });
                           return;
                         }
@@ -2091,7 +2382,7 @@ export default function AdminSubjectLoadStudio() {
                               <Button
                                 size="sm"
                                 variant={isPublishSectionDisabled ? "default" : "outline"}
-                                disabled={isSaving}
+                                disabled={isPublishSectionDisabled}
                                 className="gap-2 shadow-none"
                                 onClick={handlePublishSectionClick}
                               >
@@ -2103,7 +2394,7 @@ export default function AdminSubjectLoadStudio() {
                             <Button
                               size="sm"
                               variant={isPublishSectionDisabled ? "default" : "outline"}
-                              disabled={isSaving}
+                              disabled={isPublishSectionDisabled}
                               className="gap-2"
                               onClick={handlePublishSectionClick}
                             >
@@ -2227,29 +2518,6 @@ export default function AdminSubjectLoadStudio() {
                       );
                     };
 
-                    const allLevels = studioData?.academic_levels || [];
-                    const currentLevelIndex = allLevels.findIndex(
-                      (l) => String(l.academic_level_id) === selectedGradeId
-                    );
-                    const prevLevel = allLevels[currentLevelIndex - 1];
-                    const nextLevel = allLevels[currentLevelIndex + 1];
-
-                    const handlePrevGradeExternal =
-                      selectedGradeId !== "all" && prevLevel
-                        ? () => {
-                          setSelectedGradeId(String(prevLevel.academic_level_id));
-                          setSelectedSectionId("all");
-                        }
-                        : undefined;
-
-                    const handleNextGradeExternal =
-                      selectedGradeId !== "all" && nextLevel
-                        ? () => {
-                          setSelectedGradeId(String(nextLevel.academic_level_id));
-                          setSelectedSectionId("all");
-                        }
-                        : undefined;
-
                     const isAllList =
                       filteredClasses.length > 0 &&
                       filteredClasses.every((c) => sectionViewModes[c.class_id] === "list");
@@ -2271,11 +2539,6 @@ export default function AdminSubjectLoadStudio() {
                             return next;
                           });
                         }}
-                        onPrevGradeExternal={handlePrevGradeExternal}
-                        onNextGradeExternal={handleNextGradeExternal}
-                        hasPrevGradeExternal={selectedGradeId !== "all" ? Boolean(prevLevel) : undefined}
-                        hasNextGradeExternal={selectedGradeId !== "all" ? Boolean(nextLevel) : undefined}
-                        hideGradeNav={selectedGradeId !== "all" || selectedSectionId !== "all"}
                         hideSectionNav={selectedSectionId !== "all"}
                         renderHeaderActions={(activeIdx) =>
                           renderSectionActions(filteredClasses[activeIdx] || filteredClasses[0])
@@ -2294,6 +2557,15 @@ export default function AdminSubjectLoadStudio() {
                             invalidDraftSubjectIds.has(sub.subject_id)
                           );
                           const sectionLocked = isSectionLocked(cls.class_id);
+                          const sectionTemplateSlots = getSectionSlots(cls);
+                          const configuredNames = new Set(sectionTemplateSlots.map((slot) => slot.slot_name));
+                          const hasValidTimetable = isJhsClass(cls.class_id)
+                            ? cls.period_template_group === "JHS_45MIN" &&
+                              (studioData?.jhs_template_audit
+                                ? sectionTemplateSlots.length >= JHS_REQUIRED_SLOT_NAMES.length &&
+                                  JHS_REQUIRED_SLOT_NAMES.every((name) => configuredNames.has(name))
+                                : sectionTemplateSlots.some((slot) => slot.slot_type === "CLASS" && !slot.is_locked_break))
+                            : sectionTemplateSlots.some((slot) => slot.slot_type === "CLASS" && !slot.is_locked_break);
 
                           const timesBySubject = new Map<string, { start: number; end: number }>();
                           for (const l of sectionLoads) {
@@ -2351,7 +2623,15 @@ export default function AdminSubjectLoadStudio() {
                                   </div>
                                 </div> */}
 
-                                {classSubjects.length === 0 ? (
+                                {!hasValidTimetable ? (
+                                  <EmptyStateCard
+                                    title="Configure the timetable first"
+                                    description={`Subject Load for ${cls.section_name} is unavailable until its complete bell schedule is configured. The timetable controls every assignable class period and break.`}
+                                    actionLabel="Configure timetable"
+                                    onAction={() => setIsBreakDrawerOpen(true)}
+                                    icon={<Clock className="size-5" />}
+                                  />
+                                ) : classSubjects.length === 0 ? (
                                   <Empty className="my-2 shadow-none hover:shadow-none">
                                     <EmptyHeader>
                                       <EmptyMedia><div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><Search className="size-5" /></div></EmptyMedia>
@@ -2362,22 +2642,74 @@ export default function AdminSubjectLoadStudio() {
                                     </EmptyHeader>
                                   </Empty>
                                 ) : (sectionViewModes[cls.class_id] || "grid") === "grid" ? (
+                                  <>
+                                  {!sectionLocked && (
+                                    cellSelection?.classId === cls.class_id ? (
+                                      <div
+                                        role="toolbar"
+                                        aria-label="Selected timetable cells"
+                                        className="my-2 flex flex-wrap items-center justify-between gap-2 rounded border-2 border-black bg-primary/15 px-3 py-2"
+                                      >
+                                        <span className="text-sm font-bold text-black">
+                                          {cellSelection.cells.length} cell{cellSelection.cells.length === 1 ? "" : "s"} selected
+                                          <span className="ml-2 font-normal text-muted-foreground">
+                                            Ctrl/⌘ + click to group more cells · Esc to clear
+                                          </span>
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <Button size="sm" className="gap-2">
+                                                <Plus className="size-3.5" />
+                                                Add Subject
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent
+                                              align="end"
+                                              collisionPadding={12}
+                                              className="max-h-72 min-w-[220px] overflow-y-auto rounded border-2 border-border"
+                                            >
+                                              {sortedClassSubjects.map((sub) => (
+                                                <DropdownMenuItem
+                                                  key={sub.subject_id}
+                                                  className="gap-2 cursor-pointer"
+                                                  onClick={() => handleAssignSubjectToCells(cls.class_id, sub.subject_id)}
+                                                >
+                                                  <span
+                                                    aria-hidden="true"
+                                                    className={cn("size-3 shrink-0 rounded-sm border border-black", getSubjectColor(sub.subject_name, sub.subject_id))}
+                                                  />
+                                                  {sub.subject_name}
+                                                </DropdownMenuItem>
+                                              ))}
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                          <Button size="sm" variant="outline" className="gap-2" onClick={() => setCellSelection(null)}>
+                                            <X className="size-3.5" />
+                                            Clear
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="mt-2 text-xs text-muted-foreground">
+                                        Drag a subject onto another to swap them. Click empty cells (Ctrl/⌘ + click to group several) to add a subject.
+                                      </p>
+                                    )
+                                  )}
                                   <Table
-                                    className="w-full min-w-[700px] border-collapse bg-white text-sm border-0 shadow-none"
-                                    wrapperClassName="h-auto overflow-x-auto rounded border-2 border-black bg-white my-2 shadow-none"
+                                    className="w-full min-w-[640px] border-collapse bg-background text-sm"
+                                    wrapperClassName="h-auto overflow-x-auto rounded border-2 border-black bg-background my-2 shadow-none"
                                   >
                                     <Table.Header className="">
                                       <Table.Row className="border-b-2 border-black">
-                                        <Table.Head className="w-48 min-w-[170px] border-b-2 border-r-2 border-black bg-primary text-left first:rounded-tl-[3px]">
+                                        {/* Sticky time-label corner */}
+                                        <Table.Head className="sticky left-0 z-20 w-28 border-b-2 border-r-2 border-black bg-primary px-3 py-2.5 text-left text-base font-bold text-black">
                                           Time
                                         </Table.Head>
-                                        {TIMETABLE_DAYS.map((d, dIdx) => (
+                                        {TIMETABLE_DAYS.map((d) => (
                                           <Table.Head
                                             key={d.key}
-                                            className={cn(
-                                              "min-w-[130px] border-b-2 border-black bg-primary text-center",
-                                              dIdx < TIMETABLE_DAYS.length - 1 ? "border-r border-black" : "last:rounded-tr-[3px]"
-                                            )}
+                                            className="border-b-2 border-r-none border-black bg-primary px-3 py-2.5 text-center text-base font-bold text-black whitespace-nowrap min-w-[120px]"
                                           >
                                             <div>{d.full}</div>
                                           </Table.Head>
@@ -2385,34 +2717,31 @@ export default function AdminSubjectLoadStudio() {
                                       </Table.Row>
                                     </Table.Header>
                                     <Table.Body>
-                                      {getSectionSlots(cls).map((slot, sIdx) => {
+                                      {sectionTemplateSlots.map((slot, sIdx) => {
                                         const isBreak = slot.is_locked_break || slot.slot_type !== "CLASS";
                                         const timeLabel = `${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}`;
 
                                         if (isBreak) {
                                           return (
-                                            <Table.Row key={`break_${slot.display_order}_${sIdx}`} className="border-background bg-[#fbfbfa] hover:bg-[#fbfbfa]">
-                                              <Table.Cell className="border-r-2 border-b-2 bg-accent py-2! text-center text-xs font-bold text-black whitespace-nowrap align-middle">
+                                            <Table.Row key={`break_${slot.display_order}_${sIdx}`} className="bg-background border-none">
+                                              <Table.Cell className="sticky left-0 z-10 border-r-2 border-t-2 border-black bg-background px-3 py-1 text-xs font-semibold text-foreground whitespace-nowrap">
                                                 {timeLabel}
                                               </Table.Cell>
                                               <Table.Cell
                                                 colSpan={TIMETABLE_DAYS.length}
-                                                className="bg-white/50 p-2!"
+                                                className="border-none bg-background px-3 py-1.5 text-center text-xs font-medium text-muted-foreground"
                                               >
-                                                <div className="flex w-full">
-                                                  <Card className="flex min-h-7 w-full items-center justify-center rounded bg-primary px-2 py-1 text-xs font-bold text-primary-foreground shadow-none">
-                                                    {slot.slot_name}
-                                                  </Card>
-                                                </div>
+                                                {slot.slot_name}
                                               </Table.Cell>
                                             </Table.Row>
                                           );
                                         }
 
                                         return (
-                                          <Table.Row key={`slot_${slot.start_time}_${sIdx}`} className="border-background bg-white hover:bg-white">
-                                            <Table.Cell className=" border-r-2 border-b-2 bg-accent text-center text-xs font-bold text-black whitespace-nowrap align-middle">
-                                              {timeLabel}
+                                          <Table.Row key={`slot_${slot.start_time}_${sIdx}`} className="bg-background border-none hover:bg-background">
+                                            {/* Sticky time label */}
+                                            <Table.Cell className="sticky left-0 z-10 border-r-2 border-y-2 border-black bg-background px-3 py-2.5 align-middle whitespace-nowrap">
+                                              <div className="text-xs font-bold text-black">{timeLabel}</div>
                                             </Table.Cell>
                                             {(() => {
                                               const dayLoads = TIMETABLE_DAYS.map((d, dIdx) => {
@@ -2461,20 +2790,104 @@ export default function AdminSubjectLoadStudio() {
                                               });
 
                                               return groupedCells.map((group) => {
-                                                const isLast = group.endIdx === TIMETABLE_DAYS.length - 1;
+                                                const groupDays = TIMETABLE_DAYS.slice(group.startIdx, group.endIdx + 1).map((d) => d.key);
+                                                const blockRef: GridBlockRef = {
+                                                  classId: cls.class_id,
+                                                  loadKeys: group.matchedLoads.map((l) => l._key).filter((k): k is string => Boolean(k)),
+                                                  startTime: slot.start_time,
+                                                  endTime: slot.end_time,
+                                                  days: groupDays,
+                                                };
+                                                const dropId = `${cls.class_id}|${slot.start_time}|${group.startIdx}`;
+                                                const isDropTarget =
+                                                  !sectionLocked && gridDragSource?.classId === cls.class_id;
+                                                const isDragOver = isDropTarget && gridDragOverId === dropId;
+                                                const dropHandlers = isDropTarget
+                                                  ? {
+                                                      onDragOver: (e: React.DragEvent) => {
+                                                        e.preventDefault();
+                                                        e.dataTransfer.dropEffect = "move";
+                                                        if (gridDragOverId !== dropId) setGridDragOverId(dropId);
+                                                      },
+                                                      onDragLeave: (e: React.DragEvent) => {
+                                                        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                                                          setGridDragOverId((prev) => (prev === dropId ? null : prev));
+                                                        }
+                                                      },
+                                                      onDrop: (e: React.DragEvent) => {
+                                                        e.preventDefault();
+                                                        if (gridDragSource) handleGridDrop(cls.class_id, gridDragSource, blockRef);
+                                                        setGridDragSource(null);
+                                                        setGridDragOverId(null);
+                                                      },
+                                                    }
+                                                  : {};
+                                                const cellId = gridCellId(slot.start_time, slot.end_time, groupDays[0]);
+                                                const isCellSelected =
+                                                  cellSelection?.classId === cls.class_id && cellSelection.cells.includes(cellId);
+
                                                 return (
                                                   <Table.Cell
                                                     key={`slot_${slot.start_time}_grp_${group.startIdx}_${group.endIdx}`}
                                                     colSpan={group.colSpan}
-                                                    className={cn(
-                                                      "p-2! align-middle",
-                                                      !isLast ? "" : ""
-                                                    )}
+                                                    className="border-none px-1.5 py-1 align-top"
+                                                    {...dropHandlers}
                                                   >
                                                     {group.matchedLoads.length === 0 ? (
-                                                      <div className="text-center text-sm text-gray-400 font-medium">—</div>
+                                                      <div
+                                                        role={sectionLocked ? undefined : "button"}
+                                                        tabIndex={sectionLocked ? undefined : 0}
+                                                        aria-pressed={sectionLocked ? undefined : isCellSelected}
+                                                        aria-label={sectionLocked ? undefined : `${TIMETABLE_DAYS[group.startIdx].full} ${timeLabel}`}
+                                                        title={sectionLocked ? undefined : "Click to select · Ctrl/⌘ + click to group cells"}
+                                                        onClick={(e) => handleToggleGridCell(cls.class_id, cellId, e.ctrlKey || e.metaKey)}
+                                                        onKeyDown={(e) => {
+                                                          if (e.key === "Enter" || e.key === " ") {
+                                                            e.preventDefault();
+                                                            handleToggleGridCell(cls.class_id, cellId, e.ctrlKey || e.metaKey);
+                                                          }
+                                                        }}
+                                                        className={cn(
+                                                          "flex h-full min-h-[2.75rem] items-center justify-center rounded border-2 border-dashed border-transparent text-black transition-colors focus:outline-none",
+                                                          !sectionLocked && "cursor-pointer hover:border-black/40 hover:bg-primary/10 focus-visible:border-black",
+                                                          isCellSelected && "border-solid border-black bg-primary/30 hover:bg-primary/30",
+                                                          isDragOver && "border-black bg-primary/20"
+                                                        )}
+                                                      >
+                                                        {isCellSelected && <Plus className="size-4" aria-hidden="true" />}
+                                                      </div>
                                                     ) : (
-                                                      <div className="flex flex-col gap-1.5">
+                                                      <div
+                                                        draggable={!sectionLocked}
+                                                        onDragStart={(e) => {
+                                                          if (sectionLocked) return;
+                                                          e.dataTransfer.effectAllowed = "move";
+                                                          e.dataTransfer.setData("text/plain", blockRef.loadKeys.join(","));
+                                                          setGridDragSource(blockRef);
+                                                          setCellSelection(null);
+                                                        }}
+                                                        onDragEnd={() => {
+                                                          setGridDragSource(null);
+                                                          setGridDragOverId(null);
+                                                        }}
+                                                        className={cn(
+                                                          "flex flex-col gap-1 w-full rounded transition-opacity",
+                                                          !sectionLocked && "cursor-grab active:cursor-grabbing",
+                                                          gridDragSource?.classId === cls.class_id &&
+                                                            gridDragSource.startTime === slot.start_time &&
+                                                            gridDragSource.days.join() === groupDays.join() &&
+                                                            "opacity-50",
+                                                          isDragOver && "outline-2 outline-offset-2 outline-dashed outline-black"
+                                                        )}
+                                                      >
+                                                        {group.matchedLoads.length > 1 && (
+                                                          <Badge
+                                                            variant="outline"
+                                                            className="border-red-400 bg-red-50 text-red-700 text-[9px] font-bold self-start"
+                                                          >
+                                                            ⚠ {group.matchedLoads.length} overlapping
+                                                          </Badge>
+                                                        )}
                                                         {group.matchedLoads.map((mLoad, mIdx) => {
                                                           const subObj = (studioData?.subjects || []).find(
                                                             (s) => s.subject_id === mLoad.subject_id
@@ -2484,34 +2897,61 @@ export default function AdminSubjectLoadStudio() {
                                                           );
                                                           const conflict = getLoadConflict(cls.class_id, mLoad.subject_id);
                                                           const isSlotHighlighted = highlightedKey === `${cls.class_id}_${mLoad.subject_id}`;
+                                                          const subjectBg = getSubjectColor(subObj?.subject_name, mLoad.subject_id);
 
                                                           return (
-                                                            <Card
+                                                            <div
                                                               key={mLoad.subject_load_id || mLoad._key || mIdx}
                                                               id={`timetable-slot-${cls.class_id}_${mLoad.subject_id}`}
-                                                              title={conflict ? conflict.message : undefined}
+                                                              role="button"
+                                                              tabIndex={0}
+                                                              title={conflict ? conflict.message : teacherObj ? `Assigned: ${teacherObj.name}` : "Click to assign teacher"}
+                                                              onClick={() => {
+                                                                if (!sectionLocked) {
+                                                                  setTeacherModalTarget({
+                                                                    classId: cls.class_id,
+                                                                    className: cls.section_name,
+                                                                    subjectId: mLoad.subject_id,
+                                                                    subjectName: subObj?.subject_name || `Subject #${mLoad.subject_id}`,
+                                                                    currentStaffId: mLoad.staff_id ?? null,
+                                                                  });
+                                                                }
+                                                              }}
+                                                              onKeyDown={(e) => {
+                                                                if ((e.key === "Enter" || e.key === " ") && !sectionLocked) {
+                                                                  e.preventDefault();
+                                                                  setTeacherModalTarget({
+                                                                    classId: cls.class_id,
+                                                                    className: cls.section_name,
+                                                                    subjectId: mLoad.subject_id,
+                                                                    subjectName: subObj?.subject_name || `Subject #${mLoad.subject_id}`,
+                                                                    currentStaffId: mLoad.staff_id ?? null,
+                                                                  });
+                                                                }
+                                                              }}
                                                               className={cn(
-                                                                "rounded shadow-none text-black text-left flex flex-col gap-0.5 p-2 transition-all duration-300",
+                                                                "w-full rounded border-2 border-black px-2 py-1.5 text-xs hover:bg-retro leading-snug shadow-sm cursor-pointer transition-all hover:-translate-y-0.5 active:translate-y-0 focus:outline-none",
                                                                 isSlotHighlighted
-                                                                  ? "ring-4 ring-primary ring-offset-2 border-primary bg-primary/25 scale-[1.03] shadow-md z-10 animate-pulse"
+                                                                  ? " border-primary bg-primary/25 scale-[1.03] shadow-md z-10 animate-pulse"
                                                                   : conflict
                                                                     ? conflict.severity === "error"
-                                                                      ? "border-destructive bg-destructive/20"
+                                                                      ? "border-destructive bg-destructive/20 text-destructive-foreground"
                                                                       : "border-amber-400 bg-amber-100/50"
                                                                     : !mLoad.staff_id
-                                                                      ? "border-amber-300/80 bg-amber-50/40"
-                                                                      : "bg-success/60"
+                                                                      ? cn("border-dashed border-amber-600/80", subjectBg)
+                                                                      : subjectBg
                                                               )}
                                                             >
-                                                              <div className="font-bold text-sm leading-tight">
+                                                              <div className="font-bold text-sm leading-tight text-black truncate">
                                                                 {subObj?.subject_name || `Subject #${mLoad.subject_id}`}
                                                               </div>
-                                                              <div className="text-xs font-medium">
+                                                              <div className="text-xs text-muted-foreground truncate">
                                                                 {teacherObj
                                                                   ? teacherObj.name
                                                                   : <span className="italic font-medium text-amber-700">Unassigned</span>}
                                                               </div>
-                                                            </Card>
+
+                                                            </div>
                                                           );
                                                         })}
                                                       </div>
@@ -2525,6 +2965,7 @@ export default function AdminSubjectLoadStudio() {
                                       })}
                                     </Table.Body>
                                   </Table>
+                                  </>
                                 ) : (
                                   <Table
                                     className="min-w-[960px] table-fixed shadow-none"
@@ -2564,7 +3005,7 @@ export default function AdminSubjectLoadStudio() {
                                             className={cn(
                                               "transition-all duration-300",
                                               isHighlighted
-                                                ? "bg-primary/25 ring-2 ring-primary ring-inset font-semibold animate-pulse"
+                                                ? "bg-primary/25 font-semibold animate-pulse"
                                                 : conflict
                                                   ? conflict.severity === "error"
                                                     ? "bg-destructive/10"
@@ -2682,6 +3123,11 @@ export default function AdminSubjectLoadStudio() {
                                                 <div className="flex flex-col gap-2">
                                                   {subjectSlots.map((slot, sIdx) => {
                                                     const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
+                                                    const resolvedPeriodSlot = classPeriodSlots(cls.class_id).find(
+                                                      (period) => period.slot_id === slot.slot_id || (
+                                                        period.start_time === slot.start_time && period.end_time === slot.end_time
+                                                      )
+                                                    );
                                                     return (
                                                       <div key={slotKey} className="flex flex-wrap items-center gap-2.5">
                                                         {/* Days Chips */}
@@ -2705,26 +3151,43 @@ export default function AdminSubjectLoadStudio() {
                                                           })}
                                                         </div>
 
-                                                        {/* Time Picker */}
-                                                        <div className="grid gap-1">
-                                                        <fieldset id={`schedule-time-${slotKey}`} tabIndex={-1} disabled={sectionLocked} aria-invalid={timeValidationError?.slotKey === slotKey} className={`flex items-center gap-1 ${timeValidationError?.slotKey === slotKey ? "rounded border-2 border-destructive" : ""}`}>
-                                                          <TimePickerSingle
-                                                            value={stringToTimeValue(slot.start_time, 8)}
-                                                            onChange={(newStart) =>
-                                                              handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
-                                                            }
-                                                          />
-                                                          <span className="text-xs font-bold text-muted-foreground">–</span>
-                                                          <TimePickerSingle
-                                                            value={stringToTimeValue(slot.end_time, 9)}
-                                                            lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
-                                                            onChange={(newEnd) =>
-                                                              handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
-                                                            }
-                                                          />
-                                                        </fieldset>
-                                                        {timeValidationError?.slotKey === slotKey && <FormMessage>{timeValidationError.message}</FormMessage>}
-                                                        </div>
+                                                        {/* JHS uses the shared timetable; SHS retains its existing editor. */}
+                                                        {isJhsClass(cls.class_id) ? (
+                                                          <Select
+                                                            value={resolvedPeriodSlot?.slot_id != null ? String(resolvedPeriodSlot.slot_id) : ""}
+                                                            onValueChange={(value) => handlePeriodSlotChange(slotKey, value)}
+                                                            disabled={sectionLocked}
+                                                          >
+                                                            <Select.Trigger className="min-w-52 rounded shadow-none">
+                                                              <Select.Value placeholder="Select timetable period" />
+                                                            </Select.Trigger>
+                                                            <Select.Content className="rounded">
+                                                              {classPeriodSlots(cls.class_id).map((period) => (
+                                                                <Select.Item key={period.slot_id} value={String(period.slot_id)}>
+                                                                  {period.slot_name} — {formatTime12h(period.start_time)}–{formatTime12h(period.end_time)}
+                                                                </Select.Item>
+                                                              ))}
+                                                            </Select.Content>
+                                                          </Select>
+                                                        ) : <div className="grid gap-1">
+                                                          <fieldset id={`schedule-time-${slotKey}`} tabIndex={-1} disabled={sectionLocked} aria-invalid={timeValidationError?.slotKey === slotKey} className={`flex items-center gap-1 ${timeValidationError?.slotKey === slotKey ? "rounded border-2 border-destructive" : ""}`}>
+                                                            <TimePickerSingle
+                                                              value={stringToTimeValue(slot.start_time, 8)}
+                                                              onChange={(newStart) =>
+                                                                handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
+                                                              }
+                                                            />
+                                                            <span className="text-xs font-bold text-muted-foreground">–</span>
+                                                            <TimePickerSingle
+                                                              value={stringToTimeValue(slot.end_time, 9)}
+                                                              lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
+                                                              onChange={(newEnd) =>
+                                                                handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
+                                                              }
+                                                            />
+                                                          </fieldset>
+                                                          {timeValidationError?.slotKey === slotKey && <FormMessage>{timeValidationError.message}</FormMessage>}
+                                                        </div>}
 
                                                         {/* Delete slot button */}
                                                         {subjectSlots.length > 1 && (
@@ -2883,7 +3346,7 @@ export default function AdminSubjectLoadStudio() {
             </div>
           </div>
         </div>
-      </div>
+      </div >
 
       <BreakConfigDrawer
         open={isBreakDrawerOpen}
@@ -2896,64 +3359,64 @@ export default function AdminSubjectLoadStudio() {
 
       {/* Copy Schedule Modal */}
       <Dialog open={isCopyModalOpen} onOpenChange={setIsCopyModalOpen}>
-            <Dialog.Content className="w-[calc(100%-2rem)] max-w-xl">
-              <Dialog.Header>
-                <Dialog.Title className="font-sans text-xl font-bold">Copy Schedule from Term</Dialog.Title>
-              </Dialog.Header>
-              <section className="space-y-4 p-5">
-                <div>
-                  <label className="block text-sm font-bold mb-1">Source Term</label>
-                  <Select
-                    value={copySourcePeriodId}
-                    onValueChange={(val) => { setCopySourcePeriodId(val); setCopySourceError(""); }}
-                  >
-                    <Select.Trigger id="copy-source-term" aria-invalid={!!copySourceError} aria-describedby={copySourceError ? "copy-source-term-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
-                      <Select.Value placeholder="Select a source term..." />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        {previousPeriods.map(p => (
-                          <Select.Item key={p.academic_period_id} value={String(p.academic_period_id)}>
-                            {p.period_name}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                  <FormMessage id="copy-source-term-error">{copySourceError}</FormMessage>
-                </div>
+        <Dialog.Content className="w-[calc(100%-2rem)] max-w-xl">
+          <Dialog.Header>
+            <Dialog.Title className="font-sans text-xl font-bold">Copy Schedule from Term</Dialog.Title>
+          </Dialog.Header>
+          <section className="space-y-4 p-5">
+            <div>
+              <label className="block text-sm font-bold mb-1">Source Term</label>
+              <Select
+                value={copySourcePeriodId}
+                onValueChange={(val) => { setCopySourcePeriodId(val); setCopySourceError(""); }}
+              >
+                <Select.Trigger id="copy-source-term" aria-invalid={!!copySourceError} aria-describedby={copySourceError ? "copy-source-term-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
+                  <Select.Value placeholder="Select a source term..." />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Group>
+                    {previousPeriods.map(p => (
+                      <Select.Item key={p.academic_period_id} value={String(p.academic_period_id)}>
+                        {p.period_name}
+                      </Select.Item>
+                    ))}
+                  </Select.Group>
+                </Select.Content>
+              </Select>
+              <FormMessage id="copy-source-term-error">{copySourceError}</FormMessage>
+            </div>
 
-                <div>
-                  <label className="block text-sm font-bold mb-1">Scope</label>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedGradeId === "all"
-                      ? "Entire Term (All Grades & Sections)"
-                      : `Grade ${studioData?.academic_levels?.find(l => String(l.academic_level_id) === selectedGradeId)?.grade_level} (All Sections)`
-                    }
-                  </p>
-                </div>
+            <div>
+              <label className="block text-sm font-bold mb-1">Scope</label>
+              <p className="text-sm text-muted-foreground">
+                {activeGradeId
+                  ? `Grade ${studioData?.academic_levels?.find(l => String(l.academic_level_id) === activeGradeId)?.grade_level || activeGradeId} (All Sections)`
+                  : "Entire Term (All Grades & Sections)"
+                }
+              </p>
+            </div>
 
-                <div className="bg-amber-50 border-2 border-amber-900 p-3 rounded">
-                  <p className="text-xs font-bold text-amber-900 flex items-start gap-1">
-                    <AlertTriangle className="size-4 shrink-0" />
-                    Warning: This will overwrite any existing unsaved drafts or published schedules for the selected scope in the current term. Teacher assignments will be pre-filled and mapped to the current bell schedule.
-                  </p>
-                </div>
-              </section>
+            <div className="bg-amber-50 border-2 border-amber-900 p-3 rounded">
+              <p className="text-xs font-bold text-amber-900 flex items-start gap-1">
+                <AlertTriangle className="size-4 shrink-0" />
+                Warning: This will overwrite any existing unsaved drafts or published schedules for the selected scope in the current term. Teacher assignments will be pre-filled and mapped to the current bell schedule.
+              </p>
+            </div>
+          </section>
 
-              <Dialog.Footer>
-                <Button variant="outline" onClick={() => setIsCopyModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() => void handleCopyFromTerm()}
-                  disabled={isCopying}
-                >
-                  {isCopying ? "Copying..." : "Yes, Overwrite & Copy"}
-                </Button>
-              </Dialog.Footer>
-            </Dialog.Content>
+          <Dialog.Footer>
+            <Button variant="outline" onClick={() => setIsCopyModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => void handleCopyFromTerm()}
+              disabled={isCopying}
+            >
+              {isCopying ? "Copying..." : "Yes, Overwrite & Copy"}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
       </Dialog>
 
       {/* Discard Draft Confirmation Dialog */}
@@ -3020,6 +3483,16 @@ export default function AdminSubjectLoadStudio() {
             loads={loads}
             getTeacherAvailabilityStatus={getTeacherAvailabilityStatus}
             onAssign={(classId, subjectId, staffId) => {
+              if (staffId !== "none") {
+                const conflict = getTeacherAvailabilityStatus(staffId, classId, subjectId);
+                if (conflict.includes("Conflict")) {
+                  toast.error({
+                    title: "Teacher unavailable",
+                    description: conflict,
+                  });
+                  return;
+                }
+              }
               handleTeacherChange(classId, subjectId, staffId);
               setTeacherModalTarget(null);
             }}

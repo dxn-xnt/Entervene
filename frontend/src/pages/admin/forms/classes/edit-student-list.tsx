@@ -16,7 +16,7 @@ import { Alert } from "@/components/retroui/Alert";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card } from "@/components/retroui/Card";
 import { Checkbox } from "@/components/retroui/Checkbox";
@@ -250,7 +250,7 @@ export default function EditStudentList({
                 enrolled: visibleEnrolledStudents.length,
                 available: availableStudents.length,
               }}
-              className="border-b border-border -mx-4 px-4"
+              className="border-b-2 border-border -mx-4 px-4"
               tabClassName="rounded-t-[var(--radius)]!"
             />
             {!!pendingCount && (
@@ -564,7 +564,7 @@ function AvailableStudentsPanel({
                     </Text>
                   </span>
                   <Badge variant="outline">No section</Badge>
-                  {pending && <Badge variant="default">Pending save</Badge>}
+                  {pending && <Badge variant="default" size="sm">Pending save</Badge>}
                   <Button
                     size="sm"
                     variant={pending ? "outline" : "default"}

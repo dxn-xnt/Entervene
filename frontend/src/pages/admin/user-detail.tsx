@@ -3,7 +3,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -103,7 +103,7 @@ function getStatusStyle(status: string | undefined | null): StatusStyle {
     case "active":
       return { label: "Active", variant: "secondary" };
     case "pending":
-      return { label: "Pending", variant: "outline" };
+      return { label: "Pending", variant: "default" };
     case "inactive":
       return { label: "Inactive", variant: "default" };
     case "suspended":
@@ -1612,9 +1612,9 @@ function ClassworkTable({
                 </Table.Cell>
                 <Table.Cell className="text-xs">
                   <Badge
-                    variant="outline"
+                    variant={String(row.status).trim().toLowerCase() === "pending" ? "default" : "outline"}
                     size="sm"
-                    className="text-[10px] py-0.5"
+                    className={String(row.status).trim().toLowerCase() === "pending" ? undefined : "text-[10px] py-0.5"}
                   >
                     {row.status}
                   </Badge>

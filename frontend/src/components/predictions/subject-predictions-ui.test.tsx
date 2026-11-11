@@ -223,9 +223,9 @@ describe("PredictionSubjectSection", () => {
     expect(screen.getByRole("heading", { level: 2, name: /Mathematics 9/i })).toBeDefined();
 
     // Badges in header
-    expect(screen.getByText("2 Moderate Risk (22%)")).toBeDefined();
-    expect(screen.getByText("1 High Risk (11%)")).toBeDefined();
-    expect(screen.getByText("6 On Track (67%)")).toBeDefined();
+    expect(screen.getByText("2 Moderate Risk")).toBeDefined();
+    expect(screen.getByText("1 High Risk")).toBeDefined();
+    expect(screen.queryByText("6 On Track (67%)")).toBeNull();
 
     // Sections
     expect(screen.getByText("Demo Archimedes")).toBeDefined();
@@ -650,49 +650,34 @@ describe("Admin AI Predictions View Regression", () => {
       terms: [{ term_number: 1, term_label: "Term 1 Demo", academic_period_id: 1 }],
     };
 
-    vi.spyOn(predictionApi, "fetchDashboardFilters").mockResolvedValue(adminMockFilters);
-
-    vi.spyOn(predictionApi, "fetchDashboardGradeSummaries").mockResolvedValue([
-      {
-        grade_level: 9,
-        level_name: "Grade 9",
-        total_students: 10,
-        at_risk_count: 4,
-        sections: [
-          {
-            class_id: 1,
-            section_name: "Demo Archimedes",
-            grade_level: 9,
-            total_students: 10,
-            at_risk_count: 4,
-            high_risk_count: 0,
-            moderate_risk_count: 4,
-          },
-        ],
-      },
-    ]);
-
-    vi.spyOn(predictionApi, "fetchDashboardAtRisk").mockResolvedValue({
+    vi.spyOn(predictionApi, "fetchAdminCurrentTermScope").mockResolvedValue({
+      filters: adminMockFilters,
+      scopes: [
+        {
+          class_id: 1,
+          section_name: "Demo Archimedes",
+          grade_level: 9,
+          subject_id: 1,
+          subject_name: "Mathematics",
+          subject_codename: "MATH",
+        },
+      ],
+    });
+    vi.spyOn(predictionApi, "fetchApprovedCurrentTermPredictions").mockResolvedValue({
       items: [],
-      risk_summary: { HIGH_RISK: 0, MODERATE_RISK: 0, NEEDS_MONITORING: 0, LOW_RISK: 0, INSUFFICIENT_DATA: 0, total: 0 },
       total: 0,
-      limit: 10,
-      offset: 0,
     });
   });
 
-  it("preserves Admin Grade Cohort Summaries unchanged", async () => {
+  it("uses the read-only current-term dashboard instead of legacy grade cohorts", async () => {
     render(
       <MemoryRouter>
         <PredictionsDashboard />
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { level: 2, name: /Grade Cohort Summaries/i })).toBeDefined();
-    });
-
-    // Admin still sees Grade 9 cohort
-    expect(screen.getByText("Grade 9")).toBeDefined();
+    await waitFor(() => expect(screen.getByLabelText("Prediction risk summary")).toBeDefined());
+    expect(screen.queryByText("Grade Cohort Summaries")).toBeNull();
+    expect(screen.queryByRole("button", { name: /generate/i })).toBeNull();
   });
 });

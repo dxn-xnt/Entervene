@@ -7,7 +7,7 @@ import type {
 } from "@/types/adminClasses";
 import GenderStudentTable from "./GenderStudentTable";
 import { assignmentGenderGroup } from "./studentSorting";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 
 export default function SectionAssignmentCard({
   section,

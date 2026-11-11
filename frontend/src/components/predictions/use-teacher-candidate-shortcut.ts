@@ -8,24 +8,38 @@ import {
   type TeacherInterventionSummary,
 } from "@/lib/teacher-interventions-api";
 
-export function useTeacherCandidateShortcut(prediction: DevelopmentCurrentTermListItem | null): number | undefined {
+export function useTeacherCandidateShortcut(
+  prediction: DevelopmentCurrentTermListItem | null,
+  enabled = true,
+): number | undefined {
   const [candidates, setCandidates] = useState<TeacherInterventionSummary[]>([]);
   useEffect(() => {
+    if (!enabled) {
+      Promise.resolve().then(() => setCandidates([]));
+      return;
+    }
     let cancelled = false;
     listTeacherCandidates().then((result) => { if (!cancelled) setCandidates(result.items); })
       .catch(() => { if (!cancelled) setCandidates([]); });
     return () => { cancelled = true; };
-  }, []);
+  }, [enabled]);
   return prediction ? matchingCandidate(prediction, candidates)?.intervention_id : undefined;
 }
 
-export function useTeacherActiveInterventionShortcut(prediction: DevelopmentCurrentTermListItem | null): number | undefined {
+export function useTeacherActiveInterventionShortcut(
+  prediction: DevelopmentCurrentTermListItem | null,
+  enabled = true,
+): number | undefined {
   const [activeInterventions, setActiveInterventions] = useState<TeacherInterventionSummary[]>([]);
   useEffect(() => {
+    if (!enabled) {
+      Promise.resolve().then(() => setActiveInterventions([]));
+      return;
+    }
     let cancelled = false;
     listTeacherActive().then((result) => { if (!cancelled) setActiveInterventions(result.items); })
       .catch(() => { if (!cancelled) setActiveInterventions([]); });
     return () => { cancelled = true; };
-  }, []);
+  }, [enabled]);
   return prediction ? matchingActiveIntervention(prediction, activeInterventions)?.intervention_id : undefined;
 }

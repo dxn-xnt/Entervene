@@ -215,8 +215,8 @@ function statusBadge(
     return { label: "Missing", variant: "destructive" as const, cls: "" };
   return {
     label: "Pending",
-    variant: "outline" as const,
-    cls: "bg-orange-100 text-orange-800 border-orange-300",
+    variant: "default" as const,
+    cls: "",
   };
 }
 

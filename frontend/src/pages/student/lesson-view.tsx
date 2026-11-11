@@ -296,7 +296,7 @@ export function LessonView({
                 <Badge variant="surface" size="sm">
                   {currentMastery.completedCount} Completed
                 </Badge>
-                <Badge variant="outline" size="sm" className="bg-white text-black">
+                <Badge variant="default" size="sm">
                   {currentMastery.pendingCount} Pending
                 </Badge>
               </div>

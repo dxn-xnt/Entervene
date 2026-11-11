@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCurrentTermDashboard,
+  buildAdminPredictionHierarchy,
   buildCurrentTermGradeSummaries,
   buildCurrentTermSubjectSummaries,
+  adminUniqueStudentRiskSummary,
   currentTermRiskSummary,
   formatSubjectDisplayName,
   type AuthorizedCurrentTermRow,
@@ -96,6 +98,96 @@ describe("buildCurrentTermDashboard risk display filters", () => {
 
     expect(result.items.map((item) => item.prediction_id)).toEqual([1, 2]);
     expect(result.items.map((item) => item.risk_level)).toEqual(["LOW_RISK", "NEEDS_MONITORING"]);
+  });
+});
+
+describe("Admin grade-centered prediction hierarchy", () => {
+  it("keeps one section and one student when that student has multiple subject predictions", () => {
+    const rows = [
+      createMockRow({ prediction_id: 1, student_id: "s1", student_name: "Alex Rivera", subject_id: 1, subject_name: "Mathematics", intervention_level: "LOW_RISK" }),
+      createMockRow({ prediction_id: 2, student_id: "s1", student_name: "Alex Rivera", subject_id: 2, subject_name: "Science", intervention_level: "HIGH_RISK" }),
+      createMockRow({ prediction_id: 3, student_id: "s2", student_name: "Morgan Lee", subject_id: 1, subject_name: "Mathematics", intervention_level: "MODERATE_RISK" }),
+    ];
+
+    const hierarchy = buildAdminPredictionHierarchy(rows, [], { includeEmptySections: true });
+    const gradeNine = hierarchy.find((group) => group.grade_level === 9)!;
+
+    expect(hierarchy.map((group) => group.grade_level)).toEqual([7, 8, 9, 10, 11, 12]);
+    expect(gradeNine.sections).toHaveLength(1);
+    expect(gradeNine.sections[0].unique_student_count).toBe(2);
+    expect(gradeNine.sections[0].prediction_count).toBe(3);
+    expect(gradeNine.sections[0].students[0].predictions).toHaveLength(2);
+    expect(gradeNine.sections[0].high_risk_count).toBe(1);
+    expect(gradeNine.sections[0].moderate_risk_count).toBe(1);
+    expect(gradeNine.sections[0].subjects.map((subject) => [subject.subject_name, subject.prediction_count])).toEqual([
+      ["Mathematics", 2],
+      ["Science", 1],
+    ]);
+  });
+
+  it("counts each student once using their highest actionable subject risk", () => {
+    const rows = [
+      createMockRow({ prediction_id: 1, student_id: "s1", subject_id: 1, intervention_level: "LOW_RISK" }),
+      createMockRow({ prediction_id: 2, student_id: "s1", subject_id: 2, intervention_level: "HIGH_RISK" }),
+      createMockRow({ prediction_id: 3, student_id: "s2", subject_id: 1, intervention_level: "NEEDS_MONITORING" }),
+    ];
+
+    expect(adminUniqueStudentRiskSummary(rows)).toEqual({
+      HIGH_RISK: 1,
+      MODERATE_RISK: 0,
+      ON_TRACK: 1,
+      total: 2,
+    });
+  });
+
+  it("filters students by rolled-up risk while retaining all of their subject predictions", () => {
+    const rows = [
+      createMockRow({ prediction_id: 1, student_id: "s1", subject_id: 1, intervention_level: "LOW_RISK" }),
+      createMockRow({ prediction_id: 2, student_id: "s1", subject_id: 2, intervention_level: "HIGH_RISK" }),
+      createMockRow({ prediction_id: 3, student_id: "s2", subject_id: 1, intervention_level: "MODERATE_RISK" }),
+    ];
+
+    const gradeNine = buildAdminPredictionHierarchy(rows, [], { riskLevel: "HIGH_RISK" })
+      .find((group) => group.grade_level === 9)!;
+
+    expect(gradeNine.sections[0].students.map((student) => student.student_id)).toEqual(["s1"]);
+    expect(gradeNine.sections[0].prediction_count).toBe(2);
+  });
+
+  it("builds zero-prediction grades and sections from authorized academic scopes", () => {
+    const hierarchy = buildAdminPredictionHierarchy([], [{
+      subject_id: 10,
+      subject_name: "Science",
+      subject_codename: "SCI",
+      grade_level: 11,
+      class_id: 21,
+      section_name: "Newton",
+    }], { includeEmptySections: true });
+    const gradeEleven = hierarchy.find((group) => group.grade_level === 11)!;
+
+    expect(gradeEleven.sections).toHaveLength(1);
+    expect(gradeEleven.sections[0]).toMatchObject({
+      class_id: 21,
+      section_name: "Newton",
+      unique_student_count: 0,
+      prediction_count: 0,
+      subject_count: 1,
+      high_risk_count: 0,
+      moderate_risk_count: 0,
+      on_track_count: 0,
+      students: [],
+    });
+    expect(gradeEleven.sections[0].subjects).toEqual([{
+      subject_id: 10,
+      subject_name: "Science",
+      subject_codename: "SCI",
+      prediction_count: 0,
+      high_risk_count: 0,
+      moderate_risk_count: 0,
+      needs_monitoring_count: 0,
+      low_risk_count: 0,
+      predictions: [],
+    }]);
   });
 });
 

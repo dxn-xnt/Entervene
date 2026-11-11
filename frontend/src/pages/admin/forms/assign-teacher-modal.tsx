@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
@@ -11,6 +11,7 @@ import { Text } from "@/components/retroui/Text";
 import { AlertTriangle, Check, Search, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SubjectLoadItem, TeacherWorkloadItem } from "@/lib/api";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 
 export interface TeacherModalTarget {
   classId: number;
@@ -79,14 +80,38 @@ export default function AssignTeacherModal({
   }, [loads, target, targetSubjectHours]);
 
   const q = searchQuery.toLowerCase().trim();
-  const eligibleTeachers = React.useMemo(() => {
-    return (teachers || []).filter(
+  const sortedTeachers = React.useMemo(() => {
+    const list = (teachers || []).filter(
       (t) =>
         !t.staff_id.toUpperCase().startsWith("ADM") &&
         !t.name.toLowerCase().includes("admin") &&
         (!q || t.name.toLowerCase().includes(q) || t.staff_id.toLowerCase().includes(q))
     );
-  }, [teachers, q]);
+
+    return list
+      .map((t) => {
+        const isCurrent = target.currentStaffId === t.staff_id;
+        const statusText = getTeacherAvailabilityStatus(
+          t.staff_id,
+          target.classId,
+          target.subjectId
+        );
+        const hasConflict = statusText.includes("Conflict");
+        return { teacher: t, isCurrent, statusText, hasConflict };
+      })
+      .sort((a, b) => {
+        // 1. Current assigned teacher at top of list
+        if (a.isCurrent && !b.isCurrent) return -1;
+        if (!a.isCurrent && b.isCurrent) return 1;
+
+        // 2. Prioritize available teachers before teachers with conflicts
+        if (!a.hasConflict && b.hasConflict) return -1;
+        if (a.hasConflict && !b.hasConflict) return 1;
+
+        // 3. Alphabetical tie-breaker by name
+        return (a.teacher.name || "").localeCompare(b.teacher.name || "");
+      });
+  }, [teachers, q, target.currentStaffId, target.classId, target.subjectId, getTeacherAvailabilityStatus]);
 
   return (
     <Dialog.Content size="xl" className="max-w-3xl">
@@ -94,9 +119,7 @@ export default function AssignTeacherModal({
         <div className="flex flex-col text-left">
           <Text as="h4" className="font-bold text-lg text-primary-foreground">
             Assign Teacher to {target.subjectName} <span className="font-normal">({target.className})</span>
-
           </Text>
-
         </div>
       </Dialog.Header>
 
@@ -110,15 +133,14 @@ export default function AssignTeacherModal({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search teacher by name or staff ID..."
-              className="w-full shadow-none"
+              className="h-8.5 w-full shadow-none"
             />
           </label>
 
           {target.currentStaffId && (
             <Button
-              size="sm"
-              variant="outline"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs shrink-0 cursor-pointer"
+              variant="destructive"
+              className="text-xs cursor-pointer"
               onClick={() => {
                 onAssign(target.classId, target.subjectId, "none");
               }}
@@ -141,22 +163,20 @@ export default function AssignTeacherModal({
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {eligibleTeachers.length === 0 ? (
+              {sortedTeachers.length === 0 ? (
                 <Table.Row>
-                  <Table.Cell colSpan={4} className="text-center py-6 text-muted-foreground">
-                    No teachers found matching &quot;{searchQuery}&quot;
+                  <Table.Cell colSpan={4} className="p-3">
+                    <EmptyStateCard
+                      compact
+                      icon={<Search />}
+                      title="No teachers found"
+                      description={`No teacher matches “${searchQuery}”. Try another name or staff ID.`}
+                    />
                   </Table.Cell>
                 </Table.Row>
               ) : (
-                eligibleTeachers.map((t) => {
-                  const isCurrent = target.currentStaffId === t.staff_id;
+                sortedTeachers.map(({ teacher: t, isCurrent, statusText, hasConflict }) => {
                   const isHovered = hoveredStaffId === t.staff_id;
-                  const statusText = getTeacherAvailabilityStatus(
-                    t.staff_id,
-                    target.classId,
-                    target.subjectId
-                  );
-                  const hasConflict = statusText.includes("Conflict");
 
                   const w = teacherWorkloads.find((item) => item.staff_id === t.staff_id);
                   const weeklyHours = w?.total_weekly_hours || 0;
@@ -244,6 +264,7 @@ export default function AssignTeacherModal({
                       <Table.Cell className="py-2.5">
                         {hasConflict ? (
                           <Badge
+                            id={`teacher-status-${t.staff_id}`}
                             size="sm"
                             variant="surface"
                             className="bg-destructive/10 border-destructive! rounded text-destructive! inline-flex items-center gap-1 font-semibold text-[11px]"
@@ -253,6 +274,7 @@ export default function AssignTeacherModal({
                           </Badge>
                         ) : (
                           <Badge
+                            id={`teacher-status-${t.staff_id}`}
                             size="sm"
                             variant="surface"
                             className="text-emerald-800 rounded bg-emerald-100 border-emerald-300 inline-flex items-center gap-1 font-semibold text-[11px]"
@@ -273,12 +295,15 @@ export default function AssignTeacherModal({
                             size="sm"
                             variant={hasConflict ? "outline" : "default"}
                             className={cn(
-                              "h-7 text-xs px-3 font-bold rounded! cursor-pointer shadow-none",
+                              "h-7 text-xs px-3 font-bold rounded! shadow-none",
                               hasConflict
-                                ? "border-destructive text-destructive hover:bg-destructive/10"
-                                : ""
+                                ? "border-destructive text-destructive disabled:cursor-not-allowed disabled:opacity-60"
+                                : "cursor-pointer"
                             )}
-                            onClick={() => {
+                            disabled={hasConflict}
+                            title={hasConflict ? statusText : `Assign ${t.name}`}
+                            aria-describedby={`teacher-status-${t.staff_id}`}
+                            onClick={hasConflict ? undefined : () => {
                               onAssign(target.classId, target.subjectId, t.staff_id);
                             }}
                           >

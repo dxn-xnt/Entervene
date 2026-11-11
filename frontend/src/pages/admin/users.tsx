@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";
@@ -78,7 +78,7 @@ function getStatusStyle(status: string | undefined | null): StatusStyle {
     case "active":
       return { label: "Active", variant: "secondary" };
     case "pending":
-      return { label: "Pending", variant: "outline" };
+      return { label: "Pending", variant: "default" };
     case "inactive":
       return { label: "Inactive", variant: "default" };
     case "suspended":
@@ -898,7 +898,7 @@ function UserRow({
               <Badge
                 variant="default"
                 size="sm"
-                className="text-[10px] font-medium shrink-0 whitespace-nowrap"
+                className="shrink-0 whitespace-nowrap"
               >
                 No subjects
               </Badge>

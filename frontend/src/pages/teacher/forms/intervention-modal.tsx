@@ -21,7 +21,7 @@ import type {
   TeacherInterventionSummary,
   TeacherResolvedInterventionDetail,
 } from "@/lib/teacher-interventions-api";
-import { formatDate, formatDateTime, formatToTitleCase } from "@/lib/formatters";
+import { formatDate, formatDateTime, formatToTitleCase, getRiskBadgeMeta } from "@/lib/formatters";
 
 const label = (value: string) =>
   value
@@ -96,7 +96,7 @@ function AcademicDiagnosisCard({
     <Card className="flex flex-col gap-2 w-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-base text-foreground">Support focus:</span>
+          <span className="text-base text-foreground">Support Focus:</span>
           <span className="text-base font-bold">{focusName}</span>
         </div>
         <Badge variant="outline" size="sm">
@@ -214,7 +214,7 @@ export default function InterventionModal({
               ? "Resolved Intervention"
               : selectedKind === "active"
                 ? supportPage === "plan"
-                  ? "Adjust Support"
+                  ? "Edit Support"
                   : "Active Intervention"
                 : "Candidate Review"}
           </Dialog.Title>
@@ -437,12 +437,8 @@ export default function InterventionModal({
                                 Candidate
                               </Badge>
                               <Badge
-                                variant={
-                                  detail.triggering_intervention_level === "HIGH_RISK"
-                                    ? "destructive"
-                                    : "outline"
-                                }
-                                size="md"
+                                className={getRiskBadgeMeta(detail.triggering_intervention_level).bg}
+                                size="sm"
                               >
                                 {label(detail.triggering_intervention_level)}
                               </Badge>
@@ -744,7 +740,7 @@ export default function InterventionModal({
               ) : (
                 <>
                   <SlidersHorizontal className="size-4 mr-1.5" />
-                  Adjust Support
+                  Edit Support
                 </>
               )}
             </Button>

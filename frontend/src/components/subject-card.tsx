@@ -205,7 +205,7 @@ export function SubjectCard({
               {title}
             </p>
             {hasPending && (
-              <Badge size="sm" variant="surface" className="h-fit max-w-full whitespace-nowrap">
+              <Badge size="sm" variant="default" className="h-fit max-w-full whitespace-nowrap">
                 {pendingCount} Pending
               </Badge>
             )}

@@ -6,13 +6,20 @@ import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { SubjectSectionCard } from "./subject-section-card";
 import type { DashboardSubjectGroupSummary } from "./current-term-dashboard-adapter";
-import { getTeacherRiskDisplaySummary, getTeacherRiskPercentage } from "./teacher-risk-display";
+import { getTeacherRiskDisplaySummary } from "./teacher-risk-display";
+import { getRiskBadgeMeta } from "@/lib/formatters";
 
 interface PredictionSubjectSectionProps {
   group: DashboardSubjectGroupSummary;
+  navigationEnabled?: boolean;
+  predictionBasePath?: string;
 }
 
-export function PredictionSubjectSection({ group }: PredictionSubjectSectionProps) {
+export function PredictionSubjectSection({
+  group,
+  navigationEnabled = true,
+  predictionBasePath = "/teacher/predictions",
+}: PredictionSubjectSectionProps) {
   const displaySummary = getTeacherRiskDisplaySummary({
     HIGH_RISK: group.high_risk_count,
     MODERATE_RISK: group.moderate_risk_count,
@@ -36,16 +43,13 @@ export function PredictionSubjectSection({ group }: PredictionSubjectSectionProp
           <h2 className="text-xl font-bold">{group.display_name}</h2>
         </div>
         <div className="flex flex-row flex-wrap gap-2 items-center">
-          <Badge size="sm" variant="solid">
-            {displaySummary.MODERATE_RISK} Moderate Risk ({Math.round(getTeacherRiskPercentage(displaySummary.MODERATE_RISK, displaySummary.assessedTotal))}%)
+          <Badge size="sm" className={getRiskBadgeMeta("MODERATE_RISK").bg}>
+            {displaySummary.MODERATE_RISK} Moderate Risk
           </Badge>
-          <Badge size="sm" variant="destructive">
-            {displaySummary.HIGH_RISK} High Risk ({Math.round(getTeacherRiskPercentage(displaySummary.HIGH_RISK, displaySummary.assessedTotal))}%)
+          <Badge size="sm" className={getRiskBadgeMeta("HIGH_RISK").bg}>
+            {displaySummary.HIGH_RISK} High Risk
           </Badge>
-          <Badge size="sm" variant="outline">
-            {displaySummary.ON_TRACK} On Track ({Math.round(getTeacherRiskPercentage(displaySummary.ON_TRACK, displaySummary.assessedTotal))}%)
-          </Badge>
-          <Tooltip>
+          {navigationEnabled && <Tooltip>
             <TooltipTrigger render={
               <Button
                 asChild
@@ -54,13 +58,13 @@ export function PredictionSubjectSection({ group }: PredictionSubjectSectionProp
                 className="shadow-none p-1"
                 aria-label={`View ${group.display_name} predictions`}
               >
-                <Link to={`/teacher/predictions/subject/${group.subject_id}`}>
+                <Link to={`${predictionBasePath}/subject/${group.subject_id}`}>
                   <ArrowUpRight className="size-3" />
                 </Link>
               </Button>
             } />
             <TooltipContent>View all {group.display_name} predictions</TooltipContent>
-          </Tooltip>
+          </Tooltip>}
         </div>
       </div>
       <div className="flex flex-wrap gap-3 pt-2">
@@ -77,6 +81,8 @@ export function PredictionSubjectSection({ group }: PredictionSubjectSectionProp
               moderateRisk={sec.moderate_risk_count}
               needsMonitoring={sec.needs_monitoring_count}
               lowRisk={sec.low_risk_count}
+              navigationEnabled={navigationEnabled}
+              predictionBasePath={predictionBasePath}
             />
           ))
         ) : (

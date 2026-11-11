@@ -10,7 +10,6 @@ import {
   ClipboardList,
   FileText,
   Lightbulb,
-  Pencil,
   Plus,
   Repeat,
   Search,
@@ -38,9 +37,8 @@ import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/D
 import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Avatar } from "@/components/retroui/Avatar";
-import { LessonGoalProgress } from "@/components/lesson-goal-progress";
-import SetLessonGoalModal from "./forms/set-lesson-goal-modal";
-import { RepostModal } from "@/components/teacher/repost-modal";
+import { TeacherLessonMastery, type TeacherLessonMasteryItem } from "@/components/teacher/teacher-lesson-mastery";
+import { RepostModal } from "@/pages/teacher/forms/repost-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
@@ -60,7 +58,7 @@ import type {
   TeacherClassLoad,
   TeacherClasswork,
 } from "@/types/classwork";
-import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
+import TeacherLessonDetailScreen from "./lesson-view";
 import TeacherStudentView from "./student-view";
 import LessonItemLine, {
   type LessonItem,
@@ -90,9 +88,7 @@ import type {
 import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
 import {
   apiFetch,
-  getLessonGoals,
   getTeacherAdvisoryClassDetail,
-  type LessonGoalItemResponse,
 } from "@/lib/api";
 import {
   approveSuggestion,
@@ -121,7 +117,6 @@ export default function TeacherClassDetail() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("lessons");
   const { selectedPeriodId, selectedYear, selectedPeriod } = useAcademicPeriod();
-  const [isSetGoalModalOpen, setIsSetGoalModalOpen] = useState(false);
   const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [studentInterfaceStudent, setStudentInterfaceStudent] = useState<TeacherAdvisoryStudentItem | null>(null);
@@ -242,21 +237,6 @@ export default function TeacherClassDetail() {
                     </Button>
                     {tab === "lessons" ? (
                       <div className="flex flex-row gap-2">
-                        <Tooltip>
-                          <TooltipTrigger render={
-                            <span className="inline-flex w-full md:w-auto">
-                              <Button
-                                size="header"
-                                className="w-full md:w-auto whitespace-nowrap"
-                                disabled={isReadOnly}
-                                onClick={() => setIsSetGoalModalOpen(true)}
-                              >
-                                <Pencil className="size-4" /> Set Lesson Goal
-                              </Button>
-                            </span>
-                          } />
-                          {isReadOnly && <TooltipContent>Historical records are read-only</TooltipContent>}
-                        </Tooltip>
                         {(currentSubject?.subject_id || initialSubjectId || detail.subject_loads[0]?.subject_id) && (
                           <Button
                             size="header"
@@ -332,8 +312,6 @@ export default function TeacherClassDetail() {
                 <LessonsTab
                   detail={detail}
                   initialSubjectId={initialSubjectId}
-                  isSetGoalModalOpen={isSetGoalModalOpen}
-                  setIsSetGoalModalOpen={setIsSetGoalModalOpen}
                   onLessonViewChange={setLessonInterfaceLesson}
                   refreshTrigger={refreshKey}
                 />
@@ -416,26 +394,18 @@ const classworkCreateOptions: Array<{
 function LessonsTab({
   detail,
   initialSubjectId,
-  isSetGoalModalOpen,
-  setIsSetGoalModalOpen,
   onLessonViewChange,
   refreshTrigger,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
   initialSubjectId?: number | null;
-  isSetGoalModalOpen?: boolean;
-  setIsSetGoalModalOpen?: (open: boolean) => void;
   onLessonViewChange?: (lesson: LessonItem | null) => void;
   refreshTrigger?: number;
 }) {
   const navigate = useNavigate();
   const toast = useToast();
   const { selectedPeriodId, periods } = useAcademicPeriod();
-  const [internalSetGoalModalOpen, setInternalSetGoalModalOpen] = useState(false);
-  const isGoalModalOpen = isSetGoalModalOpen !== undefined ? isSetGoalModalOpen : internalSetGoalModalOpen;
-  const setGoalModalOpen = setIsSetGoalModalOpen || setInternalSetGoalModalOpen;
 
-  const [curatedGoals, setCuratedGoals] = useState<LessonGoalItemResponse[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
     initialSubjectId || detail.subject_loads[0]?.subject_id || null,
   );
@@ -446,6 +416,8 @@ function LessonsTab({
   const [linkedClassworks, setLinkedClassworks] = useState<
     Record<number, LinkedClassworkItem[]>
   >({});
+  const [masteryData, setMasteryData] = useState<TeacherLessonMasteryItem[]>([]);
+  const [isLoadingMastery, setIsLoadingMastery] = useState(false);
   const [loadingClassworkId, setLoadingClassworkId] = useState<number | null>(
     null,
   );
@@ -617,22 +589,64 @@ function LessonsTab({
     void loadLessonsAndCompetencies();
   }, [detail.class_id, selectedSubjectId, refreshTrigger]);
 
-  const loadCuratedGoals = useCallback(async () => {
-    if (!detail.class_id || !selectedSubjectId || !selectedPeriodId) {
-      setCuratedGoals([]);
+  const loadMastery = useCallback(async () => {
+    if (!detail.class_id || !selectedSubjectId) {
+      setMasteryData([]);
       return;
     }
+    setIsLoadingMastery(true);
     try {
-      const res = await getLessonGoals(detail.class_id, selectedSubjectId, selectedPeriodId);
-      setCuratedGoals(res.items || []);
+      const periodQuery = selectedPeriodId ? `?academic_period_id=${selectedPeriodId}` : "";
+      const res = await apiFetch(
+        `/api/v1/lessons/my-class/${detail.class_id}/subject/${selectedSubjectId}/mastery${periodQuery}`,
+      );
+      if (res.ok) {
+        const data = (await res.json()) as Array<{ lesson_id: number; title: string; mastery_percentage: number }>;
+        setMasteryData(
+          data.map((d) => ({
+            lesson_id: d.lesson_id,
+            title: d.title,
+            percent: d.mastery_percentage,
+          })),
+        );
+      }
     } catch {
-      setCuratedGoals([]);
+      // Graceful fallback to linkedClassworks
+    } finally {
+      setIsLoadingMastery(false);
     }
   }, [detail.class_id, selectedSubjectId, selectedPeriodId]);
 
   useEffect(() => {
-    void loadCuratedGoals();
-  }, [loadCuratedGoals]);
+    void loadMastery();
+  }, [loadMastery, refreshTrigger]);
+
+  const masteryItems: TeacherLessonMasteryItem[] = useMemo(() => {
+    if (masteryData.length > 0) return masteryData;
+    return lessons.map((l) => {
+      const cws = linkedClassworks[l.lesson_id] || [];
+      const gradedCws = cws.filter(
+        (cw) => cw.score_percent != null || (cw.total_points && cw.total_points > 0 && cw.average_score != null),
+      );
+      let percent = 0;
+      if (gradedCws.length > 0) {
+        const totalEarned = gradedCws.reduce(
+          (acc, cw) => acc + (cw.total_earned ?? ((cw.average_score ?? 0) * (cw.graded_count ?? 1))),
+          0,
+        );
+        const totalPossible = gradedCws.reduce(
+          (acc, cw) => acc + (cw.total_possible ?? ((cw.total_points ?? 0) * (cw.graded_count ?? 1))),
+          0,
+        );
+        percent = totalPossible > 0 ? Math.round((totalEarned / totalPossible) * 100) : 0;
+      }
+      return {
+        lesson_id: l.lesson_id,
+        title: l.title,
+        percent,
+      };
+    });
+  }, [masteryData, lessons, linkedClassworks]);
 
   const loadDeliveries = useCallback(async () => {
     if (!detail.class_id || !selectedSubjectId || !effectivePeriodId) return;
@@ -694,14 +708,12 @@ function LessonsTab({
         );
       }
       toast.success({
-        title: `Lesson "${lesson.title}" confirmed as taught.`,
+        title: `Lesson "${lesson.title}" confirmed as completed.`,
       });
     } catch (err) {
-      setDeliveryError(
-        err instanceof Error
-          ? err.message
-          : "Failed to confirm lesson delivery.",
-      );
+      toast.error({
+        title: err instanceof Error ? err.message : "Failed to confirm lesson delivery.",
+      });
     } finally {
       setDeliveryLoadingLessonId(null);
     }
@@ -745,11 +757,6 @@ function LessonsTab({
       setIsCorrectionModalOpen(false);
       setCorrectionTargetLesson(null);
     } catch (err) {
-      setDeliveryError(
-        err instanceof Error
-          ? err.message
-          : "Failed to correct lesson delivery.",
-      );
       throw err;
     } finally {
       setDeliveryLoadingLessonId(null);
@@ -816,7 +823,9 @@ function LessonsTab({
     setDetailLoadingId(cw.classwork_id);
     setDetailError("");
     try {
-      const res = await apiFetch(`/api/v1/classworks/${cw.classwork_id}`);
+      const res = await apiFetch(
+        `/api/v1/classwork-assignments/classwork/${cw.classwork_id}?class_id=${detail.class_id}`,
+      );
       if (res.ok) {
         const fullDetail = (await res.json()) as ClassworkDetail;
         setSelectedClasswork(fullDetail);
@@ -1028,15 +1037,6 @@ function LessonsTab({
       {activeLessonDetail ? (
         /* ── Dedicated Full-Screen Lesson Detail View ── */
         <div className="flex flex-col flex-1 min-w-0 w-full animate-in fade-in-50 duration-200">
-          {deliveryError && (
-            <Alert
-              status="error"
-              onClose={() => setDeliveryError("")}
-              className="mx-3 mt-3 sm:mx-4 md:mx-6"
-            >
-              <Alert.Description>{deliveryError}</Alert.Description>
-            </Alert>
-          )}
           <TeacherLessonDetailScreen
             lesson={activeLessonDetail as any}
             subjectName={currentSubjectLoad?.subject_name || "Subject"}
@@ -1208,13 +1208,16 @@ function LessonsTab({
             </div>
           </section>
 
-          {/* Weekly Goals Sidebar Progress */}
           <aside className="flex flex-col gap-3 min-w-0 self-start xl:row-span-2">
-            <LessonGoalProgress
-              goalItems={curatedGoals}
-              isTeacher
-              onSetGoal={() => setGoalModalOpen(true)}
-              className="w-full min-w-0"
+            <TeacherLessonMastery
+              items={masteryItems}
+              isLoading={isLoadingMastery}
+              onSelectLesson={(lessonId) => {
+                const target = lessons.find((l) => l.lesson_id === lessonId);
+                if (target) {
+                  setLessonFilter(String(lessonId));
+                }
+              }}
             />
             <OverviewCard
               title="Total Lessons"
@@ -1385,27 +1388,7 @@ function LessonsTab({
         />
       )}
 
-      {/* ── Set Lesson Goal Modal ── */}
-      {selectedSubjectId && selectedPeriodId && (
-        <SetLessonGoalModal
-          isOpen={isGoalModalOpen}
-          onClose={() => setGoalModalOpen(false)}
-          classId={detail.class_id}
-          subjectId={selectedSubjectId}
-          academicPeriodId={selectedPeriodId}
-          periodName={periods.find((p) => p.id === selectedPeriodId)?.period}
-          lessons={lessons.map((l) => ({
-            lesson_id: l.lesson_id,
-            title: l.title,
-            is_published: l.is_published,
-          }))}
-          linkedClassworks={linkedClassworks as any}
-          currentGoals={curatedGoals}
-          onSaved={(updated) => {
-            setCuratedGoals(updated.items || []);
-          }}
-        />
-      )}
+
 
       {correctionTargetLesson && (
         <LessonDeliveryCorrectionModal

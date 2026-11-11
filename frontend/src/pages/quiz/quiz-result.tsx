@@ -463,7 +463,7 @@ const StudentQuizResult = () => {
                                 </Badge>
                               )}
                               {isNeedsGrading && (
-                                <Badge size="sm" variant="outline" className="gap-1.5">
+                                <Badge size="sm" variant="default" className="gap-1.5">
                                   <Clock className="w-3.5 h-3.5" />
                                   Pending Teacher Review ({q.points} pts)
                                 </Badge>

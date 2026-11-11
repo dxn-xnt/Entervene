@@ -176,6 +176,119 @@ def test_setup():
     app.dependency_overrides.clear()
 
 
+def test_draft_rejects_teacher_overlap_without_partial_writes(test_setup):
+    db = test_setup["db"]
+    client = test_setup["client"]
+    period = test_setup["period"]
+    level = test_setup["level"]
+    target_class = test_setup["class"]
+    subject = test_setup["math_sub"]
+    teacher = test_setup["staff_a"]
+
+    other_class = Class(
+        section_name="Other Section",
+        academic_level_id=level.academic_level_id,
+        academic_year_id=target_class.academic_year_id,
+        class_status="active",
+        period_template_group="JHS_45MIN",
+    )
+    db.add(other_class)
+    db.flush()
+    db.add(SubjectLoad(
+        class_id=other_class.class_id,
+        subject_id=subject.subject_id,
+        staff_id=teacher.staff_id,
+        academic_period_id=period.academic_period_id,
+        start_time="08:00",
+        end_time="09:00",
+        days_of_week=["MON"],
+        status="published",
+        is_active_version=True,
+        is_locked=True,
+    ))
+    db.commit()
+
+    response = client.post(
+        "/api/v1/subject-loads/batch-save",
+        json={
+            "academic_period_id": period.academic_period_id,
+            "academic_level_id": level.academic_level_id,
+            "action": "draft",
+            "publish_scope": "section",
+            "target_class_id": target_class.class_id,
+            "loads": [{
+                "class_id": target_class.class_id,
+                "subject_id": subject.subject_id,
+                "staff_id": teacher.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "start_time": "08:30",
+                "end_time": "09:30",
+                "days_of_week": ["MON"],
+                "status": "draft",
+            }],
+        },
+        headers={"Authorization": f"Bearer {test_setup['token']}"},
+    )
+
+    assert response.status_code == 400
+    assert "double-booking" in response.json()["detail"]
+    assert db.query(SubjectLoad).filter(SubjectLoad.class_id == target_class.class_id).count() == 0
+
+
+def test_section_publish_rejects_overlap_when_target_is_second_in_payload(test_setup):
+    db = test_setup["db"]
+    target_class = test_setup["class"]
+    level = test_setup["level"]
+    period = test_setup["period"]
+    subject = test_setup["math_sub"]
+    teacher = test_setup["staff_a"]
+    other_class = Class(
+        section_name="First Payload Section",
+        academic_level_id=level.academic_level_id,
+        academic_year_id=target_class.academic_year_id,
+        class_status="active",
+        period_template_group="JHS_45MIN",
+    )
+    db.add(other_class)
+    db.commit()
+    from app.api.v1.routes.SubjectLoads import ensure_default_period_templates
+    ensure_default_period_templates(db)
+    period_1 = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN",
+        PeriodTemplateSlot.slot_name == "Period 1",
+    ).one()
+
+    def load_for(class_id):
+        return {
+            "class_id": class_id,
+            "subject_id": subject.subject_id,
+            "staff_id": teacher.staff_id,
+            "academic_period_id": period.academic_period_id,
+            "slot_id": period_1.slot_id,
+            "start_time": period_1.start_time,
+            "end_time": period_1.end_time,
+            "days_of_week": ["MON"],
+            "status": "draft",
+        }
+
+    response = test_setup["client"].post(
+        "/api/v1/subject-loads/batch-save",
+        json={
+            "academic_period_id": period.academic_period_id,
+            "academic_level_id": level.academic_level_id,
+            "action": "publish",
+            "publish_scope": "section",
+            "target_class_id": target_class.class_id,
+            "loads": [load_for(other_class.class_id), load_for(target_class.class_id)],
+        },
+        headers={"Authorization": f"Bearer {test_setup['token']}"},
+    )
+
+    assert response.status_code == 400
+    assert "unresolved conflicts" in response.json()["detail"]
+    assert db.query(SubjectLoad).count() == 0
+
+
 def test_section_snapshot_and_idempotent_unlock(test_setup):
     db = test_setup["db"]
     client = test_setup["client"]
@@ -332,7 +445,16 @@ def test_save_draft_does_not_recreate_published_section(test_setup):
         headers=headers,
     )
     assert unlock.status_code == 200
-    edit = unlock.json()["loads"][0]
+    period_1 = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN",
+        PeriodTemplateSlot.slot_name == "Period 1",
+    ).one()
+    edit = {
+        **unlock.json()["loads"][0],
+        "slot_id": period_1.slot_id,
+        "start_time": period_1.start_time,
+        "end_time": period_1.end_time,
+    }
     save_edit = client.post(
         "/api/v1/subject-loads/batch-save",
         json={**request, "action": "draft", "loads": [edit]},
@@ -780,7 +902,18 @@ def test_unlocked_draft_edit_and_republish_locks_again(test_setup):
         headers=headers,
     )
     assert unlocked.status_code == 200
-    draft = {**unlocked.json()["loads"][0], "start_time": "09:00", "end_time": "10:00"}
+    from app.api.v1.routes.SubjectLoads import ensure_default_period_templates
+    ensure_default_period_templates(test_setup["db"])
+    period_2 = test_setup["db"].query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN",
+        PeriodTemplateSlot.slot_name == "Period 2",
+    ).one()
+    draft = {
+        **unlocked.json()["loads"][0],
+        "slot_id": period_2.slot_id,
+        "start_time": period_2.start_time,
+        "end_time": period_2.end_time,
+    }
     saved = client.post("/api/v1/subject-loads/batch-save", json={**request, "action": "draft", "loads": [draft]}, headers=headers)
     assert saved.status_code == 200, saved.text
     current = test_setup["db"].query(SubjectLoad).filter(SubjectLoad.is_active_version.is_(True)).one()
@@ -789,7 +922,7 @@ def test_unlocked_draft_edit_and_republish_locks_again(test_setup):
     assert published.status_code == 200, published.text
     test_setup["db"].expire_all()
     current = test_setup["db"].query(SubjectLoad).filter(SubjectLoad.is_active_version.is_(True)).one()
-    assert (current.start_time, current.section_revision, current.is_locked) == ("09:00", 2, True)
+    assert (current.start_time, current.section_revision, current.is_locked) == ("08:45", 2, True)
     stale = client.post("/api/v1/subject-loads/batch-save", json={**request, "loads": [draft]}, headers=headers)
     assert stale.status_code == 409
 
@@ -1244,7 +1377,7 @@ def test_subject_load_default_reads_reject_inconsistent_lifecycle(test_setup):
     assert client.get("/api/v1/subject-loads/my-schedule", headers=headers).status_code == 409
 
 
-def test_future_template_group_revalidation_stays_in_class_year(test_setup, monkeypatch):
+def test_future_jhs_class_cannot_be_reassigned_to_custom_template(test_setup, monkeypatch):
     db = test_setup["db"]
     client = test_setup["client"]
     future_year = AcademicYear(
@@ -1298,9 +1431,9 @@ def test_future_template_group_revalidation_stays_in_class_year(test_setup, monk
         json={"template_group": "SHS_CAMPOS_ZARA"},
         headers={"Authorization": f"Bearer {test_setup['token']}"},
     )
-    assert response.status_code == 200, response.text
-    assert validated_period_ids == [future_period.academic_period_id]
-    assert test_setup["period"].academic_period_id not in validated_period_ids
+    assert response.status_code == 422, response.text
+    assert "Grades 7-10 use the shared JHS timetable" in response.json()["detail"]
+    assert validated_period_ids == []
 
 
 def test_class_schedule_authorizes_admin_teacher_adviser_substitute_and_enrolled_student(test_setup):

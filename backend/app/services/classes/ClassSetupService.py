@@ -203,6 +203,11 @@ def setup_academic_year(db: Session, payload: AcademicYearSetupRequest) -> dict:
 
                 if class_key in target_class_map:
                     existing_class = target_class_map[class_key]
+                    existing_level = db.query(AcademicLevel).filter(
+                        AcademicLevel.academic_level_id == existing_class.academic_level_id
+                    ).first()
+                    if existing_level and 7 <= existing_level.grade_level <= 10:
+                        existing_class.period_template_group = "JHS_45MIN"
                     classes_reused += 1
                     class_items.append(
                         AcademicYearSetupClassItem(
@@ -247,6 +252,15 @@ def setup_academic_year(db: Session, payload: AcademicYearSetupRequest) -> dict:
                 official = target_sections_map.get((sc.academic_level_id, norm_cname))
                 target_pw_id = official.pathway_id if official else None
 
+                source_level = db.query(AcademicLevel).filter(
+                    AcademicLevel.academic_level_id == sc.academic_level_id
+                ).first()
+                target_template_group = (
+                    "JHS_45MIN"
+                    if source_level and 7 <= source_level.grade_level <= 10
+                    else sc.period_template_group
+                )
+
                 new_class = Class(
                     section_name=sc.section_name,
                     class_status="active",
@@ -255,7 +269,7 @@ def setup_academic_year(db: Session, payload: AcademicYearSetupRequest) -> dict:
                     academic_level_id=sc.academic_level_id,
                     academic_period_id=None,
                     pathway_id=target_pw_id,
-                    period_template_group=sc.period_template_group,
+                    period_template_group=target_template_group,
                 )
                 db.add(new_class)
                 db.flush()

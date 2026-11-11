@@ -1,5 +1,5 @@
 import { Dialog } from "@/components/retroui/Dialog";
-import { RepostWorkspace } from "./repost-workspace";
+import { RepostWorkspace } from "@/components/teacher/repost-workspace";
 
 export interface RepostModalProps {
   open: boolean;

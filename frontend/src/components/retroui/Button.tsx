@@ -23,7 +23,7 @@ export const buttonVariants = cva(
         outline:
           "shadow-md hover:shadow active:shadow-none bg-background border-2 border-border transition hover:translate-y-1 active:translate-y-2 active:translate-x-1",
         destructive:
-          "bg-destructive text-destructive-foreground border-2 border-border shadow-md transition hover:translate-y-1 hover:bg-destructive/90 hover:shadow active:translate-x-1 active:translate-y-2 active:shadow-none",
+          "bg-destructive/75 text-foreground border-2 border-border shadow-md transition hover:translate-y-1 hover:bg-destructive/90 hover:shadow active:translate-x-1 active:translate-y-2 active:shadow-none",
         link: "bg-transparent text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         ghost: "bg-transparent hover:bg-accent"
       },

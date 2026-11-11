@@ -26,7 +26,7 @@ import type {
   StatusFilter,
 } from "@/types/adminClasses";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { OverviewCard } from "@/components/overview-cards";
 import { Input } from "@/components/retroui/Input";

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Award, BookOpen, CheckSquare, ClipboardList, FileText, Plus, Repeat, X, type LucideIcon } from "lucide-react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";
 import { apiFetch } from "@/lib/api";
@@ -20,6 +20,7 @@ import { DialogueSelect } from "@/components/dialogue-select";
 import { Text } from "@/components/retroui/Text";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Alert } from "@/components/retroui/Alert";
+import { LoadingPanel } from "@/components/loading-panel";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
 import ClassworkDetailModal from "./forms/classwork-preview-modal";
@@ -30,7 +31,7 @@ import ManageLessonModal from "./forms/manage-lesson";
 import SubjectLessonList from "./subject-details/subject-lesson-list";
 import SubjectClassworkTab from "./subject-details/subject-classwork-tab";
 import TeacherLessonDetailScreen from "./lesson-view";
-import { RepostModal } from "@/components/teacher/repost-modal";
+import { RepostModal } from "@/pages/teacher/forms/repost-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { academicContextState } from "@/lib/academic-context-state";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
@@ -92,6 +93,7 @@ const tabs: Array<TabItem<"lessons" | "classwork">> = [
 ];
 
 export default function SubjectDetails() {
+  const location = useLocation();
   const { classId, subjectId } = useParams<{
     classId: string;
     subjectId: string;
@@ -158,8 +160,7 @@ export default function SubjectDetails() {
   const [lessonSearch, setLessonSearch] = useState("");
   const [lessonSort, setLessonSort] = useState<"order" | "newest" | "oldest" | "title">("order");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  void isLoading;
+  const [isLoading, setIsLoading] = useState(true);
   const [deliveriesByLessonId, setDeliveriesByLessonId] = useState<Record<number, LessonDeliveryRecord>>({});
   const [deliveryLoadingLessonId, setDeliveryLoadingLessonId] = useState<number | null>(null);
   const [correctionTargetLesson, setCorrectionTargetLesson] = useState<Lesson | null>(null);
@@ -333,7 +334,12 @@ export default function SubjectDetails() {
 
         const [classesResponse, lessonsResponse, assignmentsResponse, competenciesResponse] =
           await Promise.all([
-            apiFetch("/api/v1/classwork-assignments/teacher/classes"),
+            apiFetch("/api/v1/classwork-assignments/teacher/classes").then(async (response) => {
+              if (!response.ok) throw new Error("Unable to load subject context.");
+              const data = (await response.json()) as TeacherClassLoad[];
+              if (requestId === loadRequestIdRef.current) setLoads(data);
+              return response;
+            }),
             classId && subjectId
               ? apiFetch(
                 `/api/v1/lessons/my-class/${classId}/subject/${subjectId}${lessonQuery}`,
@@ -354,8 +360,6 @@ export default function SubjectDetails() {
         if (!classesResponse.ok) {
           throw new Error("Unable to load subject context.");
         }
-
-        setLoads((await classesResponse.json()) as TeacherClassLoad[]);
 
         if (lessonsResponse) {
           if (!lessonsResponse.ok) {
@@ -508,11 +512,10 @@ export default function SubjectDetails() {
   const handleConfirmDelivery = async (lesson: Lesson) => {
     if (isReadOnly) return;
     if (!classId || !subjectId || !effectivePeriodId) {
-      setError("Academic period context is missing. Please select an academic term.");
+      toast.error("Academic period context is missing. Please select an academic term.");
       return;
     }
     setDeliveryLoadingLessonId(lesson.lesson_id);
-    setError("");
     try {
       const delivery = await confirmLessonDelivery({
         lesson_id: lesson.lesson_id,
@@ -536,9 +539,9 @@ export default function SubjectDetails() {
           prev ? { ...prev, delivery, is_taught: true } : null,
         );
       }
-      toast.success(`Lesson "${lesson.title}" confirmed as taught.`);
+      toast.success(`Lesson "${lesson.title}" confirmed as completed.`);
     } catch (err) {
-      setError(
+      toast.error(
         err instanceof Error ? err.message : "Failed to confirm lesson delivery.",
       );
     } finally {
@@ -582,7 +585,14 @@ export default function SubjectDetails() {
     }
   };
 
-  const subjectName = subjectLoad?.subject_name || "Subject";
+  const navigationContext = location.state?.subjectContext as {
+    subjectId: number; classId: number; subjectName: string; gradeLevel?: string;
+  } | undefined;
+  const matchingNavigationContext = navigationContext &&
+    Number(navigationContext.subjectId) === Number(subjectId) &&
+    Number(navigationContext.classId) === Number(classId)
+      ? navigationContext : undefined;
+  const subjectName = subjectLoad?.subject_name || matchingNavigationContext?.subjectName || "";
   const sectionName = subjectLoad?.section_name;
   const classesForSubject = useMemo(() => {
     return loads
@@ -986,45 +996,38 @@ export default function SubjectDetails() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             {activeLessonDetail ? (
-              <>
-                {error && (
-                  <Alert status="error" onClose={() => setError("")} className="mx-3 mt-3 sm:mx-4 md:mx-6">
-                    <Alert.Description>{error}</Alert.Description>
-                  </Alert>
+              <TeacherLessonDetailScreen
+                lesson={activeLessonDetail}
+                isReadOnly={isReadOnly}
+                subjectName={subjectName}
+                sectionName={sectionName}
+                closeLessonDetail={closeLessonDetail}
+                openLessonManager={openLessonManager}
+                openClassworkForm={openClassworkForm}
+                openClassworkDetail={openClassworkDetail}
+                onArchiveLesson={handleArchiveLessonDirect}
+                linkedClassworks={
+                  linkedClassworks[activeLessonDetail.lesson_id] || []
+                }
+                isLoadingClasswork={
+                  loadingClassworkId === activeLessonDetail.lesson_id
+                }
+                delivery={
+                  deliveriesByLessonId[activeLessonDetail.lesson_id] ||
+                  activeLessonDetail.delivery ||
+                  null
+                }
+                isDelivered={Boolean(
+                  activeLessonDetail.is_taught ??
+                    (deliveriesByLessonId[activeLessonDetail.lesson_id]?.is_active ||
+                      activeLessonDetail.delivery?.is_active),
                 )}
-                <TeacherLessonDetailScreen
-                  lesson={activeLessonDetail}
-                  isReadOnly={isReadOnly}
-                  subjectName={subjectName}
-                  sectionName={sectionName}
-                  closeLessonDetail={closeLessonDetail}
-                  openLessonManager={openLessonManager}
-                  openClassworkForm={openClassworkForm}
-                  openClassworkDetail={openClassworkDetail}
-                  onArchiveLesson={handleArchiveLessonDirect}
-                  linkedClassworks={
-                    linkedClassworks[activeLessonDetail.lesson_id] || []
-                  }
-                  isLoadingClasswork={
-                    loadingClassworkId === activeLessonDetail.lesson_id
-                  }
-                  delivery={
-                    deliveriesByLessonId[activeLessonDetail.lesson_id] ||
-                    activeLessonDetail.delivery ||
-                    null
-                  }
-                  isDelivered={Boolean(
-                    activeLessonDetail.is_taught ??
-                      (deliveriesByLessonId[activeLessonDetail.lesson_id]?.is_active ||
-                        activeLessonDetail.delivery?.is_active),
-                  )}
-                  isDeliveryLoading={
-                    deliveryLoadingLessonId === activeLessonDetail.lesson_id
-                  }
-                  onConfirmDelivery={handleConfirmDelivery}
-                  onOpenCorrectionDialog={openCorrectionDialog}
-                />
-              </>
+                isDeliveryLoading={
+                  deliveryLoadingLessonId === activeLessonDetail.lesson_id
+                }
+                onConfirmDelivery={handleConfirmDelivery}
+                onOpenCorrectionDialog={openCorrectionDialog}
+              />
             ) : isTOSOpen && subjectId ? (
               <main>
                 <TOSGeneratorScreen
@@ -1050,7 +1053,9 @@ export default function SubjectDetails() {
 
                           <Breadcrumb.Separator />
                           <Breadcrumb.Item className="min-w-0">
-                            <Breadcrumb.Page className="block truncate">{subjectName}</Breadcrumb.Page>
+                            <Breadcrumb.Page className="block truncate">
+                              {subjectName}
+                            </Breadcrumb.Page>
                           </Breadcrumb.Item>
                         </Breadcrumb.List>
                       </Breadcrumb>
@@ -1150,17 +1155,17 @@ export default function SubjectDetails() {
                     </Alert>
                   )}
 
-                  <SubjectClassHeader
+                  {subjectName && <SubjectClassHeader
                     detail={{
                       class_id: classId || "",
-                      academic_level: subjectLoad?.grade_level,
+                      academic_level: subjectLoad?.grade_level || matchingNavigationContext?.gradeLevel,
                     }}
                     currentSubject={{
                       subject_id: Number(subjectId),
                       subject_name: subjectName,
                     }}
                     showViewSubjectButton={false}
-                  />
+                  />}
 
                   {activeTab === "classwork" && subjectId ? (
                     <SubjectClassworkTab
@@ -1171,6 +1176,10 @@ export default function SubjectDetails() {
                       isCreateOpen={isCreatingSubjectClasswork}
                       onCloseCreate={() => setIsCreatingSubjectClasswork(false)}
                     />
+                  ) : isLoading ? (
+                    <div role="status" aria-live="polite">
+                      <LoadingPanel label="Loading lessons and subject overview..." className="rounded border-2 border-border" />
+                    </div>
                   ) : (
                     <SubjectLessonList
                       lessonSearch={lessonSearch}

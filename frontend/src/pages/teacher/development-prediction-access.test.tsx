@@ -1,15 +1,23 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import PredictionsDashboard from "./predictions";
+import GradePredictions from "./grade-predictions";
+import SubjectPrediction from "./subject-prediction";
+import SectionPredictions from "./section-predictions";
 import PredictionTable from "@/components/predictions/prediction-table";
 import { buildCurrentTermDashboard, currentTermRiskSummary, toDashboardPrediction, type AuthorizedCurrentTermRow } from "@/components/predictions/current-term-dashboard-adapter";
 
 const auth = vi.hoisted(() => ({ role: "teacher" as "teacher" | "admin" }));
 const currentTerm = vi.hoisted(() => ({ load: vi.fn() }));
 const academicContext = vi.hoisted(() => ({ selectedPeriodId: 3 }));
+const teacherOnly = vi.hoisted(() => ({
+  health: vi.fn(),
+  candidates: vi.fn().mockResolvedValue({ items: [] }),
+  active: vi.fn().mockResolvedValue({ items: [] }),
+}));
 vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ role: auth.role, user: { role: auth.role } }) }));
 vi.mock("@/context/AcademicPeriodContext", () => ({ useAcademicPeriod: () => academicContext }));
 vi.mock("@/layouts/app-layout", () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
@@ -27,6 +35,18 @@ vi.mock("@/components/retroui/Tabs", () => ({ Tabs: ({ tabs, onTabChange }: { ta
 vi.mock("@/components/predictions/current-term-dashboard-adapter", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/components/predictions/current-term-dashboard-adapter")>();
   return { ...original, loadAuthorizedCurrentTermPredictions: currentTerm.load };
+});
+vi.mock("@/lib/api", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/api")>();
+  return { ...original, getTeacherDashboardHealth: teacherOnly.health };
+});
+vi.mock("@/lib/teacher-interventions-api", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/teacher-interventions-api")>();
+  return {
+    ...original,
+    listTeacherCandidates: teacherOnly.candidates,
+    listTeacherActive: teacherOnly.active,
+  };
 });
 vi.mock("@/lib/prediction-api", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/prediction-api")>();
@@ -68,7 +88,7 @@ const filters = {
   terms: [{ term_number: 1, term_label: "Term 1", academic_period_id: 3 }],
 };
 
-afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.clearAllMocks(); academicContext.selectedPeriodId = 3; });
+afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.clearAllMocks(); academicContext.selectedPeriodId = 3; auth.role = "teacher"; });
 
 describe("shared prediction page access", () => {
   it("uses one AI Predictions experience and renders V3 semantics for teachers", async () => {
@@ -82,17 +102,15 @@ describe("shared prediction page access", () => {
     await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
     expect(screen.getByRole("heading", { name: "AI Predictions" })).toBeTruthy();
     expect(screen.queryByText("Current-Term Development")).toBeNull();
-    const summaryButtons = screen.getAllByRole("button").filter((button) =>
+    expect(screen.getAllByText("Moderate Risk").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("High Risk").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("On Track").length).toBeGreaterThan(0);
+    const summaryButtons = screen.queryAllByRole("button").filter((button) =>
       /Moderate Risk|High Risk|On Track/.test(button.textContent || "")
     );
-    expect(summaryButtons).toEqual([
-      screen.getByRole("button", { name: /Moderate Risk\s+0/i }),
-      screen.getByRole("button", { name: /High Risk\s+1/i }),
-      screen.getByRole("button", { name: /On Track\s+0/i }),
-    ]);
-    expect(screen.getByRole("button", { name: /High Risk\s+1/i })).toBeTruthy();
+    expect(summaryButtons).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
+    fireEvent.change(screen.getByPlaceholderText("Search student or LRN..."), { target: { value: "Alex" } });
     expect(screen.getByText("Grade Level")).toBeTruthy();
     expect(screen.getByText("Grade 9")).toBeTruthy();
     expect(screen.getByText("Projected Grade")).toBeTruthy();
@@ -102,29 +120,222 @@ describe("shared prediction page access", () => {
     expect(screen.getByText("Prediction detail for Alex Rivera")).toBeTruthy();
   });
 
-  it.each(["admin", "teacher"] as const)("hides the development tab in production for %s", (role) => {
-    vi.stubEnv("DEV", false);
-    vi.stubEnv("VITE_ENABLE_DEVELOPMENT_PREDICTIONS", "true");
-    auth.role = role;
-    render(
-      <MemoryRouter>
-        <PredictionsDashboard />
-      </MemoryRouter>
-    );
-    expect(screen.queryByText("Current-Term Development")).toBeNull();
-  });
-
-  it("mounts the development surface only for an enabled admin", () => {
+  it("renders the read-only Admin current-term dashboard with the Teacher risk mapping", async () => {
     vi.stubEnv("DEV", true);
     vi.stubEnv("VITE_ENABLE_DEVELOPMENT_PREDICTIONS", "true");
     auth.role = "admin";
+    const rows = [
+      row,
+      { ...row, prediction_id: 46, subject_id: 6, subject_name: "Science", subject_codename: "SCI", intervention_level: "LOW_RISK" as const },
+      { ...row, prediction_id: 42, student_id: "s2", student_name: "Morgan Lee", intervention_level: "MODERATE_RISK" as const },
+      { ...row, prediction_id: 43, student_id: "s3", student_name: "Taylor Cruz", intervention_level: "NEEDS_MONITORING" as const },
+      { ...row, prediction_id: 44, student_id: "s4", student_name: "Jamie Santos", intervention_level: "LOW_RISK" as const },
+      { ...row, prediction_id: 45, student_id: "s5", student_name: "Historical Student", intervention_level: "HIGH_RISK" as const, official_final_grade_available: true, official_final_grade: 80 },
+    ];
+    currentTerm.load.mockResolvedValue({
+      rows,
+      filters: {
+        ...filters,
+        subjects: [
+          ...filters.subjects,
+          { subject_id: 6, subject_name: "Science", subject_codename: "SCI" },
+        ],
+      },
+      assignedScopes: [
+        { subject_id: 5, subject_name: "Mathematics", subject_codename: "MATH", grade_level: 9, class_id: 7, section_name: "Archimedes" },
+        { subject_id: 6, subject_name: "Science", subject_codename: "SCI", grade_level: 9, class_id: 7, section_name: "Archimedes" },
+      ],
+    });
+
     render(
       <MemoryRouter>
         <PredictionsDashboard />
       </MemoryRouter>
     );
-    fireEvent.click(screen.getByRole("button", { name: "Current-Term Development" }));
-    expect(screen.getByText("Development panel mounted for admin")).toBeTruthy();
+
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
+    expect(currentTerm.load).toHaveBeenCalledWith(3, {}, "admin");
+    const summary = screen.getByLabelText("Prediction risk summary");
+    const summaryButtons = Array.from(summary.querySelectorAll(":scope > button"));
+    const cards = summaryButtons;
+    expect(cards).toHaveLength(3);
+    expect(cards.map((card) => card.querySelector("[data-slot='card-description']")?.textContent)).toEqual([
+      "Moderate Risk",
+      "High Risk",
+      "On Track",
+    ]);
+    expect(within(cards[0] as HTMLElement).getByText("1")).toBeTruthy();
+    expect(within(cards[1] as HTMLElement).getByText("1")).toBeTruthy();
+    expect(within(cards[2] as HTMLElement).getByText("2")).toBeTruthy();
+    expect(screen.queryByText("Current-Term Development")).toBeNull();
+    expect(screen.queryByText("Development panel mounted for admin")).toBeNull();
+    const gradeLink = screen.getByRole("link", { name: "View Grade 9 predictions" });
+    expect(gradeLink.getAttribute("href")).toBe("/admin/predictions/9");
+    expect(screen.getByRole("link", { name: "View Archimedes predictions" }).getAttribute("href"))
+      .toBe("/admin/predictions/9/7");
+    expect(screen.queryByRole("link", { name: /View Mathematics/i })).toBeNull();
+
+    const highRiskButton = screen.getByRole("button", { name: "Filter by High Risk" });
+    fireEvent.click(highRiskButton);
+    expect(highRiskButton.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByText("Morgan Lee")).toBeNull();
+    fireEvent.click(highRiskButton);
+
+    fireEvent.change(screen.getByPlaceholderText("Search student or LRN..."), { target: { value: "Alex" } });
+    expect(screen.getByRole("link", { name: "View Grade 9 predictions" })).toBeTruthy();
+    expect(screen.queryByText("Prediction detail for Alex Rivera")).toBeNull();
+    expect(screen.queryByText(/Assign Intervention|Submit Review|Review Intervention|View Active Intervention/i)).toBeNull();
+  });
+
+  it("shows an Admin empty state without issuing write controls", async () => {
+    auth.role = "admin";
+    currentTerm.load.mockResolvedValue({ rows: [], filters, assignedScopes: [] });
+
+    render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
+    expect(screen.getByText("No current-term projections available")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /generate/i })).toBeNull();
+  });
+
+  it("renders authorized Admin grades and sections when they have zero predictions", async () => {
+    auth.role = "admin";
+    currentTerm.load.mockResolvedValue({
+      rows: [],
+      filters,
+      assignedScopes: [
+        { subject_id: 5, subject_name: "Mathematics", subject_codename: "MATH", grade_level: 9, class_id: 7, section_name: "Archimedes" },
+      ],
+    });
+
+    render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
+    expect([7, 8, 9, 10, 11, 12].map((grade) =>
+      screen.getByRole("heading", { name: `Grade ${grade}` }).textContent
+    )).toHaveLength(6);
+    expect(screen.getByRole("link", { name: "View Grade 9 predictions" })).toBeTruthy();
+    expect(screen.getAllByText(/No predictions yet/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText("No current-term projections available")).toBeNull();
+    expect(screen.getByRole("link", { name: "View Archimedes predictions" }).getAttribute("href"))
+      .toBe("/admin/predictions/9/7");
+  });
+
+  it("renders one Admin grade workspace with section and subject filters", async () => {
+    auth.role = "admin";
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    const aristotleRow = {
+      ...row,
+      prediction_id: 47,
+      student_id: "s2",
+      student_name: "Morgan Lee",
+      class_id: 8,
+      class_name: "Aristotle",
+      subject_id: 8,
+      subject_name: "English",
+      subject_codename: "ENG",
+    };
+    currentTerm.load.mockResolvedValue({
+      rows: [row, aristotleRow],
+      filters,
+      assignedScopes: [
+        { subject_id: 5, subject_name: "Mathematics", subject_codename: "MATH", grade_level: 9, class_id: 7, section_name: "Archimedes" },
+        { subject_id: 8, subject_name: "English", subject_codename: "ENG", grade_level: 9, class_id: 8, section_name: "Aristotle" },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/predictions/9"]}>
+        <Routes>
+          <Route path="/admin/predictions/:grade" element={<GradePredictions />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.queryByText(/Loading Grade 9 sections/i)).toBeNull());
+    expect(currentTerm.load).toHaveBeenCalledWith(3, { gradeLevel: 9 }, "admin");
+    expect(screen.getByRole("link", { name: "AI Predictions" }).getAttribute("href")).toBe("/admin/predictions");
+    expect(screen.getByRole("combobox", { name: "Section" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "All Subjects" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Mathematics" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Student Predictions" })).toBeTruthy();
+    expect(screen.getByText("Alex Rivera")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Mathematics" }));
+    expect(screen.getByRole("button", { name: "Mathematics" }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Section" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Aristotle" }));
+    expect(screen.getByRole("button", { name: "All Subjects" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "English" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Mathematics" })).toBeNull();
+    expect(screen.getByText("Morgan Lee")).toBeTruthy();
+    expect(screen.queryByText("Alex Rivera")).toBeNull();
+    expect(screen.queryByRole("link", { name: "View Archimedes predictions" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /teacher/i })).toBeNull();
+  });
+
+  it("preserves the Admin section route by opening the unified workspace with that section selected", async () => {
+    auth.role = "admin";
+    currentTerm.load.mockResolvedValue({
+      rows: [row],
+      filters,
+      assignedScopes: [
+        { subject_id: 5, subject_name: "Mathematics", subject_codename: "MATH", grade_level: 9, class_id: 7, section_name: "Archimedes" },
+        { subject_id: 6, subject_name: "Science", subject_codename: "SCI", grade_level: 9, class_id: 7, section_name: "Archimedes" },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/predictions/9/7"]}>
+        <Routes>
+          <Route path="/admin/predictions/:grade/:classId" element={<SectionPredictions />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Section" }).textContent).toContain("Archimedes"));
+    expect(currentTerm.load).toHaveBeenCalledWith(3, { gradeLevel: 9 }, "admin");
+    expect(screen.getByRole("link", { name: "AI Predictions" }).getAttribute("href")).toBe("/admin/predictions");
+    expect(screen.getByRole("combobox", { name: "Section" }).textContent).toContain("Archimedes");
+    expect(screen.getByRole("button", { name: "All Subjects" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Mathematics" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Science" })).toBeTruthy();
+    expect(screen.getByText("Alex Rivera")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Science" }));
+    expect(screen.getByText("No predictions available for Science")).toBeTruthy();
+    expect(screen.queryByText("Alex Rivera")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "All Subjects" }));
+    expect(screen.getByText("Alex Rivera")).toBeTruthy();
+    expect(screen.queryByText(/Select Subject for|No Predictions Yet/i)).toBeNull();
+  });
+
+  it("distinguishes an active Admin risk filter with no matches from zero generated predictions", async () => {
+    auth.role = "admin";
+    currentTerm.load.mockResolvedValue({
+      rows: [row],
+      filters,
+      assignedScopes: [
+        { subject_id: 5, subject_name: "Mathematics", subject_codename: "MATH", grade_level: 9, class_id: 7, section_name: "Archimedes" },
+      ],
+    });
+
+    render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Filter by Moderate Risk" }));
+    expect(screen.getByText("No predictions match these filters")).toBeTruthy();
+    expect(screen.queryByText("No predictions yet")).toBeNull();
+  });
+
+  it("shows Admin API failures separately from empty data", async () => {
+    auth.role = "admin";
+    currentTerm.load.mockRejectedValue(new Error("network unavailable"));
+
+    render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    expect(screen.getByText(/could not be loaded/i)).toBeTruthy();
+    expect(screen.queryByText("No current-term projections available")).toBeNull();
   });
 
   it("leaves the legacy table's risk-score rendering intact", () => {
@@ -194,7 +405,7 @@ describe("shared prediction page access", () => {
     currentTerm.load.mockResolvedValue({ rows: [row], filters, assignedScopes: [] });
     const view = render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
     await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
-    fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
+    fireEvent.change(screen.getByPlaceholderText("Search student or LRN..."), { target: { value: "Alex" } });
     fireEvent.click(screen.getByText("Alex Rivera"));
     expect(screen.getByText("Prediction detail for Alex Rivera")).toBeTruthy();
 
@@ -203,6 +414,43 @@ describe("shared prediction page access", () => {
 
     await waitFor(() => expect(screen.queryByText("Prediction detail for Alex Rivera")).toBeNull());
     expect(currentTerm.load).toHaveBeenLastCalledWith(4);
+  });
+
+  it("ignores an older Admin term response that resolves after the selected term", async () => {
+    auth.role = "admin";
+    let resolveOld: (value: unknown) => void = () => undefined;
+    let resolveCurrent: (value: unknown) => void = () => undefined;
+    currentTerm.load.mockImplementation((periodId: number) => new Promise((resolve) => {
+      if (periodId === 3) resolveOld = resolve;
+      else resolveCurrent = resolve;
+    }));
+
+    const view = render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+    academicContext.selectedPeriodId = 4;
+    view.rerender(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+
+    await act(async () => resolveCurrent({
+      rows: [{ ...row, prediction_id: 61, intervention_level: "MODERATE_RISK" as const }],
+      filters,
+      assignedScopes: [],
+    }));
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
+
+    const currentSummary = screen.getByLabelText("Prediction risk summary");
+    const currentCards = Array.from(currentSummary.querySelectorAll(":scope > button"));
+    expect(within(currentCards[0] as HTMLElement).getByText("1")).toBeTruthy();
+    expect(within(currentCards[1] as HTMLElement).getByText("0")).toBeTruthy();
+
+    await act(async () => resolveOld({
+      rows: [row, { ...row, prediction_id: 62 }, { ...row, prediction_id: 63 }],
+      filters,
+      assignedScopes: [],
+    }));
+
+    const finalSummary = screen.getByLabelText("Prediction risk summary");
+    const finalCards = Array.from(finalSummary.querySelectorAll(":scope > button"));
+    expect(within(finalCards[0] as HTMLElement).getByText("1")).toBeTruthy();
+    expect(within(finalCards[1] as HTMLElement).getByText("0")).toBeTruthy();
   });
 
   it("keeps finalized projections visible as history and out of actionable risk counts", () => {
@@ -214,5 +462,68 @@ describe("shared prediction page access", () => {
     expect(screen.getByText("Final Grade: 87.00")).toBeTruthy();
     expect(screen.getByText("Earlier projection: 72.50")).toBeTruthy();
     expect(screen.getByText("Historical projection")).toBeTruthy();
+  });
+
+  it("loads the Admin subject route with school-wide scope and preserves period context", async () => {
+    auth.role = "admin";
+    currentTerm.load.mockResolvedValue({
+      rows: [row],
+      filters,
+      assignedScopes: [{ subject_id: 5, subject_name: "Mathematics", subject_codename: "MATH", grade_level: 9, class_id: 7, section_name: "Archimedes" }],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/predictions/subject/5"]}>
+        <Routes>
+          <Route path="/admin/predictions/subject/:subjectId" element={<SubjectPrediction />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
+    expect(currentTerm.load).toHaveBeenCalledWith(3, { subjectId: 5 }, "admin");
+    expect(teacherOnly.health).not.toHaveBeenCalled();
+    expect(teacherOnly.candidates).not.toHaveBeenCalled();
+    expect(teacherOnly.active).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "AI Predictions" }).getAttribute("href")).toBe("/admin/predictions");
+    expect(screen.getByText("Alex Rivera")).toBeTruthy();
+    fireEvent.click(screen.getByText("Alex Rivera"));
+    expect(screen.getByText("Prediction detail for Alex Rivera")).toBeTruthy();
+    expect(screen.queryByText(/Assign Intervention|Submit Review|View Active Intervention/i)).toBeNull();
+  });
+
+  it("loads the Admin subject-section route without Teacher redirects or write controls", async () => {
+    auth.role = "admin";
+    currentTerm.load.mockResolvedValue({
+      rows: [row],
+      filters,
+      assignedScopes: [{ subject_id: 5, subject_name: "Mathematics", subject_codename: "MATH", grade_level: 9, class_id: 7, section_name: "Archimedes" }],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/predictions/subject/5/section/7"]}>
+        <Routes>
+          <Route path="/admin/predictions/subject/:subjectId/section/:classId" element={<SectionPredictions />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
+    expect(currentTerm.load).toHaveBeenCalledWith(3, { classId: 7, subjectId: 5 }, "admin");
+    expect(teacherOnly.health).not.toHaveBeenCalled();
+    expect(teacherOnly.candidates).not.toHaveBeenCalled();
+    expect(teacherOnly.active).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "AI Predictions" }).getAttribute("href")).toBe("/admin/predictions");
+    expect(screen.getByRole("link", { name: "Grade 9" }).getAttribute("href"))
+      .toBe("/admin/predictions/9");
+    expect(screen.getByRole("link", { name: "Archimedes" }).getAttribute("href"))
+      .toBe("/admin/predictions/9/7");
+    fireEvent.change(screen.getByPlaceholderText("Search student or LRN..."), { target: { value: "Alex" } });
+    expect(screen.getByText("Alex Rivera")).toBeTruthy();
+    expect(Array.from(document.querySelectorAll("a")).every((link) => !link.getAttribute("href")?.startsWith("/teacher/")))
+      .toBe(true);
+    fireEvent.click(screen.getByText("Alex Rivera"));
+    expect(screen.getByText("Prediction detail for Alex Rivera")).toBeTruthy();
+    expect(screen.queryByText(/Assign Intervention|Submit Review|View Active Intervention/i)).toBeNull();
   });
 });

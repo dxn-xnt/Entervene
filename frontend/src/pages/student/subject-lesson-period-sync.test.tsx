@@ -9,7 +9,6 @@ import SubjectLessonTab from "./subjects-view/tabs/subject-lesson-tab";
 const mocks = vi.hoisted(() => ({
   selectedPeriodId: 1 as number | null,
   apiFetch: vi.fn(),
-  getLessonGoals: vi.fn(),
   getStudentTodos: vi.fn(),
 }));
 
@@ -19,7 +18,6 @@ vi.mock("@/context/AcademicPeriodContext", () => ({
 
 vi.mock("@/lib/api", () => ({
   apiFetch: mocks.apiFetch,
-  getLessonGoals: mocks.getLessonGoals,
   getStudentTodos: mocks.getStudentTodos,
 }));
 
@@ -39,10 +37,6 @@ vi.mock("@/components/item-line/classwork", () => ({
 
 vi.mock("@/pages/student/lesson-view", () => ({
   StudentLessonDetailScreen: () => null,
-}));
-
-vi.mock("@/components/lesson-goal-progress", () => ({
-  LessonGoalProgress: () => null,
 }));
 
 vi.mock("@/components/student-lesson-mastery", () => ({
@@ -95,9 +89,7 @@ function renderTab() {
 beforeEach(() => {
   mocks.selectedPeriodId = 1;
   mocks.apiFetch.mockReset();
-  mocks.getLessonGoals.mockReset();
   mocks.getStudentTodos.mockReset();
-  mocks.getLessonGoals.mockResolvedValue({ items: [] });
   mocks.getStudentTodos.mockResolvedValue({ all: [] });
 });
 

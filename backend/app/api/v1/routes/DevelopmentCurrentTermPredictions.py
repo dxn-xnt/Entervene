@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +23,7 @@ from app.services.prediction.V3PredictionScopeAuthorizationService import (
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class DevelopmentCurrentTermRequest(BaseModel):
@@ -42,11 +44,26 @@ def require_development_prediction_api() -> None:
         raise HTTPException(status_code=404, detail="Not found")
 
 
+def require_development_prediction_write_api() -> None:
+    """Keep the HTTP generation helper isolated to automated test fixtures.
+
+    Admin prediction pages are read-only in development/demo and production.
+    Dataset/model tests may still exercise persistence through the test
+    environment without exposing a deployable write endpoint.
+    """
+    require_development_prediction_api()
+    if settings.app_environment.lower() != "test":
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 def _registered_v3(db: Session, model_name: str | None = None) -> AIModelVersion:
     try:
         name = require_development_model_name(model_name or selected_development_model_name())
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    named_versions = db.query(AIModelVersion).filter(
+        AIModelVersion.model_name == name,
+    ).all()
     versions = db.query(AIModelVersion).filter(
         AIModelVersion.model_name == name,
         AIModelVersion.model_purpose == ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value,
@@ -55,12 +72,36 @@ def _registered_v3(db: Session, model_name: str | None = None) -> AIModelVersion
         AIModelVersion.independent_three_term_validation.is_(False),
         AIModelVersion.is_active.is_(False),
     ).all()
-    if len(versions) != 1:
-        raise HTTPException(status_code=503, detail="Selected development model registry entry unavailable")
-    return versions[0]
+    if len(versions) == 1:
+        return versions[0]
+
+    # A local database can legitimately contain only one of the allowlisted
+    # development models. If configuration drifts to the other model, use the
+    # sole valid registry entry rather than taking the prediction dashboard
+    # down. Never fall back over a malformed or duplicate configured entry.
+    if not named_versions:
+        alternatives = db.query(AIModelVersion).filter(
+            AIModelVersion.model_name.in_(MODEL_NAMES),
+            AIModelVersion.model_purpose == ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value,
+            AIModelVersion.lifecycle_status == "DEVELOPMENT",
+            AIModelVersion.production_validated.is_(False),
+            AIModelVersion.independent_three_term_validation.is_(False),
+            AIModelVersion.is_active.is_(False),
+        ).all()
+        if len(alternatives) == 1:
+            fallback = alternatives[0]
+            logger.warning(
+                "Configured development model %s is not registered; using sole valid model %s (id=%s)",
+                name,
+                fallback.model_name,
+                fallback.model_version_id,
+            )
+            return fallback
+
+    raise HTTPException(status_code=503, detail="Selected development model registry entry unavailable")
 
 
-@router.post("/current-term-predictions", dependencies=[Depends(require_development_prediction_api)])
+@router.post("/current-term-predictions", dependencies=[Depends(require_development_prediction_write_api)])
 def generate_development_current_term_prediction(
     request: DevelopmentCurrentTermRequest,
     _admin: dict = Depends(require_role("admin")),

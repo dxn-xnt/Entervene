@@ -40,6 +40,10 @@ class ConflictItem(BaseModel):
     staff_id: str | None = None
     day: str | None = None
     affected_key: str | None = None
+    affected_keys: list[str] = Field(default_factory=list)
+    related_class_id: int | None = None
+    related_subject_id: int | None = None
+    related_affected_key: str | None = None
 
 
 class TeacherWorkloadItem(BaseModel):
@@ -66,6 +70,7 @@ class AutoScheduleResponse(BaseModel):
     conflicts: list[ConflictItem]
     teacher_workloads: list[TeacherWorkloadItem]
     scheduled_loads: list[SubjectLoadItem]
+    unscheduled_loads: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ValidateSubjectLoadRequest(BaseModel):

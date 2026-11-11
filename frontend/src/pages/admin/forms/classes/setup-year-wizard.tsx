@@ -9,7 +9,7 @@ import {
   type AcademicYearSetupResponse,
   setupAcademicYearClasses,
 } from "@/lib/api";
-import { Button } from "@/components/admin/button";
+import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";

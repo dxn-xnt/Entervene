@@ -18,3 +18,13 @@ def test_settings_accepts_environment_style_values():
 
     assert settings.database_url.startswith("postgresql://")
     assert settings.cookie_samesite == "strict"
+
+
+def test_default_development_model_matches_normal_local_registry():
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql://user:pass@localhost/db",
+        secret_key="a-strong-secret-key-with-more-than-32-chars",
+    )
+
+    assert settings.development_current_term_model_name == "entervene_current_term_development_rf_v3"

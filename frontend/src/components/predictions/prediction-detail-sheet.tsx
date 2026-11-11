@@ -9,6 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/retroui/Badge";
+import { getRiskBadgeMeta } from "@/lib/formatters";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
@@ -53,14 +54,6 @@ interface PredictionDetailSheetProps {
   candidateId?: number;
   activeInterventionId?: number;
 }
-
-const RISK_BADGE_STYLES: Record<string, string> = {
-  HIGH_RISK: "bg-destructive text-foreground border-border",
-  MODERATE_RISK: "bg-foreground text-white border-border",
-  NEEDS_MONITORING: "bg-primary text-foreground border-border",
-  LOW_RISK: "bg-background text-white border-border",
-  INSUFFICIENT_DATA: "bg-muted text-muted-foreground border-none",
-};
 
 const RISK_LABELS: Record<string, string> = {
   HIGH_RISK: "High Risk",
@@ -325,8 +318,9 @@ export default function PredictionDetailSheet({
               <div className="flex items-center justify-between mb-3">
                 <Badge
                   size="sm"
-                  variant="surface"
-                  className={`${RISK_BADGE_STYLES[detail.risk_level] ?? "bg-gray-300"} font-medium`}
+                  className={getRiskBadgeMeta(isTeacher
+                    ? getTeacherRiskDisplay(detail.risk_level).level
+                    : detail.risk_level).bg}
                 >
                   {RISK_LABELS[detail.risk_level] ?? detail.risk_level}
                 </Badge>
@@ -789,6 +783,12 @@ function CurrentTermTeacherDetail({
 
   return (
     <div className="flex flex-col gap-4 px-5 text-sm">
+      {!isTeacher && (
+        <Alert status="info" role="status" className="border-2 border-blue-700 bg-blue-50 p-3 font-semibold">
+          Read-only Admin view. Prediction generation, reviews, and intervention actions are not available here.
+        </Alert>
+      )}
+
       {prediction.official_final_grade_available && (
         <Alert
           status="info"
@@ -834,7 +834,7 @@ function CurrentTermTeacherDetail({
         <h2 id="student-overview-heading" className="mb-2 text-base font-black">
           Student Overview
         </h2>
-        <Card className="grid grid-cols-2 gap-x-4 gap-y-2 border-2 border-black p-3 shadow-none">
+        <Card className="grid grid-cols-1 gap-x-4 gap-y-2 border-2 border-black p-3 shadow-none sm:grid-cols-2">
           <dt className="text-gray-600 font-semibold">Student</dt>
           <dd className="font-bold">
             {prediction.student_name || prediction.student_id}
@@ -863,7 +863,7 @@ function CurrentTermTeacherDetail({
         <p className="mb-2 text-xs text-gray-600">
           {prediction.readiness_label}
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Card className="border-2 border-black p-3 shadow-none bg-white">
             <p className="text-xs text-gray-600">Projected Final Term Grade</p>
             <p className="text-2xl font-black">
@@ -881,7 +881,6 @@ function CurrentTermTeacherDetail({
             </Badge>
           </Card>
         </div>
-        <p className="mt-2 text-xs text-gray-600"></p>
         <p className="mt-1 text-xs text-gray-600">
           This display status is derived from the projected grade using the
           school's configured thresholds. Intervention eligibility remains separate.
@@ -909,7 +908,7 @@ function CurrentTermTeacherDetail({
           />
           <ExaminationEvidence examination={academic.examination} />
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Card className="p-3 border-2 border-black shadow-none bg-white">
             <p className="text-xs text-gray-600">Academic Performance</p>
             <p className="font-black text-lg mb-1">
@@ -961,7 +960,7 @@ function CurrentTermTeacherDetail({
           These participation indicators provide classroom context. They are not
           inputs to the current grade-projection model.
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Card className="border-2 border-black p-3 shadow-none bg-white">
             <div className="flex items-center justify-between mb-1">
               <p className="font-bold">Attendance</p>
@@ -1017,7 +1016,7 @@ function CurrentTermTeacherDetail({
           value={Math.min(100, Math.max(0, term.progress_percent))}
           className="h-2.5 mb-3"
         />
-        <dl className="grid grid-cols-2 gap-y-2">
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
           <dt className="text-gray-600">Term dates</dt>
           <dd>
             {formatDate(term.start_date)} - {formatDate(term.end_date)}
