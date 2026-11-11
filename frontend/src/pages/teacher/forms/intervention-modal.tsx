@@ -21,7 +21,7 @@ import type {
   TeacherInterventionSummary,
   TeacherResolvedInterventionDetail,
 } from "@/lib/teacher-interventions-api";
-import { formatDate, formatDateTime, formatToTitleCase } from "@/lib/formatters";
+import { formatDate, formatDateTime, formatToTitleCase, getRiskBadgeMeta } from "@/lib/formatters";
 
 const label = (value: string) =>
   value
@@ -437,12 +437,8 @@ export default function InterventionModal({
                                 Candidate
                               </Badge>
                               <Badge
-                                variant={
-                                  detail.triggering_intervention_level === "HIGH_RISK"
-                                    ? "destructive"
-                                    : "outline"
-                                }
-                                size="md"
+                                className={getRiskBadgeMeta(detail.triggering_intervention_level).bg}
+                                size="sm"
                               >
                                 {label(detail.triggering_intervention_level)}
                               </Badge>

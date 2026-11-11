@@ -9,6 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/retroui/Badge";
+import { getRiskBadgeMeta } from "@/lib/formatters";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
@@ -53,14 +54,6 @@ interface PredictionDetailSheetProps {
   candidateId?: number;
   activeInterventionId?: number;
 }
-
-const RISK_BADGE_STYLES: Record<string, string> = {
-  HIGH_RISK: "bg-destructive text-foreground border-border",
-  MODERATE_RISK: "bg-foreground text-white border-border",
-  NEEDS_MONITORING: "bg-primary text-foreground border-border",
-  LOW_RISK: "bg-background text-white border-border",
-  INSUFFICIENT_DATA: "bg-muted text-muted-foreground border-none",
-};
 
 const RISK_LABELS: Record<string, string> = {
   HIGH_RISK: "High Risk",
@@ -325,8 +318,9 @@ export default function PredictionDetailSheet({
               <div className="flex items-center justify-between mb-3">
                 <Badge
                   size="sm"
-                  variant="surface"
-                  className={`${RISK_BADGE_STYLES[detail.risk_level] ?? "bg-gray-300"} font-medium`}
+                  className={getRiskBadgeMeta(isTeacher
+                    ? getTeacherRiskDisplay(detail.risk_level).level
+                    : detail.risk_level).bg}
                 >
                   {RISK_LABELS[detail.risk_level] ?? detail.risk_level}
                 </Badge>

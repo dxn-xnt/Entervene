@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
+import { getRiskBadgeMeta } from "@/lib/formatters";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
@@ -31,13 +32,13 @@ export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProp
           <h2 className="text-xl font-bold">Grade {group.grade_level}</h2>
         </Link>
         <div className="flex flex-row flex-wrap items-center gap-2">
-          <Badge size="sm" variant="solid">
+          <Badge size="sm" className={getRiskBadgeMeta("MODERATE_RISK").bg}>
             {moderateRisk} Moderate Risk ({Math.round(getTeacherRiskPercentage(moderateRisk, uniqueStudents))}%)
           </Badge>
-          <Badge size="sm" variant="destructive">
+          <Badge size="sm" className={getRiskBadgeMeta("HIGH_RISK").bg}>
             {highRisk} High Risk ({Math.round(getTeacherRiskPercentage(highRisk, uniqueStudents))}%)
           </Badge>
-          <Badge size="sm" variant="outline">
+          <Badge size="sm" className={getRiskBadgeMeta("ON_TRACK").bg}>
             {onTrack} On Track ({Math.round(getTeacherRiskPercentage(onTrack, uniqueStudents))}%)
           </Badge>
           <Tooltip>

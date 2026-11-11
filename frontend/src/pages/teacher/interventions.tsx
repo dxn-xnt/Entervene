@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
+import { getRiskBadgeMeta } from "@/lib/formatters";
 import { Button } from "@/components/teacher/button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
@@ -691,7 +692,7 @@ export default function TeacherInterventions() {
                           {candidate.triggering_predicted_grade.toFixed(2)}
                         </Table.Cell>
                         <Table.Cell className="mt-2 flex flex-col items-center justify-center gap-1">
-                          <Badge variant="surface" size="sm">
+                          <Badge size="sm" className={getRiskBadgeMeta(candidate.triggering_intervention_level).bg}>
                             {label(candidate.triggering_intervention_level)}
                           </Badge>
                           {!activeView && !resolvedView && candidate.candidate_activation_eligible === false && (
