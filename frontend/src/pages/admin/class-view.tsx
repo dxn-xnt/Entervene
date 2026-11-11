@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Pencil, Search, Users } from "lucide-react";
+import { BookOpen, CalendarDays, Pencil, Search, Users } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -386,8 +386,9 @@ export default function AdminClassDetail() {
 
                 <div className="flex w-full items-center gap-2 md:w-auto">
                   {!isArchived && (
-                    <Button size="header" onClick={() => setShowEditClass(true)} className="w-full whitespace-nowrap md:w-auto">
-                      <Pencil className="size-4" /> Edit Class
+                    <Button size="header" onClick={() => tab === "students" ? void openEditStudentList() : setShowEditClass(true)} className="w-full whitespace-nowrap md:w-auto">
+                      {tab === "students" ? <Users className="size-4" /> : <Pencil className="size-4" />}
+                      {tab === "students" ? "Add / Manage Students" : "Edit Class"}
                     </Button>
                   )}
                 </div>
@@ -651,6 +652,7 @@ function OverviewTab({
             ) : (
               <EmptyStateCard
                 icon={<BookOpen />}
+                shadow
                 title="No published subjects for this section yet"
                 description="Subjects will appear here once their subject loads are published."
               />
@@ -705,12 +707,6 @@ function StudentsTab({
                 className="w-full"
               />
             </label>
-            {!isReadOnly && (
-              <Button onClick={onEdit} size="header" className="whitespace-nowrap">
-                <Users className="size-4" />
-                Add / Manage Students
-              </Button>
-            )}
           </div>
         </div>
 
@@ -722,7 +718,7 @@ function StudentsTab({
           </RetroCard>
         )}
 
-        <RetroCard className="max-h-[520px] overflow-y-auto p-4">
+        <div className="min-w-0">
           {isLoading ? (
             <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted-foreground" role="status">
               <Loader size="sm" />
@@ -736,7 +732,7 @@ function StudentsTab({
               </div>
             </div>
           ) : !students.length || !filteredStudents.length ? (
-            <EmptyState className="border-0 bg-transparent shadow-none">
+            <EmptyState className="rounded border-2 border-border bg-background">
               <EmptyHeader>
                 <EmptyMedia>
                   <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background" aria-hidden="true">
@@ -767,9 +763,9 @@ function StudentsTab({
                 <AccordionItem
                   key={gender}
                   value={gender}
-                  className="border-2 border-border bg-background shadow-none overflow-hidden"
+                  className="rounded border-2 border-border bg-background shadow-none overflow-hidden"
                 >
-                  <AccordionTrigger className="items-center bg-accent px-4 py-3 text-base font-bold">
+                  <AccordionTrigger className="items-center bg-primary px-4 py-3 text-base font-black">
                     <div className="flex items-center justify-between w-full mr-2">
                       <span>{gender}</span>
                       <Badge variant="outline" size="sm">
@@ -779,7 +775,7 @@ function StudentsTab({
                   </AccordionTrigger>
                   <AccordionContent className="p-0 border-t-2 border-border">
                     <Table wrapperClassName="border-0 shadow-none">
-                      <Table.Header className="font-sans">
+                      <Table.Header className="sr-only">
                         <Table.Row>
                           <Table.Head>Name</Table.Head>
                           <Table.Head className="text-right w-36">Status</Table.Head>
@@ -842,7 +838,7 @@ function StudentsTab({
               ))}
             </Accordion>
           )}
-        </RetroCard>
+        </div>
       </section>
     </div>
   );
@@ -879,12 +875,20 @@ function SubjectLoadTab({ selectedClass }: { selectedClass?: ClassRecord }) {
       <Text as="h3" className="font-sans text-xl font-bold">
         Subject Load Schedule
       </Text>
-      <DynamicScheduleTable
-        schedule={scheduleData?.schedule || []}
-        isPublished={scheduleData?.is_published}
-        isLoading={isLoading}
-        emptyMessage="No published schedule assigned yet for this section."
-      />
+      {!isLoading && (!scheduleData?.is_published || !scheduleData.schedule.length) ? (
+        <EmptyStateCard
+          icon={<CalendarDays />}
+          shadow
+          title="No published schedule yet"
+          description="This section’s schedule will appear here once its subject loads are published."
+        />
+      ) : (
+        <DynamicScheduleTable
+          schedule={scheduleData?.schedule || []}
+          isPublished={scheduleData?.is_published}
+          isLoading={isLoading}
+        />
+      )}
     </section>
   );
 }

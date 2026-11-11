@@ -12,6 +12,7 @@ type EmptyStateCardProps = {
   icon?: ReactNode;
   compact?: boolean;
   inline?: boolean;
+  shadow?: boolean;
 };
 
 export function EmptyStateCard({
@@ -23,11 +24,12 @@ export function EmptyStateCard({
   icon,
   compact = false,
   inline = false,
+  shadow = false,
 }: EmptyStateCardProps) {
   const hasAction = Boolean(actionLabel && onAction);
 
   return (
-    <RetroCard className={cn("flex w-full items-center justify-center gap-2 text-center shadow-none", inline ? "flex-row px-3 py-2 text-left" : compact ? "flex-col px-6 py-6" : "flex-col px-6 py-12")}>
+    <RetroCard className={cn("flex w-full items-center justify-center gap-2 text-center", !shadow && "shadow-none", inline ? "flex-row px-3 py-2 text-left" : compact ? "flex-col px-6 py-6" : "flex-col px-6 py-12")}>
       {icon ? <div className={cn("flex shrink-0 items-center justify-center rounded border-2 border-border bg-primary", inline ? "size-8 [&>svg]:size-4" : "size-10 [&>svg]:size-5")}>{icon}</div> : null}
       <div className={cn(inline && "min-w-0")}>
         <p className="font-bold">{title}</p>
