@@ -202,8 +202,38 @@ def teacher_lesson_linked_classwork(
         .order_by(ClassworkAssignment.created_at.desc())
         .all()
     )
-    return [
-        {
+
+    asgn_ids = [assignment.classwork_assignment_id for assignment, _ in rows]
+    subs_by_asgn: dict[int, list[StudentSubmission]] = {}
+    if asgn_ids:
+        subs = (
+            db.query(StudentSubmission)
+            .filter(
+                StudentSubmission.classwork_assignment_id.in_(asgn_ids),
+                StudentSubmission.status == "graded",
+                StudentSubmission.grade.isnot(None),
+            )
+            .all()
+        )
+        for s in subs:
+            subs_by_asgn.setdefault(s.classwork_assignment_id, []).append(s)
+
+    items = []
+    for assignment, classwork in rows:
+        asgn_subs = subs_by_asgn.get(assignment.classwork_assignment_id, [])
+        total_pts = float(classwork.total_points) if classwork.total_points else 0.0
+        if asgn_subs and total_pts > 0:
+            avg_score = round(sum(float(s.grade) for s in asgn_subs) / len(asgn_subs), 2)
+            score_percent = round((avg_score / total_pts) * 100)
+            total_earned = sum(float(s.grade) for s in asgn_subs)
+            total_possible = total_pts * len(asgn_subs)
+        else:
+            avg_score = None
+            score_percent = None
+            total_earned = 0.0
+            total_possible = 0.0
+
+        items.append({
             "classwork_assignment_id": assignment.classwork_assignment_id,
             "classwork_id": classwork.classwork_id,
             "title": classwork.title,
@@ -216,11 +246,88 @@ def teacher_lesson_linked_classwork(
                 else (classwork.created_at.isoformat() if classwork.created_at else None)
             ),
             "is_locked": assignment.is_locked,
+            "is_published": assignment.is_published if assignment.is_published is not None else classwork.is_published,
+            "publish_date": aware_utc(assignment.publish_date).isoformat() if assignment.publish_date else None,
             "total_points": classwork.total_points,
             "attachment_count": len(classwork.attachments),
-        }
-        for assignment, classwork in rows
-    ]
+            "average_score": avg_score,
+            "score_percent": score_percent,
+            "graded_count": len(asgn_subs),
+            "total_earned": total_earned,
+            "total_possible": total_possible,
+        })
+    return items
+
+
+def teacher_class_lessons_mastery(
+    class_id: int,
+    subject_id: int,
+    staff_id: str,
+    db: Session,
+    academic_period_id: int | None = None,
+    academic_year_id: int | None = None,
+) -> list[dict]:
+    lessons = teacher_lessons_for_class_subject(
+        class_id=class_id,
+        subject_id=subject_id,
+        staff_id=staff_id,
+        db=db,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+    )
+    if not lessons:
+        return []
+
+    lesson_ids = [l.lesson_id for l in lessons]
+    rows = (
+        db.query(ClassworkLesson.lesson_id, ClassworkAssignment.classwork_assignment_id, Classwork.total_points)
+        .join(Classwork, Classwork.classwork_id == ClassworkLesson.classwork_id)
+        .join(ClassworkAssignment, ClassworkAssignment.classwork_id == Classwork.classwork_id)
+        .filter(
+            ClassworkLesson.lesson_id.in_(lesson_ids),
+            ClassworkAssignment.class_id == class_id,
+            Classwork.is_archived == False,
+        )
+        .all()
+    )
+
+    asgn_to_lesson: dict[int, int] = {}
+    asgn_points: dict[int, float] = {}
+    for lid, asgn_id, pts in rows:
+        asgn_to_lesson[asgn_id] = lid
+        asgn_points[asgn_id] = float(pts) if pts else 0.0
+
+    asgn_ids = list(asgn_to_lesson.keys())
+    subs = []
+    if asgn_ids:
+        subs = (
+            db.query(StudentSubmission.classwork_assignment_id, StudentSubmission.grade)
+            .filter(
+                StudentSubmission.classwork_assignment_id.in_(asgn_ids),
+                StudentSubmission.status == "graded",
+                StudentSubmission.grade.isnot(None),
+            )
+            .all()
+        )
+
+    lesson_stats = {lid: {"earned": 0.0, "possible": 0.0} for lid in lesson_ids}
+    for asgn_id, grade in subs:
+        lid = asgn_to_lesson.get(asgn_id)
+        pts = asgn_points.get(asgn_id, 0.0)
+        if lid and pts > 0 and grade is not None:
+            lesson_stats[lid]["earned"] += float(grade)
+            lesson_stats[lid]["possible"] += pts
+
+    results = []
+    for l in lessons:
+        st = lesson_stats.get(l.lesson_id, {"earned": 0.0, "possible": 0.0})
+        pct = round((st["earned"] / st["possible"]) * 100) if st["possible"] > 0 else 0
+        results.append({
+            "lesson_id": l.lesson_id,
+            "title": l.title,
+            "mastery_percentage": pct,
+        })
+    return results
 
 
 def student_lessons_for_class_subject(

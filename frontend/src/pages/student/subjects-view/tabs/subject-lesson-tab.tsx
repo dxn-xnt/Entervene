@@ -9,7 +9,7 @@ import {
 import LessonItemLine from "@/components/item-line/lesson";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
-import { apiFetch, getLessonGoals, getStudentTodos, type LessonGoalItemResponse, type TodoItem } from "@/lib/api";
+import { apiFetch, getStudentTodos, type TodoItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
@@ -20,7 +20,6 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/student/button";
 import { Select } from "@/components/retroui/Select";
-import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import { StudentLessonMastery } from "@/components/student-lesson-mastery";
 import { LoadingPanel } from "@/components/loading-panel";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
@@ -100,39 +99,6 @@ export default function SubjectLessonTab({
   const navigate = useNavigate();
   const location = useLocation();
   const { selectedPeriodId } = useAcademicPeriod();
-  const [curatedGoals, setCuratedGoals] = useState<
-    LessonGoalItemResponse[] | undefined
-  >(undefined);
-
-  useEffect(() => {
-    if (!classId || !subjectId) return;
-    const targetClassId = classId;
-    const targetSubjectId = subjectId;
-    let isMounted = true;
-
-    async function loadCuratedGoals() {
-      setCuratedGoals(undefined);
-      try {
-        const data = await getLessonGoals(
-          targetClassId,
-          targetSubjectId,
-          selectedPeriodId || undefined,
-        );
-        if (isMounted) {
-          setCuratedGoals(data.items || []);
-        }
-      } catch {
-        if (isMounted) {
-          setCuratedGoals([]);
-        }
-      }
-    }
-
-    void loadCuratedGoals();
-    return () => {
-      isMounted = false;
-    };
-  }, [classId, subjectId, selectedPeriodId]);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -1038,20 +1004,8 @@ export default function SubjectLessonTab({
                 </div>
               </div>
 
-              {/* ════════════════ RIGHT: Weekly Goals ════════════════ */}
+              {/* ════════════════ RIGHT: Mastery ════════════════ */}
               <div className="flex w-full min-w-0 flex-col gap-4">
-                <LessonGoalProgress
-                  shadowless
-                  goalItems={curatedGoals}
-                  className="w-full min-w-0"
-                  onClassworkClick={(_cwId, asgnId) => {
-                    if (asgnId) {
-                      openClassworkDetail({
-                        classwork_assignment_id: asgnId,
-                      } as LessonClasswork);
-                    }
-                  }}
-                />
                 <StudentLessonMastery
                   lessons={sortedLessons}
                   assignmentIdsByLesson={Object.fromEntries(lessons.map((lesson) => [lesson.lesson_id, (classworksByLesson[lesson.lesson_id] ?? []).map((work) => work.classwork_assignment_id)]))}
