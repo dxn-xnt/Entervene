@@ -134,10 +134,10 @@ export default function AdminSubjectView() {
                         </Text>
                       </div>
                       <div className="flex flex-row gap-2">
-                        <Badge variant="solid" className="capitalize">
+                        <Badge size="sm" variant="solid" className="capitalize">
                           {subjectDetail.grading_template.template_name}
                         </Badge>
-                        <Badge variant={subjectDetail.status === "active" ? "secondary" : "default"} className="capitalize">
+                        <Badge size="sm" variant={subjectDetail.status === "active" ? "secondary" : "default"} className="capitalize">
                           {subjectDetail.status.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}
                         </Badge>
                       </div>

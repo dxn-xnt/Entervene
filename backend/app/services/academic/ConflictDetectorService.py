@@ -120,6 +120,8 @@ class ConflictDetectorService:
                     # Rule 1: Teacher Time Overlap
                     if load1.staff_id and load2.staff_id and load1.staff_id == load2.staff_id:
                         t_name = f"{staff_map[load1.staff_id].first_name} {staff_map[load1.staff_id].last_name}" if load1.staff_id in staff_map else load1.staff_id
+                        key1 = f"{load1.class_id}_{load1.subject_id}"
+                        key2 = f"{load2.class_id}_{load2.subject_id}"
                         conflicts.append(
                             ConflictItem(
                                 rule="TEACHER_OVERLAP",
@@ -129,12 +131,18 @@ class ConflictDetectorService:
                                 subject_id=load1.subject_id,
                                 staff_id=load1.staff_id,
                                 day=list(common_days)[0],
-                                affected_key=f"{load1.class_id}_{load1.subject_id}",
+                                affected_key=key1,
+                                affected_keys=list(dict.fromkeys([key1, key2])),
+                                related_class_id=load2.class_id,
+                                related_subject_id=load2.subject_id,
+                                related_affected_key=key2,
                             )
                         )
 
                     # Rule 2: Section Timetable Overlap
                     if load1.class_id == load2.class_id:
+                        key1 = f"{load1.class_id}_{load1.subject_id}"
+                        key2 = f"{load2.class_id}_{load2.subject_id}"
                         conflicts.append(
                             ConflictItem(
                                 rule="SECTION_OVERLAP",
@@ -144,7 +152,11 @@ class ConflictDetectorService:
                                 subject_id=load1.subject_id,
                                 staff_id=load1.staff_id,
                                 day=list(common_days)[0],
-                                affected_key=f"{load1.class_id}_{load1.subject_id}",
+                                affected_key=key1,
+                                affected_keys=list(dict.fromkeys([key1, key2])),
+                                related_class_id=load2.class_id,
+                                related_subject_id=load2.subject_id,
+                                related_affected_key=key2,
                             )
                         )
 

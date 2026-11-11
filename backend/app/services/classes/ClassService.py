@@ -356,7 +356,9 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                     raise HTTPException(status_code=422, detail="Section and pathway do not match the official academic-year configuration.")
                 section_name = official.section_name
             template_group = getattr(section, "period_template_group", None)
-            if not template_group:
+            if 7 <= academic_level.grade_level <= 10:
+                template_group = "JHS_45MIN"
+            elif not template_group:
                 if academic_level.grade_level >= 11:
                     pw_obj = db.query(AcademicPathway).filter(AcademicPathway.id == pw_id).first() if pw_id else None
                     pw_code = (pw_obj.code if pw_obj else "").lower()

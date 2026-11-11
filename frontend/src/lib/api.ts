@@ -2226,6 +2226,10 @@ export type ConflictItem = {
   staff_id?: string | null;
   day?: string | null;
   affected_key?: string | null;
+  affected_keys?: string[];
+  related_class_id?: number | null;
+  related_subject_id?: number | null;
+  related_affected_key?: string | null;
 };
 
 export type TeacherWorkloadItem = {
@@ -2268,6 +2272,23 @@ export type SubjectLoadStudioData = {
   teachers: Array<{ staff_id: string; name: string; department: string; specialization: string }>;
   existing_loads: SubjectLoadItem[];
   has_pending_draft_by_class?: Record<string | number, boolean>;
+  period_template_slots?: Array<{
+    slot_id?: number | null;
+    template_group: string;
+    slot_name: string;
+    slot_type: "CLASS" | "RECESS" | "LUNCH" | "HOMEROOM";
+    start_time: string;
+    end_time: string;
+    is_locked_break: boolean;
+    display_order: number;
+  }>;
+  jhs_template_audit?: {
+    template_group: string;
+    corrected_class_count: number;
+    corrected_classes: string[];
+    draft_loads_backfilled: number;
+    draft_loads_unmatched: number;
+  };
 };
 
 export async function getSubjectLoadStudioData(periodId?: number): Promise<SubjectLoadStudioData> {
@@ -2284,6 +2305,12 @@ export type AutoScheduleResponse = {
   conflicts: ConflictItem[];
   teacher_workloads: TeacherWorkloadItem[];
   scheduled_loads: SubjectLoadItem[];
+  unscheduled_loads?: Array<{
+    class_id: number;
+    subject_id: number;
+    staff_id?: string | null;
+    reason: string;
+  }>;
 };
 
 export async function validateSubjectLoads(periodId: number, loads: SubjectLoadItem[]): Promise<ValidationResultResponse> {
@@ -2838,6 +2865,7 @@ export type OverviewQueryParams = {
   class_id?: number;
   subject_id?: number;
   academic_period_id?: number;
+  academic_year_id?: number;
 };
 
 export async function getOverviewStats(params: OverviewQueryParams = {}): Promise<OverviewResponse> {
@@ -2847,6 +2875,7 @@ export async function getOverviewStats(params: OverviewQueryParams = {}): Promis
   if (params.class_id) query.set("class_id", String(params.class_id));
   if (params.subject_id) query.set("subject_id", String(params.subject_id));
   if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
+  if (params.academic_year_id) query.set("academic_year_id", String(params.academic_year_id));
 
   const res = await apiFetch(`/api/v1/analytics/overview${query.toString() ? `?${query.toString()}` : ""}`);
   if (!res.ok) {
