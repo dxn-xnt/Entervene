@@ -250,7 +250,7 @@ export default function EditStudentList({
                 enrolled: visibleEnrolledStudents.length,
                 available: availableStudents.length,
               }}
-              className="border-b border-border -mx-4 px-4"
+              className="border-b-2 border-border -mx-4 px-4"
               tabClassName="rounded-t-[var(--radius)]!"
             />
             {!!pendingCount && (
