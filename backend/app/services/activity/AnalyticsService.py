@@ -429,6 +429,30 @@ def build_class_overview(
     avg_grade_val = grade_q.scalar()
     avg_grade_str = f"{round(float(avg_grade_val), 1)}%" if avg_grade_val is not None else "N/A"
 
+    period_rows = (
+        db.query(AcademicPeriod.academic_period_id, AcademicPeriod.period_name,
+                 func.avg(StudentPeriodGrade.final_period_grade).label("average"))
+        .outerjoin(StudentPeriodGrade, and_(
+            StudentPeriodGrade.academic_period_id == AcademicPeriod.academic_period_id,
+            StudentPeriodGrade.class_id == class_id,
+        ))
+        .filter(AcademicPeriod.academic_year_id == cls.academic_year_id)
+        .group_by(AcademicPeriod.academic_period_id, AcademicPeriod.period_name,
+                  AcademicPeriod.period_sequence, AcademicPeriod.start_date)
+        .order_by(AcademicPeriod.period_sequence, AcademicPeriod.start_date)
+        .all()
+    )
+    subject_rows = (
+        db.query(Subject.subject_id, Subject.subject_name,
+                 func.avg(StudentPeriodGrade.final_period_grade).label("average"))
+        .join(StudentPeriodGrade, StudentPeriodGrade.subject_id == Subject.subject_id)
+        .filter(StudentPeriodGrade.class_id == class_id,
+                *((StudentPeriodGrade.academic_period_id == target_period.academic_period_id,) if target_period else ()))
+        .group_by(Subject.subject_id, Subject.subject_name)
+        .order_by(Subject.subject_name)
+        .all()
+    )
+
     cards = [
         {
             "title": "Total Students",
@@ -468,6 +492,16 @@ def build_class_overview(
             "total_students": total_students,
             "total_subjects": total_subjects,
             "avg_grade": avg_grade_val,
+            "performance_trend": [
+                {"period_id": row.academic_period_id, "period_name": row.period_name,
+                 "average": round(float(row.average), 1) if row.average is not None else None}
+                for row in period_rows
+            ],
+            "subject_breakdown": [
+                {"subject_id": row.subject_id, "subject_name": row.subject_name,
+                 "average": round(float(row.average), 1) if row.average is not None else None}
+                for row in subject_rows
+            ],
         },
     }
 

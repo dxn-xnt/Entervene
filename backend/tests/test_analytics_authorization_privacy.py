@@ -10,11 +10,54 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 
 from tests.test_teacher_dashboard_health import create_client, data, db
+
+
+def test_class_performance_uses_recorded_grades_and_selected_term(db, data):
+    for student_key, term, grade, class_key in [
+        ("active_one", "period", 0, "class_"),
+        ("active_two", "period", 80, "class_"),
+        ("active_one", "previous_period", 90, "class_"),
+        ("other", "period", 100, "other_class"),
+    ]:
+        db.add(StudentPeriodGrade(
+            student_id=data["students"][student_key].student_id,
+            class_id=data[class_key].class_id,
+            subject_id=data["subject"].subject_id,
+            academic_period_id=data[term].academic_period_id,
+            final_period_grade=grade,
+        ))
+    db.commit()
+    client = create_client(db, {"sub": str(uuid.uuid4()), "role": "admin"})
+    response = client.get("/analytics/overview", params={
+        "scope": "class", "class_id": data["class_"].class_id,
+        "academic_period_id": data["period"].academic_period_id,
+    })
+    assert response.status_code == 200, response.text
+    details = response.json()["details"]
+    assert [row["average"] for row in details["performance_trend"]] == [90, 40, None]
+    assert details["subject_breakdown"] == [{
+        "subject_id": data["subject"].subject_id,
+        "subject_name": data["subject"].subject_name,
+        "average": 40,
+    }]
+
+
+def test_class_performance_without_grades_has_no_fabricated_values(db, data):
+    client = create_client(db, {"sub": str(uuid.uuid4()), "role": "admin"})
+    response = client.get("/analytics/overview", params={
+        "scope": "class", "class_id": data["class_"].class_id,
+        "academic_period_id": data["period"].academic_period_id,
+    })
+    assert response.status_code == 200, response.text
+    details = response.json()["details"]
+    assert all(row["average"] is None for row in details["performance_trend"])
+    assert details["subject_breakdown"] == []
 
 
 def _add_year_period(db, *, year_label, start_date, end_date, is_year_active=False, is_period_active=False):
