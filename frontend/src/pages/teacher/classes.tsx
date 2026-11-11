@@ -228,6 +228,12 @@ const TeacherClasses = () => {
                                     if (group.loads[0]) {
                                       navigate(
                                         `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
+                                        { state: { subjectContext: {
+                                          subjectId: group.subjectId,
+                                          classId: group.loads[0].class_id,
+                                          subjectName: group.subjectName,
+                                          gradeLevel: group.loads[0].grade_level,
+                                        } } },
                                       );
                                     }
                                   }}

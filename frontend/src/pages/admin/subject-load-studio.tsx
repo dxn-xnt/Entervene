@@ -2032,7 +2032,7 @@ export default function AdminSubjectLoadStudio() {
                   onClick={() => setIsBreakDrawerOpen(true)}
                   className="gap-2 cursor-pointer"
                 >
-                  <Settings className="size-3.5 text-purple-900" />
+                  <Settings className="size-3.5 text-black" />
                   <span>Edit Break Timelines</span>
                 </Button>
 

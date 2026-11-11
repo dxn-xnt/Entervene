@@ -2865,6 +2865,7 @@ export type OverviewQueryParams = {
   class_id?: number;
   subject_id?: number;
   academic_period_id?: number;
+  academic_year_id?: number;
 };
 
 export async function getOverviewStats(params: OverviewQueryParams = {}): Promise<OverviewResponse> {
@@ -2874,6 +2875,7 @@ export async function getOverviewStats(params: OverviewQueryParams = {}): Promis
   if (params.class_id) query.set("class_id", String(params.class_id));
   if (params.subject_id) query.set("subject_id", String(params.subject_id));
   if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
+  if (params.academic_year_id) query.set("academic_year_id", String(params.academic_year_id));
 
   const res = await apiFetch(`/api/v1/analytics/overview${query.toString() ? `?${query.toString()}` : ""}`);
   if (!res.ok) {
