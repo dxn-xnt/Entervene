@@ -130,6 +130,7 @@ export type TeacherQuizSubmissionDetail = {
   total_points: number;
   grade?: number | null;
   feedback?: string | null;
+  feedback_fingerprint: string;
   submitted_at?: string | null;
   graded_at?: string | null;
   needs_grading: boolean;
@@ -143,5 +144,6 @@ export type TeacherGradeQuizSubmissionPayload = {
     is_correct?: boolean | null;
   }>;
   feedback?: string | null;
+  expected_feedback_fingerprint?: string | null;
   override_total_grade?: number | null;
 };

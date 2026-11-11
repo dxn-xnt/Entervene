@@ -387,12 +387,20 @@ export default function ClassworkView({
           body: JSON.stringify({
             grade,
             feedback: feedbackDraft.trim() || null,
+            expected_feedback_fingerprint: selectedSubmissionDetail.feedback_fingerprint,
           }),
         },
       );
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || "Unable to post grade.");
+        const responseDetail = body.detail;
+        const message =
+          responseDetail && typeof responseDetail === "object" && typeof responseDetail.message === "string"
+            ? responseDetail.message
+            : typeof responseDetail === "string"
+              ? responseDetail
+              : "Unable to post grade.";
+        throw new Error(message);
       }
       const updated = (await response.json()) as TeacherSubmissionDetail;
       setSelectedSubmissionDetail(updated);
