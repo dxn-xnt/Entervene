@@ -27,6 +27,7 @@ import {
   getAllSettings,
   updateSetting,
   getAcademicYearsSettings,
+  prepareAcademicYears,
   getYearGeneralAveragePolicy,
   saveYearGeneralAveragePolicy,
   type YearGeneralAveragePolicy,
@@ -56,6 +57,9 @@ type Template = {
   ww: number;
   pt: number;
   qa: number;
+  ww_label?: string;
+  pt_label?: string;
+  qa_label?: string;
   is_locked: boolean;
   lock_reason: string | null;
   assigned_subject_count: number;
@@ -220,28 +224,42 @@ export default function AdminSystemSettings() {
       const templatesRes = await getGradingTemplates();
       const list = templatesRes.grading_templates || [];
       const mappedTemplates: Template[] = list.map((gt) => {
-        const wwComp =
-          gt.components.find((c) =>
-            c.component_name.toLowerCase().includes("written"),
-          )?.weight ?? 0;
-        const ptComp =
-          gt.components.find((c) =>
-            c.component_name.toLowerCase().includes("performance"),
-          )?.weight ?? 0;
-        const qaComp =
-          gt.components.find(
-            (c) =>
-              c.component_name.toLowerCase().includes("quarter") ||
-              c.component_name.toLowerCase().includes("term") ||
-              c.component_name.toLowerCase().includes("exam"),
-          )?.weight ?? 0;
+        const wwComp = gt.components.find((c) =>
+          c.component_name.toLowerCase().includes("written") ||
+          c.component_name.toLowerCase() === "ww",
+        );
+        const ptComp = gt.components.find((c) =>
+          c.component_name.toLowerCase().includes("performance") ||
+          c.component_name.toLowerCase() === "pt",
+        );
+        const qaComp = gt.components.find(
+          (c) =>
+            c.component_name.toLowerCase().includes("quarter") ||
+            c.component_name.toLowerCase().includes("term") ||
+            c.component_name.toLowerCase().includes("exam") ||
+            c.component_name.toLowerCase() === "qa",
+        );
+
+        const formatComponentName = (raw: string | undefined, fallback: string) => {
+          if (!raw) return fallback;
+          const trimmed = raw.trim();
+          const lower = trimmed.toLowerCase();
+          if (lower === "ww") return "Written Work";
+          if (lower === "pt") return "Performance Task";
+          if (lower === "qa") return "Quarterly Assessment";
+          return trimmed;
+        };
+
         return {
           id: gt.grading_template_id,
           name: gt.template_name,
           description: gt.description ?? null,
-          ww: wwComp,
-          pt: ptComp,
-          qa: qaComp,
+          ww: wwComp?.weight ?? 0,
+          pt: ptComp?.weight ?? 0,
+          qa: qaComp?.weight ?? 0,
+          ww_label: formatComponentName(wwComp?.component_name, "Written Work"),
+          pt_label: formatComponentName(ptComp?.component_name, "Performance Task"),
+          qa_label: formatComponentName(qaComp?.component_name, "Quarterly Assessment"),
           is_locked: Boolean(gt.is_locked),
           lock_reason: gt.lock_reason ?? null,
           assigned_subject_count: gt.assigned_subject_count ?? gt.assigned_subjects?.length ?? 0,
@@ -276,7 +294,7 @@ export default function AdminSystemSettings() {
     try {
       const [settingsData, yearsData, levelsData] = await Promise.all([
         getAllSettings(),
-        getAcademicYearsSettings(),
+        prepareAcademicYears().catch(() => getAcademicYearsSettings()),
         getAcademicLevelsSettings(),
       ]);
 
@@ -812,15 +830,15 @@ export default function AdminSystemSettings() {
                 <div className="grid grid-cols-1 items-stretch gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
                   {templates.map((template) => {
                     return (
-                      <Card key={template.id} className="flex h-full min-w-0 flex-col overflow-hidden border-2 border-black bg-primary p-4 shadow-[4px_4px_0_#000]">
+                      <Card key={template.id} className="flex h-full min-w-0 flex-col overflow-hidden border-2 border-black bg-primary p-4 shadow-none">
                         <Card.Header className="mb-0! p-0">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Card.Title className="min-w-0 break-words text-lg font-bold leading-tight">{template.name}</Card.Title>
                                 {template.is_locked ? (
-                                  <Badge className="bg-white" variant="outline" size="sm">
-                                    <Lock className="mr-1 size-3" /> Locked
+                                  <Badge variant="solid" size="sm">
+                                    Locked
                                   </Badge>
                                 ) : (
                                   <Badge className="bg-white capitalize" variant="outline" size="sm">
@@ -849,10 +867,14 @@ export default function AdminSystemSettings() {
                             <span>{template.assigned_subject_count} assigned subjects</span>
                           </div>
                           <div className="grid grid-cols-3 gap-2">
-                            {[["WW", template.ww], ["PT", template.pt], ["Exams", template.qa]].map(([label, value]) => (
-                              <div key={label} className="rounded border-2 border-black bg-white px-2 py-3 text-center">
-                                <strong className="block text-xl">{value}%</strong>
-                                <span className="text-xs text-black/60">{label}</span>
+                            {[
+                              [template.ww_label || "Written Work", template.ww],
+                              [template.pt_label || "Performance Task", template.pt],
+                              [template.qa_label || "Quarterly Assessment", template.qa],
+                            ].map(([label, value]) => (
+                              <div key={label} className="flex min-w-0 flex-col items-center justify-center gap-1 rounded border-2 border-black bg-white px-1.5 py-2.5 text-center">
+                                <strong className="block text-xl leading-none">{value}%</strong>
+                                <span className="block break-words text-xs leading-tight">{label}</span>
                               </div>
                             ))}
                           </div>

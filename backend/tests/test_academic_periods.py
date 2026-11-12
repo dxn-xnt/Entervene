@@ -121,3 +121,38 @@ def test_admin_activation_switches_the_period_flag_without_using_scheduled_dates
     ctx["db"].refresh(ctx["next_period"])
     assert ctx["period"].is_active is False
     assert ctx["next_period"].is_active is True
+
+
+def test_update_single_academic_period_success(current_period_context):
+    from app.services.AcademicPeriodService import update_single_academic_period
+
+    ctx = current_period_context
+    period = ctx["period"]
+    updated = update_single_academic_period(
+        db=ctx["db"],
+        academic_period_id=period.academic_period_id,
+        start_date_raw="2026-09-05",
+        end_date_raw="2026-12-15",
+        period_name="Term 1 Updated",
+    )
+    assert updated.start_date == date(2026, 9, 5)
+    assert updated.end_date == date(2026, 12, 15)
+    assert updated.period_name == "Term 1 Updated"
+
+
+def test_update_single_academic_period_rejects_inverted_dates(current_period_context):
+    from fastapi import HTTPException
+    from app.services.AcademicPeriodService import update_single_academic_period
+
+    ctx = current_period_context
+    period = ctx["period"]
+    with pytest.raises(HTTPException) as exc_info:
+        update_single_academic_period(
+            db=ctx["db"],
+            academic_period_id=period.academic_period_id,
+            start_date_raw="2026-12-15",
+            end_date_raw="2026-09-05",
+        )
+    assert exc_info.value.status_code == 400
+    assert "Start date cannot be after end date" in exc_info.value.detail
+
