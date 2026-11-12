@@ -20,6 +20,13 @@ from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.schemas.SubjectLoad import SubjectLoadItem
 from app.services.academic.AutoSchedulerService import AutoSchedulerService
 from app.services.academic.ConflictDetectorService import ConflictDetectorService, times_overlap
+from app.models.academic.SubjectOffering import SubjectOffering
+from app.models.academic.PeriodTemplateRevision import PeriodTemplateRevision
+from app.schemas.SubjectLoad import PeriodTemplateSlotSchema
+from app.services.academic.PeriodTemplateRevisionService import (
+    CONFIRMATION_PHRASE,
+    PeriodTemplateRevisionService,
+)
 
 
 @pytest.fixture
@@ -683,5 +690,207 @@ def test_period_template_update_endpoint_blocks_locked_published_schedules(db):
     assert locked_load.end_time == "08:45"
     assert locked_load.status == "published"
     assert locked_load.is_locked is True
+
+
+def test_published_template_override_creates_new_revision_without_mutating_history(db):
+    from datetime import timedelta
+    from app.services.academic.SubstitutionService import SubstitutionService
+
+    today = SubstitutionService.get_academic_date()
+    period = AcademicPeriod(
+        period_name="Current Term",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        start_date=today - timedelta(days=30),
+        end_date=today + timedelta(days=30),
+        is_active=True,
+        academic_year_id=1,
+    )
+    level = AcademicLevel(level_name="Grade 9 Override", grade_level=9)
+    db.add_all([period, level])
+    db.flush()
+    cls = Class(
+        section_name="Revision Section",
+        academic_year_id=1,
+        academic_level_id=level.academic_level_id,
+        period_template_group="JHS_45MIN",
+    )
+    subject = Subject(
+        subject_name="Revision Subject",
+        subject_codename="REV",
+        academic_level_id=level.academic_level_id,
+        grading_template_id=1,
+        is_core=False,
+    )
+    teacher = AcademicStaff(staff_id="REV-T1", first_name="Revision", last_name="Teacher")
+    db.add_all([cls, subject, teacher])
+    db.flush()
+    db.add(SubjectOffering(
+        subject_id=subject.subject_id,
+        academic_year_id=1,
+        academic_level_id=level.academic_level_id,
+        academic_period_id=period.academic_period_id,
+        minutes=40,
+        status="active",
+    ))
+    period_one = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN",
+        PeriodTemplateSlot.slot_name == "Period 1",
+    ).one()
+    original = SubjectLoad(
+        class_id=cls.class_id,
+        subject_id=subject.subject_id,
+        staff_id=teacher.staff_id,
+        academic_period_id=period.academic_period_id,
+        slot_id=period_one.slot_id,
+        start_time=period_one.start_time,
+        end_time=period_one.end_time,
+        days_of_week=["MON", "TUE", "WED", "THU", "FRI"],
+        status="published",
+        is_active_version=True,
+        is_locked=True,
+        section_revision=1,
+        logical_load_id=f"LL_{cls.class_id}_{subject.subject_id}_{period.academic_period_id}",
+    )
+    db.add(original)
+    db.commit()
+
+    rows = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN"
+    ).order_by(PeriodTemplateSlot.display_order).all()
+    submitted = [PeriodTemplateSlotSchema(
+        slot_id=row.slot_id,
+        template_group="JHS_45MIN",
+        slot_name=row.slot_name,
+        slot_type=row.slot_type,
+        start_time=row.start_time,
+        end_time="08:40" if row.slot_name == "Period 1" else row.end_time,
+        is_locked_break=row.is_locked_break,
+        display_order=row.display_order,
+    ) for row in rows]
+
+    preview = PeriodTemplateRevisionService.create_preview(
+        db,
+        period=period,
+        submitted_slots=submitted,
+        effective_date=today,
+        actor="admin@example.test",
+    )
+    assert preview["can_apply"] is True
+    assert preview["affected_section_count"] == 1
+    assert preview["affected_published_load_count"] == 1
+
+    with pytest.raises(Exception, match="Type REPLACE PUBLISHED SCHEDULES exactly"):
+        PeriodTemplateRevisionService.apply_preview(
+            db,
+            token=preview["preview_token"],
+            confirmation="replace",
+            actor="admin@example.test",
+        )
+    db.rollback()
+
+    result = PeriodTemplateRevisionService.apply_preview(
+        db,
+        token=preview["preview_token"],
+        confirmation=CONFIRMATION_PHRASE,
+        actor="admin@example.test",
+    )
+    assert result["status"] == "active"
+    db.refresh(original)
+    assert original.status == "archived"
+    assert original.is_active_version is False
+    assert (original.start_time, original.end_time) == ("08:00", "08:45")
+
+    replacement = db.query(SubjectLoad).filter(
+        SubjectLoad.class_id == cls.class_id,
+        SubjectLoad.is_active_version.is_(True),
+    ).one()
+    assert replacement.subject_load_id != original.subject_load_id
+    assert replacement.continued_from_load_id == original.subject_load_id
+    assert replacement.staff_id == original.staff_id
+    assert replacement.subject_id == original.subject_id
+    assert replacement.days_of_week == original.days_of_week
+    assert (replacement.start_time, replacement.end_time) == ("08:00", "08:40")
+    assert replacement.section_revision == 2
+    assert db.query(PeriodTemplateRevision).count() == 1
+
+    effective_rows = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == db.query(PeriodTemplateRevision).one().version_template_group
+    ).order_by(PeriodTemplateSlot.display_order).all()
+    future_submitted = [PeriodTemplateSlotSchema(
+        slot_id=row.slot_id,
+        template_group="JHS_45MIN",
+        slot_name=row.slot_name,
+        slot_type=row.slot_type,
+        start_time=row.start_time,
+        end_time="08:35" if row.slot_name == "Period 1" else row.end_time,
+        is_locked_break=row.is_locked_break,
+        display_order=row.display_order,
+    ) for row in effective_rows]
+    future_date = today + timedelta(days=1)
+    future_preview = PeriodTemplateRevisionService.create_preview(
+        db,
+        period=period,
+        submitted_slots=future_submitted,
+        effective_date=future_date,
+        actor="admin@example.test",
+    )
+    future_result = PeriodTemplateRevisionService.apply_preview(
+        db,
+        token=future_preview["preview_token"],
+        confirmation=CONFIRMATION_PHRASE,
+        actor="admin@example.test",
+    )
+    assert future_result["status"] == "scheduled"
+    db.refresh(replacement)
+    assert replacement.is_active_version is True
+    scheduled = db.query(SubjectLoad).filter(SubjectLoad.status == "scheduled").one()
+    assert scheduled.is_active_version is False
+
+    PeriodTemplateRevisionService.activate_due_revisions(db, as_of=future_date)
+    db.refresh(replacement)
+    db.refresh(scheduled)
+    assert replacement.status == "archived"
+    assert scheduled.status == "published"
+    assert scheduled.is_active_version is True
+    assert (scheduled.start_time, scheduled.end_time) == ("08:00", "08:35")
+
+    latest_revision = db.get(PeriodTemplateRevision, scheduled.template_revision_id)
+    latest_rows = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == latest_revision.version_template_group
+    ).order_by(PeriodTemplateSlot.display_order).all()
+    stale_submitted = [PeriodTemplateSlotSchema(
+        slot_id=row.slot_id,
+        template_group="JHS_45MIN",
+        slot_name=row.slot_name,
+        slot_type=row.slot_type,
+        start_time=row.start_time,
+        end_time="08:30" if row.slot_name == "Period 1" else row.end_time,
+        is_locked_break=row.is_locked_break,
+        display_order=row.display_order,
+    ) for row in latest_rows]
+    stale_preview = PeriodTemplateRevisionService.create_preview(
+        db,
+        period=period,
+        submitted_slots=stale_submitted,
+        effective_date=today,
+        actor="admin@example.test",
+    )
+    revision_count = db.query(PeriodTemplateRevision).count()
+    load_count = db.query(SubjectLoad).count()
+    scheduled.days_of_week = ["MON", "TUE", "WED", "THU"]
+    db.commit()
+
+    with pytest.raises(Exception, match="changed after preview"):
+        PeriodTemplateRevisionService.apply_preview(
+            db,
+            token=stale_preview["preview_token"],
+            confirmation=CONFIRMATION_PHRASE,
+            actor="admin@example.test",
+        )
+    db.rollback()
+    assert db.query(PeriodTemplateRevision).count() == revision_count
+    assert db.query(SubjectLoad).count() == load_count
 
 

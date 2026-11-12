@@ -483,7 +483,8 @@ export default function AdminSubjectLoadStudio() {
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
-        const res = await apiFetch("/api/v1/subject-loads/period-templates");
+        const query = selectedPeriodId ? `?academic_period_id=${selectedPeriodId}` : "";
+        const res = await apiFetch(`/api/v1/subject-loads/period-templates${query}`);
         if (res.ok) {
           const data = (await res.json()) as PeriodTemplateSlotItem[];
           if (data && data.length > 0) {
@@ -495,7 +496,7 @@ export default function AdminSubjectLoadStudio() {
       }
     };
     void fetchTemplates();
-  }, []);
+  }, [selectedPeriodId]);
 
   const getSectionSlots = useCallback(
     (cls: { class_id: number; period_template_group?: string | null; section_name?: string; academic_level_id: number }) => {
@@ -548,14 +549,17 @@ export default function AdminSubjectLoadStudio() {
     if (!activeGradeId) return "JHS_45MIN";
     const levelObj = studioData?.academic_levels.find((l) => String(l.academic_level_id) === activeGradeId);
     const grade = levelObj?.grade_level || 7;
+    const selectedClass = selectedSectionId !== "all"
+      ? studioData?.classes.find((c) => String(c.class_id) === selectedSectionId)
+      : studioData?.classes.find((c) => String(c.academic_level_id) === activeGradeId);
+    if (selectedClass?.period_template_group) return selectedClass.period_template_group;
     if (grade >= 11) {
-      const classInLevel = studioData?.classes.find((c) => String(c.academic_level_id) === activeGradeId);
-      const name = (classInLevel?.section_name || "").toLowerCase();
+      const name = (selectedClass?.section_name || "").toLowerCase();
       if (name.includes("del mundo") || name.includes("reyes")) return "SHS_DELMUNDO_REYES";
       return "SHS_CAMPOS_ZARA";
     }
     return "JHS_45MIN";
-  }, [activeGradeId, studioData]);
+  }, [activeGradeId, selectedSectionId, studioData]);
 
 
   const previousPeriods = useMemo(() => {

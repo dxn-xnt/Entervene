@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 from pydantic import BaseModel, Field
 
@@ -11,6 +12,7 @@ class SubjectLoadItem(BaseModel):
     staff_id: str | None = None
     academic_period_id: int
     slot_id: int | None = None
+    template_revision_id: int | None = None
     start_time: str | None = None
     end_time: str | None = None
     days_of_week: list[str] = Field(default_factory=list)
@@ -24,6 +26,8 @@ class SubjectLoadItem(BaseModel):
     is_locked: bool = False
     published_at: str | None = None
     published_by: str | None = None
+    effective_from: date | None = None
+    effective_to: date | None = None
     last_modified_by: str | None = None
     continued_from_load_id: int | None = None
     is_math_or_science: bool | None = False
@@ -126,6 +130,17 @@ class PeriodTemplateSlotSchema(BaseModel):
     end_time: str
     is_locked_break: bool = False
     display_order: int = 0
+
+
+class PeriodTemplateOverridePreviewRequest(BaseModel):
+    academic_period_id: int
+    effective_date: date
+    slots: list[PeriodTemplateSlotSchema]
+
+
+class PeriodTemplateOverrideApplyRequest(BaseModel):
+    preview_token: str
+    confirmation: str
 
 
 class TeacherScopeGradeOption(BaseModel):
