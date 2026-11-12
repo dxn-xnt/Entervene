@@ -2198,6 +2198,7 @@ export type SubjectLoadItem = {
   staff_id?: string | null;
   academic_period_id: number;
   slot_id?: number | null;
+  template_revision_id?: number | null;
   start_time?: string | null;
   end_time?: string | null;
   days_of_week: string[];
@@ -2207,6 +2208,8 @@ export type SubjectLoadItem = {
   is_locked?: boolean;
   published_at?: string | null;
   published_by?: string | null;
+  effective_from?: string | null;
+  effective_to?: string | null;
   last_modified_by?: string | null;
   continued_from_load_id?: number | null;
   is_math_or_science?: boolean;
@@ -2272,6 +2275,7 @@ export type SubjectLoadStudioData = {
   teachers: Array<{ staff_id: string; name: string; department: string; specialization: string }>;
   existing_loads: SubjectLoadItem[];
   has_pending_draft_by_class?: Record<string | number, boolean>;
+  published_load_count_by_class?: Record<string | number, number>;
   period_template_slots?: Array<{
     slot_id?: number | null;
     template_group: string;
@@ -2374,6 +2378,76 @@ export async function batchSaveSubjectLoads(
     throw new ApiRequestError(msg, response.status, data);
   }
   return (await response.json()) as { message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] };
+}
+
+export type PeriodTemplateOverrideImpact = {
+  preview_token: string;
+  expires_at: string;
+  effective_date: string;
+  template_group: string;
+  changed_slots: Array<{
+    slot_id: number;
+    slot_name: string;
+    old_start_time: string;
+    old_end_time: string;
+    new_start_time: string;
+    new_end_time: string;
+  }>;
+  affected_sections: Array<{ class_id: number; section_name: string }>;
+  affected_section_count: number;
+  affected_published_load_count: number;
+  conflicts: ConflictItem[];
+  can_apply: boolean;
+};
+
+export async function previewPeriodTemplateOverride(
+  periodId: number,
+  effectiveDate: string,
+  slots: Array<{
+    slot_id?: number | null;
+    template_group: string;
+    slot_name: string;
+    slot_type: "CLASS" | "RECESS" | "LUNCH" | "HOMEROOM";
+    start_time: string;
+    end_time: string;
+    is_locked_break: boolean;
+    display_order: number;
+  }>
+): Promise<PeriodTemplateOverrideImpact> {
+  const response = await apiFetch("/api/v1/subject-loads/period-templates/override-preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ academic_period_id: periodId, effective_date: effectiveDate, slots }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiRequestError(data?.detail || "Unable to preview the published schedule replacement.", response.status, data);
+  }
+  return data as PeriodTemplateOverrideImpact;
+}
+
+export async function applyPeriodTemplateOverride(
+  previewToken: string,
+  confirmation: string
+): Promise<{
+  message: string;
+  revision_id: number;
+  revision_number: number;
+  effective_date: string;
+  status: "active" | "scheduled";
+  affected_section_count: number;
+  created_load_count: number;
+}> {
+  const response = await apiFetch("/api/v1/subject-loads/period-templates/override-apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ preview_token: previewToken, confirmation }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiRequestError(data?.detail || "Unable to replace the published schedules.", response.status, data);
+  }
+  return data;
 }
 
 export async function unlockSection(

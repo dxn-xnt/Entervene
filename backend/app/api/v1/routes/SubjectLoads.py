@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date as date_type, datetime
 from typing import Any
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy import or_
@@ -28,6 +28,8 @@ from app.schemas.SubjectLoad import (
     BatchSaveSubjectLoadResponse,
     SubjectLoadItem,
     PeriodTemplateSlotSchema,
+    PeriodTemplateOverridePreviewRequest,
+    PeriodTemplateOverrideApplyRequest,
     UnlockSectionRequest,
     DiscardDraftRequest,
     SectionDraftResponse,
@@ -43,6 +45,8 @@ from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 from app.services.academic.SubstitutionService import SubstitutionService
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
+from app.services.academic.PeriodTemplateResolver import PeriodTemplateResolver
+from app.services.academic.PeriodTemplateRevisionService import PeriodTemplateRevisionService
 
 router = APIRouter()
 
@@ -74,6 +78,47 @@ def _resolve_requested_or_active_period(
             raise HTTPException(status_code=404, detail="Academic period not found.")
         return period
     return resolve_active_academic_period(db)
+
+
+def _effective_period_template_payload(
+    db: Session,
+    *,
+    academic_year_id: int,
+    classes: list[Class] | None = None,
+) -> list[dict[str, Any]]:
+    base_groups = {"JHS_45MIN", "SHS_CAMPOS_ZARA", "SHS_DELMUNDO_REYES"}
+    base_groups.update(
+        (class_.period_template_group or JHS_TEMPLATE_GROUP)
+        for class_ in (classes or [])
+    )
+    result: list[dict[str, Any]] = []
+    representative_by_group = {
+        (class_.period_template_group or JHS_TEMPLATE_GROUP): class_
+        for class_ in (classes or [])
+    }
+    for base_group in sorted(base_groups):
+        representative = representative_by_group.get(base_group)
+        resolved_slots = (
+            PeriodTemplateResolver.slots_for_class(db, representative)
+            if representative is not None
+            else PeriodTemplateResolver.slots_for_group(
+                db,
+                base_group=base_group,
+                academic_year_id=academic_year_id,
+            )
+        )
+        for slot in resolved_slots:
+            result.append({
+                "slot_id": slot.slot_id,
+                "template_group": base_group,
+                "slot_name": slot.slot_name,
+                "slot_type": slot.slot_type,
+                "start_time": slot.start_time,
+                "end_time": slot.end_time,
+                "is_locked_break": slot.is_locked_break,
+                "display_order": slot.display_order,
+            })
+    return result
 
 
 
@@ -174,7 +219,7 @@ def ensure_jhs_template_assignments_and_backfill(db: Session) -> dict[str, Any]:
     class_ids: list[int] = []
     for cls in classes:
         class_ids.append(cls.class_id)
-        if cls.period_template_group != JHS_TEMPLATE_GROUP:
+        if cls.period_template_group is None:
             cls.period_template_group = JHS_TEMPLATE_GROUP
             corrected_classes.append(cls.section_name)
 
@@ -238,31 +283,30 @@ def _normalize_jhs_load_slots(
         slot.slot_id: slot
         for slot in db.query(PeriodTemplateSlot).filter(PeriodTemplateSlot.slot_id.in_(slot_ids)).all()
     } if slot_ids else {}
-    exact_jhs_slots = db.query(PeriodTemplateSlot).filter(
-        PeriodTemplateSlot.template_group == JHS_TEMPLATE_GROUP,
-        PeriodTemplateSlot.slot_type == "CLASS",
-        PeriodTemplateSlot.is_locked_break.is_(False),
-    ).all()
+    exact_slots_by_class: dict[int, list[PeriodTemplateSlot]] = {}
+    for class_id, cls in classes.items():
+        exact_slots_by_class[class_id] = [
+            slot for slot in PeriodTemplateResolver.slots_for_class(db, cls)
+            if slot.slot_type == "CLASS" and not slot.is_locked_break
+        ]
 
     normalized: list[SubjectLoadItem] = []
     for item in loads:
         cls = classes.get(item.class_id)
         is_jhs = (
             cls is not None
-            and cls.period_template_group == JHS_TEMPLATE_GROUP
             and grades.get(cls.academic_level_id) in range(7, 11)
         )
         if not is_jhs:
             normalized.append(item)
             continue
 
-        has_schedule = bool(item.start_time or item.end_time or item.days_of_week)
         slot = slots.get(item.slot_id) if item.slot_id is not None else None
         # Preserve immutable legacy publications in validation requests by
         # resolving an exact match in memory. Draft/client edits must send ID.
         if slot is None and item.status in ("published", "active") and item.start_time and item.end_time:
             matches = [
-                candidate for candidate in exact_jhs_slots
+                candidate for candidate in exact_slots_by_class.get(item.class_id, [])
                 if candidate.start_time == item.start_time and candidate.end_time == item.end_time
             ]
             slot = matches[0] if len(matches) == 1 else None
@@ -270,15 +314,19 @@ def _normalize_jhs_load_slots(
             if item.status in ("published", "active") and item.is_locked:
                 normalized.append(item)
                 continue
-            if has_schedule:
+            if item.slot_id is not None:
                 raise HTTPException(
                     status_code=422,
                     detail=f"Grade 7-10 load {item.class_id}_{item.subject_id} must select a valid JHS timetable slot.",
                 )
-            normalized.append(item.model_copy(update={"slot_id": None, "start_time": None, "end_time": None}))
+            # Legacy API clients may still submit explicit times without a
+            # slot_id. Preserve that existing contract; Studio-generated
+            # schedules use slot IDs and are resolved authoritatively above.
+            normalized.append(item)
             continue
+        allowed_slot_ids = {candidate.slot_id for candidate in exact_slots_by_class.get(item.class_id, [])}
         if (
-            slot.template_group != JHS_TEMPLATE_GROUP
+            slot.slot_id not in allowed_slot_ids
             or slot.slot_type != "CLASS"
             or slot.is_locked_break
         ):
@@ -304,12 +352,12 @@ def _attach_server_generated_slot_ids(
         cls.class_id: cls
         for cls in db.query(Class).filter(Class.class_id.in_(class_ids)).all()
     } if class_ids else {}
-    groups = {cls.period_template_group or JHS_TEMPLATE_GROUP for cls in classes.values()}
-    candidates = db.query(PeriodTemplateSlot).filter(
-        PeriodTemplateSlot.template_group.in_(groups),
-        PeriodTemplateSlot.slot_type == "CLASS",
-        PeriodTemplateSlot.is_locked_break.is_(False),
-    ).all() if groups else []
+    candidates: list[PeriodTemplateSlot] = []
+    for class_ in classes.values():
+        candidates.extend(
+            slot for slot in PeriodTemplateResolver.slots_for_class(db, class_)
+            if slot.slot_type == "CLASS" and not slot.is_locked_break
+        )
     by_key: dict[tuple[str, str, str], list[PeriodTemplateSlot]] = {}
     for slot in candidates:
         by_key.setdefault((slot.template_group, slot.start_time, slot.end_time), []).append(slot)
@@ -320,7 +368,11 @@ def _attach_server_generated_slot_ids(
         if not cls or not item.start_time or not item.end_time:
             result.append(item.model_copy(update={"slot_id": None}) if not item.start_time else item)
             continue
-        group = cls.period_template_group or JHS_TEMPLATE_GROUP
+        group = PeriodTemplateResolver.effective_group(
+            db,
+            base_group=cls.period_template_group or JHS_TEMPLATE_GROUP,
+            academic_year_id=cls.academic_year_id,
+        )
         matches = by_key.get((group, item.start_time, item.end_time), [])
         result.append(item.model_copy(update={"slot_id": matches[0].slot_id if len(matches) == 1 else None}))
     return result
@@ -439,6 +491,7 @@ def _serialize_load_item(sl: SubjectLoad, period_deps: dict[tuple[int, int], dic
         "staff_id": sl.staff_id,
         "academic_period_id": sl.academic_period_id,
         "slot_id": getattr(sl, "slot_id", None),
+        "template_revision_id": getattr(sl, "template_revision_id", None),
         "start_time": getattr(sl, "start_time", None),
         "end_time": getattr(sl, "end_time", None),
         "days_of_week": getattr(sl, "days_of_week", []) or [],
@@ -451,6 +504,8 @@ def _serialize_load_item(sl: SubjectLoad, period_deps: dict[tuple[int, int], dic
         "is_locked": bool(getattr(sl, "is_locked", False)),
         "published_at": sl.published_at.isoformat() if getattr(sl, "published_at", None) else None,
         "published_by": getattr(sl, "published_by", None),
+        "effective_from": sl.effective_from.isoformat() if getattr(sl, "effective_from", None) else None,
+        "effective_to": sl.effective_to.isoformat() if getattr(sl, "effective_to", None) else None,
         "last_modified_by": getattr(sl, "last_modified_by", None),
         "continued_from_load_id": getattr(sl, "continued_from_load_id", None),
         "dependencies": deps,
@@ -467,6 +522,7 @@ def _to_subject_load_item(sl: SubjectLoad) -> SubjectLoadItem:
         staff_id=sl.staff_id,
         academic_period_id=sl.academic_period_id,
         slot_id=sl.slot_id,
+        template_revision_id=getattr(sl, "template_revision_id", None),
         start_time=sl.start_time,
         end_time=sl.end_time,
         days_of_week=sl.days_of_week or [],
@@ -474,6 +530,8 @@ def _to_subject_load_item(sl: SubjectLoad) -> SubjectLoadItem:
         logical_load_id=sl.logical_load_id,
         section_revision=sl.section_revision or 1,
         base_revision=sl.base_revision,
+        effective_from=getattr(sl, "effective_from", None),
+        effective_to=getattr(sl, "effective_to", None),
         is_active_version=bool(sl.is_active_version),
         is_locked=bool(sl.is_locked),
     )
@@ -571,9 +629,15 @@ def get_subject_load_studio_data(
 
     existing_loads: list[dict[str, Any]] = []
     has_pending_draft_by_class: dict[int, bool] = {}
+    published_load_count_by_class: dict[int, int] = {}
 
     for c in classes:
         c_loads = loads_by_class.get(c.class_id, [])
+        published_active_loads = [
+            l for l in c_loads
+            if l.is_active_version is True and l.status in ("published", "active")
+        ]
+        published_load_count_by_class[c.class_id] = len(published_active_loads)
         draft_loads = [l for l in c_loads if l.status == "draft"]
         if draft_loads:
             has_pending_draft_by_class[c.class_id] = True
@@ -581,10 +645,6 @@ def get_subject_load_studio_data(
                 existing_loads.append(_serialize_load_item(dl, period_deps))
         else:
             has_pending_draft_by_class[c.class_id] = False
-            published_active_loads = [
-                l for l in c_loads
-                if l.is_active_version is True and l.status in ("published", "active")
-            ]
             for pl in published_active_loads:
                 existing_loads.append(_serialize_load_item(pl, period_deps))
 
@@ -686,20 +746,13 @@ def get_subject_load_studio_data(
         ],
         "existing_loads": existing_loads,
         "has_pending_draft_by_class": has_pending_draft_by_class,
+        "published_load_count_by_class": published_load_count_by_class,
         "jhs_template_audit": jhs_template_audit,
-        "period_template_slots": [
-            {
-                "slot_id": pts.slot_id,
-                "template_group": pts.template_group,
-                "slot_name": pts.slot_name,
-                "slot_type": pts.slot_type,
-                "start_time": pts.start_time,
-                "end_time": pts.end_time,
-                "is_locked_break": pts.is_locked_break,
-                "display_order": pts.display_order,
-            }
-            for pts in (ensure_default_period_templates(db) or db.query(PeriodTemplateSlot).order_by(PeriodTemplateSlot.template_group, PeriodTemplateSlot.display_order).all())
-        ],
+        "period_template_slots": _effective_period_template_payload(
+            db,
+            academic_year_id=selected_period.academic_year_id,
+            classes=classes,
+        ),
     }
 
 def get_school_hours_settings(db: Session) -> tuple[str, str]:
@@ -769,24 +822,54 @@ def _validate_period_template_payload(
                 )
 @router.get("/period-templates")
 def get_period_templates(
+    academic_period_id: int | None = Query(None),
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
     ensure_default_period_templates(db)
-    slots = db.query(PeriodTemplateSlot).order_by(PeriodTemplateSlot.template_group, PeriodTemplateSlot.display_order).all()
-    return [
-        {
-            "slot_id": s.slot_id,
-            "template_group": s.template_group,
-            "slot_name": s.slot_name,
-            "slot_type": s.slot_type,
-            "start_time": s.start_time,
-            "end_time": s.end_time,
-            "is_locked_break": s.is_locked_break,
-            "display_order": s.display_order,
-        }
-        for s in slots
-    ]
+    period = _resolve_requested_or_active_period(db, academic_period_id)
+    classes = db.query(Class).filter(Class.academic_year_id == period.academic_year_id).all()
+    return _effective_period_template_payload(
+        db,
+        academic_year_id=period.academic_year_id,
+        classes=classes,
+    )
+
+
+@router.post("/period-templates/override-preview")
+def preview_published_period_template_override(
+    payload: PeriodTemplateOverridePreviewRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    period = _resolve_requested_or_active_period(db, payload.academic_period_id)
+    actor = current_user.get("email") or current_user.get("username") or "Admin"
+    return PeriodTemplateRevisionService.create_preview(
+        db,
+        period=period,
+        submitted_slots=payload.slots,
+        effective_date=payload.effective_date,
+        actor=actor,
+    )
+
+
+@router.post("/period-templates/override-apply")
+def apply_published_period_template_override(
+    payload: PeriodTemplateOverrideApplyRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    actor = current_user.get("email") or current_user.get("username") or "Admin"
+    try:
+        return PeriodTemplateRevisionService.apply_preview(
+            db,
+            token=payload.preview_token,
+            confirmation=payload.confirmation,
+            actor=actor,
+        )
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.put("/period-templates")
@@ -818,7 +901,7 @@ def update_period_templates(
                 old_end = db_slot.end_time
                 new_start = item.start_time
                 new_end = item.end_time
-                grp = db_slot.template_group
+                grp = PeriodTemplateRevisionService._base_group_for_slot(db, db_slot)
 
                 # Class-slot edits cascade into loads. Never change a published
                 # section through the global template editor.
@@ -905,11 +988,15 @@ def update_class_template_group(
         raise HTTPException(status_code=409, detail="Section is locked. Unlock Section before changing its bell schedule template.")
 
     level = db.get(AcademicLevel, cls.academic_level_id)
-    if level and 7 <= level.grade_level <= 10 and payload.template_group != JHS_TEMPLATE_GROUP:
-        raise HTTPException(
-            status_code=422,
-            detail="Grades 7-10 use the shared JHS timetable and cannot be assigned a custom template.",
+    if level and 7 <= level.grade_level <= 10 and payload.template_group:
+        ensure_default_period_templates(db)
+        target_slots = PeriodTemplateResolver.slots_for_group(
+            db,
+            base_group=payload.template_group,
+            academic_year_id=cls.academic_year_id,
         )
+        if not any(slot.slot_type == "CLASS" for slot in target_slots):
+            raise HTTPException(status_code=422, detail="The selected Junior High template has no class periods.")
 
     cls.period_template_group = payload.template_group
     db.commit()
@@ -974,7 +1061,9 @@ def validate_subject_loads(
         raise HTTPException(status_code=422, detail="Every subject load must use the requested academic period.")
     normalized = _normalize_jhs_load_slots(db, payload.loads)
     merged = _merge_proposed_period_snapshot(db, period.academic_period_id, normalized)
-    return ConflictDetectorService.validate_loads(db=db, loads=merged, academic_period=period)
+    return ConflictDetectorService.validate_loads(
+        db=db, loads=merged, academic_period=period, require_complete_schedule=True
+    )
 
 
 @router.post("/auto-schedule", response_model=AutoScheduleResponse)
@@ -1026,7 +1115,9 @@ def auto_schedule_subject_loads(
     auto_scheduled_loads.extend(protected_loads)
     auto_scheduled_loads = _attach_server_generated_slot_ids(db, auto_scheduled_loads)
 
-    validation_res = ConflictDetectorService.validate_loads(db=db, loads=auto_scheduled_loads, academic_period=period)
+    validation_res = ConflictDetectorService.validate_loads(
+        db=db, loads=auto_scheduled_loads, academic_period=period, require_complete_schedule=True
+    )
     unscheduled_loads = [
         {
             "class_id": item.class_id,
@@ -1357,7 +1448,12 @@ def batch_save_subject_loads(
                 detail=f"Cannot publish schedule: All subjects in the target schedule must have an assigned teacher. Unassigned: {sample_str}.",
             )
 
-    validation_res = ConflictDetectorService.validate_loads(db=db, loads=merged_validation_loads, academic_period=period)
+    validation_res = ConflictDetectorService.validate_loads(
+        db=db,
+        loads=merged_validation_loads,
+        academic_period=period,
+        require_complete_schedule=is_publishing,
+    )
     proposed_keys = {f"{item.class_id}_{item.subject_id}" for item in payload.loads}
     proposed_teacher_overlaps = [
         conflict for conflict in validation_res.conflicts
@@ -1742,6 +1838,7 @@ def _assert_can_view_class_schedule(
 def get_class_schedule(
     class_id: int,
     academic_period_id: int | None = Query(None),
+    schedule_date: date_type | None = Query(None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1763,25 +1860,25 @@ def get_class_schedule(
     )
     period_id = period.academic_period_id
 
-    published_loads = (
-        db.query(SubjectLoad)
-        .filter(
-            SubjectLoad.class_id == class_id,
-            SubjectLoad.academic_period_id == period_id,
+    load_query = db.query(SubjectLoad).filter(
+        SubjectLoad.class_id == class_id,
+        SubjectLoad.academic_period_id == period_id,
+    )
+    if schedule_date is None:
+        load_query = load_query.filter(
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["published", "active"]),
         )
-        .all()
-    )
+    else:
+        load_query = load_query.filter(
+            SubjectLoad.status.in_(["published", "active", "archived"]),
+            or_(SubjectLoad.effective_from.is_(None), SubjectLoad.effective_from <= schedule_date),
+            or_(SubjectLoad.effective_to.is_(None), SubjectLoad.effective_to >= schedule_date),
+        )
+    published_loads = load_query.all()
 
     ensure_default_period_templates(db)
-    grp = getattr(cls, "period_template_group", None) or "JHS_45MIN"
-    break_slots = (
-        db.query(PeriodTemplateSlot)
-        .filter(PeriodTemplateSlot.template_group == grp)
-        .order_by(PeriodTemplateSlot.display_order)
-        .all()
-    )
+    break_slots = PeriodTemplateResolver.slots_for_class(db, cls, as_of=schedule_date)
 
     is_published = len(published_loads) > 0
     slots = []
@@ -1841,6 +1938,7 @@ def get_class_schedule(
 @router.get("/my-schedule")
 def get_my_schedule(
     academic_period_id: int | None = Query(None),
+    schedule_date: date_type | None = Query(None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1862,7 +1960,7 @@ def get_my_schedule(
             )
             if not st_class:
                 return {"is_published": False, "schedule": []}
-            return get_class_schedule(class_id=st_class.class_id, academic_period_id=period_id, current_user=current_user, db=db)
+            return get_class_schedule(class_id=st_class.class_id, academic_period_id=period_id, schedule_date=schedule_date, current_user=current_user, db=db)
         except Exception:
             return {"is_published": False, "schedule": []}
 
@@ -1875,19 +1973,25 @@ def get_my_schedule(
                 SubjectLoad.status.in_(["published", "active"]),
             ).first()
             if pub_load:
-                return get_class_schedule(class_id=pub_load.class_id, academic_period_id=period_id, current_user=current_user, db=db)
+                return get_class_schedule(class_id=pub_load.class_id, academic_period_id=period_id, schedule_date=schedule_date, current_user=current_user, db=db)
             return {"is_published": False, "schedule": []}
 
-        teacher_loads = (
-            db.query(SubjectLoad)
-            .filter(
-                SubjectLoad.staff_id == staff_id,
-                SubjectLoad.academic_period_id == period_id,
+        teacher_query = db.query(SubjectLoad).filter(
+            SubjectLoad.staff_id == staff_id,
+            SubjectLoad.academic_period_id == period_id,
+        )
+        if schedule_date is None:
+            teacher_query = teacher_query.filter(
                 SubjectLoad.is_active_version.is_(True),
                 SubjectLoad.status.in_(["published", "active"]),
             )
-            .all()
-        )
+        else:
+            teacher_query = teacher_query.filter(
+                SubjectLoad.status.in_(["published", "active", "archived"]),
+                or_(SubjectLoad.effective_from.is_(None), SubjectLoad.effective_from <= schedule_date),
+                or_(SubjectLoad.effective_to.is_(None), SubjectLoad.effective_to >= schedule_date),
+            )
+        teacher_loads = teacher_query.all()
 
         covered_by_sub_map = SubstitutionService.get_original_teacher_covered_load_ids(db, staff_id, period_id)
         covered_as_sub_loads = SubstitutionService.get_substitute_covered_loads(db, staff_id, period_id)
@@ -1899,15 +2003,8 @@ def get_my_schedule(
             [sl.class_id for sl in teacher_loads] + [sl.class_id for sl, _ in covered_as_sub_loads]
         ))
         primary_class = db.query(Class).filter(Class.class_id == all_class_ids[0]).first() if all_class_ids else None
-        grp = getattr(primary_class, "period_template_group", None) or "JHS_45MIN" if primary_class else "JHS_45MIN"
-
         ensure_default_period_templates(db)
-        break_slots = (
-            db.query(PeriodTemplateSlot)
-            .filter(PeriodTemplateSlot.template_group == grp)
-            .order_by(PeriodTemplateSlot.display_order)
-            .all()
-        )
+        break_slots = PeriodTemplateResolver.slots_for_class(db, primary_class, as_of=schedule_date) if primary_class else []
 
         slots = []
         # 1. Teacher's own assigned loads

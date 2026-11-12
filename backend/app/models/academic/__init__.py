@@ -21,6 +21,8 @@ from .StudentAssessmentScore import StudentAssessmentScore
 from .StudentPeriodGrade import StudentPeriodGrade
 from .LessonPlanModel import LessonPlanModel
 from .PeriodTemplateSlot import PeriodTemplateSlot
+from .PeriodTemplateRevision import PeriodTemplateRevision
+from .PeriodTemplateOverridePreview import PeriodTemplateOverridePreview
 from .Competency import Competency
 from .TeacherSubstitution import TeacherSubstitution
 from .GradeSubmissionLog import GradeSubmissionLog

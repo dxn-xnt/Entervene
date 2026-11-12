@@ -8,6 +8,7 @@ from app.schemas.SubjectLoad import SubjectLoadItem
 from app.services.academic.ConflictDetectorService import (
     times_overlap,
 )
+from app.services.academic.PeriodTemplateResolver import PeriodTemplateResolver
 
 
 def is_math_or_science_subject(item: SubjectLoadItem, subjects_map: dict[int, Subject]) -> bool:
@@ -25,15 +26,22 @@ class AutoSchedulerService:
     def get_group_template_slots(
         template_group: str,
         db: Session,
+        academic_year_id: int | None = None,
     ) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
         """
         Dynamically fetches (enhanced_slots, standard_class_slots, break_slots) from the DB.
         """
         db_slots = (
-            db.query(PeriodTemplateSlot)
-            .filter(PeriodTemplateSlot.template_group == template_group)
-            .order_by(PeriodTemplateSlot.display_order)
-            .all()
+            PeriodTemplateResolver.slots_for_group(
+                db,
+                base_group=template_group,
+                academic_year_id=academic_year_id,
+            )
+            if academic_year_id is not None
+            else db.query(PeriodTemplateSlot)
+                .filter(PeriodTemplateSlot.template_group == template_group)
+                .order_by(PeriodTemplateSlot.display_order)
+                .all()
         )
         if not db_slots:
             raise ValueError(f"No period template slots found in database for group: {template_group}")
@@ -135,7 +143,19 @@ class AutoSchedulerService:
             c_obj = classes_map.get(cid)
             c_group = getattr(c_obj, "period_template_group", None) or "JHS_45MIN"
 
-            enhanced_slots, standard_periods, break_slots = AutoSchedulerService.get_group_template_slots(c_group, db)
+            resolved_slots = PeriodTemplateResolver.slots_for_class(db, c_obj) if c_obj else []
+            enhanced_slots = [
+                (slot.start_time, slot.end_time) for slot in resolved_slots
+                if slot.slot_type == "CLASS" and not slot.is_locked_break and (slot.slot_name or "").lower().startswith("enhanced")
+            ]
+            standard_periods = [
+                (slot.start_time, slot.end_time) for slot in resolved_slots
+                if slot.slot_type == "CLASS" and not slot.is_locked_break and not (slot.slot_name or "").lower().startswith("enhanced")
+            ]
+            break_slots = [
+                (slot.start_time, slot.end_time) for slot in resolved_slots
+                if slot.is_locked_break or slot.slot_type != "CLASS"
+            ]
 
             # Determine occupied slots from locked loads in this specific class
             occupied_class_slots: list[tuple[str, str, list[str]]] = []

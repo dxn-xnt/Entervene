@@ -13,6 +13,7 @@ from app.schemas.SubjectLoad import (
     TeacherWorkloadItem,
     ValidationResultResponse,
 )
+from app.services.academic.PeriodTemplateResolver import PeriodTemplateResolver
 
 
 def parse_time_to_minutes(time_str: str | None) -> int | None:
@@ -59,7 +60,13 @@ def times_overlap(start1: str | None, end1: str | None, start2: str | None, end2
 class ConflictDetectorService:
 
     @staticmethod
-    def validate_loads(db: Session, loads: list[SubjectLoadItem], academic_period=None) -> ValidationResultResponse:
+    def validate_loads(
+        db: Session,
+        loads: list[SubjectLoadItem],
+        academic_period=None,
+        *,
+        require_complete_schedule: bool = False,
+    ) -> ValidationResultResponse:
         conflicts: list[ConflictItem] = []
 
         # Map helpers
@@ -90,6 +97,23 @@ class ConflictDetectorService:
                         rule="UNASSIGNED_TEACHER",
                         severity="warning",
                         message=f"Subject '{s_name}' in section '{c_name}' has no assigned teacher.",
+                        class_id=load.class_id,
+                        subject_id=load.subject_id,
+                        affected_key=f"{load.class_id}_{load.subject_id}",
+                    )
+                )
+
+        if require_complete_schedule:
+            for load in loads:
+                if load.start_time and load.end_time and load.days_of_week:
+                    continue
+                c_name = classes_map[load.class_id].section_name if load.class_id in classes_map else f"Section #{load.class_id}"
+                s_name = subjects_map[load.subject_id].subject_name if load.subject_id in subjects_map else f"Subject #{load.subject_id}"
+                conflicts.append(
+                    ConflictItem(
+                        rule="UNSCHEDULED_LOAD",
+                        severity="error",
+                        message=f"Subject '{s_name}' in section '{c_name}' must have a valid time and at least one meeting day.",
                         class_id=load.class_id,
                         subject_id=load.subject_id,
                         affected_key=f"{load.class_id}_{load.subject_id}",
@@ -380,10 +404,12 @@ class ConflictDetectorService:
         # ---------------------------------------------------------
         # 6. Break Time Violation Check (Homeroom / Recess / Lunch)
         # ---------------------------------------------------------
-        all_break_slots = db.query(PeriodTemplateSlot).filter(PeriodTemplateSlot.is_locked_break == True).all()
-        break_map: dict[str, list[PeriodTemplateSlot]] = {}
-        for bslot in all_break_slots:
-            break_map.setdefault(bslot.template_group, []).append(bslot)
+        break_map: dict[int, list[PeriodTemplateSlot]] = {}
+        for class_id, class_obj in classes_map.items():
+            break_map[class_id] = [
+                slot for slot in PeriodTemplateResolver.slots_for_class(db, class_obj)
+                if slot.is_locked_break or slot.slot_type != "CLASS"
+            ]
 
         for load in loads:
             if not load.start_time or not load.end_time:
@@ -395,7 +421,7 @@ class ConflictDetectorService:
             c_name = class_obj.section_name or ""
             grp = getattr(class_obj, "period_template_group", None) or "JHS_45MIN"
 
-            group_breaks = break_map.get(grp, [])
+            group_breaks = break_map.get(load.class_id, [])
             for bslot in group_breaks:
                 if times_overlap(load.start_time, load.end_time, bslot.start_time, bslot.end_time):
                     subject_obj = subjects_map.get(load.subject_id)
