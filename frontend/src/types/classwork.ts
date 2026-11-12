@@ -147,6 +147,7 @@ export type TeacherSubmissionDetail = {
   status: string;
   grade?: number | null;
   feedback?: string | null;
+  feedback_fingerprint: string;
   submitted_at?: string | null;
   attachments: SubmissionAttachment[];
   total_points?: number | null;

@@ -7,7 +7,21 @@ from sqlalchemy.orm import Session
 from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.core.Dependencies import get_db, get_staff_id, get_student_record, require_role
 from app.core.FileUpload import delete_file, save_file
-from app.schemas.Submission import GradeRequest, ReadingFocusPayload, SubmissionResponse
+from app.schemas.Submission import (
+    FeedbackEligibilityResponse,
+    FeedbackPublicationRequest,
+    FeedbackPublicationResponse,
+    FeedbackSuggestionResponse,
+    GradeRequest,
+    ReadingFocusPayload,
+    SubmissionResponse,
+)
+from app.services.ai.UsageGuard import actor
+from app.services.submission.SubmissionFeedbackService import (
+    generate_submission_feedback_suggestion,
+    get_submission_feedback_eligibility,
+    publish_submission_feedback,
+)
 from app.services.submission.SubmissionService import (
     assignment_submissions,
     assignment_tracking,
@@ -117,6 +131,41 @@ def get_tracking_by_classwork(
     db: Session = Depends(get_db),
 ):
     return classwork_tracking(classwork_id, staff_id, db)
+
+
+@router.get("/{submission_id}/feedback/eligibility", response_model=FeedbackEligibilityResponse)
+def get_feedback_eligibility(
+    submission_id: int,
+    current_user: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return get_submission_feedback_eligibility(db, staff_id, submission_id)
+
+
+@router.post("/{submission_id}/feedback/suggestion", response_model=FeedbackSuggestionResponse)
+async def generate_feedback_suggestion(
+    submission_id: int,
+    current_user: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    token = actor.set(str(staff_id))
+    try:
+        return await generate_submission_feedback_suggestion(db, staff_id, submission_id)
+    finally:
+        actor.reset(token)
+
+
+@router.put("/{submission_id}/feedback", response_model=FeedbackPublicationResponse)
+def publish_feedback(
+    submission_id: int,
+    body: FeedbackPublicationRequest,
+    current_user: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return publish_submission_feedback(db, staff_id, submission_id, body)
 
 
 # Wildcard routes must stay at the bottom.

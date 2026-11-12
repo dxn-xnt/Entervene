@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+import hashlib
+import json
 from pathlib import Path
 from typing import Optional, cast
 from uuid import UUID
@@ -38,6 +40,12 @@ from app.services.intervention.RemediationPrerequisiteService import require_rem
 
 
 MAX_READING_FOCUS_DELTA_SECONDS = 300
+
+
+def feedback_fingerprint(feedback: str | None) -> str:
+    """Return the stable concurrency token used for teacher feedback writes."""
+    value = json.dumps({"feedback": feedback}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def user_id(current_user: dict):
@@ -205,6 +213,7 @@ def build_submission_response(submission, db: Session) -> SubmissionResponse:
         status=submission.status,
         grade=float(submission.grade) if submission.grade is not None else None,
         feedback=submission.feedback,
+        feedback_fingerprint=feedback_fingerprint(submission.feedback),
         attempt_count=submission.attempt_count,
         graded_at=submission.graded_at,
         graded_by_staff_id=submission.graded_by_staff_id,
@@ -819,7 +828,9 @@ def grade_student_submission(
     staff_id: str,
     db: Session,
 ) -> SubmissionResponse:
-    submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
+    submission = db.query(StudentSubmission).filter(
+        StudentSubmission.submission_id == submission_id,
+    ).with_for_update().first()
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     assignment = teacher_owns_assignment(submission.classwork_assignment_id, staff_id, db, write_required=True)
@@ -856,6 +867,22 @@ def grade_student_submission(
         raise HTTPException(status_code=400, detail="Grade cannot be negative")
     if classwork and classwork.total_points is not None and body.grade > float(classwork.total_points):
         raise HTTPException(status_code=400, detail=f"Grade cannot be greater than {float(classwork.total_points)}")
+    current_feedback_fingerprint = feedback_fingerprint(submission.feedback)
+    if (
+        body.expected_feedback_fingerprint is None
+        and submission.feedback is not None
+        and body.feedback != submission.feedback
+    ) or (
+        body.expected_feedback_fingerprint is not None
+        and body.expected_feedback_fingerprint != current_feedback_fingerprint
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "FEEDBACK_COMMENT_STALE",
+                "message": "Saved teacher feedback changed elsewhere. Reload before saving the grade.",
+            },
+        )
     previous_grade = submission.grade
     submission.grade = Decimal(str(body.grade))
     submission.feedback = body.feedback

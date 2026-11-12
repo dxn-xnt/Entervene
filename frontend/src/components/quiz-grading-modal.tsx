@@ -10,6 +10,7 @@ import { Card } from "./retroui/Card";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
 import { formatDate, formatToTitleCase } from "@/lib/formatters";
 import { Avatar } from "@/components/retroui/Avatar";
+import QuizFeedbackAssistant from "@/components/quiz-feedback-assistant";
 
 interface QuizGradingModalProps {
   submissionId: number;
@@ -47,8 +48,12 @@ export default function QuizGradingModal({
 
   useEffect(() => {
     if (!isOpen || !submissionId) return;
+    let cancelled = false;
     setLoading(true);
     setError("");
+    setDetail(null);
+    setFeedback("");
+    setScores({});
     setActiveQuestionIndex(0);
     setViewMode("single");
     apiFetch(`/api/v1/quizzes/submission/${submissionId}`)
@@ -57,6 +62,7 @@ export default function QuizGradingModal({
         return res.json();
       })
       .then((data: TeacherQuizSubmissionDetail) => {
+        if (cancelled) return;
         setDetail(data);
         setFeedback(data.feedback || "");
         const initialScores: Record<number, string> = {};
@@ -69,9 +75,15 @@ export default function QuizGradingModal({
         setScores(initialScores);
       })
       .catch((err) => {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load submission.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, submissionId]);
 
   const calculateTotal = () => {
@@ -82,7 +94,7 @@ export default function QuizGradingModal({
     }, 0);
   };
 
-  const getQuestionStatus = (quizQuestionId: number, maxPoints: number, _isAutoCorrect?: boolean | null): QuestionGradingStatus => {
+  const getQuestionStatus = (quizQuestionId: number, maxPoints: number): QuestionGradingStatus => {
     const rawVal = scores[quizQuestionId];
     if (rawVal === undefined || rawVal === "") {
       return "needs_grading";
@@ -125,12 +137,20 @@ export default function QuizGradingModal({
         body: JSON.stringify({
           answers: answerPayload,
           feedback: feedback.trim() || undefined,
+          expected_feedback_fingerprint: detail.feedback_fingerprint,
         }),
       });
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || "Failed to save grades.");
+        const responseDetail = body.detail;
+        const message =
+          responseDetail && typeof responseDetail === "object" && typeof responseDetail.message === "string"
+            ? responseDetail.message
+            : typeof responseDetail === "string"
+              ? responseDetail
+              : "Failed to save grades.";
+        throw new Error(message);
       }
 
       toast.success({ title: "Quiz grades saved" });
@@ -149,7 +169,7 @@ export default function QuizGradingModal({
     const maxPts = ans.max_points;
     const currentScoreStr = scores[ans.quiz_question_id] ?? "";
     const isUngraded = ans.points_awarded === null || ans.points_awarded === undefined;
-    const status = getQuestionStatus(ans.quiz_question_id, maxPts, ans.is_correct);
+    const status = getQuestionStatus(ans.quiz_question_id, maxPts);
     const qType = (ans.question_type || "").toLowerCase();
     const studentAnswerText = ans.student_answer_text ?? ans.answer_text ?? "";
     const correctAnswerText =
@@ -460,7 +480,7 @@ export default function QuizGradingModal({
                   className="pl-1 flex flex-wrap gap-2 max-h-36 sm:max-h-40 overflow-y-auto py-1 pr-1"
                 >
                   {detail.answers.map((ans, idx) => {
-                    const status = getQuestionStatus(ans.quiz_question_id, ans.max_points, ans.is_correct);
+                    const status = getQuestionStatus(ans.quiz_question_id, ans.max_points);
                     const isActive = activeQuestionIndex === idx;
 
                     return (
@@ -545,6 +565,21 @@ export default function QuizGradingModal({
                   className="w-full rounded! border-2 border-black px-3 py-2 text-sm focus:outline-none"
                 />
               </Card>
+
+              <QuizFeedbackAssistant
+                key={submissionId}
+                submissionId={submissionId}
+                fullyGraded={!detail.needs_grading && detail.status.toLowerCase() === "graded"}
+                existingFeedback={feedback}
+                onPublished={(savedFeedback, savedFeedbackFingerprint) => {
+                  setFeedback(savedFeedback);
+                  setDetail((current) => current ? {
+                    ...current,
+                    feedback: savedFeedback,
+                    feedback_fingerprint: savedFeedbackFingerprint,
+                  } : current);
+                }}
+              />
             </div>
 
             {/* Dialog Footer */}
