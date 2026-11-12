@@ -154,6 +154,29 @@ export async function createAcademicPeriods(
   return res.json();
 }
 
+export interface UpdateAcademicPeriodPayload {
+  start_date: string;
+  end_date: string;
+  period_name?: string;
+}
+
+/** Update an academic period's dates and name (admin only). */
+export async function updateAcademicPeriod(
+  periodId: number,
+  payload: UpdateAcademicPeriodPayload,
+): Promise<{ message: string; period: AcademicPeriodSettingItem }> {
+  const res = await apiFetch(`/api/v1/settings/academic-periods/${periodId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to update academic period");
+  }
+  return res.json();
+}
+
 /** Set active academic period (admin only). */
 export async function setActivePeriod(periodId: number): Promise<void> {
   const res = await apiFetch(`/api/v1/settings/active-period/${periodId}`, {

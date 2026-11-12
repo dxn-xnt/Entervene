@@ -23,7 +23,6 @@ import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { TOSGeneratorScreen } from "../subject-details/tos-generator-screen";
 import type { CompetencyItem } from "../subject-details/types";
-import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getTeacherActive, getRemediationWorkspace, type RemediationFocus } from "@/lib/teacher-interventions-api";
@@ -316,7 +315,9 @@ export const TeacherTOSPage: React.FC = () => {
               </div>
               {/* Academic Term Filter Chips */}
               <div className="flex flex-wrap items-center gap-2">
-                <Text as="p" className="text-sm font-semibold">Terms:</Text>
+                <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                  Terms:
+                </span>
                 {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map(
                   (qTab) => (
                     <Button
@@ -327,9 +328,9 @@ export const TeacherTOSPage: React.FC = () => {
                       autoIcon={false}
                       aria-pressed={selectedQuarterFilter === qTab}
                       onClick={() => setSelectedQuarterFilter(qTab)}
-                      className="rounded px-3 text-xs font-bold"
+                      className="shrink-0 border-black shadow-none"
                     >
-                      {qTab === "ALL" ? "All Terms" : `${qTab}`}
+                      {qTab === "ALL" ? "All" : qTab}
                     </Button>
                   ),
                 )}

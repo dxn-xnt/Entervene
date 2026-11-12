@@ -6,27 +6,15 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import { ArrowUpRight, AlertCircle } from "lucide-react";
+import { ArrowUpRight, AlertCircle, Pencil } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Dialog } from "@/components/retroui/Dialog";
 import ViewPreviousPeriodsModal from "./forms/view-previous-periods";
+import EditAcademicPeriodModal, { type DBPeriodItem } from "./forms/edit-academic-period";
 import { API_URL } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
 import { overdueActivePeriodNotice } from "@/lib/academic-periods";
 import { Card } from "@/components/retroui/Card";
-
-type DBPeriodItem = {
-  id: number;
-  period: string;
-  period_sequence: number;
-  period_type: string;
-  academic_year_id: number;
-  academicyear: string;
-  startDate: string | null;
-  endDate: string | null;
-  is_active: boolean;
-  status: string;
-};
 
 export default function AdminAcademicPeriods() {
   const navigate = useNavigate();
@@ -35,6 +23,7 @@ export default function AdminAcademicPeriods() {
 
   // Dynamic periods fetched directly from the database
   const [periods, setPeriods] = React.useState<DBPeriodItem[]>([]);
+  const [editingPeriod, setEditingPeriod] = React.useState<DBPeriodItem | null>(null);
 
   const fetchPeriodsFromDB = React.useCallback(async () => {
     setIsLoading(true);
@@ -85,7 +74,7 @@ export default function AdminAcademicPeriods() {
                 <Breadcrumb>
                   <Breadcrumb.List>
                     <Breadcrumb.Item>
-                    <Breadcrumb.Link href="/admin/settings">
+                      <Breadcrumb.Link href="/admin/settings">
                         System Settings
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
@@ -101,86 +90,107 @@ export default function AdminAcademicPeriods() {
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 [&_table]:min-w-[640px] sm:px-4 sm:py-4 md:px-6">
               {/* Single Consolidated Card for Unified JHS & SHS */}
               <Card className="@container/card">
-              <Card.Header className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <Card.Title className="flex flex-col w-full gap-1">
-                  Academic Periods
-                  <Text
-                    as="p"
-                    className="text-sm font-normal text-muted-foreground"
-                  >
-                    Unified three-term academic schedule applying to both Junior High School and Senior High School grade levels.
-                  </Text>
-                </Card.Title>
-                <div className="flex items-center gap-4">
-                  <Button size="sm" onClick={() => navigate("/admin/settings")} className="whitespace-nowrap">
-                    Manage Active Term
-                  </Button>
-                </div>
-              </Card.Header>
-
-              <Card.Content className="flex flex-col gap-4">
-                {loadError && <p role="alert" className="border border-red-500 bg-red-50 p-3 text-sm font-semibold">Academic periods could not be loaded. Try again later.</p>}
-                {overdue && <div role="status" className="border-2 border-amber-600 bg-amber-50 p-3 text-sm">
-                  <p className="font-bold">Scheduled end date has passed. {overdue.active.period} is still active.</p>
-                  <p>{overdue.next
-                    ? `Review the current term and consider activating ${overdue.next.period} when current-term activities are complete.`
-                    : "No next period is configured. Review the current term when activities are complete."}</p>
-                </div>}
-                {isLoading ? (
-                  <LoadingPanel label="Loading academic periods from database..." />
-                ) : (
-                  <Table wrapperClassName="shadow-none">
-                    <Table.Header className="font-sans">
-                      <Table.Row>
-                        <Table.Head>Period</Table.Head>
-                        <Table.Head>Academic Year</Table.Head>
-                        <Table.Head>Start Date</Table.Head>
-                        <Table.Head>End Date</Table.Head>
-                        <Table.Head>Status</Table.Head>
-                      </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                      {periods.map((item) => (
-                        <Table.Row key={item.id}>
-                          <Table.Cell className="font-bold">{item.period}</Table.Cell>
-                          <Table.Cell className="font-medium">{item.academicyear}</Table.Cell>
-                          <Table.Cell>
-                            <GracefulDateDisplay dateString={item.startDate} />
-                          </Table.Cell>
-                          <Table.Cell>
-                            <GracefulDateDisplay dateString={item.endDate} />
-                          </Table.Cell>
-                          <Table.Cell>
-                            <Badge
-                              variant={
-                                item.is_active || item.status === "Active"
-                                  ? "surface"
-                                  : item.status === "Passed"
-                                    ? "default"
-                                    : "outline"
-                              }
-                              size="sm"
-                            >
-                              {item.is_active ? "Active" : item.status}
-                            </Badge>
-                          </Table.Cell>
-                        </Table.Row>
-                      ))}
-                    </Table.Body>
-                  </Table>
-                )}
-
-                <Dialog>
-                  <Dialog.Trigger className="w-full flex justify-end">
-                    <Button size="sm" variant="link" className="shadow-none p-0! flex-row gap-2 shrink-0 m-0! justify-end w-fit text-black">
-                      View Previous Periods
-                      <ArrowUpRight className="w-4 h-4" />
+                <Card.Header className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <Card.Title className="flex flex-col w-full gap-1">
+                    Academic Periods
+                    <Text
+                      as="p"
+                      className="text-sm font-normal text-muted-foreground"
+                    >
+                      Unified three-term academic schedule applying to both Junior High School and Senior High School grade levels.
+                    </Text>
+                  </Card.Title>
+                  <div className="flex items-center gap-4">
+                    <Button size="sm" onClick={() => navigate("/admin/settings")} className="whitespace-nowrap">
+                      Manage Active Term
                     </Button>
-                  </Dialog.Trigger>
-                  <ViewPreviousPeriodsModal yearLevel="unified" />
-                </Dialog>
-              </Card.Content>
-            </Card>
+                  </div>
+                </Card.Header>
+
+                <Card.Content className="flex flex-col gap-4">
+                  {loadError && <p role="alert" className="border border-red-500 bg-red-50 p-3 text-sm font-semibold">Academic periods could not be loaded. Try again later.</p>}
+                  {overdue && <div role="status" className="border-2 border-amber-600 bg-amber-50 p-3 text-sm">
+                    <p className="font-bold">Scheduled end date has passed. {overdue.active.period} is still active.</p>
+                    <p>{overdue.next
+                      ? `Review the current term and consider activating ${overdue.next.period} when current-term activities are complete.`
+                      : "No next period is configured. Review the current term when activities are complete."}</p>
+                  </div>}
+                  {isLoading ? (
+                    <LoadingPanel label="Loading academic periods from database..." />
+                  ) : (
+                    <Table wrapperClassName="shadow-none">
+                      <Table.Header className="font-sans">
+                        <Table.Row>
+                          <Table.Head>Period</Table.Head>
+                          <Table.Head>Academic Year</Table.Head>
+                          <Table.Head>Start Date</Table.Head>
+                          <Table.Head>End Date</Table.Head>
+                          <Table.Head>Status</Table.Head>
+                          <Table.Head className="text-right w-10">Action</Table.Head>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {periods.map((item) => (
+                          <Table.Row key={item.id}>
+                            <Table.Cell className="font-bold">{item.period}</Table.Cell>
+                            <Table.Cell className="font-medium">{item.academicyear}</Table.Cell>
+                            <Table.Cell>
+                              <GracefulDateDisplay dateString={item.startDate} />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <GracefulDateDisplay dateString={item.endDate} />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <Badge
+                                variant={
+                                  item.is_active || item.status === "Active"
+                                    ? "surface"
+                                    : item.status === "Passed"
+                                      ? "default"
+                                      : "outline"
+                                }
+                                size="sm"
+                              >
+                                {item.is_active ? "Active" : item.status}
+                              </Badge>
+                            </Table.Cell>
+                            <Table.Cell className="text-right w-10">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={() => setEditingPeriod(item)}
+                                className="inline-flex items-center p-1 shadow-none hover:shadow-none"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            </Table.Cell>
+                          </Table.Row>
+                        ))}
+                      </Table.Body>
+                    </Table>
+                  )}
+
+                  <Dialog>
+                    <Dialog.Trigger className="w-full flex justify-end">
+                      <Button size="sm" variant="link" className="shadow-none p-0! flex-row gap-2 shrink-0 m-0! justify-end w-fit text-black">
+                        View Previous Periods
+                        <ArrowUpRight className="w-4 h-4" />
+                      </Button>
+                    </Dialog.Trigger>
+                    <ViewPreviousPeriodsModal yearLevel="unified" />
+                  </Dialog>
+
+                  <Dialog open={editingPeriod !== null} onOpenChange={(open) => { if (!open) setEditingPeriod(null); }}>
+                    {editingPeriod && (
+                      <EditAcademicPeriodModal
+                        period={editingPeriod}
+                        onClose={() => setEditingPeriod(null)}
+                        onSaved={fetchPeriodsFromDB}
+                      />
+                    )}
+                  </Dialog>
+                </Card.Content>
+              </Card>
 
             </div>
           </div>

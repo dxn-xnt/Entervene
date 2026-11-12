@@ -151,3 +151,51 @@ def create_or_update_academic_periods(
     return results
 
 
+def update_single_academic_period(
+    db,
+    academic_period_id: int,
+    start_date_raw: str,
+    end_date_raw: str,
+    period_name: str | None = None,
+):
+    """Updates dates and optional name of a single academic period."""
+    from datetime import date
+    from fastapi import HTTPException
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+
+    period = (
+        db.query(AcademicPeriod)
+        .filter(AcademicPeriod.academic_period_id == academic_period_id)
+        .first()
+    )
+    if not period:
+        raise HTTPException(status_code=404, detail="Academic period not found")
+
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db,
+        academic_year_id=period.academic_year_id,
+        academic_period_id=period.academic_period_id,
+    )
+
+    try:
+        start_d = date.fromisoformat(start_date_raw) if isinstance(start_date_raw, str) else start_date_raw
+        end_d = date.fromisoformat(end_date_raw) if isinstance(end_date_raw, str) else end_date_raw
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
+
+    if start_d > end_d:
+        raise HTTPException(status_code=400, detail="Start date cannot be after end date")
+
+    period.start_date = start_d
+    period.end_date = end_d
+    if period_name and period_name.strip():
+        period.period_name = period_name.strip()
+
+    normalize_academic_period_values(period)
+    db.commit()
+    db.refresh(period)
+    return period
+
+
+
