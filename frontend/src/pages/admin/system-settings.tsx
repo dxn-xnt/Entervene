@@ -27,6 +27,7 @@ import {
   getAllSettings,
   updateSetting,
   getAcademicYearsSettings,
+  prepareAcademicYears,
   getYearGeneralAveragePolicy,
   saveYearGeneralAveragePolicy,
   type YearGeneralAveragePolicy,
@@ -276,7 +277,7 @@ export default function AdminSystemSettings() {
     try {
       const [settingsData, yearsData, levelsData] = await Promise.all([
         getAllSettings(),
-        getAcademicYearsSettings(),
+        prepareAcademicYears().catch(() => getAcademicYearsSettings()),
         getAcademicLevelsSettings(),
       ]);
 

@@ -208,3 +208,25 @@ def test_historical_period_configuration_and_invalid_batches_do_not_partially_mu
     assert db_session.query(AcademicPeriod).filter(
         AcademicPeriod.academic_year_id == current.academic_year_id
     ).count() == 0
+
+
+def test_ensure_future_academic_years_with_custom_labeled_active_year(db_session):
+    # Active year has custom label with suffix e.g. "2026-2027 DEMO"
+    active_year = AcademicYear(
+        year_label="2026-2027 DEMO",
+        start_date=date(2026, 8, 1),
+        end_date=date(2027, 5, 31),
+        is_active=True,
+    )
+    db_session.add(active_year)
+    db_session.commit()
+
+    years = ensure_future_academic_years(db_session, years_ahead=2)
+    labels = [y.year_label for y in years]
+
+    # Must retain original label and provision 2027-2028 and 2028-2029 without duplicate 2026-2027
+    assert "2026-2027 DEMO" in labels
+    assert "2026-2027" not in labels
+    assert "2027-2028" in labels
+    assert "2028-2029" in labels
+

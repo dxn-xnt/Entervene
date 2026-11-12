@@ -8,18 +8,18 @@ import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Text } from "@/components/retroui/Text";
 import { FormMessage } from "@/components/retroui/FormMessage";
-import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
-import { Carousel } from "@/components/retroui/Carousel";
+import { Carousel, type CarouselApi } from "@/components/retroui/Carousel";
 import { Calendar } from "@/components/retroui/Calendar";
 import { formatPeriodLabel, periodTotal } from "@/lib/academic-periods";
-import { ApiRequestError } from "@/lib/api";
 import {
     createAcademicPeriods,
     getAcademicYearsSettings,
+    prepareAcademicYears,
     type AcademicYearSettingItem,
 } from "@/lib/settings-api";
+import { Card } from "@/components/retroui/Card";
 
 
 interface DatePickerProps {
@@ -55,7 +55,7 @@ function DatePicker({ id, invalid, errorId, selected, onSelect, placeholder = "S
                 id={id}
                 aria-invalid={invalid}
                 aria-describedby={invalid ? errorId : undefined}
-                className={`flex h-10 w-full rounded items-center justify-between border-2 border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 text-left cursor-pointer ${invalid ? "border-destructive" : "border-border"}`}
+                className={`flex h-10 w-full rounded! items-center justify-between border-2 border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 text-left cursor-pointer ${invalid ? "border-destructive" : "border-border"}`}
             >
                 <span className={selected ? "text-foreground" : "text-muted-foreground"}>
                     {selected ? format(selected, "PPP") : placeholder}
@@ -63,10 +63,11 @@ function DatePicker({ id, invalid, errorId, selected, onSelect, placeholder = "S
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
             </Popover.Trigger>
             <Popover.Portal>
-                <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
-                    <Popover.Popup className="border-2 border-border bg-background text-popover-foreground rounded overflow-hidden">
+                <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-[1050]">
+                    <Popover.Popup className="border-2 border-black bg-white text-popover-foreground rounded-lg shadow-[4px_4px_0_#000]">
                         <Calendar
                             mode="single"
+                            captionLayout="dropdown"
                             selected={selected}
                             onSelect={(date) => {
                                 onSelect(date);
@@ -120,18 +121,18 @@ function PeriodCard({
     const invalidEnd = !!error && (!endDate || (!!startDate && !!endDate && startDate > endDate));
     const errorId = `period-date-error-${index}`;
     return (
-        <div className="flex flex-col gap-5 py-3">
-            <div className="flex items-center justify-between border-b pb-3 border-border/40">
+        <Card className="flex flex-col p-0 rounded! border-2 border-black bg-card shadow-sm">
+            <div className="flex items-center justify-between p-4 bg-primary rounded-t! border-b-2 pb-3">
                 <Text className="font-bold text-md">
                     {formatPeriodLabel({ period_type: periodType, period_sequence: index + 1 })}
                 </Text>
-                <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-mono">
+                <span className="text-sm text-foreground font-semibold px-2">
                     {index + 1} of {total}
                 </span>
             </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 p-4 pt-2">
                 <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-muted-foreground" htmlFor={`start-date-${index}`}>Start Date</label>
+                    <label className="text-xs font-medium text-foreground" htmlFor={`start-date-${index}`}>Start Date</label>
                     <DatePicker
                         id={`start-date-${index}`}
                         invalid={invalidStart}
@@ -144,7 +145,7 @@ function PeriodCard({
                     />
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-muted-foreground" htmlFor={`end-date-${index}`}>End Date</label>
+                    <label className="text-xs font-medium text-foreground" htmlFor={`end-date-${index}`}>End Date</label>
                     <DatePicker
                         id={`end-date-${index}`}
                         invalid={invalidEnd}
@@ -157,8 +158,7 @@ function PeriodCard({
                     />
                 </div>
             </div>
-            {error && <FormMessage id={errorId}>{error}</FormMessage>}
-        </div>
+        </Card>
     );
 }
 
@@ -167,17 +167,19 @@ interface AddAcademicPeriodModalProps {
     onSaved?: () => void | Promise<void>;
 }
 
+const PERIOD_TYPE = "TERM";
+
 export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademicPeriodModalProps = {}) {
     const toast = useToast();
+    const [carouselApi, setCarouselApi] = React.useState<CarouselApi>();
     const [academicYears, setAcademicYears] = React.useState<AcademicYearSettingItem[]>([]);
     const [academicYear, setAcademicYear] = React.useState<string>("");
-    const [periodType, setPeriodType] = React.useState<string>("TERM");
     const [isSaving, setIsSaving] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
-    const [validationAttempt, setValidationAttempt] = React.useState(0);
 
     React.useEffect(() => {
-        getAcademicYearsSettings()
+        prepareAcademicYears()
+            .catch(() => getAcademicYearsSettings())
             .then((years) => {
                 setAcademicYears(years);
                 const active = years.find((y) => y.is_active) || years[0];
@@ -190,13 +192,13 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
             });
     }, []);
 
-    const totalPeriods = React.useMemo(() => periodTotal(periodType), [periodType]);
+    const totalPeriods = React.useMemo(() => periodTotal(PERIOD_TYPE), []);
 
     const [dates, setDates] = React.useState<{ startDate?: Date; endDate?: Date }[]>(() =>
         Array.from({ length: 3 }).map(() => ({}))
     );
 
-    // Reset/reinitialize dates when academicYear or periodType changes
+    // Reset/reinitialize dates when academicYear changes
     React.useEffect(() => {
         setDates(Array.from({ length: totalPeriods }).map(() => ({})));
         setError(null);
@@ -227,7 +229,7 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
             next[idx] = { ...next[idx], [field]: value };
             return next;
         });
-        if (error?.endsWith(formatPeriodLabel({ period_type: periodType, period_sequence: idx + 1 }) + ".") && nextPeriod.startDate && nextPeriod.endDate && nextPeriod.startDate <= nextPeriod.endDate) setError(null);
+        if (error?.endsWith(formatPeriodLabel({ period_type: PERIOD_TYPE, period_sequence: idx + 1 }) + ".") && nextPeriod.startDate && nextPeriod.endDate && nextPeriod.startDate <= nextPeriod.endDate) setError(null);
     };
 
     // Start date calculations:
@@ -299,33 +301,44 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
     const handleConfirm = async () => {
         const selectedAyObj = academicYears.find((y) => y.year_label === academicYear);
         if (!selectedAyObj) {
+            toast.error({
+                title: "Academic Year Required",
+                description: "Please select a valid academic year.",
+            });
             setError("Please select a valid academic year.");
-            setValidationAttempt((attempt) => attempt + 1);
             return;
         }
 
         // Validate all periods are filled
         for (let i = 0; i < totalPeriods; i++) {
             const p = dates[i];
+            const termLabel = formatPeriodLabel({ period_type: PERIOD_TYPE, period_sequence: i + 1 });
             if (!p?.startDate || !p?.endDate) {
-                setError(`Please select both start and end dates for ${formatPeriodLabel({ period_type: periodType, period_sequence: i + 1 })}.`);
-                setValidationAttempt((attempt) => attempt + 1);
+                carouselApi?.scrollTo(i);
+                toast.error({
+                    title: "Incomplete Term Dates",
+                    description: `Please select both start and end dates for ${termLabel}.`,
+                });
+                setError(`Please select both start and end dates for ${termLabel}.`);
                 return;
             }
             if (p.startDate > p.endDate) {
-                setError(`Start date cannot be after end date for ${formatPeriodLabel({ period_type: periodType, period_sequence: i + 1 })}.`);
-                setValidationAttempt((attempt) => attempt + 1);
+                carouselApi?.scrollTo(i);
+                toast.error({
+                    title: "Invalid Date Range",
+                    description: `Start date cannot be after end date for ${termLabel}.`,
+                });
+                setError(`Start date cannot be after end date for ${termLabel}.`);
                 return;
             }
         }
 
         setIsSaving(true);
         setError(null);
-        let created = false;
         try {
             const payload = {
                 academic_year_id: selectedAyObj.academic_year_id,
-                period_type: periodType,
+                period_type: PERIOD_TYPE,
                 periods: dates.slice(0, totalPeriods).map((p, idx) => ({
                     period_sequence: idx + 1,
                     start_date: format(p.startDate!, "yyyy-MM-dd"),
@@ -334,7 +347,10 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
             };
 
             await createAcademicPeriods(payload);
-            created = true;
+            toast.success({
+                title: "Academic Periods Created",
+                description: `Successfully configured ${totalPeriods} terms for ${academicYear}.`,
+            });
             if (onSaved) {
                 await onSaved();
             }
@@ -344,10 +360,7 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
         } catch (err: unknown) {
             console.error("Failed to save academic periods:", err);
             const msg = err instanceof Error ? err.message : "Failed to create academic periods.";
-            if (!created && err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) {
-                setError(msg);
-                setValidationAttempt((attempt) => attempt + 1);
-            } else if (!created) toast.error({ title: "Unable to create academic periods", description: msg });
+            toast.error({ title: "Unable to create academic periods", description: msg });
         } finally {
             setIsSaving(false);
         }
@@ -359,11 +372,6 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                 <Text as="h5" className="font-sans text-xl font-bold">Add Academic Period</Text>
             </Dialog.Header>
             <section className="flex flex-col gap-4 p-4">
-                <AdminValidationAlert
-                    message={error && !error.startsWith("Please select") && !error.startsWith("Start date") ? error : null}
-                    attempt={validationAttempt}
-                    firstInvalidFieldId={error === "Please select a valid academic year." ? "academic-year" : undefined}
-                />
                 <section className="text-md">
                     <div className="flex flex-col gap-3">
                         <div className="flex flex-col gap-1">
@@ -388,40 +396,27 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                             </Select>
                             {error === "Please select a valid academic year." && <FormMessage id="academic-year-error">{error}</FormMessage>}
                         </div>
-                        <div className="flex flex-col gap-1">
-                            <label htmlFor="period-type" className="text-sm font-semibold">Period Type</label>
-                            <Select value={periodType} onValueChange={setPeriodType}>
-                                <Select.Trigger className="w-full">
-                                    <Select.Value placeholder="Period Type" />
-                                </Select.Trigger>
-                                <Select.Content>
-                                    <Select.Group>
-                                        <Select.Item value="TERM">Term</Select.Item>
-                                        <Select.Item value="QUARTER">Quarter</Select.Item>
-                                        <Select.Item value="SEMESTER">Semester</Select.Item>
-                                    </Select.Group>
-                                </Select.Content>
-                            </Select>
-                        </div>
-                        <Carousel className="relative mt-4 w-full">
+                        <Carousel setApi={setCarouselApi} className="relative mt-2 w-full">
                             <div className="mx-14 min-w-0 sm:mx-16">
-                                <Carousel.Content>
+                                <Carousel.Content className="py-2">
                                     {dates.map((period, index) => (
                                         <Carousel.Item key={index}>
-                                            <PeriodCard
-                                                index={index}
-                                                total={totalPeriods}
-                                                startDate={period.startDate}
-                                                endDate={period.endDate}
-                                                onStartDateChange={(date) => handleDateChange(index, "startDate", date)}
-                                                onEndDateChange={(date) => handleDateChange(index, "endDate", date)}
-                                                minStartDate={getMinStartDate(index)}
-                                                maxStartDate={getMaxStartDate(index)}
-                                                minEndDate={getMinEndDate(index)}
-                                                maxEndDate={getMaxEndDate(index)}
-                                                periodType={periodType}
-                                                error={error?.endsWith(formatPeriodLabel({ period_type: periodType, period_sequence: index + 1 }) + ".") ? error : null}
-                                            />
+                                            <div className="p-1">
+                                                <PeriodCard
+                                                    index={index}
+                                                    total={totalPeriods}
+                                                    startDate={period.startDate}
+                                                    endDate={period.endDate}
+                                                    onStartDateChange={(date) => handleDateChange(index, "startDate", date)}
+                                                    onEndDateChange={(date) => handleDateChange(index, "endDate", date)}
+                                                    minStartDate={getMinStartDate(index)}
+                                                    maxStartDate={getMaxStartDate(index)}
+                                                    minEndDate={getMinEndDate(index)}
+                                                    maxEndDate={getMaxEndDate(index)}
+                                                    periodType={PERIOD_TYPE}
+                                                    error={error?.endsWith(formatPeriodLabel({ period_type: PERIOD_TYPE, period_sequence: index + 1 }) + ".") ? error : null}
+                                                />
+                                            </div>
                                         </Carousel.Item>
                                     ))}
                                 </Carousel.Content>

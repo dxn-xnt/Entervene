@@ -82,6 +82,16 @@ export async function getAcademicYearsSettings(): Promise<AcademicYearSettingIte
   return data.years || [];
 }
 
+/** Auto-prepare / provision future academic years (admin only). */
+export async function prepareAcademicYears(): Promise<AcademicYearSettingItem[]> {
+  const res = await apiFetch("/api/v1/settings/academic-years/prepare", {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to prepare academic years");
+  const data = await res.json();
+  return data.years || [];
+}
+
 /** Set active academic year (admin only). */
 export async function setActiveAcademicYear(academicYearId: number): Promise<void> {
   const res = await apiFetch(`/api/v1/settings/active-academic-year/${academicYearId}`, {
