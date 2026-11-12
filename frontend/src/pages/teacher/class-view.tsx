@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Archive,
   ArrowDownAZ,
   ArrowUpDown,
   BookOpen,
-  CheckCircle2,
   CheckSquare,
-  ChevronDown,
   ClipboardList,
   FileText,
-  Lightbulb,
   Plus,
-  Repeat,
   Search,
   Users,
   X,
@@ -22,7 +17,6 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
-import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
@@ -38,7 +32,6 @@ import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Avatar } from "@/components/retroui/Avatar";
 import { TeacherLessonMastery, type TeacherLessonMasteryItem } from "@/components/teacher/teacher-lesson-mastery";
-import { RepostModal } from "@/pages/teacher/forms/repost-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
@@ -85,17 +78,11 @@ import type {
   LessonDraft,
 } from "./subject-details/types";
 
-import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
 import {
   apiFetch,
   getTeacherAdvisoryClassDetail,
 } from "@/lib/api";
-import {
-  approveSuggestion,
-  archiveSuggestion,
-  dismissSuggestion,
-  getTeacherSuggestions,
-} from "@/lib/suggestion-api";
+import { getTeacherSuggestions } from "@/lib/suggestion-api";
 import type {
   TeacherAdvisoryClassDetailResponse,
   TeacherAdvisoryStudentItem,
@@ -116,9 +103,7 @@ export default function TeacherClassDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("lessons");
-  const { selectedPeriodId, selectedYear, selectedPeriod } = useAcademicPeriod();
-  const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { selectedYear, selectedPeriod } = useAcademicPeriod();
   const [studentInterfaceStudent, setStudentInterfaceStudent] = useState<TeacherAdvisoryStudentItem | null>(null);
   const [lessonInterfaceLesson, setLessonInterfaceLesson] = useState<LessonItem | null>(null);
   const [classworkInterfaceClasswork, setClassworkInterfaceClasswork] = useState<TeacherClasswork | null>(null);
@@ -227,14 +212,6 @@ export default function TeacherClassDetail() {
                   </div>
 
                   <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
-                    <Button
-                      size="header"
-                      variant="outline"
-                      className="w-full md:w-auto whitespace-nowrap"
-                      onClick={() => setIsRepostModalOpen(true)}
-                    >
-                      <Repeat className="size-4" /> Repost
-                    </Button>
                     {tab === "lessons" ? (
                       <div className="flex flex-row gap-2">
                         {(currentSubject?.subject_id || initialSubjectId || detail.subject_loads[0]?.subject_id) && (
@@ -313,7 +290,6 @@ export default function TeacherClassDetail() {
                   detail={detail}
                   initialSubjectId={initialSubjectId}
                   onLessonViewChange={setLessonInterfaceLesson}
-                  refreshTrigger={refreshKey}
                 />
               )}
               {tab === "students" && (
@@ -329,26 +305,7 @@ export default function TeacherClassDetail() {
                   currentSubject={currentSubject}
                   subjectId={currentSubject?.subject_id || initialSubjectId}
                   onClassworkViewChange={setClassworkInterfaceClasswork}
-                  refreshTrigger={refreshKey}
                   isReadOnly={isReadOnly}
-                />
-              )}
-              {detail && (currentSubject?.subject_id || initialSubjectId || detail.subject_loads[0]?.subject_id) && (
-                <RepostModal
-                  open={isRepostModalOpen}
-                  onOpenChange={setIsRepostModalOpen}
-                  destinationClassId={Number(detail.class_id)}
-                  destinationSubjectId={Number(
-                    currentSubject?.subject_id ||
-                    initialSubjectId ||
-                    detail.subject_loads[0]?.subject_id,
-                  )}
-                  destinationAcademicPeriodId={Number(selectedPeriodId || 1)}
-                  sectionName={detail.section_name}
-                  subjectName={currentSubject?.subject_name}
-                  onClonedSuccess={() => {
-                    setRefreshKey((k) => k + 1);
-                  }}
                 />
               )}
             </div>
@@ -1585,7 +1542,6 @@ function StudentsTab({
                             key={student.student_id}
                             student={student}
                             classId={detail.class_id}
-                            subjectLoads={detail.subject_loads}
                             onSelectStudent={handleSelectStudent}
                           />
                         ))}
@@ -2145,34 +2101,25 @@ function ClassworkTab({
 function StudentRow({
   student,
   classId,
-  subjectLoads,
   onSelectStudent,
 }: {
   student: TeacherAdvisoryStudentItem;
   classId: number;
-  subjectLoads: TeacherAdvisoryClassDetailResponse["subject_loads"];
   onSelectStudent?: (student: TeacherAdvisoryStudentItem) => void;
 }) {
-  const toast = useToast();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<SuggestionResponse[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState("");
 
   const loadHistory = useCallback(async () => {
     setIsHistoryLoading(true);
-    setHistoryError("");
     try {
       const data = await getTeacherSuggestions({
         classId,
         studentId: student.student_id,
       });
       setHistory(data.suggestions);
-    } catch (err) {
-      setHistoryError(
-        err instanceof Error ? err.message : "Unable to load suggestions.",
-      );
+    } catch {
+      setHistory([]);
     } finally {
       setIsHistoryLoading(false);
     }
@@ -2181,25 +2128,6 @@ function StudentRow({
   useEffect(() => {
     void loadHistory();
   }, [loadHistory]);
-
-  async function updateSuggestion(
-    id: number,
-    action: "approve" | "dismiss" | "archive",
-  ) {
-    setHistoryError("");
-    try {
-      if (action === "approve") await approveSuggestion(id);
-      else if (action === "dismiss") await dismissSuggestion(id);
-      else await archiveSuggestion(id);
-      toast.success({ title: `Suggestion ${action === "approve" ? "approved" : action === "dismiss" ? "dismissed" : "archived"}` });
-      await loadHistory();
-    } catch (err) {
-      setHistoryError(
-        err instanceof Error ? err.message : "Unable to update suggestion.",
-      );
-      toast.error({ title: "Unable to update suggestion", description: err instanceof Error ? err.message : undefined });
-    }
-  }
 
   const activeCount = history.filter((item) => item.status === "ACTIVE").length;
   const draftCount = history.filter((item) => item.status === "DRAFT").length;
@@ -2269,183 +2197,8 @@ function StudentRow({
           )}
         </Table.Cell>
 
-        {/* Column 3: Action */}
-        <Table.Cell
-          className="py-2.5 px-4 text-right"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsDialogOpen(true);
-              }}
-              className="border-2 border-black bg-success hover:bg-[#fae498] text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            >
-              <Lightbulb size={14} className="mr-1" />
-              Intervention
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowHistory((prev) => !prev);
-              }}
-              className="border-2 border-black bg-white hover:bg-gray-100 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            >
-              History
-              <ChevronDown
-                size={14}
-                className={`ml-1 transition-transform ${showHistory ? "rotate-180" : ""}`}
-              />
-            </Button>
-          </div>
-        </Table.Cell>
       </Table.Row>
 
-      {showHistory && (
-        <Table.Row className="bg-gray-50/70 border-b-2 border-black">
-          <Table.Cell colSpan={3} className="p-3">
-            <Card className="block w-full border-2 border-black bg-white p-3 shadow-none">
-              <h5 className="mb-2 text-sm font-bold text-black">
-                Suggestion History for {student.full_name}
-              </h5>
-              {historyError ? (
-                <p className="text-xs font-semibold text-red-600">
-                  {historyError}
-                </p>
-              ) : isHistoryLoading ? (
-                <p className="text-xs font-semibold text-black/60">
-                  Loading suggestions...
-                </p>
-              ) : history.length ? (
-                <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
-                  {history.map((item) => (
-                    <Card
-                      key={item.student_suggestion_id}
-                      className="block w-full border-black bg-[#fffdf5] p-2.5 text-xs shadow-none transition-none hover:shadow-none"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-black">{item.title}</p>
-                          <p className="font-semibold text-black/60">
-                            {item.resource.title}
-                          </p>
-                        </div>
-                        <span className="border border-black bg-white px-2 py-0.5 font-black text-[10px]">
-                          {item.status}
-                        </span>
-                      </div>
-                      {item.description && (
-                        <p className="mt-1 text-black/70">{item.description}</p>
-                      )}
-                      {item.source_metrics ? (
-                        <div className="mt-2 border border-black bg-white px-2 py-1 text-[11px] font-semibold text-black/70">
-                          <p>
-                            Reason:{" "}
-                            {String(
-                              item.source_metrics.source_title ?? "Low result",
-                            )}
-                          </p>
-                          <p>
-                            Score:{" "}
-                            {String(item.source_metrics.score_percent ?? "?")}%
-                            {item.source_metrics.threshold_percent
-                              ? ` below ${String(item.source_metrics.threshold_percent)}% threshold`
-                              : ""}
-                          </p>
-                        </div>
-                      ) : null}
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {item.status === "DRAFT" && (
-                          <Button
-                            type="button"
-                            variant="default"
-                            size="sm"
-                            onClick={() =>
-                              updateSuggestion(
-                                item.student_suggestion_id,
-                                "approve",
-                              )
-                            }
-                            className="gap-1 border-black bg-[#79bd80] px-2 py-1 font-bold shadow-none hover:bg-[#79bd80]"
-                          >
-                            <CheckCircle2 size={12} />
-                            Approve
-                          </Button>
-                        )}
-                        {item.status === "ACTIVE" && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              updateSuggestion(
-                                item.student_suggestion_id,
-                                "dismiss",
-                              )
-                            }
-                            className="gap-1 border-black px-2 py-1 font-bold shadow-none"
-                          >
-                            <X size={12} />
-                            Dismiss
-                          </Button>
-                        )}
-                        {(item.status === "COMPLETED" ||
-                          item.status === "DISMISSED") && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                updateSuggestion(
-                                  item.student_suggestion_id,
-                                  "archive",
-                                )
-                              }
-                              className="gap-1 border-black px-2 py-1 font-bold shadow-none"
-                            >
-                              <Archive size={12} />
-                              Archive
-                            </Button>
-                          )}
-                        {item.status === "COMPLETED" && (
-                          <span className="inline-flex items-center gap-1 font-bold text-green-700">
-                            <CheckCircle2 size={12} />
-                            Completed by student
-                          </span>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <TeacherEmptyState
-                  compact
-                  className="rounded! bg-card px-3! py-3! shadow-none hover:shadow-none"
-                  icon={<Lightbulb />}
-                  title="No suggestions yet"
-                  description="Suggestions shared with this student will appear here."
-                />
-              )}
-            </Card>
-          </Table.Cell>
-        </Table.Row>
-      )}
-
-      <SuggestionPanel
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        classId={classId}
-        student={student}
-        subjectLoads={subjectLoads}
-        onSuccess={loadHistory}
-      />
     </>
   );
 }

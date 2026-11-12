@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StudentRecordScope(BaseModel):
@@ -65,6 +65,11 @@ class StudentRecordSummary(BaseModel):
     ungraded_count: int
 
 
+class StudentClassworkLessonLink(BaseModel):
+    lesson_id: int
+    title: str
+
+
 class StudentClassworkResult(BaseModel):
     classwork_id: int
     assignment_id: int
@@ -81,6 +86,7 @@ class StudentClassworkResult(BaseModel):
     raw_score: Optional[float] = None
     effective_score: Optional[float] = None
     remediation: Optional[dict] = None
+    lesson_links: list[StudentClassworkLessonLink] = Field(default_factory=list)
 
 
 class StudentRecordDetailResponse(BaseModel):
