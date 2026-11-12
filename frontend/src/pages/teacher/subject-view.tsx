@@ -512,11 +512,10 @@ export default function SubjectDetails() {
   const handleConfirmDelivery = async (lesson: Lesson) => {
     if (isReadOnly) return;
     if (!classId || !subjectId || !effectivePeriodId) {
-      setError("Academic period context is missing. Please select an academic term.");
+      toast.error("Academic period context is missing. Please select an academic term.");
       return;
     }
     setDeliveryLoadingLessonId(lesson.lesson_id);
-    setError("");
     try {
       const delivery = await confirmLessonDelivery({
         lesson_id: lesson.lesson_id,
@@ -542,7 +541,7 @@ export default function SubjectDetails() {
       }
       toast.success(`Lesson "${lesson.title}" confirmed as completed.`);
     } catch (err) {
-      setError(
+      toast.error(
         err instanceof Error ? err.message : "Failed to confirm lesson delivery.",
       );
     } finally {
@@ -997,45 +996,38 @@ export default function SubjectDetails() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             {activeLessonDetail ? (
-              <>
-                {error && (
-                  <Alert status="error" onClose={() => setError("")} className="mx-3 mt-3 sm:mx-4 md:mx-6">
-                    <Alert.Description>{error}</Alert.Description>
-                  </Alert>
+              <TeacherLessonDetailScreen
+                lesson={activeLessonDetail}
+                isReadOnly={isReadOnly}
+                subjectName={subjectName}
+                sectionName={sectionName}
+                closeLessonDetail={closeLessonDetail}
+                openLessonManager={openLessonManager}
+                openClassworkForm={openClassworkForm}
+                openClassworkDetail={openClassworkDetail}
+                onArchiveLesson={handleArchiveLessonDirect}
+                linkedClassworks={
+                  linkedClassworks[activeLessonDetail.lesson_id] || []
+                }
+                isLoadingClasswork={
+                  loadingClassworkId === activeLessonDetail.lesson_id
+                }
+                delivery={
+                  deliveriesByLessonId[activeLessonDetail.lesson_id] ||
+                  activeLessonDetail.delivery ||
+                  null
+                }
+                isDelivered={Boolean(
+                  activeLessonDetail.is_taught ??
+                    (deliveriesByLessonId[activeLessonDetail.lesson_id]?.is_active ||
+                      activeLessonDetail.delivery?.is_active),
                 )}
-                <TeacherLessonDetailScreen
-                  lesson={activeLessonDetail}
-                  isReadOnly={isReadOnly}
-                  subjectName={subjectName}
-                  sectionName={sectionName}
-                  closeLessonDetail={closeLessonDetail}
-                  openLessonManager={openLessonManager}
-                  openClassworkForm={openClassworkForm}
-                  openClassworkDetail={openClassworkDetail}
-                  onArchiveLesson={handleArchiveLessonDirect}
-                  linkedClassworks={
-                    linkedClassworks[activeLessonDetail.lesson_id] || []
-                  }
-                  isLoadingClasswork={
-                    loadingClassworkId === activeLessonDetail.lesson_id
-                  }
-                  delivery={
-                    deliveriesByLessonId[activeLessonDetail.lesson_id] ||
-                    activeLessonDetail.delivery ||
-                    null
-                  }
-                  isDelivered={Boolean(
-                    activeLessonDetail.is_taught ??
-                      (deliveriesByLessonId[activeLessonDetail.lesson_id]?.is_active ||
-                        activeLessonDetail.delivery?.is_active),
-                  )}
-                  isDeliveryLoading={
-                    deliveryLoadingLessonId === activeLessonDetail.lesson_id
-                  }
-                  onConfirmDelivery={handleConfirmDelivery}
-                  onOpenCorrectionDialog={openCorrectionDialog}
-                />
-              </>
+                isDeliveryLoading={
+                  deliveryLoadingLessonId === activeLessonDetail.lesson_id
+                }
+                onConfirmDelivery={handleConfirmDelivery}
+                onOpenCorrectionDialog={openCorrectionDialog}
+              />
             ) : isTOSOpen && subjectId ? (
               <main>
                 <TOSGeneratorScreen

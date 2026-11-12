@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Loader2, RotateCcw, X } from "lucide-react";
+import { Loader2, RotateCcw, X } from "lucide-react";
+import { toast } from "sonner";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
-import { Alert } from "@/components/retroui/Alert";
+import LessonItemLine from "@/components/item-line/lesson";
 import { formatDate } from "@/lib/formatters";
 
 export interface LessonDeliveryCorrectionModalProps {
@@ -26,12 +27,10 @@ export default function LessonDeliveryCorrectionModal({
 }: LessonDeliveryCorrectionModalProps) {
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     if (open) {
       setReason("");
-      setError("");
       setIsSubmitting(false);
     }
   }, [open]);
@@ -49,23 +48,21 @@ export default function LessonDeliveryCorrectionModal({
     if (!deliveryId) return;
 
     if (trimmedReason.length < 3) {
-      setError("Please provide a reason of at least 3 characters.");
+      toast.error("Please provide a reason of at least 3 characters.");
       return;
     }
     if (trimmedReason.length > 500) {
-      setError("Reason cannot exceed 500 characters.");
+      toast.error("Reason cannot exceed 500 characters.");
       return;
     }
 
     setIsSubmitting(true);
-    setError("");
 
     try {
       await onConfirmCorrection(deliveryId, trimmedReason);
       onOpenChange(false);
     } catch (err) {
-      // Inline alert only, avoid duplicate toasts per AGENTS.md
-      setError(
+      toast.error(
         err instanceof Error
           ? err.message
           : "Failed to correct lesson delivery confirmation.",
@@ -77,12 +74,12 @@ export default function LessonDeliveryCorrectionModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <Dialog.Content size="md" className="overflow-visible">
+      <Dialog.Content size="xl" className="overflow-visible">
         <Dialog.Header position="fixed" asChild>
           <div className="flex items-center justify-between w-full">
             <div>
               <Text as="h5" className="font-sans text-xl font-bold">
-                Correct Lesson Delivery Confirmation
+                Revoke Lesson Completion Confirmation
               </Text>
             </div>
             <Tooltip>
@@ -105,35 +102,21 @@ export default function LessonDeliveryCorrectionModal({
         </Dialog.Header>
 
         <form onSubmit={handleSubmit} noValidate>
-          <section className="flex flex-col gap-4 p-5">
-            {error && (
-              <Alert status="error" className="rounded!" onClose={() => setError("")}>
-                <Alert.Description>{error}</Alert.Description>
-              </Alert>
-            )}
-
-            <div className="rounded! border-2 border-border bg-retro/40 p-3 space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Lesson
-                </span>
-                {deliveredAt && (
-                  <span className="text-xs text-muted-foreground font-medium">
-                    Completed on {formatDate(deliveredAt)}
-                  </span>
-                )}
-              </div>
-              <p className="text-base font-bold text-foreground">
-                {lessonTitle || "Selected Lesson"}
-              </p>
-            </div>
-
-            <div className="flex items-start gap-2.5 rounded! border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-              <AlertTriangle className="size-4 shrink-0 text-amber-600 mt-0.5" />
-              <p>
-                Revoking this delivery confirmation removes the <strong>Completed</strong> status for this class and grading period. An auditable reason is required and preserved in the revision history.
-              </p>
-            </div>
+          <section className="flex flex-col gap-4 p-5 pb-1">
+            <LessonItemLine
+              lesson={{
+                lesson_id: deliveryId || 0,
+                title: lessonTitle || "Selected Lesson",
+              }}
+              className="rounded! "
+              isDelivered={true}
+              showDeliveryStatus={true}
+              subtitle={
+                deliveredAt ? `Completed on ${formatDate(deliveredAt)}` : undefined
+              }
+              showDropdown={false}
+              withShadow={false}
+            />
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -144,11 +127,10 @@ export default function LessonDeliveryCorrectionModal({
                   Correction Reason <span className="text-destructive">*</span>
                 </label>
                 <span
-                  className={`text-xs ${
-                    trimmedReason.length > 500
-                      ? "text-destructive font-bold"
-                      : "text-muted-foreground"
-                  }`}
+                  className={`text-xs ${trimmedReason.length > 500
+                    ? "text-destructive font-bold"
+                    : "text-muted-foreground"
+                    }`}
                 >
                   {trimmedReason.length}/500 chars
                 </span>
@@ -157,18 +139,15 @@ export default function LessonDeliveryCorrectionModal({
                 id="delivery-correction-reason"
                 rows={4}
                 value={reason}
-                onChange={(e) => {
-                  setReason(e.target.value);
-                  if (error) setError("");
-                }}
+                onChange={(e) => setReason(e.target.value)}
                 disabled={isSubmitting}
                 placeholder="Explain why this delivery record is being corrected..."
                 className="w-full resize-none rounded! border-2 border-border bg-background px-3 py-2 font-sans text-sm shadow-sm transition focus:outline-hidden focus:ring-1 focus:ring-primary"
               />
-              <p className="text-[11px] text-muted-foreground">
-                Minimum 3 characters required.
-              </p>
             </div>
+            <p className="text-xs text-muted-foreground -mt-4 px-2">
+              Revoking this delivery confirmation removes the <strong>Completed</strong> status for this class and grading period.
+            </p>
           </section>
 
           <Dialog.Footer position="static" className="flex items-center justify-end gap-2 p-4">

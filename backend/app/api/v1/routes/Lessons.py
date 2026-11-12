@@ -20,6 +20,7 @@ from app.services.lesson.LessonService import (
     teacher_lesson_linked_classwork,
     teacher_lessons,
     teacher_lessons_for_class_subject,
+    teacher_class_lessons_mastery,
     unarchive_lesson_record,
     unlink_classwork,
     update_lesson_record,
@@ -63,6 +64,25 @@ def get_teacher_lessons_for_class_subject(
     db: Session = Depends(get_db),
 ):
     return teacher_lessons_for_class_subject(
+        class_id=class_id,
+        subject_id=subject_id,
+        staff_id=staff_id,
+        db=db,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+    )
+
+
+@router.get("/my-class/{class_id}/subject/{subject_id}/mastery")
+def get_teacher_class_lessons_mastery(
+    class_id: int,
+    subject_id: int,
+    academic_period_id: Optional[int] = Query(None, description="Filter lessons by academic period"),
+    academic_year_id: Optional[int] = Query(None, description="Filter lessons by academic year"),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return teacher_class_lessons_mastery(
         class_id=class_id,
         subject_id=subject_id,
         staff_id=staff_id,

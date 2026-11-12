@@ -59,8 +59,14 @@ export interface LinkedClassworkItem {
   total_points?: number | null;
   attachment_count?: number;
   is_published?: boolean;
+  publish_date?: string | null;
   is_locked?: boolean;
   created_at?: string | null;
+  average_score?: number | null;
+  score_percent?: number | null;
+  graded_count?: number;
+  total_earned?: number;
+  total_possible?: number;
 }
 
 export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
@@ -81,6 +87,8 @@ export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
   className?: string;
   showPublicationStatus?: boolean;
   showDeliveryStatus?: boolean;
+  /** Whether to show the chevron/expand dropdown button. Defaults to true. */
+  showDropdown?: boolean;
   /** Show the retro drop shadow on the lesson card. Defaults to true. */
   withShadow?: boolean;
   // Delivery status & actions
@@ -110,6 +118,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
   className,
   showPublicationStatus = true,
   showDeliveryStatus = true,
+  showDropdown = true,
   withShadow = true,
   delivery,
   isDelivered,
@@ -139,13 +148,14 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
       <Accordion.Item
         value={String(lesson.lesson_id)}
         className={cn(
-          "border-2 border-black bg-primary hover:translate-x-1 transition-all",
+          "border-2 border-black bg-primary rounded! transition-all",
+          onOpenLessonDetail && "hover:translate-x-1",
           withShadow ? "shadow-md!" : "shadow-none!",
         )}
       >
         <div
-          role="button"
-          tabIndex={0}
+          role={onOpenLessonDetail ? "button" : undefined}
+          tabIndex={onOpenLessonDetail ? 0 : undefined}
           onClick={() => {
             onOpenLessonDetail?.(lesson);
           }}
@@ -155,8 +165,11 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
               onOpenLessonDetail?.(lesson);
             }
           }}
-          className="group flex flex-1 cursor-pointer items-center justify-between gap-3 p-4 font-sans text-base select-none transition-all"
-          aria-label={`View lesson: ${lesson.title}`}
+          className={cn(
+            "group flex flex-1 items-center justify-between gap-3 p-4 font-sans text-base select-none transition-all",
+            onOpenLessonDetail ? "cursor-pointer" : "cursor-default",
+          )}
+          aria-label={onOpenLessonDetail ? `View lesson: ${lesson.title}` : undefined}
         >
           <div className="flex flex-col w-full items-start min-w-0 text-left">
             <div className="flex items-center w-full justify-between gap-2 min-w-0 pr-2">
@@ -198,114 +211,132 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              aria-label={isExpanded ? "Collapse classworks" : "Expand classworks"}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggle?.();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
+          {showDropdown && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                aria-label={isExpanded ? "Collapse classworks" : "Expand classworks"}
+                onClick={(e) => {
                   e.stopPropagation();
                   onToggle?.();
-                }
-              }}
-              className="pr-1 transition-colors cursor-pointer shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 shrink-0 text-black transition-transform duration-200",
-                  isExpanded && "rotate-90",
-                )}
-              />
-            </button>
-          </div>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    onToggle?.();
+                  }
+                }}
+                className="pr-1 transition-colors cursor-pointer shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-black transition-transform duration-200",
+                    isExpanded && "rotate-90",
+                  )}
+                />
+              </button>
+            </div>
+          )}
         </div>
 
-        <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
-          {children !== undefined ? (
-            children
-          ) : (
-            <>
-              {lesson.description && (
-                <p className="text-xs font-normal text-muted-foreground break-words line-clamp-2 pb-1">
-                  {lesson.description}
-                </p>
-              )}
+        {showDropdown && (
+          <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
+            {children !== undefined ? (
+              children
+            ) : (
+              <>
+                {lesson.description && (
+                  <p className="text-xs font-normal text-muted-foreground break-words line-clamp-2 pb-1">
+                    {lesson.description}
+                  </p>
+                )}
 
-              {isLoadingClassworks ? (
-                <LoadingPanel label="Loading classworks..." />
-              ) : classworks.length === 0 ? (
-                <TeacherEmptyState
-                  icon={<ClipboardList />}
-                  title="No classworks yet"
-                  description="No classworks assigned to this lesson yet."
-                  action={onOpenClassworkForm ? {
-                    label: "Add Classwork",
-                    icon: <Plus className="size-4" />,
-                    onClick: () => onOpenClassworkForm(lesson),
-                  } : undefined}
-                  compact
-                  className="bg-background shadow-none hover:shadow-none"
-                />
-              ) : (
-                classworks.map((cw) => (
-                  <ClassworkItemLine
-                    key={cw.classwork_assignment_id}
-                    item={cw}
-                    onOpen={onOpenClassworkDetail}
-                    className="shadow-none!"
-                    showCategoryBadge={false}
-                    showPublicationStatus={false}
+                {isLoadingClassworks ? (
+                  <LoadingPanel label="Loading classworks..." />
+                ) : classworks.length === 0 ? (
+                  <TeacherEmptyState
+                    icon={<ClipboardList />}
+                    title="No classworks yet"
+                    description="No classworks assigned to this lesson yet."
+                    action={onOpenClassworkForm ? {
+                      label: "Add Classwork",
+                      icon: <Plus className="size-4" />,
+                      onClick: () => onOpenClassworkForm(lesson),
+                    } : undefined}
+                    compact
+                    className="bg-background shadow-none hover:shadow-none"
                   />
-                ))
-              )}
-              {((!isTaught && onConfirmDelivery) ||
-                (isTaught && onOpenCorrectionDialog) ||
-                (classworks.length > 0 && onOpenClassworkForm)) && <div className="mt-2 flex w-full flex-wrap items-center justify-between gap-2 pt-2">
-                  {isTaught && activeDelivery?.delivered_at ? (
-                    <span className="text-sm text-muted-foreground">
-                      Completed on {formatDate(activeDelivery.delivered_at)}
-                    </span>
-                  ) : <span />}
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {!isTaught && onConfirmDelivery && (
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        disabled={isDeliveryLoading}
-                        onClick={() => void onConfirmDelivery(lesson)}
-                        className="h-8 gap-1.5"
-                        data-testid={`mark-taught-btn-${lesson.lesson_id}`}
-                      >
-                        {isDeliveryLoading ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <CheckCircle2 size={14} />
-                        )}
-                        <span>Mark as Completed</span>
-                      </Button>
-                    )}
-                    {classworks.length > 0 && onOpenClassworkForm && (
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        onClick={() => onOpenClassworkForm(lesson)}
-                        className="h-8"
-                      >
-                        <Plus size={14} className="mr-1.5" />
-                        Add Classwork
-                      </Button>
-                    )}
-                  </div>
-                </div>}
-            </>
-          )}
-        </Accordion.Content>
+                ) : (
+                  classworks.map((cw) => (
+                    <ClassworkItemLine
+                      key={cw.classwork_assignment_id}
+                      item={cw}
+                      onOpen={onOpenClassworkDetail}
+                      className="shadow-none!"
+                      showCategoryBadge={false}
+                      showPublicationStatus={false}
+                    />
+                  ))
+                )}
+                {((!isTaught && onConfirmDelivery) ||
+                  (isTaught && onOpenCorrectionDialog) ||
+                  (classworks.length > 0 && onOpenClassworkForm)) && <div className="mt-2 flex w-full flex-wrap items-center justify-between gap-2 pt-2">
+                    {isTaught && activeDelivery?.delivered_at ? (
+                      <span className="text-sm text-muted-foreground">
+                        Completed on {formatDate(activeDelivery.delivered_at)}
+                      </span>
+                    ) : <span />}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {!isTaught && onConfirmDelivery && (
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          disabled={isDeliveryLoading}
+                          onClick={() => void onConfirmDelivery(lesson)}
+                          className="h-8 gap-1.5"
+                          data-testid={`mark-taught-btn-${lesson.lesson_id}`}
+                        >
+                          {isDeliveryLoading ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 size={14} />
+                          )}
+                          <span>Mark as Completed</span>
+                        </Button>
+                      )}
+                      {isTaught && onOpenCorrectionDialog && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isDeliveryLoading}
+                          onClick={() => onOpenCorrectionDialog(lesson)}
+                          className="h-8 gap-1.5 text-black hover:text-black"
+                          data-testid={`correct-delivery-btn-${lesson.lesson_id}`}
+                        >
+                          <RotateCcw className="size-3.5" />
+                          <span>Correct Confirmation</span>
+                        </Button>
+                      )}
+                      {classworks.length > 0 && onOpenClassworkForm && (
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          onClick={() => onOpenClassworkForm(lesson)}
+                          className="h-8"
+                        >
+                          <Plus size={14} className="mr-1.5" />
+                          Add Classwork
+                        </Button>
+                      )}
+                    </div>
+                  </div>}
+              </>
+            )}
+          </Accordion.Content>
+        )}
       </Accordion.Item>
     </Accordion>
   );
