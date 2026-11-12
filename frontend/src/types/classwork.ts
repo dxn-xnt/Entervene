@@ -12,6 +12,13 @@ export type ClassworkAttachment = {
   uploaded_at?: string | null;
 };
 
+export type ClassworkReferenceLink = {
+  classwork_reference_link_id: number;
+  url: string;
+  title: string | null;
+  position: number;
+};
+
 export type ActivityRubricLevel = {
   rubric_level_id?: number | null;
   level_name: string;
@@ -59,6 +66,7 @@ export type TeacherClasswork = {
   subject_id: number;
   subject_name?: string | null;
   attachments: ClassworkAttachment[];
+  reference_links?: ClassworkReferenceLink[];
   assignments?: ClassworkAssignment[] | null;
   linked_lessons?: LinkedLesson[];
   created_at?: string | null;

@@ -9,6 +9,7 @@ import {
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AttachmentDisplay from "@/components/attachment-display";
+import { ReferenceLinkList } from "@/components/classwork-reference-links";
 import { API_URL, apiFetch } from "@/lib/api";
 import { Badge } from "@/components/retroui/Badge";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -890,6 +891,12 @@ export default function ClassworkView({
                     )}
                   </Card.Content>
                 </Card>
+                {!!selected.reference_links?.length && <Card className="w-full p-0 border-0! shadow-none px-2">
+                  <Card.Content className="space-y-3">
+                    <Card.Title className="mb-1 text-lg">Reference Links</Card.Title>
+                    <ReferenceLinkList links={selected.reference_links} />
+                  </Card.Content>
+                </Card>}
               </div>
 
 

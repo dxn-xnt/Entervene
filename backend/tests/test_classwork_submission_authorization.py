@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import CheckConstraint, create_engine
+from sqlalchemy import CheckConstraint, create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -32,6 +32,7 @@ from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
+from app.models.classwork.ClassworkReferenceLink import ClassworkReferenceLink
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
@@ -383,6 +384,139 @@ def _wizard_payload(
     return payload
 
 
+def test_reference_links_create_draft_edit_publish_and_student_detail(authz_context):
+    c = authz_context
+    endpoint = "/api/v1/classwork-assignments/with-assignments"
+    payload = _wizard_payload(c, "Linked draft")
+    payload["reference_links"] = json.dumps([
+        {"url": "https://docs.example.test/first", "title": "First"},
+        {"url": "https://video.example.test/second", "title": ""},
+    ])
+    created = c["client"].post(endpoint, data=payload)
+    assert created.status_code == 200, created.text
+    classwork_id = created.json()["classwork_id"]
+    detail_url = f"/api/v1/classwork-assignments/classwork/{classwork_id}"
+    assert created.json()["is_published"] is False
+    assert [link["position"] for link in created.json()["reference_links"]] == [0, 1]
+    assert [link["title"] for link in c["client"].get(detail_url).json()["reference_links"]] == ["First", None]
+
+    _act_as(c, "student", "student")
+    assert c["client"].get(detail_url).status_code == 403
+    _act_as(c, "owner", "teacher")
+    changed = c["client"].put(detail_url, json={"reference_links": [
+        {"url": "https://video.example.test/second", "title": "Updated"},
+        {"url": "https://docs.example.test/third", "title": "Third"},
+    ]})
+    assert changed.status_code == 200, changed.text
+    assert [link["title"] for link in changed.json()["reference_links"]] == ["Updated", "Third"]
+    assert c["client"].put(detail_url, json={"is_published": True}).status_code == 200
+    assigned = c["client"].post(
+        f"{detail_url}/assign",
+        json={"class_ids": [c["allowed_class"].class_id], "is_published": True},
+    )
+    assert assigned.status_code == 200, assigned.text
+    _act_as(c, "student", "student")
+    student_detail = c["client"].get(detail_url)
+    assert student_detail.status_code == 200, student_detail.text
+    assert [link["position"] for link in student_detail.json()["reference_links"]] == [0, 1]
+    assignment_detail = c["client"].get(f"/api/v1/classwork-assignments/assignment/{c['db'].query(ClassworkAssignment).filter_by(classwork_id=classwork_id).one().classwork_assignment_id}")
+    assert assignment_detail.status_code == 200
+    assert [link["title"] for link in assignment_detail.json()["reference_links"]] == ["Updated", "Third"]
+    _act_as(c, "other_student", "student")
+    assert c["client"].get(detail_url).status_code in {403, 404}
+
+
+def test_reference_links_update_preserves_other_classwork_data(authz_context):
+    c = authz_context
+    url = f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}"
+    c["submission"].grade = 77
+    c["submission"].feedback = "Keep practicing"
+    c["db"].commit()
+    first = c["client"].put(url, json={"reference_links": [{"url": "https://example.test/resource", "title": "Resource"}]})
+    assert first.status_code == 200, first.text
+    original_id = first.json()["reference_links"][0]["classwork_reference_link_id"]
+    assert c["client"].put(url, json={"description": "Edited description"}).json()["reference_links"][0]["classwork_reference_link_id"] == original_id
+    assert c["db"].query(ClassworkAttachment).filter_by(classwork_id=c["classwork"].classwork_id).count() == 1
+    c["db"].refresh(c["submission"])
+    assert (c["submission"].grade, c["submission"].feedback) == (77, "Keep practicing")
+    assert c["client"].put(url, json={"reference_links": []}).json()["reference_links"] == []
+    assert c["db"].query(ClassworkReferenceLink).filter_by(classwork_id=c["classwork"].classwork_id).count() == 0
+
+
+@pytest.mark.parametrize("bad_links", [
+    [{"url": "javascript:alert(1)"}],
+    [{"url": "https://user:pass@example.test/"}],
+    [{"url": "https://example.test/one"}, {"url": "https://example.test/one"}],
+    [{"url": "https://example.test/space here"}],
+])
+def test_reference_links_reject_invalid_input_without_changes(authz_context, bad_links):
+    c = authz_context
+    url = f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}"
+    before = c["db"].query(ClassworkReferenceLink).count()
+    response = c["client"].put(url, json={"reference_links": bad_links})
+    assert response.status_code == 422
+    assert c["db"].query(ClassworkReferenceLink).count() == before
+    payload = _wizard_payload(c, "Invalid linked draft")
+    payload["reference_links"] = json.dumps(bad_links)
+    before_classworks = c["db"].query(Classwork).count()
+    assert c["client"].post("/api/v1/classwork-assignments/with-assignments", data=payload).status_code == 422
+    assert c["db"].query(Classwork).count() == before_classworks
+
+
+def test_reference_links_update_requires_owner_and_preserves_older_records(authz_context):
+    c = authz_context
+    url = f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}"
+    assert c["client"].get(url).json()["reference_links"] == []
+    _act_as(c, "other_teacher", "teacher")
+    assert c["client"].put(url, json={"reference_links": [{"url": "https://example.test/"}]}).status_code in {403, 404}
+    assert c["db"].query(ClassworkReferenceLink).count() == 0
+
+
+def test_reference_links_failed_insert_rolls_back_replacement(authz_context):
+    c = authz_context
+    url = f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}"
+    assert c["client"].put(url, json={"reference_links": [{"url": "https://example.test/original"}]}).status_code == 200
+
+    def reject_insert(_mapper, _connection, _target):
+        raise RuntimeError("synthetic insert failure")
+
+    event.listen(ClassworkReferenceLink, "before_insert", reject_insert)
+    try:
+        with pytest.raises(RuntimeError, match="synthetic insert failure"):
+            c["client"].put(url, json={"reference_links": [{"url": "https://example.test/replacement"}]})
+    finally:
+        event.remove(ClassworkReferenceLink, "before_insert", reject_insert)
+    c["db"].expire_all()
+    assert [link.url for link in c["db"].query(ClassworkReferenceLink).all()] == ["https://example.test/original"]
+
+
+def test_reference_links_teacher_list_loads_in_one_bulk_query(authz_context):
+    c = authz_context
+    for index in range(5):
+        work = Classwork(
+            title=f"Linked work {index}", classwork_type="READING", subject_id=c["subject"].subject_id,
+            created_by_staff_id=c["owner"].staff_id, is_published=False,
+        )
+        work.reference_links.append(ClassworkReferenceLink(url=f"https://example.test/{index}", position=0))
+        c["db"].add(work)
+    c["db"].commit()
+    link_selects = []
+
+    def count_link_reads(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT") and "classwork_reference_link" in statement:
+            link_selects.append(statement)
+
+    engine = c["db"].get_bind()
+    event.listen(engine, "before_cursor_execute", count_link_reads)
+    try:
+        response = c["client"].get("/api/v1/classwork-assignments/my-classworks")
+    finally:
+        event.remove(engine, "before_cursor_execute", count_link_reads)
+    assert response.status_code == 200, response.text
+    assert sum(bool(item["reference_links"]) for item in response.json()) == 5
+    assert len(link_selects) == 1
+
+
 def test_default_classwork_creation_tracks_canonical_period_switch(authz_context):
     c = authz_context
     c["period"].is_active = False
@@ -623,6 +757,7 @@ def test_quiz_classwork_creation_saves_builder_atomically(authz_context):
             "due_date": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
             "max_attempts": "1",
             "quiz_payload": json.dumps(_valid_quiz_payload()),
+            "reference_links": json.dumps([{"url": "https://example.test/quiz-guide", "title": "Quiz guide"}]),
         },
     )
 
@@ -631,6 +766,7 @@ def test_quiz_classwork_creation_saves_builder_atomically(authz_context):
     quiz = c["db"].query(Quiz).filter(Quiz.classwork_id == classwork_id).one()
     assert quiz.total_items == 1
     assert c["db"].query(QuizQuestion).filter(QuizQuestion.quiz_id == quiz.quiz_id).count() == 1
+    assert [link["title"] for link in response.json()["reference_links"]] == ["Quiz guide"]
 
 
 def test_quiz_classwork_creation_rolls_back_when_builder_fails(authz_context):
@@ -747,6 +883,7 @@ def test_atomic_classwork_create_rolls_back_on_upload_failure(authz_context, mon
         "classworks": c["db"].query(Classwork).count(),
         "assignments": c["db"].query(ClassworkAssignment).count(),
         "attachments": c["db"].query(ClassworkAttachment).count(),
+        "reference_links": c["db"].query(ClassworkReferenceLink).count(),
     }
 
     async def fail_upload(file, folder):
@@ -765,6 +902,7 @@ def test_atomic_classwork_create_rolls_back_on_upload_failure(authz_context, mon
             "class_ids": f"[{c['allowed_class'].class_id}]",
             "academic_period_id": str(c["period"].academic_period_id),
             "max_attempts": "1",
+            "reference_links": json.dumps([{"url": "https://example.test/rollback"}]),
         },
         files=[("files", ("broken.pdf", b"%PDF", "application/pdf"))],
     )
@@ -773,6 +911,7 @@ def test_atomic_classwork_create_rolls_back_on_upload_failure(authz_context, mon
     assert c["db"].query(Classwork).count() == counts["classworks"]
     assert c["db"].query(ClassworkAssignment).count() == counts["assignments"]
     assert c["db"].query(ClassworkAttachment).count() == counts["attachments"]
+    assert c["db"].query(ClassworkReferenceLink).count() == counts["reference_links"]
 
 
 def test_atomic_classwork_create_persists_assignments_materials_and_lesson(authz_context, monkeypatch):
@@ -886,6 +1025,9 @@ def test_student_classwork_list_uses_publish_boolean_and_future_lock_metadata(au
 
 def test_published_locked_classwork_is_visible_but_not_accessible(authz_context):
     c = authz_context
+    c["db"].add(ClassworkReferenceLink(
+        classwork_id=c["classwork"].classwork_id, url="https://example.test/locked-resource", position=0,
+    ))
     c["assignment"].lock_date = datetime.now(timezone.utc) + timedelta(days=1)
     c["db"].commit()
 
@@ -909,6 +1051,7 @@ def test_published_locked_classwork_is_visible_but_not_accessible(authz_context)
 
     assert list_response.status_code == 200
     assert list_response.json()[0]["is_locked"] is True
+    assert list_response.json()[0]["reference_links"] == []
     assert detail_response.status_code == 403
     assert download_response.status_code == 403
     assert submit_response.status_code == 403

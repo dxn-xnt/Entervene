@@ -31,6 +31,7 @@ import {
 import { LoadingPanel } from "@/components/loading-panel";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import AttachmentDisplay from "@/components/attachment-display";
+import { ReferenceLinkList } from "@/components/classwork-reference-links";
 import SubmissionForm, { type SubmissionLinkDraft } from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
@@ -665,6 +666,11 @@ export default function StudentClassworkView() {
                         />
                       )}
                     </section>
+
+                    {!!detail.reference_links?.length && <section className="space-y-2">
+                      <h2 className="text-lg font-bold">Reference Links</h2>
+                      <ReferenceLinkList links={detail.reference_links} />
+                    </section>}
 
                     {detail.rubric_levels &&
                       detail.rubric_levels.length > 0 && (

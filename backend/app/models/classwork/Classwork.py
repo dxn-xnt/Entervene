@@ -35,6 +35,10 @@ class Classwork(Base):
     subject: Mapped[object] = relationship("Subject", backref="classworks")
     staff: Mapped[object] = relationship("AcademicStaff", backref="classworks")
     attachments: Mapped[list["ClassworkAttachment"]] = relationship("ClassworkAttachment", back_populates="classwork", cascade="all, delete-orphan")
+    reference_links: Mapped[list["ClassworkReferenceLink"]] = relationship(
+        "ClassworkReferenceLink", back_populates="classwork", cascade="all, delete-orphan",
+        order_by="ClassworkReferenceLink.position",
+    )
     assignments: Mapped[list["ClassworkAssignment"]] = relationship("ClassworkAssignment", back_populates="classwork", cascade="all, delete-orphan")
     lessons: Mapped[list["Lesson"]] = relationship("Lesson", secondary="classwork_lesson", backref="linked_classworks")
     rubric_levels: Mapped[list["ActivityRubricLevel"]] = relationship(

@@ -127,6 +127,7 @@ export default function ClassworkCard({
 
       const lessonIds = detail.linked_lessons?.map((l) => l.lesson_id) ?? [];
       formData.append("lesson_ids", JSON.stringify(lessonIds));
+      formData.append("reference_links", JSON.stringify((detail.reference_links ?? []).map((link) => ({ url: link.url, title: link.title }))));
 
       if (detail.assignments?.[0]?.allow_late_submissions !== undefined) {
         formData.append(

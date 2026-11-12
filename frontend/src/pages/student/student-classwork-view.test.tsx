@@ -72,6 +72,7 @@ const mockReadingDetail = {
   lock_date: null,
   allow_late_submissions: true,
   attachments: [],
+  reference_links: [{ classwork_reference_link_id: 21, url: "https://docs.example.test/kinematics", title: "Kinematics Guide", position: 0 }],
   linked_lessons: [
     {
       lesson_id: 101,
@@ -160,6 +161,10 @@ describe("StudentClassworkView reading review and intervention integration", () 
     expect(screen.getByRole("button", { name: "Mark as Completed" })).toBeTruthy();
     expect(screen.queryByText("Study Support Preparation")).toBeNull();
     expect(screen.queryByRole("button", { name: "Mark as Reviewed" })).toBeNull();
+    const resource = screen.getByRole("link", { name: "Kinematics Guide" });
+    expect(resource.getAttribute("href")).toBe("https://docs.example.test/kinematics");
+    expect(resource.getAttribute("target")).toBe("_blank");
+    expect(resource.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
   it("renders Study Support Preparation card with Review Required when intervention_id is present and not reviewed", async () => {

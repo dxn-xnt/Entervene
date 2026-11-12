@@ -6,6 +6,13 @@ export interface ClassworkAttachment {
   uploaded_at?: string;
 }
 
+export interface ClassworkReferenceLink {
+  classwork_reference_link_id: number;
+  url: string;
+  title: string | null;
+  position: number;
+}
+
 export interface LinkedLessonAttachment {
   lesson_attachment_id: number;
   file_name: string;
@@ -64,6 +71,7 @@ export interface ClassworkDetail {
   teacher_avatar?: string | null;
   submission_status?: string | null;
   attachments: ClassworkAttachment[];
+  reference_links?: ClassworkReferenceLink[];
   linked_lessons?: LinkedLesson[];
 }
 
