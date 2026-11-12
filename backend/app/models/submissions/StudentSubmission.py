@@ -34,4 +34,7 @@ class StudentSubmission(Base):
     classwork_assignment: Mapped[object] = relationship("ClassworkAssignment", back_populates="submissions")
     graded_by: Mapped[object] = relationship("AcademicStaff", backref="graded_submissions")
     attachments: Mapped[list[object]] = relationship("SubmissionAttachment", back_populates="submission", cascade="all, delete-orphan")
+    links: Mapped[list["SubmissionLink"]] = relationship(
+        "SubmissionLink", back_populates="submission", cascade="all, delete-orphan", order_by="SubmissionLink.position"
+    )
 

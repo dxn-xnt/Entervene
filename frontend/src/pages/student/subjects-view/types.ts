@@ -75,6 +75,13 @@ export interface SubmissionAttachment {
   uploaded_at?: string;
 }
 
+export interface SubmissionLink {
+  submission_link_id: number;
+  url: string;
+  title?: string | null;
+  position: number;
+}
+
 export interface Submission {
   submission_id: number;
   classwork_assignment_id?: number;
@@ -84,6 +91,7 @@ export interface Submission {
   feedback?: string;
   attempt_count: number;
   attachments: SubmissionAttachment[];
+  links?: SubmissionLink[];
 }
 
 export interface QuizAttemptOption {

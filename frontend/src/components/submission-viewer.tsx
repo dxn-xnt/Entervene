@@ -5,6 +5,7 @@ import AttachmentDisplay from "./attachment-display";
 import ConfirmDialog from "./confirm-dialog";
 import { API_URL } from "@/lib/api";
 import { formatDateTime } from "@/lib/formatters";
+import SubmissionLinkList, { type SavedSubmissionLink } from "./submission-link-list";
 
 interface SubmissionAttachment {
   submission_attachment_id: number;
@@ -23,6 +24,7 @@ interface SubmissionViewerProps {
     feedback?: string;
     attempt_count: number;
     attachments: SubmissionAttachment[];
+    links?: SavedSubmissionLink[];
   };
   maxAttempts?: number;
   dueDate?: string;
@@ -152,6 +154,12 @@ export default function SubmissionViewer({
         </div>
       )}
 
+      {Boolean(submission.links?.length) && (
+        <div className="bg-white border border-gray-200 rounded p-4">
+          <SubmissionLinkList links={submission.links ?? []} />
+        </div>
+      )}
+
       {/* Resubmission Actions */}
       {allowResubmit && (
         <div className="bg-white border border-blue-200 rounded p-4">
@@ -181,7 +189,7 @@ export default function SubmissionViewer({
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
         title="Delete submission?"
-        description="This will remove your current submission and its attached files so you can submit again."
+        description="This will remove your current submission, files, and links so you can submit again."
         confirmLabel={isDeleting ? "Deleting..." : "Delete & Resubmit"}
         confirmVariant="destructive"
         isLoading={isDeleting}

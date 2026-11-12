@@ -139,6 +139,13 @@ export type SubmissionAttachment = {
   uploaded_at?: string | null;
 };
 
+export type SubmissionLink = {
+  submission_link_id: number;
+  url: string;
+  title?: string | null;
+  position: number;
+};
+
 export type TeacherSubmissionDetail = {
   submission_id: number;
   student_id: string;
@@ -150,6 +157,7 @@ export type TeacherSubmissionDetail = {
   feedback_fingerprint: string;
   submitted_at?: string | null;
   attachments: SubmissionAttachment[];
+  links?: SubmissionLink[];
   total_points?: number | null;
 };
 

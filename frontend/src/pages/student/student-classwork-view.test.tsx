@@ -101,7 +101,7 @@ beforeEach(() => {
   mockAcademicContext.selectedYear.is_active = true;
   mockAcademicContext.periods = [mockAcademicContext.selectedPeriod];
 
-  vi.spyOn(apiModule, "apiFetch").mockImplementation(async (path: string, _options?: RequestInit) => {
+  vi.spyOn(apiModule, "apiFetch").mockImplementation(async (path: string) => {
     if (path.includes("/api/v1/classwork-assignments/assignment/16")) {
       return {
         ok: true,
@@ -316,4 +316,49 @@ describe("StudentClassworkView reading review and intervention integration", () 
     expect(screen.getByText("Physics Support")).toBeTruthy();
     expect(screen.getAllByText("Kinematics Reference Guide").length).toBeGreaterThanOrEqual(2);
   });
+});
+
+it("submits a link-only assignment through the existing multipart endpoint", async () => {
+  vi.mocked(apiModule.apiFetch).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.includes("/api/v1/classwork-assignments/assignment/16")) {
+      return { ok: true, json: async () => ({
+        ...mockReadingDetail,
+        classwork_type: "ASSIGNMENT",
+        title: "Link Assignment",
+        is_graded: true,
+        max_attempts: null,
+      }) } as Response;
+    }
+    if (path.includes("/api/v1/submissions/my-submissions")) {
+      return { ok: true, json: async () => [] } as Response;
+    }
+    if (path.includes("/api/v1/submissions/assignment/16/submit") && options?.method === "POST") {
+      return { ok: true, json: async () => ({
+        submission_id: 21,
+        classwork_assignment_id: 16,
+        status: "submitted",
+        attempt_count: 1,
+        attachments: [],
+        links: [{ submission_link_id: 4, url: "https://github.com/example/work", title: null, position: 0 }],
+      }) } as Response;
+    }
+    return { ok: true, json: async () => ({}) } as Response;
+  });
+
+  mount("/student/classworks/16");
+  expect(await screen.findByRole("heading", { name: "Link Assignment" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Submit link" }));
+  fireEvent.change(screen.getByLabelText("Link 1 URL"), { target: { value: "https://github.com/example/work" } });
+  fireEvent.click(screen.getByRole("button", { name: "Submit Assignment" }));
+
+  await waitFor(() => {
+    const call = vi.mocked(apiModule.apiFetch).mock.calls.find(([path, options]) =>
+      path.includes("/api/v1/submissions/assignment/16/submit") && options?.method === "POST"
+    );
+    expect(call).toBeTruthy();
+    const body = call?.[1]?.body as FormData;
+    expect(body.getAll("files")).toEqual([]);
+    expect(JSON.parse(String(body.get("links")))).toEqual([{ url: "https://github.com/example/work", title: null }]);
+  });
+  expect(await screen.findByText("Submitted Links")).toBeTruthy();
 });

@@ -31,7 +31,7 @@ import {
 import { LoadingPanel } from "@/components/loading-panel";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import AttachmentDisplay from "@/components/attachment-display";
-import SubmissionForm from "@/components/submission-form";
+import SubmissionForm, { type SubmissionLinkDraft } from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import ClassworkItemLine from "@/components/item-line/classwork";
@@ -277,17 +277,21 @@ export default function StudentClassworkView() {
   const status =
     quiz?.status ?? submission?.status ?? detail?.submission_status;
 
-  const submitFiles = async (files: File[]) => {
+  const submitFiles = async (files: File[], links: SubmissionLinkDraft[]) => {
     if (!isWritableContext) return;
     setActionLoading(true);
     try {
       const body = new FormData();
       files.forEach((file) => body.append("files", file));
+      if (links.length) body.append("links", JSON.stringify(links));
       const response = await apiFetch(
         `/api/v1/submissions/assignment/${assignmentId}/submit`,
         { method: "POST", body },
       );
-      if (!response.ok) throw new Error("Failed to submit assignment.");
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(typeof payload?.detail === "string" ? payload.detail : "Failed to submit assignment.");
+      }
       const next = (await response.json()) as Submission;
       setSubmission(next);
       setDetail((current) =>
@@ -297,15 +301,6 @@ export default function StudentClassworkView() {
         title: "Assignment submitted",
         description: "Your work was submitted successfully.",
       });
-    } catch (cause) {
-      toast.error({
-        title: "Submission failed",
-        description:
-          cause instanceof Error
-            ? cause.message
-            : "Failed to submit assignment.",
-      });
-      throw cause;
     } finally {
       setActionLoading(false);
     }
