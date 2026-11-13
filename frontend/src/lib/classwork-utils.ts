@@ -80,6 +80,15 @@ export function scoreBand(points: number | null | undefined, ratio: number) {
   return `${Math.max(1, Math.round(points * ratio))} pts`;
 }
 
+/** Display stored level scores as inclusive ranges without changing grading values. */
+export function rubricPointRange(points: number, levelPoints: number[]) {
+  const lowerLevels = levelPoints.filter((value) => value < points);
+  const previous = lowerLevels.length ? Math.max(...lowerLevels) : 0;
+  const increment = levelPoints.every(Number.isInteger) ? 1 : 0.01;
+  const minimum = Math.min(points, Number((previous + increment).toFixed(2)));
+  return minimum === points ? `${points}` : `${minimum}–${points}`;
+}
+
 export function isReadingType(value?: string | null) {
   return value?.toUpperCase() === "READING";
 }

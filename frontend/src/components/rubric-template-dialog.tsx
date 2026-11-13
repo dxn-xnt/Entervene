@@ -29,6 +29,7 @@ import RubricsScoreBoard from "@/components/rubrics-score-board";
 import {
   activityRubricMaximum,
   defaultActivityRubric,
+  rubricPointRange,
   validateActivityRubric,
 } from "@/lib/classwork-utils";
 import {
@@ -426,7 +427,7 @@ export function RubricTemplateDialog({
                             size="sm"
                             variant="outline"
                           >
-                            {level.level_name}: {level.points}
+                            {level.level_name}: {rubricPointRange(level.points, template.levels.map((item) => item.points))}
                           </Badge>
                         ))}
                       </div>
