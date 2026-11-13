@@ -304,8 +304,7 @@ function StudentsTab({
             />
           </label>
         </div>
-        <Card className="block w-full border-black">
-          <Card.Content className="max-h-[560px] overflow-y-auto p-4">
+        <div className="min-w-0">
             {!detail.students.length ? (
               <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
             ) : !filteredStudents.length ? (
@@ -316,9 +315,9 @@ function StudentsTab({
                   <details
                     key={gender}
                     open
-                    className="group overflow-hidden border-2 border-black bg-white"
+                    className="group overflow-hidden rounded border-2 border-border bg-background shadow-md transition-all hover:shadow-sm open:shadow-sm"
                   >
-                    <summary className="flex cursor-pointer list-none items-center justify-between bg-primary border-b-2 px-4 py-3 text-sm font-black">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 bg-primary px-4 py-3 text-base font-bold text-foreground">
                       <span>{gender.toUpperCase()}</span>
                       <span className="flex items-center gap-2">
                         <Badge
@@ -332,7 +331,7 @@ function StudentsTab({
                         <ChevronDown className="size-4" />
                       </span>
                     </summary>
-                    <div>
+                    <div className="border-t-2 border-border">
                       {students.map((student) => (
                         <StudentRow
                           key={student.student_id}
@@ -346,8 +345,7 @@ function StudentsTab({
                 ))}
               </div>
             )}
-          </Card.Content>
-        </Card>
+        </div>
       </section>
     </div>
   );
@@ -769,13 +767,14 @@ function GradesTab({ classId }: { classId: number }) {
                           </Badge>
                         )}
                       </Table.Cell>
-                      <Table.Cell className="text-center px-3 py-2.5 min-w-[100px] border-b border-border">
-                        <StudentSF9Button
-                          classId={classId}
-                          studentId={student.student_id}
-                          studentName={student.full_name}
-                          compact
-                        />
+                      <Table.Cell className="text-center px-3 py-2.5 min-w-[150px] border-b border-border">
+                        <div className="flex items-center justify-center">
+                          <StudentSF9Button
+                            classId={classId}
+                            studentId={student.student_id}
+                            studentName={student.full_name}
+                          />
+                        </div>
                       </Table.Cell>
                     </Table.Row>
                   ))}
@@ -811,10 +810,9 @@ function StudentSF9Button({
           e.stopPropagation();
           setIsPreviewOpen(true);
         }}
-        className={`font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-white hover:bg-muted shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all ${compact ? "px-2 py-1 h-7" : ""
-          }`}
+        className={`gap-2 whitespace-nowrap ${compact ? "px-2 py-1 h-7" : ""}`}
       >
-        <FileText className="size-3.5 text-blue-700" />
+        <FileText className="size-4" />
         {!compact && <span>Export SF9</span>}
         {compact && <span className="sr-only">Export SF9</span>}
       </Button>
@@ -842,8 +840,8 @@ function StudentRow({
   subjectLoads: TeacherAdvisoryClassDetailResponse["subject_loads"];
 }) {
   return (
-    <div className="border-b-2 border-black bg-white px-3 py-2 text-sm last:border-b-0">
-      <div className="flex min-h-12 items-center justify-between gap-3">
+    <div className="grid items-center gap-3 border-b border-border bg-background px-4 py-3 text-sm last:border-b-0 lg:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
+      <div className="flex min-h-12 min-w-0 items-center gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <Avatar text={student.avatar_initial || student.full_name} />
           <span className="min-w-0 flex-1">
@@ -857,16 +855,13 @@ function StudentRow({
             )}
           </span>
         </div>
-        <StudentSF9Button
-          classId={classId}
-          studentId={student.student_id}
-          studentName={student.full_name}
-        />
       </div>
       <ManualSuggestionPanel
         classId={classId}
         student={student}
         subjectLoads={subjectLoads}
+        displayMode="row"
+        additionalActions={<StudentSF9Button classId={classId} studentId={student.student_id} studentName={student.full_name} />}
       />
     </div>
   );

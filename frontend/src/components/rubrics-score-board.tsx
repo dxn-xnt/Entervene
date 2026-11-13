@@ -74,7 +74,7 @@ export default function RubricsScoreBoard({
           )}
         </div>
 
-        <div className={cn("grid gap-3 grid-cols-1 @sm:grid-cols-2 @4xl:grid-cols-5", gridClassName)}>
+        <div className={cn("flex flex-wrap gap-3", gridClassName)}>
           {bands.map(({ label, points, description }) => {
             const ptsNum = Number(points.replace(" pts", ""));
             const isSelected =
@@ -87,7 +87,7 @@ export default function RubricsScoreBoard({
               <div
                 key={label}
                 onClick={() => onSelectScore?.(ptsNum)}
-                className={`flex flex-col justify-between rounded! border-2 border-black p-3.5 shadow-none transition-all hover:-translate-y-1 ${onSelectScore ? "cursor-pointer" : ""
+                className={`flex min-w-0 flex-1 basis-56 flex-col justify-between rounded! border-2 border-black p-3.5 shadow-none transition-all hover:-translate-y-1 ${onSelectScore ? "cursor-pointer" : ""
                   } ${isSelected
                     ? "bg-primary text-foreground"
                     : "bg-white text-foreground hover:bg-retro"
