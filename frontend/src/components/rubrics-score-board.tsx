@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { scoreBand } from "@/lib/classwork-utils";
+import { rubricPointRange, scoreBand } from "@/lib/classwork-utils";
 import { cn } from "@/lib/utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
 
@@ -97,7 +97,9 @@ export default function RubricsScoreBoard({
                 <div>
                   <div className="mb-1 flex items-start justify-between gap-2">
                     <p className="font-bold">{label}</p>
-                    <p className="text-sm font-bold whitespace-nowrap">{points}</p>
+                    <p className="text-sm font-bold whitespace-nowrap">
+                      {rubricPointRange(ptsNum, bands.map((band) => Number(band.points.replace(" pts", ""))))} pts
+                    </p>
                   </div>
                   <p
                     className={`text-sm ${isSelected ? "text-foreground" : "text-muted-foreground"
