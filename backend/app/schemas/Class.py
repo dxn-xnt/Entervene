@@ -48,6 +48,10 @@ class OfficialSectionOption(BaseModel):
     pathway_code: str | None = None
     is_active: bool
     has_class: bool = False
+    class_id: int | None = None
+    class_status: str | None = None
+    adviser_staff_id: str | None = None
+    adviser_name: str | None = None
 
 
 class ClassListItem(BaseModel):

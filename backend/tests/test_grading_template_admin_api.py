@@ -198,6 +198,7 @@ def test_create_template_and_assign_ungraded_subject(client, db):
     response = client.post("/api/v1/grading-templates", json={
         "template_name": "Creative Studies", "description": "Practice template",
         "passing_threshold": 82, "status": "active", "subject_ids": [subject.subject_id],
+        "confirmed_reassignment_subject_ids": [subject.subject_id],
         "components": [
             {"component_name": "Written Work", "weight": 30, "display_order": 1},
             {"component_name": "Performance Tasks", "weight": 50, "display_order": 2},
@@ -210,6 +211,69 @@ def test_create_template_and_assign_ungraded_subject(client, db):
     assert body["assigned_subject_count"] == 1
     db.refresh(subject)
     assert subject.grading_template_id == body["grading_template_id"]
+
+
+def test_create_template_requires_explicit_subject_move_confirmation(client, db):
+    level = db.query(AcademicLevel).first()
+    core = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Core").one()
+    subject = Subject(
+        subject_name="Oral Communication", subject_codename="OC11",
+        grading_template_id=core.grading_template_id,
+        academic_level_id=level.academic_level_id, status="active",
+    )
+    db.add(subject)
+    db.commit()
+
+    response = client.post("/api/v1/grading-templates", json={
+        "template_name": "Communication", "passing_threshold": 85,
+        "status": "active", "subject_ids": [subject.subject_id],
+        "components": [
+            {"component_name": "Written Work", "weight": 20, "display_order": 1},
+            {"component_name": "Performance Tasks", "weight": 50, "display_order": 2},
+            {"component_name": "Exams", "weight": 30, "display_order": 3},
+        ],
+    })
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "SUBJECT_REASSIGNMENT_CONFIRMATION_REQUIRED"
+    db.refresh(subject)
+    assert subject.grading_template_id == core.grading_template_id
+
+
+def test_update_template_requires_confirmation_and_blocks_graded_subject_moves(client, db):
+    level = db.query(AcademicLevel).first()
+    core = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Core").one()
+    applied = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Applied").one()
+    subject = Subject(
+        subject_name="Media and Information Literacy", subject_codename="MIL11",
+        grading_template_id=core.grading_template_id,
+        academic_level_id=level.academic_level_id, status="active",
+    )
+    db.add(subject)
+    db.commit()
+
+    url = f"/api/v1/grading-templates/{applied.grading_template_id}"
+    response = client.patch(url, json={
+        "updated_at": applied.updated_at.isoformat(),
+        "subject_ids": [subject.subject_id],
+    })
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "SUBJECT_REASSIGNMENT_CONFIRMATION_REQUIRED"
+
+    db.add(StudentPeriodGrade(
+        student_id=uuid.uuid4(), class_id=1, subject_id=subject.subject_id,
+        academic_period_id=1, transmuted_grade=Decimal("91"), is_finalized=True,
+    ))
+    db.commit()
+    db.refresh(applied)
+    response = client.patch(url, json={
+        "updated_at": applied.updated_at.isoformat(),
+        "subject_ids": [subject.subject_id],
+        "confirmed_reassignment_subject_ids": [subject.subject_id],
+    })
+    assert response.status_code == 409
+    assert "recorded grades" in response.json()["detail"].lower()
+    db.refresh(subject)
+    assert subject.grading_template_id == core.grading_template_id
 
 
 def test_create_template_rejects_duplicate_name_and_invalid_weights(client):

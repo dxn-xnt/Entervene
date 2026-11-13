@@ -628,6 +628,14 @@ def test_official_section_read_includes_class_id_and_class_status(client, db, ba
     assert listed_sec["class_id"] == created_class.class_id
     assert listed_sec["class_status"] == "active"
 
+    # The New Class wizard uses form-options, which must preserve management metadata.
+    form_resp = client.get(f"/api/v1/classes/form-options?academic_year_id={year.academic_year_id}")
+    assert form_resp.status_code == 200
+    form_sec = next(s for s in form_resp.json()["official_sections"] if s["section_name"] == "TestSec")
+    assert form_sec["class_id"] == created_class.class_id
+    assert form_sec["class_status"] == "active"
+    assert form_sec["adviser_staff_id"] == adviser.staff_id
+
     # 4. If archived, class_status reflects "archived"
     created_class.class_status = "archived"
     db.commit()

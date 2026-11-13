@@ -237,6 +237,8 @@ export type SubjectListItem = {
     passing_threshold: number;
     components: Array<{ component_name: string; weight: number }>;
   };
+  grading_template_assignment_locked?: boolean;
+  grading_template_assignment_lock_reason?: string | null;
   subject_name: string;
   subject_codename: string | null;
   description: string | null;
@@ -291,7 +293,10 @@ export type SubjectOfferingSubject = {
   subject_id: number;
   subject_name: string;
   subject_codename: string | null;
+  grading_template_id: number;
   grading_template: string | null;
+  grading_template_assignment_locked: boolean;
+  grading_template_assignment_lock_reason: string | null;
 };
 export type SubjectOfferingAcademicYear = {
   academic_year_id: number;
@@ -342,7 +347,19 @@ export type SubjectOfferingFormOptions = {
   pathways: AcademicPathwayItem[];
   statuses: SubjectStatus[];
   default_status: SubjectStatus;
-  active_subjects: Array<SubjectOfferingSubject & { academic_level_id: number }>;
+  active_subjects: Array<{
+    subject_id: number;
+    subject_name: string;
+    subject_codename: string | null;
+    grading_template: string | null;
+    academic_level_id: number;
+    is_core?: boolean;
+  }>;
+  grading_templates: Array<{
+    grading_template_id: number;
+    template_name: string;
+    status: SubjectStatus;
+  }>;
 };
 export type SubjectOfferingImportResult = {
   total_rows: number;
@@ -378,6 +395,9 @@ export type SubjectOfferingCreatePayload = {
   status?: SubjectStatus;
 };
 export type SubjectOfferingUpdatePayload = Partial<SubjectOfferingCreatePayload>;
+export type SubjectOfferingEditPayload = SubjectOfferingUpdatePayload & {
+  grading_template_id?: number;
+};
 
 export type GradingTemplateComponentPayload = {
   component_name: string;
@@ -433,6 +453,7 @@ export type GradingTemplateCreatePayload = {
   passing_threshold: number;
   status: SubjectStatus;
   subject_ids: number[];
+  confirmed_reassignment_subject_ids?: number[];
   components: GradingTemplateComponentPayload[];
 };
 export type GradingTemplateUpdatePayload = Partial<Omit<GradingTemplateCreatePayload, "passing_threshold">> & {
@@ -1398,7 +1419,7 @@ export async function createSubjectOffering(payload: SubjectOfferingCreatePayloa
   return (await response.json()) as SubjectOfferingResponse;
 }
 
-export async function updateSubjectOffering(subjectOfferingId: string | number, payload: SubjectOfferingUpdatePayload): Promise<SubjectOfferingResponse> {
+export async function updateSubjectOffering(subjectOfferingId: string | number, payload: SubjectOfferingEditPayload): Promise<SubjectOfferingResponse> {
   const response = await apiFetch(`/api/v1/subject-offerings/${encodeURIComponent(String(subjectOfferingId))}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

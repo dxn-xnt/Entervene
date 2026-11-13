@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { GradingTemplateManager } from "./subjects/components/grading-template-manager";
 
 const createTemplate = vi.hoisted(() => vi.fn().mockResolvedValue({}));
@@ -21,6 +21,22 @@ const templates = [{
     { component_id: 3, component_name: "Exams", weight: 30, display_order: 3, created_at: null, updated_at: null },
   ], created_at: null, updated_at: "2026-10-18T00:00:00Z",
 }];
+
+const subject = (id: number, name: string, code: string, templateId: number, templateName: string, locked = false) => ({
+  subject_id: id,
+  subject_name: name,
+  subject_codename: code,
+  grading_template_id: templateId,
+  grading_template: { grading_template_id: templateId, template_name: templateName, passing_threshold: 85, components: [] },
+  grading_template_assignment_locked: locked,
+  grading_template_assignment_lock_reason: locked ? "Recorded period grades prevent changing this subject's grading template." : null,
+  description: null,
+  status: "active" as const,
+  academic_level: { academic_level_id: 1, level_name: "Grade 7", grade_level: 7 },
+  is_math_or_science: false,
+  created_at: null,
+  updated_at: null,
+});
 
 afterEach(() => { cleanup(); createTemplate.mockClear(); updateTemplate.mockClear(); editThreshold.mockClear(); });
 
@@ -113,5 +129,49 @@ describe("Subjects grading template manager", () => {
     expect(screen.getByText("No grading templates match the selected filters.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Clear Filters" }));
     expect(screen.getByText("87%")).toBeTruthy();
+  });
+
+  it("keeps the subject picker compact and disables subjects assigned to another template", () => {
+    const coreSubject = subject(1, "Mathematics 7", "MATH7", 1, "Core");
+    const appliedSubject = subject(2, "Work Immersion", "WI7", 2, "Applied");
+    const multiTemplates = [
+      { ...templates[0], assigned_subjects: [{ subject_id: 1, subject_name: "Mathematics 7", subject_codename: "MATH7", grade_level: 7 }], assigned_subject_count: 1 },
+      { ...templates[0], grading_template_id: 2, template_name: "Applied", assigned_subjects: [{ subject_id: 2, subject_name: "Work Immersion", subject_codename: "WI7", grade_level: 7 }], assigned_subject_count: 1 },
+    ];
+    render(<GradingTemplateManager templates={multiTemplates} subjects={[coreSubject, appliedSubject]} onReload={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Core" }));
+    const appliedName = screen.getAllByText("Work Immersion").find((element) => element.tagName === "STRONG");
+    const appliedRow = appliedName?.closest("label");
+    expect(appliedRow).toBeTruthy();
+    expect((within(appliedRow!).getByRole("checkbox") as HTMLInputElement).disabled).toBe(true);
+    expect(within(appliedRow!).getByText("Applied")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Move here" })).toBeNull();
+  });
+
+  it("disables moves for subjects with recorded grades and explains the lock", () => {
+    const lockedSubject = subject(2, "Work Immersion", "WI7", 2, "Applied", true);
+    const multiTemplates = [
+      templates[0],
+      { ...templates[0], grading_template_id: 2, template_name: "Applied", assigned_subjects: [{ subject_id: 2, subject_name: "Work Immersion", subject_codename: "WI7", grade_level: 7 }], assigned_subject_count: 1 },
+    ];
+    render(<GradingTemplateManager templates={multiTemplates} subjects={[lockedSubject]} onReload={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Core" }));
+    const lockedName = screen.getAllByText("Work Immersion").find((element) => element.tagName === "STRONG");
+    const lockedRow = lockedName?.closest("label");
+    expect(lockedRow).toBeTruthy();
+    expect((within(lockedRow!).getByRole("checkbox") as HTMLInputElement).disabled).toBe(true);
+    expect(lockedRow?.getAttribute("title")).toContain("Recorded period grades");
+  });
+
+  it("detects duplicate catalog rows by subject ID or grade-level code", () => {
+    const first = subject(1, "English 7", "ENG7", 1, "Core");
+    const duplicateCode = subject(2, "English Seven", "eng7", 1, "Core");
+    render(<GradingTemplateManager templates={templates} subjects={[first, duplicateCode]} onReload={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Core" }));
+    expect(screen.getByText("Duplicate catalog entries detected")).toBeTruthy();
+    expect(screen.getByText(/ENG7 \(Grade 7\)/i)).toBeTruthy();
   });
 });

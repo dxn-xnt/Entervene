@@ -16,6 +16,7 @@ from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
 
 
@@ -208,6 +209,24 @@ def test_list_subjects_and_search_filter_work(client, db):
     body = response.json()
     assert body["summary"] == {"total_subjects": 2, "active_subjects": 2, "archived_subjects": 0}
     assert [item["subject_name"] for item in body["subjects"]] == ["General Biology 1"]
+
+
+def test_list_subjects_exposes_grading_template_assignment_lock(client, db):
+    level = add_level(db)
+    template = add_template(db)
+    subject = add_subject(db, level, template)
+    db.flush()
+    db.add(StudentPeriodGrade(
+        student_id=uuid.uuid4(), class_id=1, subject_id=subject.subject_id,
+        academic_period_id=1, transmuted_grade=Decimal("90"), is_finalized=True,
+    ))
+    db.commit()
+
+    response = client.get("/api/v1/subjects")
+    assert response.status_code == 200
+    item = response.json()["subjects"][0]
+    assert item["grading_template_assignment_locked"] is True
+    assert "Recorded period grades" in item["grading_template_assignment_lock_reason"]
 
 
 def test_filter_by_academic_level_and_grading_template(client, db):

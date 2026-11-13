@@ -525,6 +525,7 @@ def teacher_student_gradebook(
         db=db,
         subject_id=scope.subject.subject_id,
         academic_level_id=getattr(scope.class_, "academic_level_id", None),
+        academic_year_id=scope.year.academic_year_id,
     )
 
     # Pre-fetch existing finalized period grades for all students in this scope
@@ -816,13 +817,23 @@ def _match_component_category(name: str) -> str | None:
     return classify_template_component_name(name)
 
 
-def resolve_subject_grading_weights(db: Session, subject_id: int,
-                                    academic_level_id: int | None = None) -> GradingWeights:
-    """Resolve canonical weights from the subject's assigned template FK."""
+def resolve_subject_grading_weights(
+    db: Session,
+    subject_id: int,
+    academic_level_id: int | None = None,
+    academic_year_id: int | None = None,
+) -> GradingWeights:
+    """Resolve canonical weights from the year assignment or catalog fallback."""
     subject = db.get(Subject, subject_id)
     if subject is None:
         raise HTTPException(status_code=404, detail="Subject not found.")
     template = subject.grading_template
+    if academic_year_id is not None:
+        from app.services.subject_offerings.SubjectOfferingTemplateService import (
+            get_subject_year_template,
+        )
+
+        template = get_subject_year_template(db, subject, academic_year_id)
     if template is None or template.status != "active":
         raise HTTPException(status_code=422, detail="Subject has no active grading template.")
     weights = {"WW": 0.0, "PT": 0.0, "QA": 0.0}
@@ -1169,8 +1180,6 @@ def _grade_send_requirements(
     template = db.get(GradingTemplate, weights.template_id)
     if template is None or template.status != "active" or not template.components:
         return GradeSendRequirements(configuration_error=missing)
-    if scope.subject.grading_template_id != template.grading_template_id:
-        return GradeSendRequirements(configuration_error=missing)
     categories: set[str] = set()
     total = Decimal("0")
     for component in template.components:
@@ -1301,6 +1310,7 @@ def send_student_grade_to_adviser(
         db=db,
         subject_id=scope.subject.subject_id,
         academic_level_id=getattr(scope.class_, "academic_level_id", None),
+        academic_year_id=scope.year.academic_year_id,
     )
 
     asgn_ids = [a.classwork_assignment_id for a in assignments]
@@ -1536,6 +1546,7 @@ def bulk_send_grades_to_adviser(
         db=db,
         subject_id=scope.subject.subject_id,
         academic_level_id=getattr(scope.class_, "academic_level_id", None),
+        academic_year_id=scope.year.academic_year_id,
     )
     requirements = _grade_send_requirements(db, scope, weights)
 

@@ -8,13 +8,14 @@ selection with the authoritative closure marker and snapshots.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Subject import Subject
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.AcademicYearPassingPolicy import AcademicYearPassingPolicy
+from app.models.academic.SubjectYearGradingTemplate import SubjectYearGradingTemplate
 from app.services.grading.PassingThresholdResolver import (
     PassingThresholdConfigurationError,
     PassingThresholdContext, PassingThresholdResolution, SubjectThresholdConfig,
@@ -49,11 +50,22 @@ def read_passing_threshold_context(
             raise PassingThresholdConfigurationError("academic_year_missing")
         subjects, templates = {}, {}
         if ids:
+            effective_template_id = func.coalesce(
+                SubjectYearGradingTemplate.grading_template_id,
+                Subject.grading_template_id,
+            )
             rows = db.execute(select(
-                Subject.subject_id, Subject.grading_template_id,
+                Subject.subject_id, effective_template_id.label("grading_template_id"),
                 GradingTemplate.grading_template_id.label("linked_template_id"),
                 GradingTemplate.passing_threshold,
-            ).outerjoin(GradingTemplate, Subject.grading_template_id == GradingTemplate.grading_template_id)
+            ).outerjoin(
+                SubjectYearGradingTemplate,
+                (SubjectYearGradingTemplate.subject_id == Subject.subject_id)
+                & (SubjectYearGradingTemplate.academic_year_id == academic_year_id),
+            ).outerjoin(
+                GradingTemplate,
+                effective_template_id == GradingTemplate.grading_template_id,
+            )
                 .where(Subject.subject_id.in_(ids))).all()
             for row in rows:
                 subjects[row.subject_id] = SubjectThresholdConfig(row.subject_id, row.grading_template_id)

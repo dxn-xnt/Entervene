@@ -66,6 +66,31 @@ def _ensure_reassignment_unlocked(db: Session, subjects: list[Subject]) -> None:
         _assert_assignment_unlocked(db, subject.subject_id)
 
 
+def _ensure_reassignments_confirmed(
+    subjects: list[Subject], target_template_id: int | None, confirmed_subject_ids: list[int],
+) -> None:
+    moving_ids = {
+        subject.subject_id
+        for subject in subjects
+        if subject.grading_template_id is not None
+        and (target_template_id is None or subject.grading_template_id != target_template_id)
+    }
+    confirmed_ids = set(confirmed_subject_ids)
+    unexpected = sorted(confirmed_ids - moving_ids)
+    if unexpected:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Confirmed reassignment IDs are not pending moves: {unexpected}",
+        )
+    missing = sorted(moving_ids - confirmed_ids)
+    if missing:
+        raise HTTPException(status_code=409, detail={
+            "code": "SUBJECT_REASSIGNMENT_CONFIRMATION_REQUIRED",
+            "message": "Confirm each subject move before changing its grading template.",
+            "subject_ids": missing,
+        })
+
+
 def create_grading_template_record(db: Session, payload: GradingTemplateCreate) -> dict:
     name = _ensure_unique_name(db, payload.template_name)
     components = normalized_components(payload.components)
@@ -73,6 +98,7 @@ def create_grading_template_record(db: Session, payload: GradingTemplateCreate) 
     status = normalize_status(payload.status)
     if status == "archived" and subjects:
         raise HTTPException(status_code=422, detail="An archived template cannot receive subject assignments.")
+    _ensure_reassignments_confirmed(subjects, None, payload.confirmed_reassignment_subject_ids)
     _ensure_reassignment_unlocked(db, subjects)
     template = GradingTemplate(
         template_name=name,
@@ -144,6 +170,14 @@ def update_grading_template_record(db: Session, grading_template_id: int, payloa
         )
         removed = [subject for subject in current if subject.subject_id not in requested_ids]
         added = [subject for subject in requested if subject.grading_template_id != grading_template_id]
+        target_status = normalize_status(data.get("status", template.status))
+        if target_status != "active" and requested:
+            raise HTTPException(status_code=422, detail="An archived template cannot receive subject assignments.")
+        _ensure_reassignments_confirmed(
+            added,
+            grading_template_id,
+            data.get("confirmed_reassignment_subject_ids") or [],
+        )
         _ensure_reassignment_unlocked(db, [*removed, *added])
         if removed:
             replacement_id = data.get("replacement_template_id")

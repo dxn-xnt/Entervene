@@ -22,6 +22,7 @@ class GradingTemplateCreate(BaseModel):
     passing_threshold: float = Field(..., ge=0, le=100)
     status: str = "active"
     subject_ids: list[int] = Field(default_factory=list)
+    confirmed_reassignment_subject_ids: list[int] = Field(default_factory=list)
     components: list[GradingTemplateComponentCreate]
 
 
@@ -32,6 +33,7 @@ class GradingTemplateUpdate(BaseModel):
     passing_threshold: float | None = Field(None, ge=0, le=100)
     status: str | None = None
     subject_ids: list[int] | None = None
+    confirmed_reassignment_subject_ids: list[int] = Field(default_factory=list)
     replacement_template_id: int | None = None
     components: list[GradingTemplateComponentCreate] | None = None
     updated_at: datetime

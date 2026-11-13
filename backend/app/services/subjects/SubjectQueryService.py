@@ -13,6 +13,33 @@ from app.services.subjects.SubjectShared import (
 )
 
 
+def _assignment_lock_reasons(db: Session, subject_ids: list[int]) -> dict[int, str]:
+    if not subject_ids:
+        return {}
+    from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+    from app.models.classwork.Classwork import Classwork
+    from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+    from app.models.submissions.StudentSubmission import StudentSubmission
+
+    period_grade_ids = {
+        subject_id for subject_id, in db.query(StudentPeriodGrade.subject_id)
+        .filter(StudentPeriodGrade.subject_id.in_(subject_ids)).distinct().all()
+    }
+    graded_classwork_ids = {
+        subject_id for subject_id, in db.query(Classwork.subject_id)
+        .join(ClassworkAssignment, ClassworkAssignment.classwork_id == Classwork.classwork_id)
+        .join(StudentSubmission, StudentSubmission.classwork_assignment_id == ClassworkAssignment.classwork_assignment_id)
+        .filter(Classwork.subject_id.in_(subject_ids), StudentSubmission.grade.isnot(None)).distinct().all()
+    }
+    reasons = {
+        subject_id: "Recorded period grades prevent changing this subject's grading template."
+        for subject_id in period_grade_ids
+    }
+    for subject_id in graded_classwork_ids:
+        reasons.setdefault(subject_id, "Graded classwork prevents changing this subject's grading template.")
+    return reasons
+
+
 def get_subject_form_options_data(db: Session) -> dict:
     academic_levels = (
         db.query(AcademicLevel)
@@ -85,6 +112,7 @@ def list_subjects_data(
     from app.models.academic.GradingTemplate import GradingTemplate
     templates = db.query(GradingTemplate).all()
     template_name_map = {str(t.grading_template_id): t.template_name for t in templates}
+    lock_reasons = _assignment_lock_reasons(db, [subject.subject_id for subject, _ in rows])
 
     return {
         "summary": {
@@ -92,7 +120,10 @@ def list_subjects_data(
             "active_subjects": active_subjects,
             "archived_subjects": archived_subjects,
         },
-        "subjects": [subject_to_item(subject, level, template_name_map) for subject, level in rows],
+        "subjects": [
+            subject_to_item(subject, level, template_name_map, lock_reasons.get(subject.subject_id))
+            for subject, level in rows
+        ],
     }
 
 
@@ -110,4 +141,5 @@ def get_subject_detail_data(db: Session, subject_id: int) -> dict:
     from app.models.academic.GradingTemplate import GradingTemplate
     templates = db.query(GradingTemplate).all()
     template_name_map = {str(t.grading_template_id): t.template_name for t in templates}
-    return subject_to_item(subject, academic_level, template_name_map)
+    lock_reason = _assignment_lock_reasons(db, [subject.subject_id]).get(subject.subject_id)
+    return subject_to_item(subject, academic_level, template_name_map, lock_reason)

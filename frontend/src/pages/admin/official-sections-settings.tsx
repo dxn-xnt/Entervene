@@ -9,15 +9,24 @@ import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { ApiRequestError, createOfficialSection, getOfficialSections, updateOfficialSection, type AcademicPathwayRead, type PathwayScopeRead } from "@/lib/api";
 import type { OfficialSectionOption } from "@/types/adminClasses";
-import type { AcademicLevelSettingItem } from "@/lib/settings-api";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
+import { School } from "lucide-react";
 
-export default function OfficialSectionsSettings({ academicYearId, levels, pathways, pathwayScopes }: {
+type OfficialSectionLevel = {
+  academic_level_id: number;
+  level_name: string;
+  grade_level: number;
+  requires_pathway?: boolean;
+};
+
+export default function OfficialSectionsSettings({ academicYearId, levels, pathways, pathwayScopes, initialLevelId }: {
   academicYearId: number;
-  levels: AcademicLevelSettingItem[];
+  levels: OfficialSectionLevel[];
   pathways: AcademicPathwayRead[];
   pathwayScopes: PathwayScopeRead[];
+  initialLevelId?: number;
 }) {
-  const [levelId, setLevelId] = useState("");
+  const [levelId, setLevelId] = useState(initialLevelId == null ? "" : String(initialLevelId));
   const [sections, setSections] = useState<OfficialSectionOption[]>([]);
   const [name, setName] = useState("");
   const [pathwayId, setPathwayId] = useState("");
@@ -46,7 +55,9 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
   }, [academicYearId]);
 
   const selectedLevel = levels.find((level) => String(level.academic_level_id) === levelId);
-  const requiresPathway = pathwayScopes.find((scope) => scope.academic_level_id === Number(levelId))?.requires_pathway ?? selectedLevel?.grade_level === 11;
+  const requiresPathway = pathwayScopes.find((scope) => scope.academic_level_id === Number(levelId))?.requires_pathway
+    ?? selectedLevel?.requires_pathway
+    ?? selectedLevel?.grade_level === 11;
   const gradeSections = sections.filter((section) => section.academic_level_id === Number(levelId));
   const enabledPathways = pathways.filter((pathway) => pathway.is_enabled);
 
@@ -128,7 +139,14 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
           <Button onClick={() => void save()} disabled={saving}>{editingId == null ? "Add Section" : "Save Section"}</Button>
         </div>
         {editingId != null && <Button variant="outline" className="w-fit" onClick={resetDraft}>Cancel edit</Button>}
-        {loading ? <Text as="p">Loading sections...</Text> : !gradeSections.length ? <Text as="p" className="text-sm text-muted-foreground">No official sections configured for this grade and academic year.</Text> : (
+        {loading ? <Text as="p">Loading sections...</Text> : !gradeSections.length ? (
+          <EmptyStateCard
+            compact
+            icon={<School />}
+            title="No official sections configured"
+            description="Add the first official section for this grade and academic year using the form above."
+          />
+        ) : (
           <div className="grid gap-2">
             {gradeSections.map((section) => <div key={section.id} className="flex flex-wrap items-center justify-between gap-2 rounded border-2 border-border p-2 text-sm">
               <div><b>{section.section_name}</b>{section.pathway_name ? ` — ${section.pathway_name}` : ""}<span className="ml-2 text-xs text-muted-foreground">{section.is_active ? "Active" : "Inactive"}{section.has_class ? " · In use" : ""}</span></div>

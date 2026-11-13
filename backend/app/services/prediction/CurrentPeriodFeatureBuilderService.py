@@ -263,7 +263,12 @@ def build_current_period_features_from_records(
     if not student or not class_ or not subject or not period:
         raise ValueError("Current-period feature scope references a missing student, class, subject, or period.")
 
-    weights = resolve_subject_grading_weights(db, subject_id, getattr(class_, "academic_level_id", None))
+    weights = resolve_subject_grading_weights(
+        db,
+        subject_id,
+        getattr(class_, "academic_level_id", None),
+        academic_year_id=period.academic_year_id,
+    )
     weight_values = {
         "ww": round(weights.ww_weight * 100.0, 4),
         "pt": round(weights.pt_weight * 100.0, 4),
