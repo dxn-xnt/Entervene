@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class StudentSuggestion(Base):
     __tablename__ = "student_suggestion"
     __table_args__ = (
-        CheckConstraint("resource_type IN ('LESSON', 'CLASSWORK')", name="ck_student_suggestion_resource_type"),
+        CheckConstraint("resource_type IN ('LESSON', 'CLASSWORK', 'LINK')", name="ck_student_suggestion_resource_type"),
         CheckConstraint("suggestion_type IN ('MANUAL', 'AUTOMATED')", name="ck_student_suggestion_type"),
         CheckConstraint(
             "priority IN ('LOW', 'NORMAL', 'HIGH', 'URGENT')",
@@ -29,8 +29,10 @@ class StudentSuggestion(Base):
             name="ck_student_suggestion_status",
         ),
         CheckConstraint(
-            "(resource_type = 'LESSON' AND lesson_id IS NOT NULL) OR "
-            "(resource_type = 'CLASSWORK' AND lesson_id IS NULL)",
+            "(resource_type = 'LESSON' AND lesson_id IS NOT NULL AND external_url IS NULL) OR "
+            "(resource_type = 'CLASSWORK' AND lesson_id IS NULL AND external_url IS NULL) OR "
+            "(resource_type = 'LINK' AND lesson_id IS NULL AND "
+            "external_url IS NOT NULL AND length(trim(external_url)) BETWEEN 1 AND 2048)",
             name="ck_student_suggestion_resource_link",
         ),
         Index("ix_student_suggestion_student_status", "student_id", "status"),
@@ -46,6 +48,13 @@ class StudentSuggestion(Base):
             postgresql_where=text("status = 'ACTIVE' AND lesson_id IS NOT NULL"),
             sqlite_where=text("status = 'ACTIVE' AND lesson_id IS NOT NULL"),
         ),
+        Index(
+            "uq_student_suggestion_active_link",
+            "student_id", "subject_id", "external_url",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE' AND resource_type = 'LINK'"),
+            sqlite_where=text("status = 'ACTIVE' AND resource_type = 'LINK'"),
+        ),
     )
 
     student_suggestion_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -54,6 +63,7 @@ class StudentSuggestion(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     resource_links: Mapped[dict | None] = mapped_column(JSON)
+    external_url: Mapped[str | None] = mapped_column(Text)
     priority: Mapped[str] = mapped_column(String(30), nullable=False, default="NORMAL")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE")
     is_viewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

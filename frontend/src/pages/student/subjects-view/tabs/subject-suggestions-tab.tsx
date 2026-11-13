@@ -116,11 +116,12 @@ export default function SubjectSuggestionsTab({
         ? suggestion
         : await markSuggestionViewed(suggestion.student_suggestion_id);
       updateSuggestion(updated);
-      navigate(resourceRoute(classId, subjectId, suggestion));
+      if (suggestion.resource.resource_type !== "LINK")
+        navigate(resourceRoute(classId, subjectId, suggestion));
     } catch (err) {
       setNotice({
         status: "error",
-        title: "Unable to open material",
+        title: suggestion.resource.resource_type === "LINK" ? "Unable to mark material as viewed" : "Unable to open material",
         description: err instanceof Error ? err.message : "Please try again.",
       });
     } finally {
@@ -190,7 +191,7 @@ export default function SubjectSuggestionsTab({
               <p className="text-sm text-gray-700">
                 {selectedLessonId
                   ? "Materials recommended for the selected lesson."
-                  : "Select a lesson to narrow suggestions to that lesson."}
+                  : "View learning resources and recommendations suggested by your teacher for this subject."}
               </p>
             </div>
           </div>

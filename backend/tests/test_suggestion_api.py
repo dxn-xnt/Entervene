@@ -292,6 +292,147 @@ def _classwork_payload(context, **overrides):
     return payload
 
 
+def _link_payload(context, **overrides):
+    payload = {
+        "student_id": str(context["student"].student_id),
+        "subject_id": context["subject"].subject_id,
+        "resource_type": "LINK",
+        "title": "Review phonological processes",
+        "description": "Read this resource before the next activity.",
+        "external_url": "https://example.org/learning/phonology",
+        "priority": "NORMAL",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_link_suggestion_is_standalone_and_student_private(suggestion_api_context):
+    c = suggestion_api_context
+    response = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["resource_type"] == "LINK"
+    assert body["lesson_id"] is None
+    assert body["classwork_link"] is None
+    assert body["resource"]["external_url"] == "https://example.org/learning/phonology"
+    assert body["resource"]["is_available"] is True
+    stored = c["db"].get(StudentSuggestion, body["student_suggestion_id"])
+    assert stored.external_url == body["resource"]["external_url"]
+    assert stored.resource_links is None
+
+    _act_as(c, "other_student", "student")
+    assert c["client"].get(f"/api/v1/suggestions/my/{body['student_suggestion_id']}").status_code == 404
+    assert c["client"].get("/api/v1/suggestions/my").json()["suggestions"] == []
+    _act_as(c, "student", "student")
+    mine = c["client"].get("/api/v1/suggestions/my").json()["suggestions"]
+    assert len(mine) == 1 and mine[0]["resource"]["external_url"] == stored.external_url
+    viewed = c["client"].patch(f"/api/v1/suggestions/my/{body['student_suggestion_id']}/viewed")
+    assert viewed.status_code == 200 and viewed.json()["is_viewed"] is True
+    completed = c["client"].patch(f"/api/v1/suggestions/my/{body['student_suggestion_id']}/complete")
+    assert completed.status_code == 200 and completed.json()["status"] == "COMPLETED"
+
+
+@pytest.mark.parametrize("url", [
+    "javascript:alert(1)", "data:text/html,hello", "file:///secret", "https://user:password@example.org/x",
+    "https://", "https://example.org/a b", "https://example.org/" + "a" * 2048,
+])
+def test_link_rejects_unsafe_urls_without_persistence(suggestion_api_context, url):
+    c = suggestion_api_context
+    response = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c, external_url=url))
+    assert response.status_code == 422
+    assert c["db"].query(StudentSuggestion).count() == 0
+
+
+@pytest.mark.parametrize("overrides", [
+    {"external_url": None},
+    {"lesson_id": 1},
+    {"classwork_assignment_id": 1},
+])
+def test_link_rejects_missing_url_or_internal_ids(suggestion_api_context, overrides):
+    c = suggestion_api_context
+    response = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c, **overrides))
+    assert response.status_code in {400, 422}
+    assert c["db"].query(StudentSuggestion).count() == 0
+
+
+def test_link_respects_teacher_scope_and_duplicate_rule(suggestion_api_context):
+    c = suggestion_api_context
+    _act_as(c, "other_teacher", "teacher")
+    assert c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c)).status_code == 403
+    _act_as(c, "owner", "teacher")
+    assert c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c)).status_code == 200
+    assert c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c)).status_code == 409
+    assert c["db"].query(StudentSuggestion).count() == 1
+
+
+def test_teacher_list_keeps_student_and_subject_load_paired(suggestion_api_context):
+    c = suggestion_api_context
+    db = c["db"]
+    science = db.query(Subject).filter(Subject.subject_name == "Science").one()
+    ruby = db.query(Class).filter(Class.section_name == "Ruby").one()
+    period = db.query(AcademicPeriod).one()
+    db.add(SubjectLoad(
+        staff_id=c["owner"].staff_id, subject_id=science.subject_id,
+        class_id=ruby.class_id, academic_period_id=period.academic_period_id,
+        status="active",
+    ))
+    db.add(StudentSuggestion(
+        resource_type="LINK", title="Other class material",
+        external_url="https://example.org/private",
+        student_id=c["student"].student_id, subject_id=science.subject_id,
+        created_by_staff_id="T-OTHER",
+    ))
+    db.commit()
+    listed = c["client"].get("/api/v1/suggestions/teacher")
+    assert listed.status_code == 200
+    assert listed.json()["suggestions"] == []
+    rejected = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c, subject_id=science.subject_id))
+    assert rejected.status_code == 403
+
+
+def test_corrupt_stored_link_fails_closed_for_student(suggestion_api_context):
+    c = suggestion_api_context
+    created = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c)).json()
+    stored = c["db"].get(StudentSuggestion, created["student_suggestion_id"])
+    stored.external_url = "javascript:alert(1)"
+    c["db"].commit()
+    _act_as(c, "student", "student")
+    response = c["client"].get(f"/api/v1/suggestions/my/{stored.student_suggestion_id}")
+    assert response.status_code == 200
+    assert response.json()["resource"]["is_available"] is False
+    assert response.json()["resource"]["external_url"] is None
+    assert c["client"].patch(f"/api/v1/suggestions/my/{stored.student_suggestion_id}/complete").status_code == 403
+
+
+def test_link_uses_existing_dismiss_and_archive_lifecycle(suggestion_api_context):
+    c = suggestion_api_context
+    created = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c)).json()
+    suggestion_id = created["student_suggestion_id"]
+    dismissed = c["client"].patch(f"/api/v1/suggestions/{suggestion_id}/dismiss")
+    assert dismissed.status_code == 200 and dismissed.json()["status"] == "DISMISSED"
+    archived = c["client"].patch(f"/api/v1/suggestions/{suggestion_id}/archive")
+    assert archived.status_code == 200 and archived.json()["status"] == "ARCHIVED"
+    assert archived.json()["resource"]["external_url"] == "https://example.org/learning/phonology"
+
+
+def test_unknown_resource_type_is_rejected_before_persistence(suggestion_api_context):
+    c = suggestion_api_context
+    response = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c, resource_type="WEBSITE"))
+    assert response.status_code == 422
+    assert c["db"].query(StudentSuggestion).count() == 0
+
+
+def test_old_resource_types_reject_external_url_and_keep_internal_json(suggestion_api_context):
+    c = suggestion_api_context
+    for payload in (_lesson_payload(c), _classwork_payload(c)):
+        assert c["client"].post("/api/v1/suggestions/manual", json={**payload, "external_url": "https://example.org"}).status_code == 400
+        response = c["client"].post("/api/v1/suggestions/manual", json=payload)
+        assert response.status_code == 200, response.text
+    saved = c["db"].query(StudentSuggestion).order_by(StudentSuggestion.student_suggestion_id).all()
+    assert [row.resource_type for row in saved] == ["LESSON", "CLASSWORK"]
+    assert all(row.external_url is None and row.resource_links for row in saved)
+
+
 def test_teacher_can_create_list_and_dismiss_lesson_suggestion(suggestion_api_context):
     c = suggestion_api_context
     response = c["client"].post("/api/v1/suggestions/manual", json=_lesson_payload(c))

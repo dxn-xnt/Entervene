@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { BookOpen, ClipboardList } from "lucide-react";
+import { BookOpen, ClipboardList, Sparkles } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
@@ -9,15 +9,17 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { SubjectClassHeader } from "@/components/subject-class-header";
 import SubjectLessonTab from "./subjects-view/tabs/subject-lesson-tab";
 import SubjectClassworkTab from "./subjects-view/tabs/subject-classwork-tab";
+import SubjectSuggestionsTab from "./subjects-view/tabs/subject-suggestions-tab";
 import { routes } from "@/../routes";
 import { getMySubjects, type StudentSubjectItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { LoadingPanel } from "@/components/loading-panel";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 
-const tabs: TabItem<"lessons" | "classwork">[] = [
+const tabs: TabItem<"lessons" | "classwork" | "suggestions">[] = [
   { id: "lessons", label: "Lessons", icon: BookOpen },
   { id: "classwork", label: "Classwork", icon: ClipboardList },
+  { id: "suggestions", label: "Suggestions", icon: Sparkles },
 ];
 
 const StudentSubjectDetail = () => {
@@ -29,9 +31,10 @@ const StudentSubjectDetail = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedPeriodId } = useAcademicPeriod();
   const requestedTab = searchParams.get("tab");
-  const activeTab = (requestedTab === "classwork" ? "classwork" : "lessons") as
+  const activeTab = (requestedTab === "classwork" || requestedTab === "suggestions" ? requestedTab : "lessons") as
     | "lessons"
-    | "classwork";
+    | "classwork"
+    | "suggestions";
   const isLessonDetailScreen =
     activeTab === "lessons" && Boolean(searchParams.get("lessonId"));
   const numericClassId = classId ? parseInt(classId, 10) : undefined;
@@ -47,7 +50,7 @@ const StudentSubjectDetail = () => {
   const isResolved = subjectResult?.key === requestKey;
   const isLoading = !isResolved;
 
-  const handleTabChange = (tabId: "lessons" | "classwork") => {
+  const handleTabChange = (tabId: "lessons" | "classwork" | "suggestions") => {
     const nextParams = new URLSearchParams(searchParams);
     if (tabId === "lessons") nextParams.delete("tab");
     else nextParams.set("tab", tabId);
@@ -187,6 +190,12 @@ const StudentSubjectDetail = () => {
                         )}
                         {activeTab === "classwork" && (
                           <SubjectClassworkTab
+                            classId={numericClassId}
+                            subjectId={numericSubjectId}
+                          />
+                        )}
+                        {activeTab === "suggestions" && (
+                          <SubjectSuggestionsTab
                             classId={numericClassId}
                             subjectId={numericSubjectId}
                           />

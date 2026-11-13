@@ -249,3 +249,46 @@ def test_classwork_score_constraints_are_enforced(suggestion_db):
 
     with pytest.raises(IntegrityError):
         suggestion_db.commit()
+
+
+def test_link_constraints_and_duplicate_index_are_enforced(suggestion_db):
+    data = _base_suggestion_graph(suggestion_db)
+    values = dict(
+        resource_type="LINK", title="Study guide",
+        student_id=data["student"].student_id,
+        subject_id=data["subject"].subject_id,
+        created_by_staff_id=data["staff"].staff_id,
+    )
+    for invalid in (
+        dict(external_url=None),
+        dict(external_url=" "),
+        dict(external_url="https://example.org/guide", lesson_id=data["lesson"].lesson_id),
+    ):
+        suggestion_db.add(StudentSuggestion(**values, **invalid))
+        with pytest.raises(IntegrityError):
+            suggestion_db.commit()
+        suggestion_db.rollback()
+
+    suggestion_db.add(_lesson_suggestion(data, external_url="https://example.org/guide"))
+    with pytest.raises(IntegrityError):
+        suggestion_db.commit()
+    suggestion_db.rollback()
+    suggestion_db.add(_classwork_suggestion(data, external_url="https://example.org/guide"))
+    with pytest.raises(IntegrityError):
+        suggestion_db.commit()
+    suggestion_db.rollback()
+
+    first = StudentSuggestion(**values, external_url="https://example.org/guide")
+    suggestion_db.add(first)
+    suggestion_db.commit()
+    suggestion_db.add(StudentSuggestion(**values, external_url="https://example.org/guide"))
+    with pytest.raises(IntegrityError):
+        suggestion_db.commit()
+    suggestion_db.rollback()
+    assert suggestion_db.query(StudentSuggestion).count() == 1
+
+    first.status = "COMPLETED"
+    suggestion_db.commit()
+    suggestion_db.add(StudentSuggestion(**values, external_url="https://example.org/guide"))
+    suggestion_db.commit()
+    assert suggestion_db.query(StudentSuggestion).count() == 2

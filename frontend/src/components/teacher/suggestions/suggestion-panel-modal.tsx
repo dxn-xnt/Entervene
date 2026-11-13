@@ -7,6 +7,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Alert } from "@/components/retroui/Alert";
 import { apiFetch } from "@/lib/api";
+import { validateReferenceLinks } from "@/lib/classwork-reference-links";
 import {
   createManualSuggestion,
   generateRecommendationDrafts,
@@ -85,6 +86,7 @@ export function SuggestionPanel({
     useState<SuggestionResourceType>("CLASSWORK");
   const [resources, setResources] = useState<ResourceOption[]>([]);
   const [resourceId, setResourceId] = useState("");
+  const [externalUrl, setExternalUrl] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<SuggestionPriority>("NORMAL");
@@ -111,6 +113,12 @@ export function SuggestionPanel({
   };
 
   const loadResources = useCallback(async () => {
+    if (resourceType === "LINK") {
+      setResources([]);
+      setResourceId("");
+      setIsResourceLoading(false);
+      return;
+    }
     if (!subjectId) {
       setResources([]);
       setResourceId("");
@@ -182,13 +190,24 @@ export function SuggestionPanel({
     if (e) e.preventDefault();
 
     const selected = resources.find((resource) => resource.id === resourceId);
-    if (!selected) {
+    if (resourceType !== "LINK" && !selected) {
       setResourceError("Select a lesson or classwork resource.");
       return;
     }
     if (!title.trim()) {
       setTitleError("Enter a suggestion title.");
       return;
+    }
+    if (title.trim().length > 255) {
+      setTitleError("Title must be at most 255 characters.");
+      return;
+    }
+    if (resourceType === "LINK") {
+      const error = validateReferenceLinks([{ url: externalUrl, title: title.trim() }]);
+      if (error) {
+        setResourceError(error.replace("Reference link 1", "Link"));
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -197,16 +216,21 @@ export function SuggestionPanel({
       await createManualSuggestion({
         student_id: student.student_id,
         subject_id: subjectId,
-        resource_type: selected.kind,
+        resource_type: resourceType,
         title: title.trim(),
         description: description.trim() || null,
         priority,
-        lesson_id: selected.lessonId ?? null,
-        classwork_assignment_id: selected.classworkAssignmentId ?? null,
+        ...(resourceType === "LINK"
+          ? { external_url: externalUrl.trim() }
+          : {
+              lesson_id: selected?.lessonId ?? null,
+              classwork_assignment_id: selected?.classworkAssignmentId ?? null,
+            }),
       });
       toast.success({ title: "Suggestion sent to student" });
       setTitle("");
       setDescription("");
+      setExternalUrl("");
       if (onSuccess) onSuccess();
       setTimeout(() => {
         handleClose();
@@ -354,12 +378,30 @@ export function SuggestionPanel({
                   <Select.Content>
                     <Select.Item value="CLASSWORK">Classwork or Reading</Select.Item>
                     <Select.Item value="LESSON">Lesson</Select.Item>
+                    <Select.Item value="LINK">Link</Select.Item>
                   </Select.Content>
                 </Select>
               </label>
             </div>
 
-            <label className="block text-sm font-medium text-foreground">
+            {resourceType === "LINK" ? (
+              <label className="block text-sm font-medium text-foreground">
+                External URL <span className="text-red-500">*</span>
+                <Input
+                  type="url"
+                  value={externalUrl}
+                  onChange={(event) => {
+                    setExternalUrl(event.target.value);
+                    setResourceError("");
+                  }}
+                  aria-invalid={Boolean(resourceError)}
+                  aria-describedby={resourceError ? "suggestion-resource-error" : undefined}
+                  className="mt-1 w-full shadow-none aria-[invalid=true]:border-destructive"
+                  placeholder="https://example.com/resource"
+                />
+                {resourceError && <span id="suggestion-resource-error" className="mt-1 block text-sm text-destructive">{resourceError}</span>}
+              </label>
+            ) : <label className="block text-sm font-medium text-foreground">
               Resource <span className="text-red-500">*</span>
               <Select value={resourceId} onValueChange={(value) => {
                 setResourceId(value);
@@ -378,7 +420,7 @@ export function SuggestionPanel({
                 </Select.Content>
               </Select>
               {resourceError && <span id="suggestion-resource-error" className="mt-1 block text-sm text-destructive">{resourceError}</span>}
-            </label>
+            </label>}
 
             <label className="block text-sm font-medium text-foreground">
               Title <span className="text-red-500">*</span>
@@ -443,7 +485,7 @@ export function SuggestionPanel({
             form="suggestion-form"
             type="submit"
             size="sm"
-            disabled={isSubmitting || !resources.length}
+            disabled={isSubmitting || (resourceType !== "LINK" && !resources.length)}
             className="px-5 disabled:opacity-50"
           >
             <Send size={14} className="mr-1 inline" />

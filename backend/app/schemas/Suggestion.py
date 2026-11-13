@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-SuggestionResourceType = Literal["LESSON", "CLASSWORK"]
+SuggestionResourceType = Literal["LESSON", "CLASSWORK", "LINK"]
 SuggestionPriority = Literal["LOW", "NORMAL", "HIGH", "URGENT"]
 SuggestionStatus = Literal["DRAFT", "ACTIVE", "COMPLETED", "DISMISSED", "ARCHIVED"]
 
@@ -19,6 +19,7 @@ class ManualSuggestionCreate(BaseModel):
     priority: SuggestionPriority = "NORMAL"
     lesson_id: Optional[int] = None
     classwork_assignment_id: Optional[int] = None
+    external_url: Optional[str] = None
 
 
 class SuggestionResourceSummary(BaseModel):
@@ -32,6 +33,7 @@ class SuggestionResourceSummary(BaseModel):
     classwork_assignment_id: Optional[int] = None
     classwork_type: Optional[str] = None
     class_id: Optional[int] = None
+    external_url: Optional[str] = None
 
 
 class SuggestionClassworkResponse(BaseModel):

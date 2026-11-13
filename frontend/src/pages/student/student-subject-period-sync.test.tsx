@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Subjects from "./subjects";
@@ -58,6 +58,11 @@ vi.mock("./subjects-view/tabs/subject-lesson-tab", () => ({
 
 vi.mock("./subjects-view/tabs/subject-classwork-tab", () => ({
   default: () => <div>Classwork tab</div>,
+}));
+
+vi.mock("./subjects-view/tabs/subject-suggestions-tab", () => ({
+  default: ({ classId, subjectId }: { classId: number; subjectId: number }) =>
+    <div>Suggestions for {classId}/{subjectId}</div>,
 }));
 
 type Deferred<T> = {
@@ -190,6 +195,14 @@ describe("Student Subjects period synchronization", () => {
 });
 
 describe("Student Subject Details period synchronization", () => {
+  it("mounts the existing Suggestions tab for the selected subject", async () => {
+    mocks.getMySubjects.mockResolvedValue([subject(1, "Science")]);
+    renderDetail();
+    expect(await screen.findByText(/Science\|2025-2026/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Suggestions" }));
+    expect(screen.getByText("Suggestions for 7/5")).toBeTruthy();
+  });
+
   it("supports direct historical navigation using only the selected period", async () => {
     mocks.selectedPeriodId = 1;
     mocks.getMySubjects.mockResolvedValue([subject(1, "Historical Science")]);
