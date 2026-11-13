@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.FileUpload import delete_file, save_file
+from app.core.ExternalUrl import validate_external_link_title, validate_external_url
 from app.core.Security import decode_access_token
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -22,6 +23,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
+from app.models.classwork.ClassworkReferenceLink import ClassworkReferenceLink
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.classwork.ActivityRubricLevel import ActivityRubricLevel
 from app.models.people.AcademicStaff import AcademicStaff
@@ -33,6 +35,7 @@ from app.schemas.Classwork import (
     ClassworkCreate,
     ClassworkResponse,
     ClassworkUpdate,
+    ClassworkReferenceLinkInput,
     ActivityRubricLevelInput,
     validate_activity_rubric,
 )
@@ -68,6 +71,51 @@ from app.services.classwork.ClassworkShared import (
 )
 from app.services.quiz.QuizBuilderService import upsert_quiz_builder
 from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
+
+
+MAX_CLASSWORK_REFERENCE_LINKS = 20
+
+
+def _normalized_reference_links(raw: object) -> list[ClassworkReferenceLinkInput]:
+    if not isinstance(raw, list) or len(raw) > MAX_CLASSWORK_REFERENCE_LINKS:
+        raise HTTPException(status_code=422, detail=f"Provide at most {MAX_CLASSWORK_REFERENCE_LINKS} reference links in a list.")
+    result: list[ClassworkReferenceLinkInput] = []
+    seen: set[str] = set()
+    for index, value in enumerate(raw, start=1):
+        try:
+            link = ClassworkReferenceLinkInput.model_validate(value)
+            url = validate_external_url(link.url)
+            title = validate_external_link_title(link.title)
+        except ValidationError:
+            raise HTTPException(status_code=422, detail=f"Reference link {index} needs a URL and optional text title.") from None
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=f"Reference link {index}: {error}") from None
+        if url in seen:
+            raise HTTPException(status_code=422, detail=f"Reference link {index} duplicates an earlier link.")
+        seen.add(url)
+        result.append(ClassworkReferenceLinkInput(url=url, title=title))
+    return result
+
+
+def _parse_reference_links_form(raw: str | None) -> list[ClassworkReferenceLinkInput]:
+    if raw is None:
+        return []
+    if len(raw) > MAX_CLASSWORK_REFERENCE_LINKS * 2500:
+        raise HTTPException(status_code=422, detail="Reference links payload is too large.")
+    try:
+        values = json.loads(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Reference links must be a JSON list.") from None
+    return _normalized_reference_links(values)
+
+
+def _replace_reference_links(db: Session, classwork: Classwork, links: list[ClassworkReferenceLinkInput]) -> None:
+    classwork.reference_links.clear()
+    db.flush()  # Release unique positions before adding replacements.
+    classwork.reference_links.extend(
+        ClassworkReferenceLink(url=link.url, title=link.title, position=index)
+        for index, link in enumerate(links)
+    )
 
 
 def build_classwork_notification_details(
@@ -198,6 +246,7 @@ def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -
     )
     validate_classwork_values(total_points=total_points)
     ensure_subject_owner(db, staff_id, body.subject_id)
+    reference_links = _normalized_reference_links(body.reference_links)
     lesson_ids = dedupe_ids(body.lesson_ids)
     ensure_lessons_owned(db, staff_id, body.subject_id, lesson_ids)
 
@@ -218,6 +267,7 @@ def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -
     try:
         db.add(classwork)
         db.flush()
+        _replace_reference_links(db, classwork, reference_links)
         _replace_activity_rubric(db, classwork, rubric_levels)
         if is_reading_type(classwork_type):
             classwork.total_points = None
@@ -252,6 +302,7 @@ async def create_classwork_wizard_record(
     max_attempts: Optional[int],
     quiz_payload: Optional[str],
     rubric_payload: Optional[str],
+    reference_links: Optional[str] = None,
     files: Optional[list[UploadFile]],
     intervention_id: int | None = None,
     remediation_request_id: UUID | None = None,
@@ -273,6 +324,7 @@ async def create_classwork_wizard_record(
     validate_classwork_values(total_points=total_points, max_attempts=max_attempts)
     validate_schedule(None, due_date, lock_date)
     ensure_subject_owner(db, staff_id, subject_id)
+    selected_reference_links = _parse_reference_links_form(reference_links)
     ensure_lessons_owned(db, staff_id, subject_id, selected_lesson_ids)
 
     if academic_period_id is None:
@@ -418,6 +470,7 @@ async def create_classwork_wizard_record(
         )
         db.add(classwork)
         db.flush()
+        _replace_reference_links(db, classwork, selected_reference_links)
 
         _replace_activity_rubric(db, classwork, rubric_levels)
 
@@ -658,6 +711,7 @@ def teacher_classworks(
             joinedload(Classwork.subject),
             joinedload(Classwork.staff),
             selectinload(Classwork.attachments),
+            selectinload(Classwork.reference_links),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
             selectinload(Classwork.lessons),
         )
@@ -718,6 +772,7 @@ def classwork_detail(
             joinedload(Classwork.subject),
             joinedload(Classwork.staff),
             selectinload(Classwork.attachments),
+            selectinload(Classwork.reference_links),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
             selectinload(Classwork.lessons),
         )
@@ -788,6 +843,7 @@ def update_classwork_record(
             joinedload(Classwork.subject),
             joinedload(Classwork.staff),
             selectinload(Classwork.attachments),
+            selectinload(Classwork.reference_links),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
             selectinload(Classwork.lessons),
         )
@@ -797,6 +853,10 @@ def update_classwork_record(
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     values = body.model_dump(exclude_unset=True)
+    raw_reference_links = values.pop("reference_links", ...)
+    if raw_reference_links is None:
+        raise HTTPException(status_code=422, detail="Reference links must be a list; omit the field to keep existing links.")
+    replacement_links = _normalized_reference_links(raw_reference_links) if raw_reference_links is not ... else None
     is_live_update = bool(
         values.get("is_published")
         or classwork.is_published
@@ -864,6 +924,8 @@ def update_classwork_record(
             db.query(ClassworkLesson).filter(ClassworkLesson.classwork_id == classwork_id).delete()
             for lesson_id in lesson_ids:
                 db.add(ClassworkLesson(classwork_id=classwork_id, lesson_id=lesson_id))
+        if replacement_links is not None:
+            _replace_reference_links(db, classwork, replacement_links)
         db.commit()
         db.refresh(classwork)
 
@@ -1251,13 +1313,13 @@ def classwork_assignment_detail(assignment_id: int, current_user: dict, db: Sess
     ).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
+    classwork = db.query(Classwork).options(selectinload(Classwork.reference_links)).filter(Classwork.classwork_id == assignment.classwork_id).first()
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found")
     authorize_assignment_access(assignment, classwork, current_user, db)
     class_ = db.query(Class).filter(Class.class_id == assignment.class_id).first()
     staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == classwork.created_by_staff_id).first()
-    response = _assignment_response(assignment, classwork, class_, staff, None)
+    response = _assignment_response(assignment, classwork, class_, staff, None, include_reference_links=True)
     if current_user.get("role") == "teacher":
         from app.services.classwork.ClassworkResponseService import authorized_teacher_linked_lessons
         response.linked_lessons = authorized_teacher_linked_lessons(classwork, current_user, db, assignment.class_id)
@@ -1637,6 +1699,7 @@ def _assignment_response(
     class_: Class | None,
     staff: AcademicStaff | None,
     submission_status: Optional[str],
+    include_reference_links: bool = False,
 ) -> ClassworkAssignmentResponse:
     return ClassworkAssignmentResponse(
         classwork_assignment_id=cast(int, assignment.classwork_assignment_id),
@@ -1664,6 +1727,15 @@ def _assignment_response(
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
         teacher_avatar=cast(str | None, staff.user_account.avatar_path if staff and staff.user_account else None),
         attachments=[build_attachment_response(attachment) for attachment in classwork.attachments],
+        reference_links=[
+            {
+                "classwork_reference_link_id": link.classwork_reference_link_id,
+                "url": link.url,
+                "title": link.title,
+                "position": link.position,
+            }
+            for link in classwork.reference_links
+        ] if include_reference_links else [],
         linked_lessons=[
             build_linked_lesson_response(lesson)
             for lesson in (getattr(classwork, "lessons", None) or [])

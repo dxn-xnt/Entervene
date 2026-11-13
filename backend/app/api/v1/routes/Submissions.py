@@ -1,7 +1,7 @@
 # app/api/v1/routes/Submissions.py
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
@@ -53,10 +53,11 @@ async def submit_work(
     assignment_id: int,
     request: Request,
     files: Optional[List[UploadFile]] = File(None),
+    links: Optional[str] = Form(None),
     student=Depends(get_student_record),
     db: Session = Depends(get_db),
 ):
-    return await submit_student_work(assignment_id, request, files, student, db, save_file)
+    return await submit_student_work(assignment_id, request, files, student, db, save_file, links=links)
 
 
 @router.post("/assignment/{assignment_id}/complete-reading", response_model=SubmissionResponse)

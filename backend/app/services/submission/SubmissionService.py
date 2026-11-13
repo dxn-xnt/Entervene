@@ -8,10 +8,16 @@ from uuid import UUID
 
 from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.core.FileUpload import delete_file, save_file
+from app.core.ExternalUrl import (
+    MAX_EXTERNAL_LINK_TITLE_LENGTH,
+    MAX_EXTERNAL_URL_LENGTH,
+    validate_external_link_title,
+    validate_external_url,
+)
 from app.core.Security import decode_access_token
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
@@ -24,7 +30,8 @@ from app.models.people.Student import Student
 from app.models.auth.UserAccount import UserAccount
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
-from app.schemas.Submission import GradeRequest, SubmissionAttachmentResponse, SubmissionResponse
+from app.models.submissions.SubmissionLink import SubmissionLink
+from app.schemas.Submission import GradeRequest, SubmissionAttachmentResponse, SubmissionLinkInput, SubmissionLinkResponse, SubmissionResponse
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 from app.services.classwork.ClassworkShared import (
@@ -40,6 +47,36 @@ from app.services.intervention.RemediationPrerequisiteService import require_rem
 
 
 MAX_READING_FOCUS_DELTA_SECONDS = 300
+MAX_SUBMISSION_LINKS = 20
+
+
+def parse_submission_links(raw: str | None) -> list[SubmissionLinkInput] | None:
+    """Parse one multipart JSON field without logging student supplied URLs."""
+    if raw is None:
+        return None
+    if len(raw) > MAX_SUBMISSION_LINKS * (MAX_EXTERNAL_URL_LENGTH + MAX_EXTERNAL_LINK_TITLE_LENGTH + 100):
+        raise HTTPException(status_code=422, detail="Links payload is too large.")
+    try:
+        values = json.loads(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Links must be a JSON list.") from None
+    if not isinstance(values, list) or len(values) > MAX_SUBMISSION_LINKS:
+        raise HTTPException(status_code=422, detail=f"Provide at most {MAX_SUBMISSION_LINKS} links in a list.")
+    links: list[SubmissionLinkInput] = []
+    seen: set[str] = set()
+    for index, value in enumerate(values, start=1):
+        if not isinstance(value, dict) or set(value) - {"url", "title"}:
+            raise HTTPException(status_code=422, detail=f"Link {index} must contain a URL and optional title.")
+        try:
+            url = validate_external_url(value.get("url"))
+            title = validate_external_link_title(value.get("title"))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=f"Link {index}: {error}") from None
+        if url in seen:
+            raise HTTPException(status_code=422, detail=f"Link {index} duplicates an earlier link.")
+        seen.add(url)
+        links.append(SubmissionLinkInput(url=url, title=title))
+    return links
 
 
 def feedback_fingerprint(feedback: str | None) -> str:
@@ -219,6 +256,12 @@ def build_submission_response(submission, db: Session) -> SubmissionResponse:
         graded_by_staff_id=submission.graded_by_staff_id,
         reading_focused_seconds=getattr(submission, "reading_focused_seconds", None),
         attachments=[build_attachment_response(attachment) for attachment in submission.attachments],
+        links=[SubmissionLinkResponse(
+            submission_link_id=link.submission_link_id,
+            url=link.url,
+            title=link.title,
+            position=link.position,
+        ) for link in submission.links],
         total_points=float(classwork.total_points) if classwork and classwork.total_points is not None else None,
         created_at=submission.created_at,
     )
@@ -227,6 +270,7 @@ def build_submission_response(submission, db: Session) -> SubmissionResponse:
 def student_submissions(student: Student, db: Session) -> list[SubmissionResponse]:
     submissions = (
         db.query(StudentSubmission)
+        .options(selectinload(StudentSubmission.links))
         .filter(StudentSubmission.student_id == student.student_id)
         .order_by(StudentSubmission.created_at.desc())
         .all()
@@ -293,6 +337,7 @@ async def submit_student_work(
     student: Student,
     db: Session,
     save_file_func=save_file,
+    links: str | None = None,
 ) -> SubmissionResponse:
     """Create or resubmit work while preserving attempts and rolling back failed uploads."""
     assignment = db.query(ClassworkAssignment).filter(
@@ -307,6 +352,9 @@ async def submit_student_work(
     _assert_student_submission_mutation_scope(db, student, assignment, classwork)
     ensure_remedial_period_open(db, assignment, student.student_id)
     require_remediation_prerequisite(db, assignment, student)
+    incoming_links = parse_submission_links(links)
+    if incoming_links and (classwork.classwork_type or "").upper() not in {"ASSIGNMENT", "ACTIVITY"}:
+        raise HTTPException(status_code=422, detail="Links are supported only for assignments and activities.")
     now = datetime.now(timezone.utc)
     if not assignment_is_available(assignment, now):
         raise HTTPException(status_code=403, detail="This assignment is not available")
@@ -343,15 +391,16 @@ async def submit_student_work(
             raise HTTPException(status_code=403, detail="Cannot modify a graded submission")
         is_draft = existing.status == "pending"
         if is_draft:
-            if not upload_files and not existing.attachments:
-                raise HTTPException(status_code=400, detail="Attach at least one file using the 'files' form field.")
-            if upload_files:
+            retained_links = existing.links if incoming_links is None else incoming_links
+            if not upload_files and not existing.attachments and not retained_links:
+                raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
+            if upload_files or incoming_links:
                 if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
                     raise HTTPException(status_code=403, detail="Maximum attempts reached")
                 existing.attempt_count += 1
         else:
-            if not upload_files:
-                raise HTTPException(status_code=400, detail="Use Unsubmit first, then upload changes and submit again.")
+            if not upload_files and not incoming_links:
+                raise HTTPException(status_code=400, detail="Use Unsubmit first, then upload a file or link and submit again.")
             if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
                 raise HTTPException(status_code=403, detail="Maximum attempts reached")
             existing.attempt_count += 1
@@ -359,8 +408,8 @@ async def submit_student_work(
         existing.status = "late" if is_late else "submitted"
         submission = existing
     else:
-        if not upload_files:
-            raise HTTPException(status_code=400, detail="Attach at least one file using the 'files' form field.")
+        if not upload_files and not incoming_links:
+            raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
         submission = StudentSubmission(
             student_id=student.student_id,
             classwork_assignment_id=assignment_id,
@@ -376,6 +425,17 @@ async def submit_student_work(
             info = await save_file_func(upload, "submissions")
             saved_paths.append(info["file_path"])
             db.add(SubmissionAttachment(submission_id=submission.submission_id, **info))
+        if incoming_links is not None:
+            for old_link in list(submission.links):
+                db.delete(old_link)
+            db.flush()
+            for position, link in enumerate(incoming_links):
+                db.add(SubmissionLink(
+                    submission_id=submission.submission_id,
+                    url=link.url,
+                    title=link.title,
+                    position=position,
+                ))
         db.commit()
         db.refresh(submission)
 
@@ -545,8 +605,8 @@ def unsubmit_student_work(assignment_id: int, student: Student, db: Session) -> 
         raise HTTPException(status_code=400, detail="Submission is not submitted yet")
     if submission.status not in ("submitted", "late"):
         raise HTTPException(status_code=400, detail="Submission cannot be unsubmitted")
-    if not submission.attachments:
-        raise HTTPException(status_code=400, detail="No files to keep; upload work first")
+    if not submission.attachments and not submission.links:
+        raise HTTPException(status_code=400, detail="No files or links to keep; upload work first")
 
     setattr(submission, "status", "pending")
     setattr(submission, "submitted_at", None)
@@ -587,20 +647,25 @@ def clear_submission_files(
     delete_file_func=delete_file,
 ) -> dict[str, str]:
     _, submission = assert_student_can_modify_submission(assignment_id, student, db)
+    if submission.status == "graded":
+        raise HTTPException(status_code=403, detail="Cannot modify a graded submission")
     for raw_attachment in submission.attachments:
         attachment = cast(SubmissionAttachment, raw_attachment)
         delete_file_func(cast(str, attachment.file_path))
         db.delete(attachment)
+    for link in list(submission.links):
+        db.delete(link)
     submission.status = "pending"
     submission.submitted_at = None
     db.commit()
-    return {"message": "Submission files cleared. You can now resubmit."}
+    return {"message": "Submission files and links cleared. You can now resubmit."}
 
 
 def assignment_submissions(assignment_id: int, staff_id: str, db: Session) -> list[SubmissionResponse]:
     teacher_owns_assignment(assignment_id, staff_id, db)
     submissions = (
         db.query(StudentSubmission)
+        .options(selectinload(StudentSubmission.links))
         .filter(StudentSubmission.classwork_assignment_id == assignment_id)
         .order_by(StudentSubmission.submitted_at.desc())
         .all()

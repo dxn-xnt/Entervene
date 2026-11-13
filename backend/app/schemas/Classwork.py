@@ -1,5 +1,5 @@
 # app/schemas/Classwork.py
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
@@ -31,6 +31,17 @@ def validate_activity_rubric(levels: Optional[list[ActivityRubricLevelInput]]):
     return sorted(levels, key=lambda level: (-level.points, level.display_order))
 
 
+class ClassworkReferenceLinkInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str
+    title: Optional[str] = None
+
+
+class ClassworkReferenceLinkResponse(ClassworkReferenceLinkInput):
+    classwork_reference_link_id: int
+    position: int
+
+
 class ClassworkCreate(BaseModel):
     title: str
     description: Optional[str] = None
@@ -46,6 +57,7 @@ class ClassworkCreate(BaseModel):
     show_scores: Optional[bool] = True
     lesson_ids: Optional[list[int]] = None
     rubric_levels: Optional[list[ActivityRubricLevelInput]] = None
+    reference_links: list[ClassworkReferenceLinkInput] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_rubric(self):
@@ -68,6 +80,7 @@ class ClassworkUpdate(BaseModel):
     lesson_ids: Optional[list[int]] = None
     rubric_levels: Optional[list[ActivityRubricLevelInput]] = None
     confirm_rubric_change: bool = False
+    reference_links: Optional[list[ClassworkReferenceLinkInput]] = None
 
     @model_validator(mode="after")
     def validate_rubric(self):
@@ -145,6 +158,7 @@ class ClassworkResponse(BaseModel):
     created_by_staff_id: str
     teacher_name: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
+    reference_links: list[ClassworkReferenceLinkResponse] = Field(default_factory=list)
     assignments: Optional[list[CwAssignmentRow]] = None
     linked_lessons: list[LinkedLessonResponse] = []
     created_at: Optional[datetime]
@@ -193,6 +207,7 @@ class ClassworkAssignmentResponse(BaseModel):
     teacher_name: Optional[str] = None
     teacher_avatar: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
+    reference_links: list[ClassworkReferenceLinkResponse] = Field(default_factory=list)
     assignments: Optional[list[CwAssignmentRow]] = None
     linked_lessons: list[LinkedLessonResponse] = []
     submission_status: Optional[str] = None  # for student view

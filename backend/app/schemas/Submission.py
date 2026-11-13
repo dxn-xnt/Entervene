@@ -14,6 +14,16 @@ class SubmissionAttachmentResponse(BaseModel):
     uploaded_at: Optional[datetime]
 
 
+class SubmissionLinkInput(BaseModel):
+    url: str
+    title: Optional[str] = None
+
+
+class SubmissionLinkResponse(SubmissionLinkInput):
+    submission_link_id: int
+    position: int
+
+
 class SubmissionResponse(BaseModel):
     submission_id: int
     student_id: str
@@ -30,6 +40,7 @@ class SubmissionResponse(BaseModel):
     graded_by_staff_id: Optional[str] = None
     reading_focused_seconds: Optional[int] = None
     attachments: list[SubmissionAttachmentResponse] = []
+    links: list[SubmissionLinkResponse] = Field(default_factory=list)
     total_points: Optional[float] = None
     created_at: Optional[datetime] = None
 

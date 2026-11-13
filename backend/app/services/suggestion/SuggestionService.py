@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.ExternalUrl import validate_external_link_title, validate_external_url
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.StudentCLass import StudentClass
@@ -175,11 +176,25 @@ def _ensure_no_duplicate_classwork(db: Session, student_id: UUID, subject_id: in
         raise HTTPException(status_code=409, detail="This classwork is already actively suggested to the student")
 
 
+def _ensure_no_duplicate_link(db: Session, student_id: UUID, subject_id: int, url: str) -> None:
+    duplicate = db.query(StudentSuggestion.student_suggestion_id).filter(
+        StudentSuggestion.student_id == student_id,
+        StudentSuggestion.subject_id == subject_id,
+        StudentSuggestion.resource_type == "LINK",
+        StudentSuggestion.external_url == url,
+        StudentSuggestion.status == ACTIVE_STATUS,
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="This link is already actively suggested to the student")
+
+
 def create_manual_suggestion(db: Session, staff_id: str, body: ManualSuggestionCreate) -> SuggestionResponse:
     scoped_class_ids = _ensure_teacher_student_scope(db, staff_id, body.student_id, body.subject_id)
     title = body.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Suggestion title is required")
+    if body.resource_type != "LINK" and body.external_url is not None:
+        raise HTTPException(status_code=400, detail="Only link suggestions may include external_url")
 
     suggestion = StudentSuggestion(
         suggestion_type="MANUAL",
@@ -202,7 +217,7 @@ def create_manual_suggestion(db: Session, staff_id: str, body: ManualSuggestionC
             "lesson_id": lesson.lesson_id,
             "title": lesson.title,
         }
-    else:
+    elif body.resource_type == "CLASSWORK":
         assignment = _validate_classwork_resource(db, body, scoped_class_ids)
         _ensure_no_duplicate_classwork(db, body.student_id, body.subject_id, assignment.classwork_assignment_id)
         suggestion.resource_links = {
@@ -214,6 +229,15 @@ def create_manual_suggestion(db: Session, staff_id: str, body: ManualSuggestionC
         suggestion.classwork_link = SuggestionClasswork(
             classwork_assignment_id=assignment.classwork_assignment_id,
         )
+    else:
+        if body.lesson_id is not None or body.classwork_assignment_id is not None:
+            raise HTTPException(status_code=400, detail="Link suggestions cannot reference a lesson or classwork")
+        try:
+            suggestion.external_url = validate_external_url(body.external_url)
+            suggestion.title = validate_external_link_title(title) or title
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from None
+        _ensure_no_duplicate_link(db, body.student_id, body.subject_id, suggestion.external_url)
 
     db.add(suggestion)
     db.commit()
@@ -235,35 +259,21 @@ def list_teacher_suggestions(
     if not is_admin:
         if not staff_id:
             return SuggestionListResponse()
-        load_query = db.query(SubjectLoad.class_id, SubjectLoad.subject_id).filter(
+        scope = db.query(StudentClass.student_id).join(
+            SubjectLoad, SubjectLoad.class_id == StudentClass.class_id,
+        ).filter(
+            StudentClass.student_id == StudentSuggestion.student_id,
+            StudentClass.enrollment_status == "enrolled",
             SubjectLoad.staff_id == staff_id,
+            SubjectLoad.subject_id == StudentSuggestion.subject_id,
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
         )
         if class_id is not None:
-            load_query = load_query.filter(SubjectLoad.class_id == class_id)
+            scope = scope.filter(SubjectLoad.class_id == class_id)
         if subject_id is not None:
-            load_query = load_query.filter(SubjectLoad.subject_id == subject_id)
-        loads = load_query.all()
-        if not loads:
-            return SuggestionListResponse()
-
-        scoped_pairs = {(row.class_id, row.subject_id) for row in loads}
-        scoped_subjects = {pair[1] for pair in scoped_pairs}
-        scoped_class_ids = {pair[0] for pair in scoped_pairs}
-        scoped_students = {
-            row[0]
-            for row in db.query(StudentClass.student_id)
-            .filter(
-                StudentClass.class_id.in_(scoped_class_ids),
-                StudentClass.enrollment_status == "enrolled",
-            )
-            .all()
-        }
-        query = query.filter(
-            StudentSuggestion.subject_id.in_(scoped_subjects),
-            StudentSuggestion.student_id.in_(scoped_students),
-        )
+            scope = scope.filter(SubjectLoad.subject_id == subject_id)
+        query = query.filter(scope.exists())
     else:
         if subject_id is not None:
             query = query.filter(StudentSuggestion.subject_id == subject_id)
@@ -402,6 +412,18 @@ def build_resource_summary(
     suggestion: StudentSuggestion,
     student: Optional[Student] = None,
 ) -> SuggestionResourceSummary:
+    if suggestion.resource_type == "LINK":
+        try:
+            url = validate_external_url(suggestion.external_url)
+        except ValueError:
+            return _resource_unavailable("External resource link is invalid", suggestion)
+        return SuggestionResourceSummary(
+            resource_type="LINK",
+            title=suggestion.title,
+            subject_id=suggestion.subject_id,
+            is_available=True,
+            external_url=url,
+        )
     if suggestion.resource_type == "LESSON":
         lesson = suggestion.lesson or db.query(Lesson).filter(Lesson.lesson_id == suggestion.lesson_id).first()
         if not lesson:

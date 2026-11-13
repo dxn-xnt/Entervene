@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session, object_session
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
+from app.models.academic.Lesson import Lesson
+from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.Class_ import Class
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
@@ -23,6 +25,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.academic.GradeSubmissionLog import GradeSubmissionLog
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
@@ -61,6 +64,7 @@ from app.schemas.StudentRecord import (
     SendGradeToAdviserItemResponse,
     SendStudentGradeRequest,
     StudentClassworkResult,
+    StudentClassworkLessonLink,
     StudentGradebookResponse,
     StudentGradebookRow,
     StudentPeriodGradeFinalizeResponse,
@@ -366,6 +370,27 @@ def teacher_student_record_detail(
         and assignment.classwork_assignment_id not in resolved.remedial_assignment_ids
         and assignment.original_exam_assignment_id is None
     ]
+    classwork_ids = {assignment.classwork_id for assignment in official_assignments}
+    lesson_links_by_classwork: dict[int, list[StudentClassworkLessonLink]] = {}
+    if classwork_ids:
+        lesson_rows = (
+            db.query(ClassworkLesson.classwork_id, Lesson.lesson_id, Lesson.title)
+            .join(Lesson, Lesson.lesson_id == ClassworkLesson.lesson_id)
+            .join(LessonAssignment, LessonAssignment.lesson_id == Lesson.lesson_id)
+            .filter(
+                ClassworkLesson.classwork_id.in_(classwork_ids),
+                LessonAssignment.class_id == scope.class_.class_id,
+                Lesson.subject_id == scope.subject.subject_id,
+                Lesson.is_archived.is_(False),
+            )
+            .distinct()
+            .order_by(Lesson.title, Lesson.lesson_id)
+            .all()
+        )
+        for classwork_id, lesson_id, title in lesson_rows:
+            lesson_links_by_classwork.setdefault(classwork_id, []).append(
+                StudentClassworkLessonLink(lesson_id=lesson_id, title=title)
+            )
     classwork_results = []
     for assignment in official_assignments:
         sub = submissions.get(assignment.classwork_assignment_id)
@@ -395,6 +420,7 @@ def teacher_student_record_detail(
                 sub,
                 effective_score=effective_score,
                 remediation=rem_dict,
+                lesson_links=lesson_links_by_classwork.get(assignment.classwork_id, []),
             )
         )
 
@@ -2177,6 +2203,7 @@ def _classwork_result(
     submission: StudentSubmission | None,
     effective_score: float | None = None,
     remediation: dict | None = None,
+    lesson_links: list[StudentClassworkLessonLink] | None = None,
 ) -> StudentClassworkResult:
     status = _status_for_assignment(assignment, submission, datetime.now(timezone.utc))
     total_points = (
@@ -2202,6 +2229,7 @@ def _classwork_result(
         raw_score=raw_score,
         effective_score=effective_score,
         remediation=remediation,
+        lesson_links=lesson_links or [],
     )
 
 

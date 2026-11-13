@@ -6,6 +6,7 @@ from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.schemas.Classwork import (
     ClassworkAttachmentResponse,
+    ClassworkReferenceLinkResponse,
     ClassworkResponse,
     LinkedLessonAttachmentResponse,
     LinkedLessonResponse,
@@ -204,6 +205,14 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         created_by_staff_id=cw.created_by_staff_id,
         teacher_name=f"{getattr(staff, 'first_name', '')} {getattr(staff, 'last_name', '')}".strip() or None if staff else None,
         attachments=[build_attachment_response(attachment) for attachment in cw.attachments],
+        reference_links=[
+            ClassworkReferenceLinkResponse(
+                classwork_reference_link_id=link.classwork_reference_link_id,
+                url=link.url,
+                title=link.title,
+                position=link.position,
+            ) for link in cw.reference_links
+        ],
         assignments=assignments_data,
         linked_lessons=linked_lessons,
         created_at=cw.created_at,

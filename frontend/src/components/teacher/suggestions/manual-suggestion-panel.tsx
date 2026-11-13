@@ -168,6 +168,9 @@ export function ManualSuggestionPanel({
                       <p className="font-semibold text-black/60">
                         {item.resource.title}
                       </p>
+                      {item.resource.resource_type === "LINK" && item.resource.external_url && (
+                        <p className="max-w-full break-all text-black/60">{item.resource.external_url}</p>
+                      )}
                     </div>
                     <span className="border border-black bg-white px-2 py-0.5 font-black text-[10px]">
                       {item.status}

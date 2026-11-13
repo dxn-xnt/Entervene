@@ -1,6 +1,7 @@
-import { BookOpen, CheckCircle2, ClipboardList, Eye, ExternalLink, Loader2 } from "lucide-react";
+import { BookOpen, CheckCircle2, ClipboardList, Eye, ExternalLink, Link2, Loader2 } from "lucide-react";
 import type { SuggestionResponse } from "@/types/suggestion";
 import IconContainer from "@/components/icon-container";
+import { validateReferenceLinks } from "@/lib/classwork-reference-links";
 
 type StudySuggestionCardProps = {
   suggestion: SuggestionResponse;
@@ -29,7 +30,11 @@ export default function StudySuggestionCard({
 }: StudySuggestionCardProps) {
   const isCompleted = suggestion.status === "COMPLETED";
   const resource = suggestion.resource;
-  const Icon = resource.resource_type === "LESSON" ? BookOpen : ClipboardList;
+  const Icon = resource.resource_type === "LESSON" ? BookOpen : resource.resource_type === "LINK" ? Link2 : ClipboardList;
+  const externalUrl = resource.resource_type === "LINK" && resource.external_url &&
+    !validateReferenceLinks([{ url: resource.external_url, title: "" }])
+    ? resource.external_url : null;
+  const canOpen = resource.is_available && (resource.resource_type !== "LINK" || Boolean(externalUrl));
 
   return (
     <article className="rounded border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -66,8 +71,9 @@ export default function StudySuggestionCard({
               <p className="text-sm font-bold uppercase tracking-wide text-gray-500">Linked resource</p>
               <p className="mt-1 font-bold text-gray-900">{resource.title}</p>
               <p className="text-sm text-gray-600">
-                {resource.resource_type === "LESSON" ? "Lesson" : `Classwork${resource.classwork_type ? ` - ${resource.classwork_type}` : ""}`}
+                {resource.resource_type === "LESSON" ? "Lesson" : resource.resource_type === "LINK" ? "External link" : `Classwork${resource.classwork_type ? ` - ${resource.classwork_type}` : ""}`}
               </p>
+              {externalUrl && <p className="mt-1 break-all text-sm text-gray-600">{externalUrl}</p>}
               {!resource.is_available && resource.unavailable_reason ? (
                 <p className="mt-2 text-sm font-medium text-red-700">{resource.unavailable_reason}</p>
               ) : null}
@@ -76,15 +82,27 @@ export default function StudySuggestionCard({
         </div>
 
         <div className="flex shrink-0 flex-wrap gap-2 md:flex-col">
-          <button
-            type="button"
-            onClick={() => onOpenResource(suggestion)}
-            disabled={isBusy || !resource.is_available}
-            className="inline-flex items-center justify-center gap-2 rounded border border-black bg-white px-4 py-2 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors hover:bg-[#F6E9B2] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isBusy ? <Loader2 size={16} className="animate-spin" /> : suggestion.is_viewed ? <ExternalLink size={16} /> : <Eye size={16} />}
-            {suggestion.is_viewed ? "Open Resource" : "View Resource"}
-          </button>
+          {resource.resource_type === "LINK" && externalUrl && canOpen ? (
+            <a
+              href={externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => onOpenResource(suggestion)}
+              className="inline-flex items-center justify-center gap-2 rounded border border-black bg-white px-4 py-2 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors hover:bg-[#F6E9B2]"
+            >
+              <ExternalLink size={16} /> Open Resource
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onOpenResource(suggestion)}
+              disabled={isBusy || !canOpen}
+              className="inline-flex items-center justify-center gap-2 rounded border border-black bg-white px-4 py-2 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors hover:bg-[#F6E9B2] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isBusy ? <Loader2 size={16} className="animate-spin" /> : suggestion.is_viewed ? <ExternalLink size={16} /> : <Eye size={16} />}
+              {suggestion.is_viewed ? "Open Resource" : "View Resource"}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onComplete(suggestion)}

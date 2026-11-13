@@ -164,6 +164,9 @@ it("renders teacher guidance, displays supporting readings, marks upload optiona
   expect(screen.getByText("Upload Material (Optional)")).toBeTruthy();
   expect(screen.getByText(/No Additional Files Attached/i)).toBeTruthy();
   expect(screen.getByText(/Attach Optional Files/i)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Add Reference Link" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Reference link 1 URL" }), { target: { value: "https://docs.example.test/guide" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Reference link 1 title" }), { target: { value: "Guide" } });
 
   // 5. Student Instructions field has dedicated student guidance label
   expect(screen.getByText(/Student Instructions \(Visible to student\):/i)).toBeTruthy();
@@ -192,4 +195,5 @@ it("renders teacher guidance, displays supporting readings, marks upload optiona
   expect(form.get("original_classwork_assignment_id")).toBe("101");
   expect(form.get("intervention_id")).toBe("42");
   expect(form.get("total_points")).toBe("20");
+  expect(JSON.parse(String(form.get("reference_links")))).toEqual([{ url: "https://docs.example.test/guide", title: "Guide" }]);
 });

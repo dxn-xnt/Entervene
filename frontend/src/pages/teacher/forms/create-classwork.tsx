@@ -36,6 +36,8 @@ import type { ActivityRubricLevel } from "@/types/classwork";
 import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination, RemediationClassworkTarget, RemediationResource } from "@/lib/teacher-interventions-api";
 import { categoryFromFocus } from "@/lib/remediation-authoring";
 import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
+import { ReferenceLinkEditor } from "@/components/classwork-reference-links";
+import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
 
 function scaleRubricToMaxPoints(levels: ActivityRubricLevel[], targetPoints: number): ActivityRubricLevel[] {
   if (levels.length === 0) return levels;
@@ -140,6 +142,7 @@ export default function CreateClassworkModal({
     }
   }, [draftOnly]);
   const [materials, setMaterials] = useState<File[]>([]);
+  const [referenceLinks, setReferenceLinks] = useState<ReferenceLinkDraft[]>([]);
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>(() => {
     if (remediationTarget) return [remediationTarget.class_id];
     if (initialClassId) return [initialClassId];
@@ -239,6 +242,8 @@ export default function CreateClassworkModal({
   };
 
   const validateDetails = () => {
+    const linksError = validateReferenceLinks(referenceLinks);
+    if (linksError) return linksError;
     if (!draft.subject_id) return "Choose a subject.";
     if (!draft.title.trim()) return "Topic title is required.";
     if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
@@ -427,6 +432,7 @@ export default function CreateClassworkModal({
         }
       }
       formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
+      formData.append("reference_links", JSON.stringify(referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null }))));
       if (draft.due_date) {
         formData.append("due_date", new Date(draft.due_date).toISOString());
       }
@@ -751,6 +757,8 @@ export default function CreateClassworkModal({
                   </Field>}
                 </div>
               )}
+
+              <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isCreating} />
 
               <Field label={remediationDraft ? "Upload Material (Optional)" : "Upload Material"}>
 

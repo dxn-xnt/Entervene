@@ -6,7 +6,7 @@ import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/teacher/button";
 import { Progress } from "@/components/retroui/Progress";
-import { Empty } from "@/components/retroui/Empty";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { OverviewCard } from "@/components/overview-cards";
 import { ClassworkItemLine } from "@/components/item-line/classwork";
@@ -90,6 +90,8 @@ export function StudentRecordDetail({
         status: item.status,
         type: item.type,
         percent: Math.min(100, Math.max(0, percent)),
+        hasScore: item.score !== null && item.score !== undefined && Boolean(item.total_points),
+        lessonLinks: item.lesson_links ?? [],
       };
     });
   }, [detail.classwork_results, performanceFilter]);
@@ -97,6 +99,20 @@ export function StudentRecordDetail({
   const displayedPerformanceItems = showAllPerformance
     ? performanceItems
     : performanceItems.slice(0, 5);
+  const performanceGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; title: string; items: typeof displayedPerformanceItems }>();
+    for (const item of displayedPerformanceItems) {
+      const key = item.lessonLinks.length === 1
+        ? `lesson-${item.lessonLinks[0].lesson_id}`
+        : item.lessonLinks.length > 1 ? "multiple" : "unlinked";
+      const title = item.lessonLinks.length === 1
+        ? item.lessonLinks[0].title
+        : item.lessonLinks.length > 1 ? "Covers multiple lessons" : "Not linked to a lesson";
+      if (!groups.has(key)) groups.set(key, { key, title, items: [] });
+      groups.get(key)!.items.push(item);
+    }
+    return Array.from(groups.values());
+  }, [displayedPerformanceItems]);
 
   return (
     <div className="space-y-4">
@@ -214,37 +230,23 @@ export function StudentRecordDetail({
             <Card.Content className="flex flex-col justify-between gap-2.5 p-0 h-full mt-3">
               <div className="flex flex-col gap-2.5">
                 {!performanceItems.length ? (
-                  <Empty className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
-                    <Empty.Content>
-                      <Empty.Icon><BookOpen className="size-6 text-muted-foreground" /></Empty.Icon>
-                      <Empty.Title>No classwork performance records found for this filter.</Empty.Title>
-                    </Empty.Content>
-                  </Empty>
+                  <TeacherEmptyState compact icon={<BookOpen />} title="No lesson performance yet" description="No classwork records match this filter." className="border-none bg-transparent shadow-none hover:shadow-none" />
                 ) : (
-                  displayedPerformanceItems.map((item) => (
-                    <div
-                      key={item.id}
-                      title={`${item.title} — ${item.score !== null && item.score !== undefined
-                        ? `${item.score} / ${item.total_points ?? 0} pts`
-                        : isReadingType(item.type)
-                          ? item.percent === 100
-                            ? "Opened"
-                            : "Not Opened"
-                          : "Not Graded"
-                        } (${item.percent}%)`}
-                      className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                    >
-                      <span
-                        className="font-medium text-foreground/90 shrink-0 w-32 sm:w-48 truncate"
-                        title={item.title}
-                      >
-                        {item.title}
-                      </span>
-                      <Progress value={item.percent} className="h-2.5 flex-1" />
-                      <span className="font-semibold text-foreground text-right w-12 shrink-0">
-                        {item.percent}%
-                      </span>
-                    </div>
+                  performanceGroups.map((group) => (
+                    <section key={group.key} className="space-y-2 border-b border-black/15 pb-3 last:border-0 last:pb-0">
+                      <h3 className="text-sm font-bold text-foreground">{group.title}</h3>
+                      {group.items.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs sm:text-sm">
+                          <span className="font-medium text-foreground/90 shrink-0 w-32 sm:w-48 truncate" title={item.title}>
+                            {item.title}
+                          </span>
+                          {item.hasScore ? <Progress value={item.percent} className="h-2.5 flex-1" /> : <span className="flex-1" />}
+                          <span className="font-semibold text-foreground text-right min-w-12 shrink-0">
+                            {item.hasScore ? `${item.percent}%` : isReadingType(item.type) ? (item.percent === 100 ? "Opened" : "Not opened") : "Not graded"}
+                          </span>
+                        </div>
+                      ))}
+                    </section>
                   ))
                 )}
               </div>

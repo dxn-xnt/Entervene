@@ -22,4 +22,12 @@ describe("isDisplayableSubmission", () => {
       attachments: [{ submission_attachment_id: 2, file_name: "work.pdf", file_size: 12 }],
     })).toBe(true);
   });
+
+  it("keeps link-only drafts visible", () => {
+    expect(isDisplayableSubmission({
+      ...submission,
+      status: "pending",
+      links: [{ submission_link_id: 3, url: "https://example.com/work", position: 0 }],
+    })).toBe(true);
+  });
 });

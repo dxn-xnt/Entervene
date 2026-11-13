@@ -37,6 +37,11 @@ import type {
 } from "@/types/classwork";
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
+import { ReferenceLinkEditor } from "@/components/classwork-reference-links";
+import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
+
+const editReferenceLinks = (classwork: TeacherClasswork): ReferenceLinkDraft[] =>
+  (classwork.reference_links ?? []).map((link) => ({ url: link.url, title: link.title ?? "" }));
 
 export interface EditClassworkModalProps {
   draftOnly?: boolean;
@@ -60,6 +65,7 @@ export default function EditClassworkModal({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [rubricConfirmation, setRubricConfirmation] = useState<"graded" | "submitted" | null>(null);
   const [editMaterials, setEditMaterials] = useState<File[]>([]);
+  const [referenceLinks, setReferenceLinks] = useState<ReferenceLinkDraft[]>(() => editReferenceLinks(classwork));
   const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>(() =>
@@ -113,6 +119,7 @@ export default function EditClassworkModal({
       classwork.linked_lessons?.map((lesson) => lesson.lesson_id) ?? [],
     );
     setEditMaterials([]);
+    setReferenceLinks(editReferenceLinks(classwork));
     setRubricConfirmation(null);
     setRubricLevels(
       classwork.rubric_levels?.length
@@ -338,12 +345,14 @@ export default function EditClassworkModal({
       classes: unorderedValues([...new Set(classwork.assignments?.map(item => item.class_id) ?? [])]),
       lessons: unorderedValues(classwork.linked_lessons?.map(item => item.lesson_id) ?? []),
       files: [],
+      referenceLinks: editReferenceLinks(classwork),
     },
     values: {
       draft: draftValues(editDraft, rubricLevels),
       classes: unorderedValues([...new Set(selectedClassIds)]),
       lessons: unorderedValues(selectedLessonIds),
       files: editMaterials.map(file => [file.name, file.size, file.lastModified, file.type]),
+      referenceLinks,
     },
   });
   const saveClassworkEdit = async (rubricConfirmed = false) => {
@@ -361,6 +370,11 @@ export default function EditClassworkModal({
         : null;
     if (!editDraft.title.trim()) {
       setFormError("Classwork title is required.");
+      return;
+    }
+    const linksError = validateReferenceLinks(referenceLinks);
+    if (linksError) {
+      setFormError(linksError);
       return;
     }
     if (
@@ -425,6 +439,9 @@ export default function EditClassworkModal({
             is_published: publishValue,
             show_scores: editDraft.show_scores,
             lesson_ids: selectedLessonIds,
+            reference_links: JSON.stringify(referenceLinks) === JSON.stringify(editReferenceLinks(currentClasswork))
+              ? undefined
+              : referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null })),
           }),
         },
       );
@@ -760,6 +777,8 @@ export default function EditClassworkModal({
                       )}
                   </div>
                 )}
+
+                <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isSavingEdit} />
 
                 <Field label="Upload Material">
                   {currentClasswork.attachments.length === 0 &&

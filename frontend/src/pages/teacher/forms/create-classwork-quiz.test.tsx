@@ -48,6 +48,8 @@ it("submits the selected lesson on an Examination quiz question", async () => {
 
   fireEvent.click(screen.getByRole("button", { name: /Create manually/i }));
   fireEvent.change(screen.getByPlaceholderText("Introduction to Programming Quiz"), { target: { value: "Summative ratios" } });
+  fireEvent.click(screen.getByRole("button", { name: "Add Reference Link" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Reference link 1 URL" }), { target: { value: "https://example.test/quiz-guide" } });
   fireEvent.click(screen.getByRole("button", { name: "Exams" }));
   fireEvent.click(screen.getByText(/Summative 1/i));
   fireEvent.change(screen.getByText("Total points").parentElement!.querySelector("input")!, { target: { value: "1" } });
@@ -56,7 +58,7 @@ it("submits the selected lesson on an Examination quiz question", async () => {
   fireEvent.change(screen.getByPlaceholderText("Choice 1"), { target: { value: "A comparison" } });
   fireEvent.change(screen.getByPlaceholderText("Choice 2"), { target: { value: "A calendar" } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  fireEvent.click(screen.getByRole("button", { name: "Sapphire" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sapphire Active Section" }));
   const lessonButton = (await screen.findByText("Variables")).closest("button")!;
   fireEvent.click(lessonButton);
   fireEvent.click(await screen.findByRole("button", { name: "Variables" }));
@@ -69,6 +71,7 @@ it("submits the selected lesson on an Examination quiz question", async () => {
   expect(form.get("classwork_category")).toBe("QUARTERLY_ASSESSMENT");
   expect(form.get("exam_subtype")).toBe("SUMMATIVE_1");
   expect(JSON.parse(String(form.get("quiz_payload"))).questions[0].lesson_id).toBe(42);
+  expect(JSON.parse(String(form.get("reference_links")))).toEqual([{ url: "https://example.test/quiz-guide", title: null }]);
 });
 
 it("requires an explicit Examination subtype before leaving quiz details", async () => {

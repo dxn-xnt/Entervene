@@ -40,6 +40,7 @@ it("locks a remediation assessment to its assigned student instead of showing se
     subject_id: 5,
     subject_name: "Mathematics",
     attachments: [],
+    reference_links: [{ classwork_reference_link_id: 1, url: "https://example.test/old", title: "Old", position: 0 }],
     linked_lessons: [],
     rubric_levels: [
       { level_name: "Complete", description: "Complete work", points: 40, display_order: 0 },
@@ -86,6 +87,9 @@ it("locks a remediation assessment to its assigned student instead of showing se
   expect(screen.queryByRole("button", { name: /Select All/i })).toBeNull();
   expect(api.fetch.mock.calls.some(([path]) => path === "/api/v1/classwork-assignments/teacher/classes")).toBe(false);
 
+  fireEvent.change(screen.getByRole("textbox", { name: "Reference link 1 URL" }), { target: { value: "https://example.test/new" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Reference link 1 title" }), { target: { value: "New" } });
+
   fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
   await waitFor(() => {
     const assignCall = api.fetch.mock.calls.find(
@@ -94,4 +98,6 @@ it("locks a remediation assessment to its assigned student instead of showing se
     expect(assignCall).toBeTruthy();
     expect(JSON.parse(assignCall![1].body as string).class_ids).toEqual([7]);
   });
+  const editCall = api.fetch.mock.calls.find(([path, options]) => path === "/api/v1/classwork-assignments/classwork/700" && options?.method === "PUT");
+  expect(JSON.parse(editCall![1].body as string).reference_links).toEqual([{ url: "https://example.test/new", title: "New" }]);
 });

@@ -16,6 +16,8 @@ from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.Lesson import Lesson
+from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
@@ -23,6 +25,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
@@ -336,6 +339,42 @@ def test_teacher_detail_returns_classwork_history(student_record_context):
     assert body["classwork_results"][0]["percentage"] == 80
     assert body["classwork_results"][1]["status"] == "late"
     assert body["classwork_results"][2]["status"] == "missing"
+
+
+def test_teacher_detail_returns_only_assigned_subject_lesson_links(student_record_context):
+    ctx = student_record_context
+    db = ctx["db"]
+    classworks = db.query(Classwork).order_by(Classwork.classwork_id).all()
+    lessons = [
+        Lesson(title=title, subject_id=ctx["subject"].subject_id)
+        for title in ("Loops", "Functions", "Other section")
+    ]
+    db.add_all(lessons)
+    db.flush()
+    db.add_all([
+        LessonAssignment(lesson_id=lessons[0].lesson_id, class_id=ctx["class"].class_id),
+        LessonAssignment(lesson_id=lessons[1].lesson_id, class_id=ctx["class"].class_id),
+        LessonAssignment(lesson_id=lessons[2].lesson_id, class_id=ctx["other_class"].class_id),
+        ClassworkLesson(classwork_id=classworks[0].classwork_id, lesson_id=lessons[0].lesson_id),
+        ClassworkLesson(classwork_id=classworks[1].classwork_id, lesson_id=lessons[0].lesson_id),
+        ClassworkLesson(classwork_id=classworks[1].classwork_id, lesson_id=lessons[1].lesson_id),
+        ClassworkLesson(classwork_id=classworks[2].classwork_id, lesson_id=lessons[2].lesson_id),
+    ])
+    db.commit()
+
+    student = ctx["students"][0]
+    response = ctx["client"].get(
+        f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}"
+        f"/subjects/{ctx['subject'].subject_id}/students/{student.student_id}",
+        params={"academic_period_id": ctx["period"].academic_period_id},
+    )
+
+    assert response.status_code == 200
+    results = response.json()["classwork_results"]
+    assert [[link["title"] for link in item["lesson_links"]] for item in results] == [
+        ["Loops"], ["Functions", "Loops"], [],
+    ]
+    assert len(results) == 3  # Multi-linked work is still returned only once.
 
 
 def test_other_teacher_cannot_read_roster(student_record_context):

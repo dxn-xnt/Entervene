@@ -48,6 +48,7 @@ export type StudentClassworkResult = {
   percentage?: number | null;
   submitted_at?: string | null;
   graded_at?: string | null;
+  lesson_links?: Array<{ lesson_id: number; title: string }>;
 };
 
 export type StudentRecordDetailResponse = {

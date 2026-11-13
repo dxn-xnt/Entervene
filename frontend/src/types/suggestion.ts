@@ -1,4 +1,4 @@
-export type SuggestionResourceType = "LESSON" | "CLASSWORK";
+export type SuggestionResourceType = "LESSON" | "CLASSWORK" | "LINK";
 export type SuggestionPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 export type SuggestionStatus = "DRAFT" | "ACTIVE" | "COMPLETED" | "DISMISSED" | "ARCHIVED";
 
@@ -13,6 +13,7 @@ export type SuggestionResourceSummary = {
   classwork_assignment_id?: number | null;
   classwork_type?: string | null;
   class_id?: number | null;
+  external_url?: string | null;
 };
 
 export type SuggestionClassworkResponse = {
@@ -57,6 +58,7 @@ export type ManualSuggestionCreate = {
   priority: SuggestionPriority;
   lesson_id?: number | null;
   classwork_assignment_id?: number | null;
+  external_url?: string | null;
 };
 
 export type RecommendationDraftRequest = {

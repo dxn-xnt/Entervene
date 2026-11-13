@@ -1,5 +1,6 @@
 import { Eye, FileText } from "lucide-react";
 import AttachmentDisplay from "@/components/attachment-display";
+import SubmissionLinkList from "@/components/submission-link-list";
 import { API_URL } from "@/lib/api";
 import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
@@ -175,7 +176,7 @@ export default function StudentSubmissionView({
                     </Card.Title>
                     {selectedSubmissionDetail && !isQuizType(selected.classwork_type) && (
                       <Badge variant="secondary" size="sm">
-                        {selectedSubmissionDetail.attachments?.length ?? 0} Attached
+                        {selectedSubmissionDetail.attachments?.length ?? 0} Files · {selectedSubmissionDetail.links?.length ?? 0} Links
                       </Badge>
                     )}
                   </div>
@@ -210,22 +211,26 @@ export default function StudentSubmissionView({
                           Review &amp; Grade Quiz Questions
                         </Button>
                       </div>
-                    ) : selectedSubmissionDetail.attachments && selectedSubmissionDetail.attachments.length > 0 ? (
-                      <AttachmentDisplay
-                        attachments={selectedSubmissionDetail.attachments.map(
-                          (attachment) => ({
-                            ...attachment,
-                            file_type: attachment.file_type ?? undefined,
-                          }),
-                        )}
-                        type="submission"
-                        downloadUrl={(attachmentId) =>
-                          `${API_URL}/api/v1/submissions/${selectedSubmissionDetail.submission_id}/attachments/${attachmentId}/download`
-                        }
-                      />
                     ) : (
-                      <div className="py-8 text-center text-sm font-semibold text-muted-foreground">
-                        No submitted files attached.
+                      <div className="space-y-4">
+                        {selectedSubmissionDetail.attachments?.length ? (
+                          <AttachmentDisplay
+                            attachments={selectedSubmissionDetail.attachments.map((attachment) => ({
+                              ...attachment,
+                              file_type: attachment.file_type ?? undefined,
+                            }))}
+                            type="submission"
+                            downloadUrl={(attachmentId) =>
+                              `${API_URL}/api/v1/submissions/${selectedSubmissionDetail.submission_id}/attachments/${attachmentId}/download`
+                            }
+                          />
+                        ) : null}
+                        <SubmissionLinkList links={selectedSubmissionDetail.links ?? []} />
+                        {!selectedSubmissionDetail.attachments?.length && !selectedSubmissionDetail.links?.length ? (
+                          <div className="py-8 text-center text-sm font-semibold text-muted-foreground">
+                            No submitted files or links.
+                          </div>
+                        ) : null}
                       </div>
                     )
                   ) : (
