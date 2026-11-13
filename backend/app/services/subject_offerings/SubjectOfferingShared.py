@@ -230,6 +230,8 @@ def offering_to_item(
     academic_year: AcademicYear | None = None,
     academic_level: AcademicLevel | None = None,
     academic_period: AcademicPeriod | None = None,
+    db: Session | None = None,
+    grading_template_context: tuple[object, bool, str | None] | None = None,
 ) -> dict:
     subject = subject or offering.subject
     academic_year = academic_year or offering.academic_year
@@ -251,6 +253,19 @@ def offering_to_item(
     ]
     pathway_ids = [p["id"] for p in pathways_data]
     legacy_pathway = get_offering_legacy_pathway(offering)
+    grading_template = subject.grading_template
+    template_locked = False
+    template_lock_reason = None
+    if grading_template_context is not None:
+        grading_template, template_locked, template_lock_reason = grading_template_context
+    elif db is not None:
+        from app.services.subject_offerings.SubjectOfferingTemplateService import (
+            resolve_subject_year_template,
+        )
+
+        grading_template, template_locked, template_lock_reason = resolve_subject_year_template(
+            db, subject, academic_year.academic_year_id
+        )
 
     return {
         "subject_offering_id": offering.subject_offering_id,
@@ -258,8 +273,10 @@ def offering_to_item(
             "subject_id": subject.subject_id,
             "subject_name": subject.subject_name,
             "subject_codename": subject.subject_codename,
-            "grading_template_id": subject.grading_template_id,
-            "grading_template": subject.grading_template.template_name,
+            "grading_template_id": grading_template.grading_template_id,
+            "grading_template": grading_template.template_name,
+            "grading_template_assignment_locked": template_locked,
+            "grading_template_assignment_lock_reason": template_lock_reason,
             "is_core": getattr(subject, "is_core", False),
         },
         "academic_year": {

@@ -48,6 +48,8 @@ class SubjectListItem(BaseModel):
     subject_codename: str | None
     grading_template_id: int
     grading_template: SubjectTemplateInline
+    grading_template_assignment_locked: bool = False
+    grading_template_assignment_lock_reason: str | None = None
     is_core: bool = False
     is_math_or_science: bool = False
     description: str | None

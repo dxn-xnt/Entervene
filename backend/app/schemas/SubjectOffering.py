@@ -10,7 +10,10 @@ class SubjectOfferingSubject(BaseModel):
     subject_id: int
     subject_name: str
     subject_codename: str | None
+    grading_template_id: int
     grading_template: str | None = None
+    grading_template_assignment_locked: bool = False
+    grading_template_assignment_lock_reason: str | None = None
     is_core: bool = False
 
 
@@ -54,6 +57,7 @@ class SubjectOfferingUpdate(BaseModel):
     pathway_ids: list[int] | None = None
     minutes: int | None = None
     status: str | None = None
+    grading_template_id: int | None = None
 
 
 class SubjectOfferingCopyAcademicYearRequest(BaseModel):
@@ -116,6 +120,12 @@ class SubjectOfferingFormSubject(BaseModel):
     is_core: bool = False
 
 
+class SubjectOfferingFormGradingTemplate(BaseModel):
+    grading_template_id: int
+    template_name: str
+    status: str
+
+
 class SubjectOfferingFormAcademicYear(SubjectOfferingAcademicYear):
     start_date: date
     end_date: date
@@ -129,6 +139,7 @@ class SubjectOfferingFormOptions(BaseModel):
     statuses: list[str]
     default_status: str
     active_subjects: list[SubjectOfferingFormSubject]
+    grading_templates: list[SubjectOfferingFormGradingTemplate]
 
 
 class SubjectOfferingImportError(BaseModel):

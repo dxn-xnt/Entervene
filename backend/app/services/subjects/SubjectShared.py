@@ -59,7 +59,8 @@ def ensure_subject_code_available(db: Session, subject_codename: str | None, aca
 
 
 def subject_to_item(subject: Subject, academic_level: AcademicLevel | None = None,
-                    template_name_map: dict[str, str] | None = None) -> dict:
+                    template_name_map: dict[str, str] | None = None,
+                    assignment_lock_reason: str | None = None) -> dict:
     level = academic_level or subject.academic_level
     template = subject.grading_template
     return {
@@ -73,6 +74,8 @@ def subject_to_item(subject: Subject, academic_level: AcademicLevel | None = Non
             "passing_threshold": float(template.passing_threshold),
             "components": [{"component_name": c.component_name, "weight": float(c.weight)} for c in template.components],
         },
+        "grading_template_assignment_locked": assignment_lock_reason is not None,
+        "grading_template_assignment_lock_reason": assignment_lock_reason,
         "is_core": bool(subject.is_core),
         "is_math_or_science": bool(subject.is_math_or_science),
         "description": subject.description,

@@ -25,6 +25,9 @@ from app.services.subject_offerings.SubjectOfferingShared import (
     validate_core_subject_pathway_restriction,
     validate_offering_scope,
 )
+from app.services.subject_offerings.SubjectOfferingTemplateService import (
+    set_subject_year_template,
+)
 
 
 def _resolve_pathway_ids(db: Session, pathway_ids: list[int] | None, legacy_pathway: str | None, academic_level: AcademicLevel, academic_year_id: int, subject: Subject | None = None) -> list[int]:
@@ -122,7 +125,7 @@ def create_subject_offering_record(db: Session, payload: SubjectOfferingCreate) 
         db.rollback()
         raise HTTPException(status_code=409, detail="Unable to create subject offering because it conflicts with existing data.") from exc
     db.refresh(offering)
-    return offering_to_item(offering)
+    return offering_to_item(offering, db=db)
 
 
 def update_subject_offering_record(db: Session, subject_offering_id: int, payload: SubjectOfferingUpdate) -> dict:
@@ -165,6 +168,13 @@ def update_subject_offering_record(db: Session, subject_offering_id: int, payloa
     offering.academic_year_id = target_year_id
     offering.academic_level_id = target_level_id
     offering.academic_period_id = target_period_id
+    if "grading_template_id" in data and data["grading_template_id"] is not None:
+        set_subject_year_template(
+            db,
+            subject=subject,
+            academic_year_id=target_year_id,
+            grading_template_id=data["grading_template_id"],
+        )
     if "minutes" in data:
         offering.minutes = data["minutes"]
     if "status" in data:
@@ -184,7 +194,7 @@ def update_subject_offering_record(db: Session, subject_offering_id: int, payloa
         db.rollback()
         raise HTTPException(status_code=409, detail="Unable to update subject offering because it conflicts with existing data.") from exc
     db.refresh(offering)
-    return offering_to_item(offering)
+    return offering_to_item(offering, db=db)
 
 
 def validate_subject_offering_can_be_archived(db: Session, offering: SubjectOffering) -> None:
@@ -234,7 +244,7 @@ def archive_subject_offering_record(db: Session, subject_offering_id: int) -> di
     offering.status = "archived"
     db.commit()
     db.refresh(offering)
-    return offering_to_item(offering)
+    return offering_to_item(offering, db=db)
 
 
 def restore_subject_offering_record(db: Session, subject_offering_id: int) -> dict:
@@ -254,7 +264,7 @@ def restore_subject_offering_record(db: Session, subject_offering_id: int) -> di
     offering.status = "active"
     db.commit()
     db.refresh(offering)
-    return offering_to_item(offering)
+    return offering_to_item(offering, db=db)
 
 
 def copy_subject_offerings_between_academic_years(

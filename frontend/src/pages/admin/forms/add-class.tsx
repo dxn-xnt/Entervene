@@ -45,19 +45,11 @@ export default function AddClassModal({
 
   useEffect(() => {
     if (propSourceYears !== undefined) return;
-    if (!selectedYear) {
-      setDiscoveredSourceYears([]);
-      return;
-    }
+    if (!selectedYear) return;
 
     const earlierCandidates = (academicYears ?? []).filter((y) =>
       isChronologicallyEarlierYear(y, selectedYear)
     );
-
-    if (earlierCandidates.length === 0) {
-      setDiscoveredSourceYears([]);
-      return;
-    }
 
     let active = true;
     void (async () => {
@@ -83,12 +75,13 @@ export default function AddClassModal({
     };
   }, [academicYears, selectedYear, propSourceYears]);
 
-  const validSourceYears = propSourceYears ?? discoveredSourceYears;
+  const validSourceYears = propSourceYears ?? (selectedYear ? discoveredSourceYears : []);
   const canSetupFromPreviousYear = validSourceYears.length > 0;
 
   const [mode, setMode] = useState<WizardMode>("choice");
   const [manualSetup, setManualSetup] = useState<ManualClassSetup | null>(null);
   const [manualStep, setManualStep] = useState<"details" | "assignment" | "review">("details");
+  const [manualScreen, setManualScreen] = useState<"details" | "official-sections">("details");
   const [skippedStudents, setSkippedStudents] = useState(false);
   const [assignmentState, setAssignmentState] = useState<ManualAssignmentWorkspaceState | null>(null);
   const [resetWarning, setResetWarning] = useState("");
@@ -99,6 +92,7 @@ export default function AddClassModal({
     setMode("choice");
     setManualSetup(null);
     setManualStep("details");
+    setManualScreen("details");
     setSkippedStudents(false);
     setAssignmentState(null);
     setResetWarning("");
@@ -158,6 +152,7 @@ export default function AddClassModal({
   function resetManualState() {
     setManualSetup(null);
     setManualStep("details");
+    setManualScreen("details");
     setSkippedStudents(false);
     setAssignmentState(null);
     setResetWarning("");
@@ -236,13 +231,15 @@ export default function AddClassModal({
     : mode === "setup_year"
       ? (setupYearStep === "confirm" ? "Confirm Academic-Year Setup" : "Set Up from Previous Year")
       : manualStep === "details"
-        ? mode === "manual" ? "Add Class Details" : "Import Class Details"
+        ? mode === "manual" ? manualScreen === "official-sections" ? "Manage Official Sections" : "Add Class Details" : "Import Class Details"
         : manualStep === "assignment"
           ? "Assign Students"
           : "Review Class Setup";
 
   const stepCountText = (saveSuccess || (mode === "setup_year" && setupYearStep === "success"))
     ? null
+    : mode === "manual" && manualScreen === "official-sections"
+      ? null
     : mode === "setup_year"
       ? (setupYearStep === "confirm" ? "Step 2 of 2" : "Step 1 of 2")
       : `Step ${stepIndex} of 3`;
@@ -288,6 +285,7 @@ export default function AddClassModal({
                 onSkipStudents={reviewWithoutStudents}
                 onBack={() => setMode("choice")}
                 onClose={handleClose}
+                onScreenChange={setManualScreen}
               />
             ) : manualStep === "assignment" && manualSetup ? (
               <StudentAssignmentWorkspace

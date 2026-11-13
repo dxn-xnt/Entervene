@@ -24,6 +24,9 @@ from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.models.academic.AcademicLevelPathwayScope import AcademicLevelPathwayScope
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
+from app.models.academic.SubjectYearGradingTemplate import SubjectYearGradingTemplate
+from app.models.academic.AssessmentItem import AssessmentItem
+from app.models.academic.Class_ import Class
 
 TABLES = [
     AcademicYear.__table__,
@@ -150,6 +153,16 @@ def offering_context(db):
     ]
     db.add(template)
     db.flush()
+    applied_template = GradingTemplate(
+        template_name="Applied", passing_threshold=85, status="active"
+    )
+    applied_template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=20, display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=60, display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=20, display_order=3),
+    ]
+    db.add(applied_template)
+    db.flush()
 
     biology = Subject(
         subject_name="General Biology 1",
@@ -213,6 +226,8 @@ def offering_context(db):
         "genmath": genmath,
         "archived_subject": archived_subject,
         "grade_12_subject": grade_12_subject,
+        "template": template,
+        "applied_template": applied_template,
     }
 
 
@@ -677,6 +692,86 @@ def test_get_subject_offering_detail(client, db, offering_context):
 
     assert response.status_code == 200
     assert response.json()["subject_offering_id"] == offering.subject_offering_id
+
+
+def test_update_grading_template_applies_to_subject_year_without_changing_catalog_default(
+    client, db, offering_context
+):
+    ctx = offering_context
+    term_one = create_offering(db, ctx)
+    term_two = create_offering(
+        db,
+        ctx,
+        academic_period_id=ctx["term_2"].academic_period_id,
+        pathway="stem_medical",
+    )
+    db.commit()
+
+    response = client.patch(
+        f"/api/v1/subject-offerings/{term_one.subject_offering_id}",
+        json={"grading_template_id": ctx["applied_template"].grading_template_id},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["subject"]["grading_template"] == "Applied"
+    assert ctx["biology"].grading_template_id == ctx["template"].grading_template_id
+    assignment = db.query(SubjectYearGradingTemplate).one()
+    assert assignment.subject_id == ctx["biology"].subject_id
+    assert assignment.academic_year_id == ctx["year"].academic_year_id
+    from app.services.student_record.StudentRecordService import (
+        resolve_subject_grading_weights,
+    )
+
+    year_weights = resolve_subject_grading_weights(
+        db,
+        ctx["biology"].subject_id,
+        academic_year_id=ctx["year"].academic_year_id,
+    )
+    catalog_weights = resolve_subject_grading_weights(db, ctx["biology"].subject_id)
+    assert year_weights.template_id == ctx["applied_template"].grading_template_id
+    assert catalog_weights.template_id == ctx["template"].grading_template_id
+
+    term_two_response = client.get(
+        f"/api/v1/subject-offerings/{term_two.subject_offering_id}"
+    )
+    assert term_two_response.json()["subject"]["grading_template"] == "Applied"
+
+
+def test_grading_template_change_is_locked_when_year_has_recorded_grades(
+    client, db, offering_context
+):
+    ctx = offering_context
+    offering = create_offering(db, ctx)
+    class_ = Class(
+        section_name="Santos",
+        academic_year_id=ctx["year"].academic_year_id,
+        academic_level_id=ctx["grade_11"].academic_level_id,
+        academic_period_id=ctx["term_1"].academic_period_id,
+    )
+    db.add(class_)
+    db.flush()
+    db.add(
+        AssessmentItem(
+            class_id=class_.class_id,
+            subject_id=ctx["biology"].subject_id,
+            academic_period_id=ctx["term_1"].academic_period_id,
+            component_type="WRITTEN_WORK",
+            item_number=1,
+            max_score=20,
+        )
+    )
+    db.commit()
+
+    detail = client.get(f"/api/v1/subject-offerings/{offering.subject_offering_id}")
+    assert detail.status_code == 200
+    assert detail.json()["subject"]["grading_template_assignment_locked"] is True
+
+    response = client.patch(
+        f"/api/v1/subject-offerings/{offering.subject_offering_id}",
+        json={"grading_template_id": ctx["applied_template"].grading_template_id},
+    )
+    assert response.status_code == 409
+    assert "classwork, submissions, or grades" in response.json()["detail"]
 
 
 def test_update_offering_works_and_revalidates_conflicts(client, db, offering_context):

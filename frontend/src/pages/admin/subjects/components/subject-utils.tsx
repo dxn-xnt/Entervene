@@ -107,6 +107,7 @@ export type OfferingFormState = {
   pathway: SubjectOfferingPathway;
   minutes: string;
   status: SubjectStatus;
+  grading_template_id: string;
 };
 
 // ─── Utility Functions ──────────────────────────────────────────────────────
