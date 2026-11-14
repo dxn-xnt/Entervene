@@ -40,7 +40,7 @@ def create_subject_record(db: Session, payload: SubjectCreate) -> dict:
     subject = Subject(
         subject_name=name, subject_codename=code,
         grading_template_id=payload.grading_template_id,
-        is_core=payload.is_core, is_math_or_science=payload.is_math_or_science,
+        is_core=payload.is_core,
         description=normalize_optional_text(payload.description),
         status=normalize_subject_status(payload.status),
         academic_level_id=payload.academic_level_id,
@@ -84,8 +84,6 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
         subject.subject_name = name
     if "subject_codename" in data:
         subject.subject_codename = code
-    if "is_math_or_science" in data and data["is_math_or_science"] is not None:
-        subject.is_math_or_science = data["is_math_or_science"]
     if "description" in data:
         subject.description = normalize_optional_text(data["description"])
     if "status" in data:

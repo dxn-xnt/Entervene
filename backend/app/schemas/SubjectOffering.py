@@ -1,6 +1,11 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from typing import Annotated
+
+from pydantic import BaseModel, Field, StrictInt
+
+
+PositiveMinutes = Annotated[StrictInt, Field(gt=0)]
 
 
 from app.schemas.AcademicPathway import AcademicPathwayRead
@@ -44,7 +49,7 @@ class SubjectOfferingCreate(BaseModel):
     academic_period_id: int
     pathway: str | None = None
     pathway_ids: list[int] = []
-    minutes: int | None = None
+    minutes: PositiveMinutes | None = None
     status: str = "active"
 
 
@@ -55,7 +60,7 @@ class SubjectOfferingUpdate(BaseModel):
     academic_period_id: int | None = None
     pathway: str | None = None
     pathway_ids: list[int] | None = None
-    minutes: int | None = None
+    minutes: PositiveMinutes | None = None
     status: str | None = None
     grading_template_id: int | None = None
 

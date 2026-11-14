@@ -157,6 +157,28 @@ function isSubjectOfferedForClass(
   });
 }
 
+function subjectOfferingForClass(
+  subjectId: number,
+  cls: { academic_level_id: number; academic_year_id: number; pathway_id?: number | null },
+  offerings: SubjectLoadStudioData["subject_offerings"],
+  academicPeriodId: number,
+) {
+  return (offerings || []).find((offering) => {
+    if (offering.subject_id !== subjectId
+      || offering.academic_level_id !== cls.academic_level_id
+      || offering.academic_year_id !== cls.academic_year_id
+      || offering.academic_period_id !== academicPeriodId) return false;
+    const pathwayIds = offering.pathway_ids || [];
+    return pathwayIds.length === 0 || (cls.pathway_id != null && pathwayIds.includes(cls.pathway_id));
+  });
+}
+
+function slotDurationMinutes(slot: { start_time: string; end_time: string }) {
+  const start = timeStringToMinutes(slot.start_time);
+  const end = timeStringToMinutes(slot.end_time);
+  return start == null || end == null || end <= start ? null : end - start;
+}
+
 function studioClassPathwayLabel(
   cls: SubjectLoadStudioData["classes"][number],
   levels: Array<{ academic_level_id: number; grade_level?: number }> = []
@@ -449,6 +471,19 @@ export default function AdminSubjectLoadStudio() {
       .sort((a, b) => a.display_order - b.display_order);
   }, [periodTemplateSlots, studioData]);
 
+  const subjectPeriodSlots = useCallback((classId: number, subjectId: number) => {
+    const cls = studioData?.classes.find((item) => item.class_id === classId);
+    if (!cls || !studioData) return [];
+    const offering = subjectOfferingForClass(
+      subjectId,
+      cls,
+      studioData.subject_offerings,
+      selectedPeriodId || studioData.active_period_id,
+    );
+    if (offering?.minutes == null) return [];
+    return classPeriodSlots(classId).filter((slot) => slotDurationMinutes(slot) === offering.minutes);
+  }, [classPeriodSlots, selectedPeriodId, studioData]);
+
   const withAuthoritativeJhsSlots = useCallback((items: SubjectLoadItem[]) => items.map((item) => {
     if (!isJhsClass(item.class_id) || !item.start_time || !item.end_time) return item;
     const matches = classPeriodSlots(item.class_id).filter(
@@ -641,26 +676,23 @@ export default function AdminSubjectLoadStudio() {
         const classSlots = (data.period_template_slots || [])
           .filter((slot) => slot.template_group === templateGroup && slot.slot_type === "CLASS" && !slot.is_locked_break && slot.slot_id != null)
           .sort((a, b) => a.display_order - b.display_order);
-        const enhancedSlots = classSlots.filter((slot) => slot.slot_name.toLowerCase().startsWith("enhanced"));
-        const standardSlots = classSlots.filter((slot) => !slot.slot_name.toLowerCase().startsWith("enhanced"));
         const defaultSchedule = new Map<number, { slot: (typeof classSlots)[number]; days: string[] }>();
 
         if (!hasExistingSchedule && classSlots.length > 0) {
-          const enhancedSubjects = levelSubjects.filter((subject) => subject.is_math_or_science);
-          const generalSubjects = levelSubjects.filter((subject) => !subject.is_math_or_science);
-          enhancedSubjects.slice(0, enhancedSlots.length).forEach((subject, index) => {
-            defaultSchedule.set(subject.subject_id, { slot: enhancedSlots[index], days: ["MON", "TUE", "WED", "THU", "FRI"] });
-          });
-          const standardSubjects = [...generalSubjects, ...enhancedSubjects.slice(enhancedSlots.length)];
-          standardSubjects.slice(0, standardSlots.length).forEach((subject, index) => {
-            defaultSchedule.set(subject.subject_id, { slot: standardSlots[index], days: ["MON", "TUE", "WED", "THU", "FRI"] });
-          });
-          standardSubjects.slice(standardSlots.length, standardSlots.length * 2).forEach((subject, index) => {
-            const paired = standardSubjects[index];
-            const slot = standardSlots[index];
-            if (!paired || !slot) return;
-            defaultSchedule.set(paired.subject_id, { slot, days: ["MON", "WED", "FRI"] });
-            defaultSchedule.set(subject.subject_id, { slot, days: ["TUE", "THU"] });
+          const usedByDuration = new Map<number, number>();
+          levelSubjects.forEach((subject) => {
+            const offering = subjectOfferingForClass(subject.subject_id, cls, offerings, periodIdToUse);
+            if (offering?.minutes == null) return;
+            const matchingSlots = classSlots.filter((slot) => slotDurationMinutes(slot) === offering.minutes);
+            const index = usedByDuration.get(offering.minutes) || 0;
+            const slot = matchingSlots[index % Math.max(1, matchingSlots.length)];
+            if (!slot) return;
+            const cycle = Math.floor(index / matchingSlots.length);
+            const days = cycle === 0
+              ? ["MON", "TUE", "WED", "THU", "FRI"]
+              : cycle % 2 === 1 ? ["MON", "WED", "FRI"] : ["TUE", "THU"];
+            defaultSchedule.set(subject.subject_id, { slot, days });
+            usedByDuration.set(offering.minutes, index + 1);
           });
         }
 
@@ -805,7 +837,7 @@ export default function AdminSubjectLoadStudio() {
   const handlePeriodSlotChange = (slotKey: string, slotId: string) => {
     const item = loads.find((load) => load._key === slotKey);
     if (!item || isSectionLocked(item.class_id)) return;
-    const selected = classPeriodSlots(item.class_id).find((slot) => String(slot.slot_id) === slotId);
+    const selected = subjectPeriodSlots(item.class_id, item.subject_id).find((slot) => String(slot.slot_id) === slotId);
     if (!selected) return;
     const updated = loads.map((load) => load._key === slotKey ? {
       ...load,
@@ -848,12 +880,7 @@ export default function AdminSubjectLoadStudio() {
     const usedDays = new Set(existingSlots.flatMap((s) => s.days_of_week || []));
     const allDays = ["THU", "FRI", "TUE", "MON", "WED"];
     const defaultDay = allDays.find((d) => !usedDays.has(d)) || "THU";
-    const subject = studioData?.subjects.find((item) => item.subject_id === subjectId);
-    const availableSlots = classPeriodSlots(classId);
-    const preferredSlots = subject?.is_math_or_science
-      ? availableSlots.filter((slot) => slot.slot_name.toLowerCase().startsWith("enhanced"))
-      : availableSlots.filter((slot) => !slot.slot_name.toLowerCase().startsWith("enhanced"));
-    const selectedSlot = preferredSlots[0] || availableSlots[0];
+    const selectedSlot = subjectPeriodSlots(classId, subjectId)[0];
 
     const newSlot: SubjectLoadItem = {
       _key: newKey,
@@ -1853,12 +1880,6 @@ export default function AdminSubjectLoadStudio() {
       studioData?.classes,
       studioData?.subjects,
     ) ?? "Available";
-  };
-
-  const parseMin = (t?: string | null) => {
-    if (!t) return 0;
-    const parts = t.split(":");
-    return Number(parts[0]) * 60 + (Number(parts[1]) || 0);
   };
 
   // Check if a specific load has an error conflict
@@ -2988,15 +3009,6 @@ export default function AdminSubjectLoadStudio() {
                                           (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
                                         );
 
-                                        let scheduledWeeklyHours = 0;
-                                        subjectSlots.forEach((sl) => {
-                                          const dur = (parseMin(sl.end_time) - parseMin(sl.start_time)) / 60;
-                                          const numDays = (sl.days_of_week || []).length;
-                                          if (dur > 0 && numDays > 0) {
-                                            scheduledWeeklyHours += dur * numDays;
-                                          }
-                                        });
-
                                         const conflict = getLoadConflict(cls.class_id, sub.subject_id);
                                         const isOfferingEligible = !invalidDraftSubjectIds.has(sub.subject_id);
                                         const isHighlighted =
@@ -3121,7 +3133,9 @@ export default function AdminSubjectLoadStudio() {
                                             <Table.Cell className="py-2.5 px-2 align-middle">
                                               {subjectSlots.length === 0 ? (
                                                 <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
-                                                  Unscheduled — click &quot;+ Add Slot&quot; to assign schedule
+                                                  {subjectPeriodSlots(cls.class_id, sub.subject_id).length
+                                                    ? "Unscheduled — click “+ Add Slot” to assign schedule"
+                                                    : "No timetable slot matches this offering’s configured duration"}
                                                 </span>
                                               ) : (
                                                 <div className="flex flex-col gap-2">
@@ -3166,7 +3180,7 @@ export default function AdminSubjectLoadStudio() {
                                                               <Select.Value placeholder="Select timetable period" />
                                                             </Select.Trigger>
                                                             <Select.Content className="rounded">
-                                                              {classPeriodSlots(cls.class_id).map((period) => (
+                                                              {subjectPeriodSlots(cls.class_id, sub.subject_id).map((period) => (
                                                                 <Select.Item key={period.slot_id} value={String(period.slot_id)}>
                                                                   {period.slot_name} — {formatTime12h(period.start_time)}–{formatTime12h(period.end_time)}
                                                                 </Select.Item>
@@ -3296,6 +3310,8 @@ export default function AdminSubjectLoadStudio() {
                                                             variant="ghost"
                                                             size="sm"
                                                             autoIcon={false}
+                                                            disabled={subjectPeriodSlots(cls.class_id, sub.subject_id).length === 0}
+                                                            title={subjectPeriodSlots(cls.class_id, sub.subject_id).length === 0 ? "No timetable slot matches the offering duration." : undefined}
                                                             onClick={() => {
                                                               setOpenRowKey(null);
                                                               handleAddSlot(cls.class_id, sub.subject_id);

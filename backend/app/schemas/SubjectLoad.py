@@ -30,7 +30,6 @@ class SubjectLoadItem(BaseModel):
     effective_to: date | None = None
     last_modified_by: str | None = None
     continued_from_load_id: int | None = None
-    is_math_or_science: bool | None = False
     dependencies: dict[str, int] | None = None
     has_live_data: bool = False
 

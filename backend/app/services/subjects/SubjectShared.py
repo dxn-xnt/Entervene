@@ -77,7 +77,6 @@ def subject_to_item(subject: Subject, academic_level: AcademicLevel | None = Non
         "grading_template_assignment_locked": assignment_lock_reason is not None,
         "grading_template_assignment_lock_reason": assignment_lock_reason,
         "is_core": bool(subject.is_core),
-        "is_math_or_science": bool(subject.is_math_or_science),
         "description": subject.description,
         "status": subject.status or DEFAULT_SUBJECT_STATUS,
         "academic_level": {

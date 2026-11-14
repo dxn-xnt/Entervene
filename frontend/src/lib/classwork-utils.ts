@@ -80,13 +80,19 @@ export function scoreBand(points: number | null | undefined, ratio: number) {
   return `${Math.max(1, Math.round(points * ratio))} pts`;
 }
 
-/** Display stored level scores as inclusive ranges without changing grading values. */
-export function rubricPointRange(points: number, levelPoints: number[]) {
+/** Resolve a stored upper score threshold into its contiguous inclusive range. */
+export function rubricPointBounds(points: number, levelPoints: number[]) {
   const lowerLevels = levelPoints.filter((value) => value < points);
   const previous = lowerLevels.length ? Math.max(...lowerLevels) : 0;
   const increment = levelPoints.every(Number.isInteger) ? 1 : 0.01;
   const minimum = Math.min(points, Number((previous + increment).toFixed(2)));
-  return minimum === points ? `${points}` : `${minimum}–${points}`;
+  return { minimum, maximum: points };
+}
+
+/** Display stored level scores as inclusive ranges without changing grading values. */
+export function rubricPointRange(points: number, levelPoints: number[]) {
+  const { minimum, maximum } = rubricPointBounds(points, levelPoints);
+  return minimum === maximum ? `${maximum}` : `${minimum}–${maximum}`;
 }
 
 export function isReadingType(value?: string | null) {

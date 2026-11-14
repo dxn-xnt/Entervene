@@ -33,7 +33,6 @@ const subject = (id: number, name: string, code: string, templateId: number, tem
   description: null,
   status: "active" as const,
   academic_level: { academic_level_id: 1, level_name: "Grade 7", grade_level: 7 },
-  is_math_or_science: false,
   created_at: null,
   updated_at: null,
 });

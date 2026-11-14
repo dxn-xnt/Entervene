@@ -21,7 +21,6 @@ class SubjectBase(BaseModel):
     subject_codename: str | None = Field(None, max_length=50)
     grading_template_id: int
     is_core: bool = False
-    is_math_or_science: bool = False
     description: str | None = None
     academic_level_id: int
 
@@ -36,7 +35,6 @@ class SubjectUpdate(BaseModel):
     subject_codename: str | None = Field(None, max_length=50)
     grading_template_id: int | None = None
     is_core: bool | None = None
-    is_math_or_science: bool | None = None
     description: str | None = None
     status: str | None = None
     academic_level_id: int | None = None
@@ -51,7 +49,6 @@ class SubjectListItem(BaseModel):
     grading_template_assignment_locked: bool = False
     grading_template_assignment_lock_reason: str | None = None
     is_core: bool = False
-    is_math_or_science: bool = False
     description: str | None
     status: str
     academic_level: SubjectAcademicLevel

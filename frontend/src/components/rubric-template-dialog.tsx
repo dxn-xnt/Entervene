@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { NoChangesMessage } from "@/components/retroui/FormMessage";
-import { BookOpenCheck, Copy, ExternalLink, MoreVertical, Pencil, Plus, Trash2, X } from "lucide-react";
+import { BookOpenCheck, Copy, ExternalLink, Library, MoreVertical, Pencil, Plus, Trash2, UserRound, X } from "lucide-react";
+import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { RubricLevelFields } from "@/components/rubric-level-fields";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
+import { LoadingPanel } from "@/components/loading-panel";
 import {
   activityRubricMaximum,
   defaultActivityRubric,
@@ -45,8 +47,8 @@ import type { ActivityRubricLevel } from "@/types/classwork";
 type View = "list" | "form" | "preview" | "replace" | "delete";
 
 const templateTabs: TabItem<"system" | "mine">[] = [
-  { id: "system", label: "System Templates" },
-  { id: "mine", label: "My Templates" },
+  { id: "system", label: "System Templates", icon: Library },
+  { id: "mine", label: "My Templates", icon: UserRound },
 ];
 
 type Props = {
@@ -250,7 +252,7 @@ export function RubricTemplateDialog({
       }}
     >
       <Dialog.Content
-        size="2xl"
+        size={view === "list" ? "xl" : "2xl"}
         data-rubric-template-dialog
         className="max-h-[90dvh] p-0"
         portalContainer={typeof document === "undefined" ? undefined : document.body}
@@ -287,31 +289,46 @@ export function RubricTemplateDialog({
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {view === "list" && (
-            <div>
-              <div className="flex flex-wrap items-end justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <Tabs
-                    tabs={templateTabs}
-                    activeTab={tab}
-                    onTabChange={setTab}
-                    className="!mx-0 !border-b-0"
-                    tabClassName="rounded-t!"
-                  />
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <h3 className="text-base font-bold">Choose a scoring guide</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Preview a rubric before applying it, or create one for future assignments.
+                  </p>
                 </div>
-                <Button type="button" size="sm" className="mb-2" onClick={() => openForm()}>
+                <Button type="button" size="sm" onClick={() => openForm()}>
                   <Plus /> Create Template
                 </Button>
               </div>
 
+              <div className="border-b-2 border-border">
+                  <Tabs
+                    tabs={templateTabs}
+                    activeTab={tab}
+                    onTabChange={setTab}
+                    counts={{
+                      system: templates.filter((template) => template.is_system).length,
+                      mine: templates.filter((template) => !template.is_system).length,
+                    }}
+                    className="!mx-0 !border-b-0"
+                    tabClassName="rounded-t!"
+                  />
+              </div>
+
               {loading && (
-                <p className="text-sm text-muted-foreground">
-                  Loading templates…
-                </p>
+                <LoadingPanel
+                  label="Loading rubric templates…"
+                  className="rounded! shadow-none"
+                />
               )}
 
               {error && !loading && (
-                <div role="alert" className="space-y-2 text-sm text-destructive">
-                  <p>{error}</p>
+                <Alert status="error" className="space-y-3">
+                  <div>
+                    <Alert.Title>Templates could not be loaded</Alert.Title>
+                    <Alert.Description>{error}</Alert.Description>
+                  </div>
                   <Button
                     type="button"
                     size="sm"
@@ -333,37 +350,45 @@ export function RubricTemplateDialog({
                   >
                     Retry
                   </Button>
-                </div>
+                </Alert>
               )}
 
               {!loading && !error && visible.length === 0 && (
                 <TeacherEmptyState
                   compact
-                  className="mt-0"
+                  className="mt-0 rounded! shadow-none hover:shadow-none"
                   icon={<BookOpenCheck />}
                   title={tab === "mine" ? "No personal templates yet" : "No system templates available"}
                   description={tab === "mine" ? "Create a template to reuse in future classwork." : "System rubric templates will appear here when available."}
+                  action={tab === "mine" ? { label: "Create Template", onClick: () => openForm(), icon: <Plus /> } : undefined}
                 />
               )}
 
               {!loading && !error && visible.length > 0 && (
-                <div className="grid gap-3 rounded! border-2 border-border bg-card p-4 md:grid-cols-2">
+                <div className={`grid gap-4 ${visible.length === 1 ? "grid-cols-1" : "md:grid-cols-2"}`}>
                   {visible.map((template) => (
                     <Card
                       key={template.rubric_template_id}
-                      className="min-w-0 border-2 border-border p-4 shadow-none hover:bg-retro hover:-translate-y-1"
+                      className="flex min-w-0 flex-col border-2 border-border p-4 shadow-md hover:-translate-y-0.5 hover:shadow-none"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Card.Title className="min-w-0 text-base">
-                            {template.name}
-                          </Card.Title>
-                          <Badge
-                            size="sm"
-                            variant="secondary"
-                          >
-                            {template.is_system ? "System" : "Custom"}
-                          </Badge>
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div className="flex size-10 shrink-0 items-center justify-center border-2 border-border bg-primary" aria-hidden="true">
+                            <BookOpenCheck className="size-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <Card.Title className="truncate text-base">
+                              {template.name}
+                            </Card.Title>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <Badge size="sm" variant="secondary">
+                                {template.is_system ? "System" : "Custom"}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {template.levels.length} levels · {activityRubricMaximum(template.levels)} points
+                              </span>
+                            </div>
+                          </div>
                         </div>
 
                         <DropdownMenu>
@@ -372,8 +397,8 @@ export function RubricTemplateDialog({
                               type="button"
                               variant="secondary"
                               size="sm"
-                              className="h-7 w-7 p-0 shrink-0 shadow-none "
-                              aria-label="Template options"
+                              className="size-8 shrink-0 p-0 shadow-none"
+                              aria-label={`Options for ${template.name}`}
                             >
                               <MoreVertical className="size-4" />
                             </Button>
@@ -415,28 +440,26 @@ export function RubricTemplateDialog({
                         </DropdownMenu>
                       </div>
 
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        {template.levels.length} levels · Maximum{" "}
-                        {activityRubricMaximum(template.levels)} points
-                      </p>
-
-                      <div className="mt-2 flex flex-wrap gap-1">
+                      <div className="mt-4 grid gap-1.5 sm:grid-cols-2">
                         {template.levels.map((level) => (
-                          <Badge
+                          <div
                             key={level.level_name}
-                            size="sm"
-                            variant="outline"
+                            className="flex min-w-0 items-center justify-between gap-2 rounded! border-2 border-border bg-background px-2.5 py-1.5 text-xs"
                           >
-                            {level.level_name}: {rubricPointRange(level.points, template.levels.map((item) => item.points))}
-                          </Badge>
+                            <span className="truncate font-semibold">{level.level_name}</span>
+                            <span className="shrink-0 font-bold">
+                              {rubricPointRange(level.points, template.levels.map((item) => item.points))}
+                            </span>
+                          </div>
                         ))}
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2 justify-end">
+                      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t-2 border-border pt-3">
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
+                          className="sm:min-w-28"
                           onClick={() => {
                             setSelected(template);
                             setPreviewFromForm(false);
@@ -449,6 +472,8 @@ export function RubricTemplateDialog({
                         <Button
                           type="button"
                           size="sm"
+                          className="sm:min-w-36"
+                          disabled={busy}
                           onClick={() => apply(template)}
                         >
                           <BookOpenCheck />

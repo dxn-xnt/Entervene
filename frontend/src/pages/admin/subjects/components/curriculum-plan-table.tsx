@@ -314,7 +314,17 @@ export function CurriculumPlanTable({
                       </Table.Cell>
                     );
                   })}
-                  <Table.Cell>{row.minutes ? `${row.minutes} mins` : "—"}</Table.Cell>
+                  <Table.Cell>{(() => {
+                    const durations = Array.from(new Set(
+                      Array.from(row.termOfferings.values())
+                        .map((item) => item.minutes)
+                        .filter((minutes): minutes is number => minutes != null)
+                    )).sort((a, b) => a - b);
+                    if (!durations.length) return "—";
+                    return durations.length === 1
+                      ? `${durations[0]} mins`
+                      : `Varies: ${durations.join(" / ")} mins`;
+                  })()}</Table.Cell>
                   <Table.Cell>{row.gradingTemplate || "No template"}</Table.Cell>
                   <Table.Cell className="w-10 text-center">{statusBadge(row.status)}</Table.Cell>
                   <Table.Cell>

@@ -262,7 +262,7 @@ def seed(database_url: str) -> dict:
         session.flush()
         period = AcademicPeriod(period_name="Term 1 Demo", period_type="TERM", period_sequence=1, total_periods_in_year=3, period_progress_ratio=Decimal("0.3333"), start_date=date(2026, 9, 1), end_date=date(2026, 11, 30), is_active=True, academic_year_id=year.academic_year_id)
         class_ = Class(section_name="Demo Archimedes", class_status="active", adviser_staff_id=teacher.staff_id, academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
-        subject = Subject(subject_name="Mathematics", subject_codename="MATHEMATICS", academic_level_id=level.academic_level_id, is_math_or_science=True, is_core=True, status="active")
+        subject = Subject(subject_name="Mathematics", subject_codename="MATHEMATICS", academic_level_id=level.academic_level_id, is_core=True, status="active")
         session.add_all([period, class_, subject])
         session.flush()
         class_.academic_period_id = period.academic_period_id

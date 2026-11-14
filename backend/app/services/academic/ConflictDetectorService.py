@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from app.models.academic.Subject import Subject
 from app.models.academic.Class_ import Class
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.people.AcademicStaff import AcademicStaff
-from app.models.academic.SubjectOffering import SubjectOffering
 from app.schemas.SubjectLoad import (
     ConflictItem,
     SubjectLoadItem,
@@ -14,6 +13,11 @@ from app.schemas.SubjectLoad import (
     ValidationResultResponse,
 )
 from app.services.academic.PeriodTemplateResolver import PeriodTemplateResolver
+from app.services.academic.OfferingDurationService import (
+    load_active_offerings,
+    resolve_offering_for_class,
+    time_range_minutes,
+)
 
 
 def parse_time_to_minutes(time_str: str | None) -> int | None:
@@ -77,6 +81,10 @@ class ConflictDetectorService:
         subjects_map = {s.subject_id: s for s in db.query(Subject).filter(Subject.subject_id.in_(subject_ids)).all()} if subject_ids else {}
         classes_map = {c.class_id: c for c in db.query(Class).filter(Class.class_id.in_(class_ids)).all()} if class_ids else {}
         staff_map = {st.staff_id: st for st in db.query(AcademicStaff).filter(AcademicStaff.staff_id.in_(staff_ids)).all()} if staff_ids else {}
+        class_slots_map = {
+            class_id: PeriodTemplateResolver.slots_for_class(db, class_obj)
+            for class_id, class_obj in classes_map.items()
+        }
 
         # Compute weeks in the academic period for term-total comparison
         num_weeks = None
@@ -276,15 +284,10 @@ class ConflictDetectorService:
             # Offering eligibility is a publication invariant. Do not swallow
             # lookup failures: callers must not interpret a failed query as an
             # academic period with no configured offerings.
-            period_offerings = (
-                db.query(SubjectOffering)
-                .options(joinedload(SubjectOffering.offering_pathways))
-                .filter(
-                    SubjectOffering.academic_period_id == academic_period.academic_period_id,
-                    SubjectOffering.academic_year_id == academic_period.academic_year_id,
-                    SubjectOffering.status == "active",
-                )
-                .all()
+            period_offerings = load_active_offerings(
+                db,
+                academic_period_id=academic_period.academic_period_id,
+                academic_year_id=academic_period.academic_year_id,
             )
 
             for load in loads:
@@ -296,32 +299,14 @@ class ConflictDetectorService:
                 s_name = subject_obj.subject_name if subject_obj else f"Subject #{load.subject_id}"
                 c_name = class_obj.section_name or f"Class #{load.class_id}"
 
-                def is_eligible(offering: SubjectOffering) -> bool:
-                    if (
-                        offering.subject_id != load.subject_id
-                        or offering.academic_year_id != class_obj.academic_year_id
-                        or offering.academic_level_id != class_obj.academic_level_id
-                    ):
-                        return False
+                offering = resolve_offering_for_class(
+                    period_offerings,
+                    subject_id=load.subject_id,
+                    class_obj=class_obj,
+                    academic_period_id=load.academic_period_id,
+                )
 
-                    pathway_ids = {
-                        link.pathway_id
-                        for link in (offering.offering_pathways or [])
-                    }
-                    # No pathway links means the offering is unrestricted for
-                    # the grade (including core/shared subjects). Restricted
-                    # offerings require exact membership of the class pathway.
-                    return not pathway_ids or (
-                        class_obj.pathway_id is not None
-                        and class_obj.pathway_id in pathway_ids
-                    )
-
-                matching_offerings = [
-                    offering for offering in period_offerings
-                    if is_eligible(offering)
-                ]
-
-                if not matching_offerings:
+                if offering is None:
                     conflicts.append(
                         ConflictItem(
                             rule="SUBJECT_NOT_OFFERED_IN_PERIOD",
@@ -336,7 +321,7 @@ class ConflictDetectorService:
                             affected_key=f"{load.class_id}_{load.subject_id}",
                         )
                     )
-                elif any(offering.minutes is None for offering in matching_offerings):
+                elif offering.minutes is None:
                     conflicts.append(
                         ConflictItem(
                             rule="MISSING_OFFERING_DURATION",
@@ -347,29 +332,37 @@ class ConflictDetectorService:
                             affected_key=f"{load.class_id}_{load.subject_id}",
                         )
                     )
-
-        # ---------------------------------------------------------
-        # 5. Math/Science 1-Hour Duration Mismatch Check (JHS)
-        # ---------------------------------------------------------
-        for load in loads:
-            subject_obj = subjects_map.get(load.subject_id)
-            class_obj = classes_map.get(load.class_id)
-            if subject_obj and class_obj:
-                s_name = subject_obj.subject_name or ""
-                s_code = subject_obj.subject_codename or ""
-                c_name = class_obj.section_name or ""
-                is_jhs = not any(k in c_name.lower() for k in ["campos", "zara", "reyes", "del mundo"])
-                is_math_sci = getattr(subject_obj, "is_math_or_science", False)
-
-                if is_jhs and is_math_sci and load.start_time and load.end_time:
-                    dur_hrs = calculate_duration_hours(load.start_time, load.end_time)
-                    if dur_hrs < 0.95:  # less than 60 mins
-                        dur_mins = int(dur_hrs * 60)
+                elif (not load.start_time or not load.end_time) and not any(
+                    slot.slot_type == "CLASS"
+                    and not slot.is_locked_break
+                    and time_range_minutes(slot.start_time, slot.end_time) == offering.minutes
+                    for slot in class_slots_map.get(load.class_id, [])
+                ):
+                    conflicts.append(
+                        ConflictItem(
+                            rule="NO_MATCHING_DURATION_SLOT",
+                            severity="error",
+                            message=(
+                                f"Subject '{s_name}' is configured for {offering.minutes} minutes, "
+                                f"but section '{c_name}' has no matching timetable slot."
+                            ),
+                            class_id=load.class_id,
+                            subject_id=load.subject_id,
+                            affected_key=f"{load.class_id}_{load.subject_id}",
+                        )
+                    )
+                elif load.start_time and load.end_time:
+                    scheduled_minutes = time_range_minutes(load.start_time, load.end_time)
+                    if scheduled_minutes is not None and scheduled_minutes != offering.minutes:
                         conflicts.append(
                             ConflictItem(
-                                rule="MATH_SCIENCE_DURATION_MISMATCH",
-                                severity="warning",
-                                message=f"Core subject '{s_name}' in JHS section '{c_name}' is assigned {dur_mins} mins, but requires 1 hr (60 mins) per day.",
+                                rule="OFFERING_DURATION_MISMATCH",
+                                severity="error",
+                                message=(
+                                    f"Subject '{s_name}' is configured for {offering.minutes} minutes "
+                                    f"in Curriculum Plan, but the selected timetable slot is "
+                                    f"{scheduled_minutes} minutes."
+                                ),
                                 class_id=load.class_id,
                                 subject_id=load.subject_id,
                                 affected_key=f"{load.class_id}_{load.subject_id}",
