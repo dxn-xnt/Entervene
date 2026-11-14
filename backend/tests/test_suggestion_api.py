@@ -90,6 +90,7 @@ def suggestion_api_context():
     period = AcademicPeriod(
         period_name="Q1",
         period_type="QUARTER",
+        is_active=True,
         start_date=date(2025, 6, 1),
         end_date=date(2025, 8, 31),
         academic_year_id=year.academic_year_id,
@@ -306,6 +307,81 @@ def _link_payload(context, **overrides):
     return payload
 
 
+def test_teacher_lesson_destination_requires_current_authorized_class(suggestion_api_context):
+    c = suggestion_api_context
+    created = c["client"].post("/api/v1/suggestions/manual", json=_lesson_payload(c))
+    assert created.status_code == 200, created.text
+    suggestion_id = created.json()["student_suggestion_id"]
+    original_class_id = c["assignment"].class_id
+    current = c["client"].get("/api/v1/suggestions/teacher", params={
+        "class_id": original_class_id, "student_id": str(c["student"].student_id),
+    })
+    assert current.status_code == 200
+    assert current.json()["suggestions"][0]["resource"]["class_id"] == original_class_id
+    assert current.json()["suggestions"][0]["resource"]["is_available"] is True
+
+    db = c["db"]
+    first = db.query(AcademicPeriod).one()
+    next_year = AcademicYear(
+        year_label="2026-2027", start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31), is_active=True,
+    )
+    db.add(next_year)
+    db.flush()
+    second = AcademicPeriod(
+        period_name="Q1", period_type="QUARTER", period_sequence=1,
+        start_date=date(2026, 6, 1), end_date=date(2026, 8, 31),
+        academic_year_id=next_year.academic_year_id, is_active=True,
+    )
+    destination = Class(
+        section_name="Successor section", academic_year_id=next_year.academic_year_id,
+        academic_level_id=c["student"].academic_level_id,
+    )
+    db.add_all([second, destination])
+    db.flush()
+    db.add_all([
+        StudentClass(student_id=c["student"].student_id, class_id=destination.class_id,
+                     academic_year_id=next_year.academic_year_id, enrollment_status="enrolled"),
+        SubjectLoad(staff_id="T-OTHER", subject_id=c["subject"].subject_id,
+                    class_id=destination.class_id, academic_period_id=second.academic_period_id,
+                    status="active"),
+    ])
+    first.is_active = False
+    first.academic_year.is_active = False
+    db.commit()
+    _act_as(c, "other_teacher", "teacher")
+
+    historical = c["client"].get("/api/v1/suggestions/teacher", params={
+        "class_id": destination.class_id, "student_id": str(c["student"].student_id),
+    })
+    assert historical.status_code == 200, historical.text
+    item = historical.json()["suggestions"][0]
+    assert item["student_suggestion_id"] == suggestion_id
+    assert item["is_historical"] is True and item["can_manage"] is False
+    assert item["resource"]["class_id"] is None
+    assert item["resource"]["is_available"] is False
+
+    db.add(LessonAssignment(lesson_id=c["lesson"].lesson_id, class_id=destination.class_id,
+                            assigned_by_staff_id="T-OTHER", is_published=True))
+    db.commit()
+    accessible = c["client"].get("/api/v1/suggestions/teacher", params={
+        "class_id": destination.class_id, "student_id": str(c["student"].student_id),
+    })
+    resource = accessible.json()["suggestions"][0]["resource"]
+    assert resource["is_available"] is True
+    assert resource["class_id"] == destination.class_id
+
+    c["lesson"].is_archived = True
+    db.commit()
+    missing = c["client"].get("/api/v1/suggestions/teacher", params={
+        "class_id": destination.class_id, "student_id": str(c["student"].student_id),
+    })
+    resource = missing.json()["suggestions"][0]["resource"]
+    assert resource["is_available"] is False
+    assert resource["class_id"] is None
+    assert resource["unavailable_reason"] == "Lesson resource is archived"
+
+
 def test_link_suggestion_is_standalone_and_student_private(suggestion_api_context):
     c = suggestion_api_context
     response = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c))
@@ -448,6 +524,12 @@ def test_teacher_can_create_list_and_dismiss_lesson_suggestion(suggestion_api_co
     assert listed.status_code == 200
     assert len(listed.json()["suggestions"]) == 1
 
+    _act_as(c, "student", "student")
+    own = c["client"].get(f"/api/v1/suggestions/my/{body['student_suggestion_id']}")
+    assert own.status_code == 200
+    assert own.json()["resource"]["class_id"] == c["assignment"].class_id
+    _act_as(c, "owner", "teacher")
+
     dismissed = c["client"].patch(f"/api/v1/suggestions/{body['student_suggestion_id']}/dismiss")
     assert dismissed.status_code == 200
     assert dismissed.json()["status"] == "DISMISSED"
@@ -546,6 +628,7 @@ def _add_low_score_source(context, grade=Decimal("58")):
     assignment = ClassworkAssignment(
         classwork_id=source.classwork_id,
         class_id=context["assignment"].class_id,
+        academic_period_id=context["db"].query(AcademicPeriod).one().academic_period_id,
         assigned_by_staff_id=context["owner"].staff_id,
         is_published=True,
     )
@@ -588,6 +671,9 @@ def test_recommendation_service_creates_explainable_draft_from_low_score(suggest
     assert draft.resource_type == "LESSON"
     assert draft.lesson_id == c["lesson"].lesson_id
     assert draft.priority == "HIGH"
+    assert draft.origin_class_id == c["assignment"].class_id
+    assert draft.origin_academic_period_id == c["db"].query(AcademicPeriod).one().academic_period_id
+    assert draft.can_manage is True
     assert draft.source_metrics is not None
     assert draft.source_metrics["source"] == "LOW_CLASSWORK_SCORE"
     assert draft.source_metrics["score_percent"] == 58.0
@@ -596,6 +682,8 @@ def test_recommendation_service_creates_explainable_draft_from_low_score(suggest
     hidden = c["client"].get("/api/v1/suggestions/my")
     assert hidden.status_code == 200
     assert hidden.json()["suggestions"] == []
+    assert c["client"].get(f"/api/v1/suggestions/my/{draft.student_suggestion_id}").status_code == 404
+    assert c["client"].patch(f"/api/v1/suggestions/my/{draft.student_suggestion_id}/viewed").status_code == 404
 
     _act_as(c, "owner", "teacher")
     approved = c["client"].patch(f"/api/v1/suggestions/{draft.student_suggestion_id}/approve")
@@ -623,3 +711,158 @@ def test_recommendation_service_skips_existing_draft_duplicates(suggestion_api_c
     assert len(first.suggestions) == 1
     assert first.suggestions[0].priority == "URGENT"
     assert second.suggestions == []
+
+
+def _advance_suggestion_period(context):
+    db = context["db"]
+    first = db.query(AcademicPeriod).one()
+    first.is_active = False
+    next_period = AcademicPeriod(
+        period_name="Q2", period_type="QUARTER", period_sequence=2,
+        start_date=date(2025, 9, 1), end_date=date(2025, 11, 30),
+        academic_year_id=first.academic_year_id, is_active=True,
+    )
+    db.add(next_period)
+    db.flush()
+    db.add(SubjectLoad(
+        staff_id=db.query(AcademicStaff).filter(AcademicStaff.staff_id == "T-OTHER").one().staff_id,
+        subject_id=context["subject"].subject_id,
+        class_id=context["assignment"].class_id,
+        academic_period_id=next_period.academic_period_id,
+        status="active",
+    ))
+    db.commit()
+    return first, next_period
+
+
+def test_succeeding_teacher_can_read_but_not_manage_historical_suggestion(suggestion_api_context):
+    c = suggestion_api_context
+    created = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c)).json()
+    assert created["origin_class_id"] == c["assignment"].class_id
+    assert created["origin_academic_period_id"] is not None
+    assert created["can_manage"] is True
+    _advance_suggestion_period(c)
+
+    _act_as(c, "other_teacher", "teacher")
+    history = c["client"].get("/api/v1/suggestions/teacher", params={
+        "class_id": c["assignment"].class_id,
+        "student_id": str(c["student"].student_id),
+    })
+    assert history.status_code == 200
+    assert len(history.json()["suggestions"]) == 1
+    item = history.json()["suggestions"][0]
+    assert item["title"] == created["title"]
+    assert item["description"] == created["description"]
+    assert item["origin_period_label"] == "2025-2026 · Q1"
+    assert item["is_historical"] is True
+    assert item["can_manage"] is False
+    for action in ("dismiss", "approve", "archive"):
+        assert c["client"].patch(
+            f"/api/v1/suggestions/{created['student_suggestion_id']}/{action}"
+        ).status_code == 403
+    assert c["db"].get(StudentSuggestion, created["student_suggestion_id"]).status == "ACTIVE"
+
+    _act_as(c, "owner", "teacher")
+    former_history = c["client"].get("/api/v1/suggestions/teacher", params={
+        "student_id": str(c["student"].student_id),
+    })
+    assert former_history.status_code == 200
+    assert former_history.json()["suggestions"] == []
+    assert c["client"].patch(
+        f"/api/v1/suggestions/{created['student_suggestion_id']}/dismiss"
+    ).status_code == 403
+    _act_as(c, "student", "student")
+    own = c["client"].get("/api/v1/suggestions/my")
+    assert own.status_code == 200
+    assert own.json()["suggestions"][0]["is_historical"] is True
+    completed = c["client"].patch(f"/api/v1/suggestions/my/{created['student_suggestion_id']}/complete")
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "COMPLETED"
+
+
+def test_current_co_teacher_can_read_but_only_creator_can_manage(suggestion_api_context):
+    c = suggestion_api_context
+    created = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c)).json()
+    period = c["db"].query(AcademicPeriod).one()
+    c["db"].add(SubjectLoad(
+        staff_id="T-OTHER", subject_id=c["subject"].subject_id,
+        class_id=c["assignment"].class_id,
+        academic_period_id=period.academic_period_id, status="active",
+    ))
+    c["db"].commit()
+    _act_as(c, "other_teacher", "teacher")
+    history = c["client"].get("/api/v1/suggestions/teacher", params={
+        "student_id": str(c["student"].student_id), "class_id": c["assignment"].class_id,
+    })
+    assert history.status_code == 200
+    assert history.json()["suggestions"][0]["can_manage"] is False
+    assert c["client"].patch(
+        f"/api/v1/suggestions/{created['student_suggestion_id']}/dismiss"
+    ).status_code == 403
+    _act_as(c, "owner", "teacher")
+    assert c["client"].patch(
+        f"/api/v1/suggestions/{created['student_suggestion_id']}/dismiss"
+    ).status_code == 200
+
+
+def test_legacy_unknown_origin_stays_student_owned_and_teacher_private(suggestion_api_context):
+    c = suggestion_api_context
+    legacy = StudentSuggestion(
+        suggestion_type="MANUAL", resource_type="LINK", title="Older guidance",
+        external_url="https://example.org/legacy", status="ACTIVE", priority="NORMAL",
+        student_id=c["student"].student_id, subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+    )
+    c["db"].add(legacy)
+    c["db"].commit()
+    teacher_history = c["client"].get("/api/v1/suggestions/teacher", params={
+        "student_id": str(c["student"].student_id),
+    })
+    assert teacher_history.json()["suggestions"] == []
+    assert c["client"].patch(f"/api/v1/suggestions/{legacy.student_suggestion_id}/dismiss").status_code == 403
+    _act_as(c, "student", "student")
+    own = c["client"].get("/api/v1/suggestions/my")
+    assert [item["origin_period_label"] for item in own.json()["suggestions"]] == ["Unknown period"]
+    assert c["client"].patch(f"/api/v1/suggestions/my/{legacy.student_suggestion_id}/viewed").status_code == 200
+    assert c["client"].patch(f"/api/v1/suggestions/my/{legacy.student_suggestion_id}/complete").status_code == 200
+    _act_as(c, "other_student", "student")
+    assert c["client"].get(f"/api/v1/suggestions/my/{legacy.student_suggestion_id}").status_code == 404
+
+
+def test_historical_read_requires_current_matching_student_class_subject(suggestion_api_context):
+    c = suggestion_api_context
+    created = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c)).json()
+    _, current = _advance_suggestion_period(c)
+    _act_as(c, "other_teacher", "teacher")
+    db = c["db"]
+    successor_load = db.query(SubjectLoad).filter(
+        SubjectLoad.staff_id == "T-OTHER",
+        SubjectLoad.subject_id == c["subject"].subject_id,
+        SubjectLoad.academic_period_id == current.academic_period_id,
+    ).one()
+    successor_load.class_id = db.query(Class).filter(Class.section_name == "Ruby").one().class_id
+    db.commit()
+    history = c["client"].get("/api/v1/suggestions/teacher", params={
+        "student_id": str(c["student"].student_id),
+    })
+    assert history.status_code == 200
+    assert history.json()["suggestions"] == []
+    assert c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c,
+        title="Not assigned", external_url="https://example.org/other")).status_code == 403
+    assert c["client"].patch(
+        f"/api/v1/suggestions/{created['student_suggestion_id']}/dismiss"
+    ).status_code == 403
+
+
+def test_student_history_remains_readable_without_an_active_period(suggestion_api_context):
+    c = suggestion_api_context
+    created = c["client"].post("/api/v1/suggestions/manual", json=_link_payload(c)).json()
+    period = c["db"].query(AcademicPeriod).one()
+    period.is_active = False
+    c["db"].query(AcademicYear).one().is_active = False
+    c["db"].commit()
+    _act_as(c, "student", "student")
+    listed = c["client"].get("/api/v1/suggestions/my")
+    assert listed.status_code == 200
+    assert listed.json()["suggestions"][0]["student_suggestion_id"] == created["student_suggestion_id"]
+    assert listed.json()["suggestions"][0]["is_historical"] is True

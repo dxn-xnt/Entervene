@@ -108,6 +108,7 @@ def test_role_based_data_isolation_admin_vs_teacher(db_session):
         year_label="2025-2026",
         start_date=date(2025, 6, 1),
         end_date=date(2026, 3, 31),
+        is_active=True,
     )
     db_session.add(year)
 
@@ -180,6 +181,8 @@ def test_role_based_data_isolation_admin_vs_teacher(db_session):
         title="Remedial Math",
         priority="HIGH",
         status="ACTIVE",
+        origin_class_id=1,
+        origin_academic_period_id=1,
     )
     # Suggestion 2 for S2 (Science, Class 2 - not in T1's subject load)
     sug2 = StudentSuggestion(
@@ -192,6 +195,8 @@ def test_role_based_data_isolation_admin_vs_teacher(db_session):
         title="Remedial Science",
         priority="URGENT",
         status="ACTIVE",
+        origin_class_id=2,
+        origin_academic_period_id=1,
     )
     db_session.add_all([sug1, sug2])
     db_session.commit()

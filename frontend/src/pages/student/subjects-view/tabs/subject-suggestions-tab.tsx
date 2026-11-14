@@ -55,7 +55,7 @@ function resourceRoute(
     );
   }
   return `${routes.student.subjectDetail
-    .replace(":classId", String(classId))
+    .replace(":classId", String(suggestion.resource.class_id ?? classId))
     .replace(":subjectId", String(subjectId))}?${params.toString()}`;
 }
 
@@ -82,7 +82,7 @@ export default function SubjectSuggestionsTab({
     setIsLoading(true);
     setNotice(null);
     try {
-      const data = await getMySuggestions("ACTIVE");
+      const data = await getMySuggestions();
       setSuggestions(data.suggestions);
     } catch (err) {
       setNotice({
@@ -148,6 +148,7 @@ export default function SubjectSuggestionsTab({
     const term = search.trim().toLowerCase();
     return suggestions
       .filter((suggestion) => suggestion.subject_id === subjectId)
+      .filter((suggestion) => ["ACTIVE", "COMPLETED", "DISMISSED"].includes(suggestion.status))
       .filter((suggestion) => {
         if (!selectedLessonId) return true;
         return suggestionLessonId(suggestion) === selectedLessonId;
@@ -179,6 +180,12 @@ export default function SubjectSuggestionsTab({
         );
       });
   }, [search, selectedLessonId, sortMode, subjectId, suggestions]);
+
+  const groups = [
+    { label: "Current Period", items: visibleSuggestions.filter((item) => item.origin_academic_period_id && !item.is_historical) },
+    { label: "Previous Periods", items: visibleSuggestions.filter((item) => item.is_historical) },
+    { label: "Unknown Period", items: visibleSuggestions.filter((item) => !item.origin_academic_period_id) },
+  ].filter((group) => group.items.length > 0);
 
   return (
     <div className="space-y-4">
@@ -245,15 +252,20 @@ export default function SubjectSuggestionsTab({
           action={search.trim() ? { label: "Reset search", onClick: () => setSearch("") } : undefined}
         />
       ) : (
-        <section className="flex flex-col gap-4">
-          {visibleSuggestions.map((suggestion) => (
-            <StudySuggestionCard
-              key={suggestion.student_suggestion_id}
-              suggestion={suggestion}
-              isBusy={busyId === suggestion.student_suggestion_id}
-              onOpenResource={handleOpenResource}
-              onComplete={handleComplete}
-            />
+        <section className="flex flex-col gap-6">
+          {groups.map((group) => (
+            <section key={group.label} className="flex flex-col gap-4">
+              <h3 className="text-lg font-bold">{group.label}</h3>
+              {group.items.map((suggestion) => (
+                <StudySuggestionCard
+                  key={suggestion.student_suggestion_id}
+                  suggestion={suggestion}
+                  isBusy={busyId === suggestion.student_suggestion_id}
+                  onOpenResource={handleOpenResource}
+                  onComplete={handleComplete}
+                />
+              ))}
+            </section>
           ))}
         </section>
       )}

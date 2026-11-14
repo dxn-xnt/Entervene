@@ -20,7 +20,17 @@ from app.models.academic.AcademicLevelPathwayScope import AcademicLevelPathwaySc
 from app.models.academic.OfficialSection import OfficialSection
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Lesson import Lesson
+from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.classwork.Classwork import Classwork
+from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.suggestion.StudentSuggestion import StudentSuggestion
+from app.models.suggestion.SuggestionClasswork import SuggestionClasswork
 from app.models.auth.Role import Role
 from app.models.auth.UserAccount import UserAccount
 from app.models.auth.UserRoles import UserRoles
@@ -172,6 +182,163 @@ def section(name, adviser_id="T-1", student_ids=None):
         "adviser_staff_id": adviser_id,
         "student_ids": [str(student_id) for student_id in (student_ids or [])],
     }
+
+
+def test_official_section_without_academic_records_is_still_deleted(client, db, batch_data):
+    year, _, level, _, adviser, _, _, _ = batch_data
+    section_row = db.query(OfficialSection).filter_by(
+        academic_year_id=year.academic_year_id, section_name="Sapphire"
+    ).one()
+    class_row = Class(
+        section_name="Sapphire", academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id, adviser_staff_id=adviser.staff_id,
+    )
+    db.add(class_row)
+    db.commit()
+    class_id, section_id = class_row.class_id, section_row.id
+
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": str(uuid.uuid4()), "role": "teacher",
+    }
+    try:
+        denied = client.delete(f"/api/v1/classes/official-sections/{section_id}")
+        assert denied.status_code == 403
+        assert db.get(Class, class_id) is not None
+    finally:
+        client.app.dependency_overrides[get_current_user] = lambda: {
+            "sub": str(uuid.uuid4()), "role": "admin",
+        }
+
+    response = client.delete(f"/api/v1/classes/official-sections/{section_id}")
+    assert response.status_code == 200
+    assert response.json()["action"] == "deleted"
+    assert db.get(Class, class_id) is None
+    assert db.get(OfficialSection, section_id) is None
+
+
+def test_official_section_with_period_grade_still_archives(client, db, batch_data):
+    year, _, level, _, adviser, _, students, _ = batch_data
+    section_row = db.query(OfficialSection).filter_by(
+        academic_year_id=year.academic_year_id, section_name="Sapphire"
+    ).one()
+    period = AcademicPeriod(
+        academic_year_id=year.academic_year_id, period_name="Q1", period_type="QUARTER",
+        period_sequence=1, start_date=date(2025, 6, 1), end_date=date(2025, 8, 31),
+    )
+    subject = Subject(subject_name="Graded subject", academic_level_id=level.academic_level_id)
+    class_row = Class(
+        section_name="Sapphire", academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id, adviser_staff_id=adviser.staff_id,
+    )
+    db.add_all([period, subject, class_row])
+    db.flush()
+    grade = StudentPeriodGrade(
+        student_id=students[0].student_id, class_id=class_row.class_id,
+        subject_id=subject.subject_id, academic_period_id=period.academic_period_id,
+        is_finalized=True,
+    )
+    db.add(grade)
+    db.commit()
+    grade_id, class_id = grade.period_grade_id, class_row.class_id
+
+    response = client.delete(f"/api/v1/classes/official-sections/{section_row.id}")
+    assert response.status_code == 200, response.text
+    assert response.json()["action"] == "archived"
+    assert db.get(Class, class_id).class_status == "archived"
+    assert db.get(StudentPeriodGrade, grade_id) is not None
+
+
+@pytest.mark.parametrize(
+    ("resource_type", "status"),
+    [
+        ("LINK", "ACTIVE"), ("LINK", "DRAFT"), ("LINK", "COMPLETED"),
+        ("LINK", "DISMISSED"), ("LINK", "ARCHIVED"),
+        ("LESSON", "ACTIVE"), ("CLASSWORK", "ACTIVE"),
+    ],
+)
+def test_official_section_with_suggestion_is_archived_and_provenance_preserved(
+    client, db, batch_data, resource_type, status,
+):
+    year, _, level, _, adviser, _, students, _ = batch_data
+    section_row = db.query(OfficialSection).filter_by(
+        academic_year_id=year.academic_year_id, section_name="Sapphire"
+    ).one()
+    period = AcademicPeriod(
+        academic_year_id=year.academic_year_id, period_name="Q1", period_type="QUARTER",
+        period_sequence=1, start_date=date(2025, 6, 1), end_date=date(2025, 8, 31),
+        is_active=True,
+    )
+    subject = Subject(subject_name="Archive test subject", academic_level_id=level.academic_level_id)
+    class_row = Class(
+        section_name="Sapphire", academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id, adviser_staff_id=adviser.staff_id,
+    )
+    unrelated_class = Class(
+        section_name="Ruby", academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add_all([period, subject, class_row, unrelated_class])
+    db.flush()
+    db.add(SubjectLoad(
+        staff_id=adviser.staff_id, subject_id=subject.subject_id,
+        class_id=class_row.class_id, academic_period_id=period.academic_period_id,
+        status="active",
+    ))
+    lesson_id = None
+    classwork_assignment = None
+    if resource_type == "LESSON":
+        lesson = Lesson(title="Historical lesson", subject_id=subject.subject_id,
+                        created_by_staff_id=adviser.staff_id)
+        db.add(lesson)
+        db.flush()
+        db.add(LessonAssignment(lesson_id=lesson.lesson_id, class_id=class_row.class_id,
+                                assigned_by_staff_id=adviser.staff_id))
+        lesson_id = lesson.lesson_id
+    if resource_type == "CLASSWORK":
+        classwork = Classwork(title="Historical work", classwork_type="READING",
+                              subject_id=subject.subject_id, created_by_staff_id=adviser.staff_id)
+        db.add(classwork)
+        db.flush()
+        classwork_assignment = ClassworkAssignment(
+            classwork_id=classwork.classwork_id, class_id=class_row.class_id,
+            academic_period_id=period.academic_period_id,
+            assigned_by_staff_id=adviser.staff_id,
+        )
+        db.add(classwork_assignment)
+        db.flush()
+    suggestion = StudentSuggestion(
+        suggestion_type="MANUAL", resource_type=resource_type,
+        title="Keep historical recommendation", priority="NORMAL", status=status,
+        student_id=students[0].student_id, subject_id=subject.subject_id,
+        lesson_id=lesson_id,
+        external_url="https://example.org/reading" if resource_type == "LINK" else None,
+        created_by_staff_id=adviser.staff_id,
+        origin_class_id=class_row.class_id,
+        origin_academic_period_id=period.academic_period_id,
+    )
+    db.add(suggestion)
+    db.flush()
+    if classwork_assignment is not None:
+        db.add(SuggestionClasswork(
+            student_suggestion_id=suggestion.student_suggestion_id,
+            classwork_assignment_id=classwork_assignment.classwork_assignment_id,
+        ))
+    db.commit()
+    class_id, other_id, section_id = class_row.class_id, unrelated_class.class_id, section_row.id
+    suggestion_id, period_id = suggestion.student_suggestion_id, period.academic_period_id
+
+    response = client.delete(f"/api/v1/classes/official-sections/{section_id}")
+    assert response.status_code == 200, response.text
+    assert response.json()["action"] == "archived"
+    db.expire_all()
+    assert db.get(Class, class_id).class_status == "archived"
+    assert db.get(OfficialSection, section_id).is_active is False
+    assert db.get(Class, other_id).class_status == "active"
+    preserved = db.get(StudentSuggestion, suggestion_id)
+    assert (preserved.status, preserved.origin_class_id,
+            preserved.origin_academic_period_id, preserved.created_by_staff_id) == (
+                status, class_id, period_id, adviser.staff_id,
+            )
 
 
 def post_batch(client, level_id: int, sections):

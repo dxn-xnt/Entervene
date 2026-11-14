@@ -57,9 +57,13 @@ export default function StudySuggestionCard({
                   Completed
                 </span>
               ) : null}
+              {suggestion.status === "DISMISSED" ? (
+                <span className="rounded-full border border-gray-300 bg-gray-100 px-2.5 py-1 text-sm font-bold text-gray-700">Dismissed</span>
+              ) : null}
             </div>
 
             <p className="text-sm font-medium text-gray-500">Suggested {formatDate(suggestion.created_at)}</p>
+            <p className="text-sm font-medium text-gray-500">{suggestion.origin_period_label ?? "Unknown period"}</p>
 
             {suggestion.description ? (
               <p className="max-w-3xl text-sm text-gray-700">{suggestion.description}</p>
@@ -106,11 +110,11 @@ export default function StudySuggestionCard({
           <button
             type="button"
             onClick={() => onComplete(suggestion)}
-            disabled={isBusy || isCompleted}
+            disabled={isBusy || suggestion.status !== "ACTIVE"}
             className="inline-flex items-center justify-center gap-2 rounded border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors hover:bg-[#69a967] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
           >
             {isBusy ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-            {isCompleted ? "Completed" : "Mark Complete"}
+            {isCompleted ? "Completed" : suggestion.status === "DISMISSED" ? "Dismissed" : "Mark Complete"}
           </button>
         </div>
       </div>

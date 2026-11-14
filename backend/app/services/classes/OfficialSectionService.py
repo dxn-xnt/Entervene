@@ -219,22 +219,30 @@ def delete_official_section(db: Session, section_id: int) -> dict:
         db, academic_year_id=section.academic_year_id
     )
 
+    # Serialize this decision with inserts that reference the class. PostgreSQL
+    # suggestion foreign keys then cannot race an unchecked hard deletion.
     class_ = db.query(Class).filter(
         Class.academic_year_id == section.academic_year_id,
         Class.academic_level_id == section.academic_level_id,
         func.lower(Class.section_name) == section.normalized_name,
-    ).first()
+    ).with_for_update().first()
 
     if class_ is not None:
-        from app.models.academic.StudentClass import StudentClass
-        from app.models.academic.StudentGrade import StudentGrade
+        from app.models.academic.StudentCLass import StudentClass
+        from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
         from app.models.classwork.ClassworkAssignment import ClassworkAssignment
         from app.models.academic.SubjectLoad import SubjectLoad
+        from app.models.suggestion.StudentSuggestion import StudentSuggestion
 
-        has_grades = db.query(StudentGrade.grade_id).filter(StudentGrade.class_id == class_.class_id).first() is not None
+        has_grades = db.query(StudentPeriodGrade.period_grade_id).filter(
+            StudentPeriodGrade.class_id == class_.class_id
+        ).first() is not None
         has_assignments = db.query(ClassworkAssignment.classwork_assignment_id).filter(ClassworkAssignment.class_id == class_.class_id).first() is not None
+        has_suggestions = db.query(StudentSuggestion.student_suggestion_id).filter(
+            StudentSuggestion.origin_class_id == class_.class_id
+        ).first() is not None
 
-        if has_grades or has_assignments:
+        if has_grades or has_assignments or has_suggestions:
             class_.class_status = "archived"
             section.is_active = False
             db.commit()

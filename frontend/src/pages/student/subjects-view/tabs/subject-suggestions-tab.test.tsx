@@ -32,7 +32,7 @@ function item(kind: "LINK" | "LESSON"): SuggestionResponse {
 
 function Location() {
   const location = useLocation();
-  return <output data-testid="route">{location.search}</output>;
+  return <><output data-testid="route">{location.search}</output><output data-testid="path">{location.pathname}</output></>;
 }
 
 function show() {
@@ -68,4 +68,36 @@ it("retains internal navigation for lessons", async () => {
   fireEvent.click(lessonButton);
   await waitFor(() => expect(api.viewed).toHaveBeenCalledWith(2));
   await waitFor(() => expect(screen.getByTestId("route").textContent).toContain("lessonId=12"));
+});
+
+it("opens an authorized historical lesson in its assigned class", async () => {
+  api.getMy.mockResolvedValue({ suggestions: [{ ...item("LESSON"),
+    origin_academic_period_id: 1, is_historical: true, origin_period_label: "2025-2026 · Q1",
+    resource: { ...item("LESSON").resource, class_id: 8 },
+  }] });
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "View Resource" }));
+  await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/student/subjects/8/7"));
+});
+
+it("shows current, historical, and unknown-origin statuses once without drafts or archived records", async () => {
+  api.getMy.mockResolvedValue({ suggestions: [
+    { ...item("LINK"), student_suggestion_id: 1, origin_academic_period_id: 2,
+      origin_period_label: "2025-2026 · Q2", is_historical: false },
+    { ...item("LESSON"), student_suggestion_id: 2, status: "COMPLETED",
+      origin_academic_period_id: 1, origin_period_label: "2025-2026 · Q1", is_historical: true },
+    { ...item("LINK"), student_suggestion_id: 3, title: "Legacy guide", status: "DISMISSED",
+      origin_academic_period_id: null, origin_period_label: "Unknown period" },
+    { ...item("LINK"), student_suggestion_id: 4, title: "Archived guide", status: "ARCHIVED" },
+    { ...item("LINK"), student_suggestion_id: 5, title: "Draft guide", status: "DRAFT" },
+  ] });
+  show();
+  expect(await screen.findByText("Current Period")).toBeTruthy();
+  expect(screen.getByText("Previous Periods")).toBeTruthy();
+  expect(screen.getByText("Unknown Period")).toBeTruthy();
+  expect(screen.getByText("Legacy guide")).toBeTruthy();
+  expect(screen.queryByText("Archived guide")).toBeNull();
+  expect(screen.queryByText("Draft guide")).toBeNull();
+  expect(screen.getByRole("button", { name: "Dismissed" }).hasAttribute("disabled")).toBe(true);
+  expect(api.getMy).toHaveBeenCalledWith();
 });
