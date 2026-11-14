@@ -120,12 +120,12 @@ export function ManualSuggestionPanel({
               {showHistory ? (
                 <>
                   <ChevronUp size={14} />
-                  Hide History ({history.length})
+                  Hide History
                 </>
               ) : (
                 <>
                   <ChevronDown size={14} />
-                  View History ({history.length})
+                  View History
                 </>
               )}
             </Button>
