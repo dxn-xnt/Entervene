@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
@@ -180,7 +180,7 @@ export default function TeacherClassDetail() {
             {!lessonInterfaceLesson && !studentInterfaceStudent && !classworkInterfaceClasswork && (
               <div data-page-tabs-sticky-region>
                 <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6">
-                  <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                     <SidebarTrigger className="shrink-0 md:hidden" />
                     <Breadcrumb className="min-w-0">
                       <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">

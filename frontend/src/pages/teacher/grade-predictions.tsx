@@ -23,7 +23,7 @@ import {
   fetchDashboardFilters,
   fetchDashboardGradeSummaries,
 } from "@/lib/prediction-api";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { AdminBreadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";

@@ -5,7 +5,7 @@ import { API_URL } from "@/lib/api";
 import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar } from "@/components/retroui/Avatar";

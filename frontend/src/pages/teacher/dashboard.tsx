@@ -516,7 +516,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <div className="flex items-center gap-2.5">
-                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl font-head">
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl ">
                     Dashboard
                   </h1>
                   {isHistorical && (

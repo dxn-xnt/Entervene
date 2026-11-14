@@ -33,7 +33,7 @@ import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
 } from "@/lib/api";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { AdminBreadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Button } from "@/components/teacher/button";
 import {
