@@ -23,6 +23,7 @@ import type {
 } from "@/types/adminClasses";
 import type { SuggestionResponse } from "@/types/suggestion";
 import { SuggestionPanel } from "./suggestion-panel-modal";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 
 type Props = {
   classId: number;
@@ -83,18 +84,26 @@ export function ManualSuggestionPanel({
       setHistoryError(
         err instanceof Error ? err.message : "Unable to update suggestion.",
       );
-      toast.error({ title: "Unable to update suggestion", description: err instanceof Error ? err.message : undefined });
     }
   }
 
-  const activeCount = history.filter((item) => item.status === "ACTIVE").length;
-  const draftCount = history.filter((item) => item.status === "DRAFT").length;
+  const currentHistory = history.filter((item) => !item.is_historical && item.origin_academic_period_id != null);
+  const previousHistory = history.filter((item) => item.is_historical);
+  const unknownHistory = history.filter((item) => item.origin_academic_period_id == null);
+  const activeCount = currentHistory.filter((item) => item.status === "ACTIVE").length;
+  const draftCount = currentHistory.filter((item) => item.status === "DRAFT").length;
 
   const Container = displayMode === "panel" ? Card : "div";
 
   return (
     <Container
-      className={displayMode === "row" || displayMode === "header" ? "min-w-0" : "p-3 shadow-none"}
+      className={
+        displayMode === "header"
+          ? "relative min-w-0"
+          : displayMode === "row"
+            ? "min-w-0"
+            : "p-3 shadow-none"
+      }
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div
@@ -107,8 +116,14 @@ export function ManualSuggestionPanel({
             {activeCount} active, {draftCount} draft
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 pb-1 pr-1">
-          {history.length > 0 && (
+        <div
+          className={
+            displayMode === "header"
+              ? "flex items-center gap-2"
+              : "flex flex-wrap items-center gap-2 pb-1 pr-1"
+          }
+        >
+          {(history.length > 0 || displayMode === "panel") && (
             <Button
               type="button"
               variant="outline"
@@ -119,12 +134,12 @@ export function ManualSuggestionPanel({
               {showHistory ? (
                 <>
                   <ChevronUp size={14} />
-                  Hide History ({history.length})
+                  Hide History
                 </>
               ) : (
                 <>
                   <ChevronDown size={14} />
-                  View History ({history.length})
+                  View History
                 </>
               )}
             </Button>
@@ -143,8 +158,10 @@ export function ManualSuggestionPanel({
         </div>
       </div>
 
-      {showHistory && displayMode !== "header" && (
-        <Card className="mt-3 block w-full border-black bg-white p-3 shadow-none transition-none hover:shadow-none">
+      {showHistory && (
+        <Card className={displayMode === "header"
+          ? "absolute right-0 top-full z-50 mt-2 block w-[min(92vw,34rem)] border-black bg-white p-3 shadow-md transition-none hover:shadow-md"
+          : "mt-3 block w-full border-black bg-white p-3 shadow-none transition-none hover:shadow-none"}>
           <h4 className="mb-2 text-sm font-black">Suggestion History</h4>
           {historyError && (
             <Alert status="error" className="mb-2 text-xs">
@@ -156,8 +173,15 @@ export function ManualSuggestionPanel({
               Loading suggestions...
             </p>
           ) : history.length ? (
-            <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
-              {history.map((item) => (
+            <div className="grid max-h-80 gap-4 overflow-y-auto pr-1">
+              {([
+                { label: "Current Period", items: currentHistory },
+                { label: "Previous Periods", items: previousHistory },
+                { label: "Unknown Period", items: unknownHistory },
+              ] as const).filter((group) => group.items.length > 0).map((group) => (
+                <section key={group.label} className="grid gap-2">
+                  <h5 className="text-xs font-black uppercase tracking-wide">{group.label}</h5>
+                  {group.items.map((item) => (
                 <Card
                   key={item.student_suggestion_id}
                   className="block w-full border-black bg-[#fffdf5] p-2.5 text-xs shadow-none transition-none hover:shadow-none"
@@ -168,14 +192,32 @@ export function ManualSuggestionPanel({
                       <p className="font-semibold text-black/60">
                         {item.resource.title}
                       </p>
+                      <p className="font-semibold text-black/60">{item.origin_period_label ?? "Unknown period"}</p>
                       {item.resource.resource_type === "LINK" && item.resource.external_url && (
-                        <p className="max-w-full break-all text-black/60">{item.resource.external_url}</p>
+                        <a className="max-w-full break-all font-bold underline" href={item.resource.external_url}
+                          target="_blank" rel="noopener noreferrer">Open external resource</a>
+                      )}
+                      {item.resource.resource_type === "LESSON" && item.resource.is_available && item.resource.lesson_id && item.resource.class_id ? (
+                        <a className="block font-bold underline"
+                          href={`/teacher/classes/${item.resource.class_id}/subjects/${item.subject_id}?lessonId=${item.resource.lesson_id}`}>
+                          Open lesson
+                        </a>
+                      ) : item.resource.resource_type === "LESSON" ? (
+                        <p className="text-black/60">{item.resource.unavailable_reason ?? "Lesson is unavailable to open."}</p>
+                      ) : null}
+                      {item.resource.is_available && item.resource.resource_type === "CLASSWORK" && item.resource.classwork_id && (
+                        <a className="block font-bold underline" href={`/teacher/classworks/${item.resource.classwork_id}`}>
+                          Open classwork
+                        </a>
                       )}
                     </div>
                     <span className="border border-black bg-white px-2 py-0.5 font-black text-[10px]">
                       {item.status}
                     </span>
                   </div>
+                  {!item.can_manage && (
+                    <span className="mt-1 inline-block border border-black bg-[#F6E9B2] px-2 py-0.5 font-bold">Read-only</span>
+                  )}
                   {item.description && (
                     <p className="mt-1 text-black/70">{item.description}</p>
                   )}
@@ -197,7 +239,7 @@ export function ManualSuggestionPanel({
                     </div>
                   ) : null}
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {item.status === "DRAFT" && (
+                    {item.can_manage && item.status === "DRAFT" && (
                       <Button
                         type="button"
                         variant="default"
@@ -214,7 +256,7 @@ export function ManualSuggestionPanel({
                         Approve
                       </Button>
                     )}
-                    {item.status === "ACTIVE" && (
+                    {item.can_manage && item.status === "ACTIVE" && (
                       <Button
                         type="button"
                         variant="outline"
@@ -231,7 +273,7 @@ export function ManualSuggestionPanel({
                         Dismiss
                       </Button>
                     )}
-                    {(item.status === "COMPLETED" ||
+                    {item.can_manage && (item.status === "COMPLETED" ||
                       item.status === "DISMISSED") && (
                         <Button
                           type="button"
@@ -257,12 +299,13 @@ export function ManualSuggestionPanel({
                     )}
                   </div>
                 </Card>
+                  ))}
+                </section>
               ))}
             </div>
           ) : (
-            <p className="text-xs font-semibold text-black/60">
-              No suggestions yet.
-            </p>
+            <TeacherEmptyState compact icon={<Lightbulb />} title="No suggestions yet"
+              description="Suggestions for this student and subject will appear here." />
           )}
         </Card>
       )}
