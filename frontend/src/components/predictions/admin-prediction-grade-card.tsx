@@ -6,7 +6,6 @@ import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { GradeCard } from "./grade-card";
-import { getTeacherRiskPercentage } from "./teacher-risk-display";
 import type { AdminPredictionGradeSummary } from "./current-term-dashboard-adapter";
 
 interface AdminPredictionGradeCardProps {
@@ -14,16 +13,12 @@ interface AdminPredictionGradeCardProps {
 }
 
 export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProps) {
-  const uniqueStudents = new Set(
-    group.sections.flatMap((section) => section.students.map((student) => student.student_id)),
-  ).size;
   const moderateRisk = group.sections.reduce((total, section) => total + section.moderate_risk_count, 0);
   const highRisk = group.sections.reduce((total, section) => total + section.high_risk_count, 0);
-  const onTrack = group.sections.reduce((total, section) => total + section.on_track_count, 0);
   const gradePath = `/admin/predictions/${group.grade_level}`;
 
   return (
-    <Card className="flex min-w-0 flex-col bg-primary">
+    <Card className="flex min-w-0 flex-col bg-background">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
           to={gradePath}
@@ -33,13 +28,10 @@ export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProp
         </Link>
         <div className="flex flex-row flex-wrap items-center gap-2">
           <Badge size="sm" className={getRiskBadgeMeta("MODERATE_RISK").bg}>
-            {moderateRisk} Moderate Risk ({Math.round(getTeacherRiskPercentage(moderateRisk, uniqueStudents))}%)
+            {moderateRisk} Moderate Risk
           </Badge>
           <Badge size="sm" className={getRiskBadgeMeta("HIGH_RISK").bg}>
-            {highRisk} High Risk ({Math.round(getTeacherRiskPercentage(highRisk, uniqueStudents))}%)
-          </Badge>
-          <Badge size="sm" className={getRiskBadgeMeta("ON_TRACK").bg}>
-            {onTrack} On Track ({Math.round(getTeacherRiskPercentage(onTrack, uniqueStudents))}%)
+            {highRisk} High Risk
           </Badge>
           <Tooltip>
             <TooltipTrigger render={
@@ -70,7 +62,6 @@ export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProp
             totalStudents={section.unique_student_count}
             highRisk={section.high_risk_count}
             moderateRisk={section.moderate_risk_count}
-            lowRisk={section.on_track_count}
             role="admin"
             emptyLabel={section.prediction_count === 0 ? "No Predictions Yet" : undefined}
           />

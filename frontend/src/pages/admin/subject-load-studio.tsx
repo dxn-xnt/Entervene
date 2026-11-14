@@ -20,7 +20,6 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
-import { Alert } from "@/components/retroui/Alert";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -430,7 +429,6 @@ export default function AdminSubjectLoadStudio() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [notice, setNotice] = useState<{ title?: string; message: string; type: "success" | "error" } | null>(null);
   const [autoScheduleNotice, setAutoScheduleNotice] = useState<{ title?: string; message: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
@@ -613,7 +611,6 @@ export default function AdminSubjectLoadStudio() {
     setIsLoading(true);
     setLoadError(false);
     if (!preserveNotice) {
-      setNotice(null);
       setAutoScheduleNotice(null);
     }
     try {
@@ -746,10 +743,9 @@ export default function AdminSubjectLoadStudio() {
       }
     } catch (err) {
       setLoadError(true);
-      setNotice({
+      toast.error({
         title: "Loading Failed",
-        message: err instanceof Error ? err.message : "Failed to load Subject Load Studio.",
-        type: "error",
+        description: err instanceof Error ? err.message : "Failed to load Subject Load Studio.",
       });
     } finally {
       setIsLoading(false);
@@ -1043,7 +1039,6 @@ export default function AdminSubjectLoadStudio() {
   const handleAutoSchedule = async (targetClassId?: number) => {
     if (!selectedPeriodId) return;
     setIsLoading(true);
-    setNotice(null);
     setAutoScheduleNotice(null);
     try {
       const currentLoads = [...loads];
@@ -1246,16 +1241,14 @@ export default function AdminSubjectLoadStudio() {
       await runValidation(finalLoads);
 
       setIsCopyModalOpen(false);
-      setNotice({
+      toast.success({
         title: "Schedule Copied",
-        message: `Successfully copied ${newLoads.length} subject loads from the selected term. Please review flagged conflicts and save.`,
-        type: "success"
+        description: `Successfully copied ${newLoads.length} subject loads from the selected term. Please review flagged conflicts and save.`,
       });
     } catch (err) {
-      setNotice({
+      toast.error({
         title: "Copy Failed",
-        message: err instanceof Error ? err.message : "Failed to copy schedule.",
-        type: "error"
+        description: err instanceof Error ? err.message : "Failed to copy schedule.",
       });
     } finally {
       setIsCopying(false);
@@ -1279,18 +1272,16 @@ export default function AdminSubjectLoadStudio() {
 
     // Explicit error for missing period_template_group — don't silently guess
     if (!sourceGroup) {
-      setNotice({
+      toast.error({
         title: "Copy Blocked",
-        message: `${sourceClass.section_name} has no period template configured. Please assign a bell-schedule template in class settings before copying.`,
-        type: "error",
+        description: `${sourceClass.section_name} has no period template configured. Please assign a bell-schedule template in class settings before copying.`,
       });
       return;
     }
     if (!targetGroup) {
-      setNotice({
+      toast.error({
         title: "Copy Blocked",
-        message: `${targetClass.section_name} has no period template configured. Please assign a bell-schedule template in class settings before copying.`,
-        type: "error",
+        description: `${targetClass.section_name} has no period template configured. Please assign a bell-schedule template in class settings before copying.`,
       });
       return;
     }
@@ -1309,10 +1300,9 @@ export default function AdminSubjectLoadStudio() {
     const targetSet = JSON.stringify([...new Set(targetDurations)].sort());
 
     if (sourceSet !== targetSet) {
-      setNotice({
+      toast.error({
         title: "Copy Blocked",
-        message: `Can't copy — ${sourceClass.section_name} and ${targetClass.section_name} use different bell schedules (${sourceGroup} vs ${targetGroup}).`,
-        type: "error",
+        description: `Can't copy — ${sourceClass.section_name} and ${targetClass.section_name} use different bell schedules (${sourceGroup} vs ${targetGroup}).`,
       });
       return;
     }
@@ -1498,10 +1488,9 @@ export default function AdminSubjectLoadStudio() {
         });
       });
 
-      setNotice({
+      toast.success({
         title: "Exact Copy Applied",
-        message: `Applied exact time slots to ${targetSubjects.length} subjects for ${targetClass.section_name}.`,
-        type: "success",
+        description: `Applied exact time slots to ${targetSubjects.length} subjects for ${targetClass.section_name}.`,
       });
     } else {
       // ── Stagger mode: day-count-aware conflict-aware assignment ──
@@ -1632,17 +1621,17 @@ export default function AdminSubjectLoadStudio() {
         }
       }
 
-      setNotice({
-        title:
-          placedCount === constraints.length
-            ? "Copy & Stagger Successful"
-            : "Copy & Stagger Partial",
-        message:
-          placedCount === constraints.length
-            ? `Successfully scheduled all ${constraints.length} subjects for ${targetClass.section_name} with 0 teacher conflicts.`
-            : `Scheduled ${placedCount} of ${constraints.length} subjects for ${targetClass.section_name}. ${constraints.length - placedCount} subject(s) have a teacher conflict across other sections — please place manually.`,
-        type: placedCount === constraints.length ? "success" : "error",
-      });
+      if (placedCount === constraints.length) {
+        toast.success({
+          title: "Copy & Stagger Successful",
+          description: `Successfully scheduled all ${constraints.length} subjects for ${targetClass.section_name} with 0 teacher conflicts.`,
+        });
+      } else {
+        toast.error({
+          title: "Copy & Stagger Partial",
+          description: `Scheduled ${placedCount} of ${constraints.length} subjects for ${targetClass.section_name}. ${constraints.length - placedCount} subject(s) have a teacher conflict across other sections — please place manually.`,
+        });
+      }
     }
 
     const normalizedLoads = withAuthoritativeJhsSlots(currentLoads);
@@ -1686,7 +1675,6 @@ export default function AdminSubjectLoadStudio() {
   ) => {
     if (!selectedPeriodId || isSaving) return;
     setIsSaving(true);
-    setNotice(null);
 
     try {
       const levelIdToSave = activeGradeId ? Number(activeGradeId) : 1;
@@ -1720,11 +1708,6 @@ export default function AdminSubjectLoadStudio() {
       );
 
       setConflicts(res.conflicts);
-      setNotice({
-        title: "Save Successful",
-        message: res.message,
-        type: "success",
-      });
       toast.success({
         title: action === "draft" ? "Draft saved" : "Subject loads published",
         description: res.message,
@@ -1736,37 +1719,32 @@ export default function AdminSubjectLoadStudio() {
       const detail = err?.data?.detail || err?.message || "";
       if (err?.status === 409) {
         if (typeof detail === "string" && detail.includes("is locked")) {
-          setNotice({
+          toast.error({
             title: "Section Locked",
-            message: detail,
-            type: "error",
+            description: detail,
           });
           void loadStudio(selectedPeriodId, true);
         } else if (detail.includes("Cannot remove") || detail.includes("SUBJECT_LOAD_HAS_LIVE_DATA")) {
-          setNotice({
+          toast.error({
             title: "Cannot Remove Populated Subject",
-            message: detail,
-            type: "error",
+            description: detail,
           });
         } else if (detail.includes("conflict") || detail.includes("revision")) {
-          setNotice({
+          toast.error({
             title: "Revision Conflict",
-            message: `${detail} If the draft remains after reloading, use Discard Draft, then Unlock Section to start from the current published revision. Discarding loses that draft's changes.`,
-            type: "error",
+            description: `${detail} If the draft remains after reloading, use Discard Draft, then Unlock Section to start from the current published revision. Discarding loses that draft's changes.`,
           });
           void loadStudio(selectedPeriodId, true);
         } else {
-          setNotice({
+          toast.error({
             title: "Conflict Error",
-            message: detail,
-            type: "error",
+            description: detail,
           });
         }
       } else {
-        setNotice({
+        toast.error({
           title: "Save Failed",
-          message: err instanceof Error ? err.message : `Failed to ${action} subject loads.`,
-          type: "error",
+          description: err instanceof Error ? err.message : `Failed to ${action} subject loads.`,
         });
       }
     } finally {
@@ -1777,20 +1755,17 @@ export default function AdminSubjectLoadStudio() {
   const handleUnlockSection = async (classId: number) => {
     if (!selectedPeriodId || isSaving) return;
     setIsSaving(true);
-    setNotice(null);
     try {
       const res = await unlockSection(selectedPeriodId, classId);
-      setNotice({
+      toast.success({
         title: "Section Unlocked",
-        message: `Section snapshot v${res.section_revision} created for editing. Live published schedule remains active for students and teachers until you publish changes.`,
-        type: "success",
+        description: `Section snapshot v${res.section_revision} created for editing. Live published schedule remains active for students and teachers until you publish changes.`,
       });
       await loadStudio(selectedPeriodId);
     } catch (err) {
-      setNotice({
+      toast.error({
         title: "Unlock Failed",
-        message: err instanceof Error ? err.message : "Failed to unlock section.",
-        type: "error",
+        description: err instanceof Error ? err.message : "Failed to unlock section.",
       });
     } finally {
       setIsSaving(false);
@@ -1800,20 +1775,17 @@ export default function AdminSubjectLoadStudio() {
   const handleDiscardDraft = async (classId: number) => {
     if (!selectedPeriodId || isSaving) return;
     setIsSaving(true);
-    setNotice(null);
     try {
       const res = await discardDraft(selectedPeriodId, classId);
-      setNotice({
+      toast.success({
         title: "Draft Discarded",
-        message: `Unpublished draft discarded. Section restored to published baseline (v${res.section_revision}).`,
-        type: "success",
+        description: `Unpublished draft discarded. Section restored to published baseline (v${res.section_revision}).`,
       });
       await loadStudio(selectedPeriodId);
     } catch (err) {
-      setNotice({
+      toast.error({
         title: "Discard Failed",
-        message: err instanceof Error ? err.message : "Failed to discard draft.",
-        type: "error",
+        description: err instanceof Error ? err.message : "Failed to discard draft.",
       });
     } finally {
       setIsSaving(false);
@@ -2108,30 +2080,6 @@ export default function AdminSubjectLoadStudio() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              {notice?.type === "error" && <AdminValidationAlert message={notice.message} />}
-              {/* Notice Alert Overlay */}
-              {notice?.type === "success" && (
-                <Alert
-                  status={notice.type}
-                  position="top-right"
-                  duration={5000}
-                  onClose={() => setNotice(null)}
-                >
-                  <div className="flex gap-2.5 items-start">
-                    <CheckCircle2 className="size-5 shrink-0 text-emerald-800 mt-0.5" />
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                      {notice.title && (
-                        <Alert.Title className="font-bold text-sm text-foreground">
-                          {notice.title}
-                        </Alert.Title>
-                      )}
-                      <Alert.Description className="text-muted-foreground text-xs leading-normal break-words">
-                        {notice.message}
-                      </Alert.Description>
-                    </div>
-                  </div>
-                </Alert>
-              )}
 
               <div className="flex min-w-0 flex-col gap-3">
                 {/* Section Schedule List */}
