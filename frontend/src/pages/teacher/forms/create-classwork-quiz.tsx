@@ -2409,6 +2409,7 @@ export default function CreateClassworkQuizModal({
                                                 const validationError = validateDetails();
                                                 if (validationError) {
                                                     setCreateError(validationError);
+                                                    toast.error({ title: validationError });
                                                 } else {
                                                     setCreateError("");
                                                     setCreateStep("quiz");

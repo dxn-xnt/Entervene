@@ -275,6 +275,7 @@ export default function CreateClassworkModal({
     const validationError = validateDetails();
     if (validationError) {
       setValidationError(validationError);
+      toast.error({ title: validationError });
       return;
     }
     setValidationError("");
@@ -382,15 +383,20 @@ export default function CreateClassworkModal({
     const validationError = validateDetails();
     if (validationError) {
       setValidationError(validationError);
+      toast.error({ title: validationError });
       setCreateStep("details");
       return;
     }
     if (selectedClassIds.length === 0) {
-      setValidationError("Select at least one section to assign this classwork.");
+      const msg = "Select at least one section to assign this classwork.";
+      setValidationError(msg);
+      toast.error({ title: msg });
       return;
     }
     if (selectedLessonIds.length === 0) {
-      setValidationError("Select the lesson where this classwork should appear.");
+      const msg = "Select the lesson where this classwork should appear.";
+      setValidationError(msg);
+      toast.error({ title: msg });
       return;
     }
     setValidationError("");
@@ -523,9 +529,6 @@ export default function CreateClassworkModal({
         </Dialog.Header>
 
         <section className="flex flex-col gap-4 p-5 pr-3">
-          {validationError && validationError !== "Topic title is required." && (
-            <FormMessage>{validationError}</FormMessage>
-          )}
           {createStep === "details" && (
             <div className="grid gap-3">
               {remediationDraft && remediationTarget && (

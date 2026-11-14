@@ -4,7 +4,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import CreateClassworkQuizModal from "./create-classwork-quiz";
 
 const api = vi.hoisted(() => ({ fetch: vi.fn() }));
+const mockToast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }));
 vi.mock("@/lib/api", () => ({ apiFetch: api.fetch }));
+vi.mock("@/components/retroui/Toast", () => ({ useToast: () => mockToast }));
 vi.mock("./ai-quiz-generator-modal", () => ({ default: () => null }));
 vi.mock("@/components/retroui/Dialog", () => ({
   dialogHeaderCloseButtonClassName: "",
@@ -139,11 +141,11 @@ it("displays 'Needs answer key' badge and blocks assign step when a question is 
   expect(screen.getByText("Select the correct choice below")).toBeTruthy();
 
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  expect(screen.getByText("Question 1 needs exactly one correct answer.")).toBeTruthy();
+  expect(mockToast.error).toHaveBeenCalledWith(expect.objectContaining({ title: "Question 1 needs exactly one correct answer." }));
   expect(screen.getByText("Step 2 of 3")).toBeTruthy();
 
-  const radios = screen.getAllByRole("radio");
-  fireEvent.click(radios[1]);
+  const checkboxes = screen.getAllByRole("checkbox");
+  fireEvent.click(checkboxes[1]);
   expect(screen.queryByText("⚠️ Needs answer key")).toBeNull();
 
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -253,7 +255,7 @@ it("locks attempts to 1, matches target points, and submits original_classwork_a
 
   // Displays original target and Recommended badge
   expect(screen.getAllByText("Original Seatwork 1").length).toBeGreaterThanOrEqual(1);
-  expect(screen.getByText("Recommended")).toBeTruthy();
+  expect(screen.getAllByText("Recommended").length).toBeGreaterThanOrEqual(1);
 
   // Total points locked to target max points (1)
   const pointsInput = screen.getByText("Total points").parentElement!.querySelector("input")!;
