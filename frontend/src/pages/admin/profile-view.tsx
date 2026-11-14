@@ -167,7 +167,7 @@ export default function AdminProfile() {
 
               <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
                 <div className="flex flex-col gap-3 flex-1">
-                  <p className="text-2xl md:text-3xl font-bold tracking-tight">
+                  <p className="text-2xl md:text-3xl font-bold">
                     My Schedule
                   </p>
                   <DynamicScheduleTable
@@ -179,7 +179,7 @@ export default function AdminProfile() {
 
                 <div className="flex flex-col gap-3 w-full lg:w-80">
                   <div className="flex flex-row items-center justify-between">
-                    <p className="text-2xl md:text-3xl font-bold tracking-tight">
+                    <p className="text-2xl md:text-3xl font-bold">
                       Current Week
                     </p>
                   </div>

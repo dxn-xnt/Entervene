@@ -93,7 +93,7 @@ export default function ToDo() {
             <div data-page-tabs-sticky-region>
             <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <SidebarTrigger className="shrink-0 md:hidden" />
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
+              <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
                 To do
               </h1>
             </header>

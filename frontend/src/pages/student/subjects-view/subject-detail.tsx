@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { BookOpen, ClipboardList } from "lucide-react";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import SubjectLessonTab from "./tabs/subject-lesson-tab";
 import SubjectClassworkTab from "./tabs/subject-classwork-tab";
@@ -29,7 +29,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
               <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <Breadcrumb className="min-w-0">
-                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold tracking-tight sm:gap-2 sm:text-2xl md:text-3xl hover:text-foreground!">
+                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold sm:gap-2 sm:text-2xl md:text-3xl hover:text-foreground!">
                     <Breadcrumb.Item className="shrink-0">
                       <Breadcrumb.Link
                         onClick={onBack}

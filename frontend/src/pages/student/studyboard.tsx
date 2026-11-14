@@ -334,7 +334,7 @@ const StoryBoard = () => {
             <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
-                <h1 className="whitespace-nowrap text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
+                <h1 className="whitespace-nowrap text-xl font-bold sm:text-2xl md:text-4xl">
                   Study Board
                 </h1>
               </div>
