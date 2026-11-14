@@ -30,7 +30,7 @@ TABLES = [
     SubjectOffering.__table__,
 ]
 
-HEADER = "academic_year,grade_level,pathway,term,subject_code"
+HEADER = "academic_year,grade_level,pathway,term,subject_code,minutes"
 READ_ONLY_DETAIL = "Subject offerings for historical academic years or periods are read-only."
 
 
@@ -163,8 +163,8 @@ def test_subject_offering_import_template_downloads_csv(client):
 def test_subject_offering_import_creates_valid_rows(client, db, offering_data):
     content = "\n".join([
         HEADER,
-        "2026-2027,Grade 7,general,Term 1,MATH7",
-        "2026-2027,11,both,1,PRECAL",
+        "2026-2027,Grade 7,general,Term 1,MATH7,45",
+        "2026-2027,11,both,1,PRECAL,96",
     ])
 
     response = upload(client, content)
@@ -184,12 +184,12 @@ def test_subject_offering_import_creates_valid_rows(client, db, offering_data):
 def test_subject_offering_import_reports_row_errors_and_keeps_valid_rows(client, db, offering_data):
     content = "\n".join([
         HEADER,
-        "2026-2027,Grade 7,general,Term 1,MATH7",
-        "2026-2027,Grade 7,general,Term 1,MATH7",
-        "2026-2027,Grade 7,both,Term 1,MATH7",
-        "2026-2027,11,stem_medical,Term 9,PRECAL",
-        "2026-2027,11,invalid,Term 1,PRECAL",
-        "2026-2027,11,both,Term 1,OLDSTEM",
+        "2026-2027,Grade 7,general,Term 1,MATH7,45",
+        "2026-2027,Grade 7,general,Term 1,MATH7,45",
+        "2026-2027,Grade 7,both,Term 1,MATH7,45",
+        "2026-2027,11,stem_medical,Term 9,PRECAL,96",
+        "2026-2027,11,invalid,Term 1,PRECAL,96",
+        "2026-2027,11,both,Term 1,OLDSTEM,60",
     ])
 
     response = upload(client, content)
@@ -207,8 +207,8 @@ def test_subject_offering_import_reports_row_errors_and_keeps_valid_rows(client,
 def test_subject_offering_import_enforces_grade_pathway_rules(client, db, offering_data):
     content = "\n".join([
         HEADER,
-        "2026-2027,Grade 7,stem_medical,Term 1,MATH7",
-        "2026-2027,Grade 11,general,Term 1,GENBIO1",
+        "2026-2027,Grade 7,stem_medical,Term 1,MATH7,45",
+        "2026-2027,Grade 11,general,Term 1,GENBIO1,96",
     ])
 
     response = upload(client, content)
@@ -226,7 +226,7 @@ def test_subject_offering_import_enforces_grade_pathway_rules(client, db, offeri
 def test_subject_offering_import_allows_prepared_future_academic_year(client, db, offering_data):
     content = "\n".join([
         HEADER,
-        "2027-2028,11,both,Term 1,GENBIO1",
+        "2027-2028,11,both,Term 1,GENBIO1,96",
     ])
 
     response = upload(client, content)
@@ -242,7 +242,7 @@ def test_subject_offering_import_allows_prepared_future_academic_year(client, db
 def test_subject_offering_import_rejects_historical_academic_year(client, db, offering_data):
     response = upload(client, "\n".join([
         HEADER,
-        "2025-2026,11,both,Term 1,GENBIO1",
+        "2025-2026,11,both,Term 1,GENBIO1,96",
     ]))
 
     assert response.status_code == 200
@@ -268,7 +268,7 @@ def test_subject_offering_import_rejects_existing_both_conflict(client, db, offe
     db.commit()
     content = "\n".join([
         HEADER,
-        "2026-2027,11,stem_engineering,Term 1,GENBIO1",
+        "2026-2027,11,stem_engineering,Term 1,GENBIO1,96",
     ])
 
     response = upload(client, content)
@@ -283,7 +283,7 @@ def test_subject_offering_import_rejects_bad_headers_and_file_type(client, offer
     assert bad_headers.status_code == 200
     assert bad_headers.json()["errors"][0]["message"].startswith("CSV headers")
 
-    bad_file = upload(client, HEADER + "\n2026-2027,11,both,Term 1,GENBIO1", filename="offerings.txt")
+    bad_file = upload(client, HEADER + "\n2026-2027,11,both,Term 1,GENBIO1,96", filename="offerings.txt")
     assert bad_file.status_code == 200
     assert bad_file.json()["errors"][0]["message"] == "Upload a .csv file."
 
@@ -294,6 +294,6 @@ def test_subject_offering_import_requires_admin(client, offering_data):
         "role": "teacher",
     }
 
-    response = upload(client, HEADER + "\n2026-2027,11,both,Term 1,GENBIO1")
+    response = upload(client, HEADER + "\n2026-2027,11,both,Term 1,GENBIO1,96")
 
     assert response.status_code == 403

@@ -82,6 +82,16 @@ export async function getAcademicYearsSettings(): Promise<AcademicYearSettingIte
   return data.years || [];
 }
 
+/** Auto-prepare / provision future academic years (admin only). */
+export async function prepareAcademicYears(): Promise<AcademicYearSettingItem[]> {
+  const res = await apiFetch("/api/v1/settings/academic-years/prepare", {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to prepare academic years");
+  const data = await res.json();
+  return data.years || [];
+}
+
 /** Set active academic year (admin only). */
 export async function setActiveAcademicYear(academicYearId: number): Promise<void> {
   const res = await apiFetch(`/api/v1/settings/active-academic-year/${academicYearId}`, {
@@ -140,6 +150,29 @@ export async function createAcademicPeriods(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail ?? "Failed to configure academic periods");
+  }
+  return res.json();
+}
+
+export interface UpdateAcademicPeriodPayload {
+  start_date: string;
+  end_date: string;
+  period_name?: string;
+}
+
+/** Update an academic period's dates and name (admin only). */
+export async function updateAcademicPeriod(
+  periodId: number,
+  payload: UpdateAcademicPeriodPayload,
+): Promise<{ message: string; period: AcademicPeriodSettingItem }> {
+  const res = await apiFetch(`/api/v1/settings/academic-periods/${periodId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to update academic period");
   }
   return res.json();
 }

@@ -1377,7 +1377,7 @@ def test_subject_load_default_reads_reject_inconsistent_lifecycle(test_setup):
     assert client.get("/api/v1/subject-loads/my-schedule", headers=headers).status_code == 409
 
 
-def test_future_jhs_class_cannot_be_reassigned_to_custom_template(test_setup, monkeypatch):
+def test_future_jhs_class_can_use_custom_tail_while_resolving_shared_first_period(test_setup, monkeypatch):
     db = test_setup["db"]
     client = test_setup["client"]
     future_year = AcademicYear(
@@ -1431,9 +1431,17 @@ def test_future_jhs_class_cannot_be_reassigned_to_custom_template(test_setup, mo
         json={"template_group": "SHS_CAMPOS_ZARA"},
         headers={"Authorization": f"Bearer {test_setup['token']}"},
     )
-    assert response.status_code == 422, response.text
-    assert "Grades 7-10 use the shared JHS timetable" in response.json()["detail"]
-    assert validated_period_ids == []
+    assert response.status_code == 200, response.text
+    assert response.json()["period_template_group"] == "SHS_CAMPOS_ZARA"
+    assert validated_period_ids == [future_period.academic_period_id]
+
+    from app.services.academic.PeriodTemplateResolver import PeriodTemplateResolver
+    resolved = PeriodTemplateResolver.slots_for_class(db, future_class)
+    first_period = next(slot for slot in resolved if slot.slot_name == "Period 1")
+    second_period = next(slot for slot in resolved if slot.slot_name == "Period 2")
+    assert (first_period.start_time, first_period.end_time) == ("08:00", "08:45")
+    assert first_period.template_group == "JHS_45MIN"
+    assert second_period.template_group == "SHS_CAMPOS_ZARA"
 
 
 def test_class_schedule_authorizes_admin_teacher_adviser_substitute_and_enrolled_student(test_setup):

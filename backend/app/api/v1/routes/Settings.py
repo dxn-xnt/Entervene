@@ -15,6 +15,7 @@ from app.core.Dependencies import require_role, get_optional_current_user
 from app.db.Session import get_db
 from app.schemas.Settings import (
     AcademicPeriodCreateRequest,
+    AcademicPeriodUpdateRequest,
     SettingRead,
     SettingUpdate,
     SettingsGroupedResponse,
@@ -115,6 +116,38 @@ def create_academic_periods_endpoint(
             }
             for p in periods
         ],
+    }
+
+
+@router.put("/academic-periods/{academic_period_id}")
+def update_academic_period_endpoint(
+    academic_period_id: int,
+    payload: AcademicPeriodUpdateRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """Admin only — update dates and details of an academic period."""
+    from app.services.AcademicPeriodService import update_single_academic_period
+
+    period = update_single_academic_period(
+        db=db,
+        academic_period_id=academic_period_id,
+        start_date_raw=payload.start_date,
+        end_date_raw=payload.end_date,
+        period_name=payload.period_name,
+    )
+    return {
+        "message": f"Successfully updated academic period {period.period_name}.",
+        "period": {
+            "academic_period_id": period.academic_period_id,
+            "academic_year_id": period.academic_year_id,
+            "period_type": period.period_type,
+            "period_sequence": period.period_sequence,
+            "period_name": period.period_name,
+            "start_date": period.start_date.isoformat() if period.start_date else None,
+            "end_date": period.end_date.isoformat() if period.end_date else None,
+            "is_active": bool(period.is_active),
+        },
     }
 
 

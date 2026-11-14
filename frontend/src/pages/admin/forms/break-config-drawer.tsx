@@ -16,14 +16,20 @@ import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage"
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Alert } from "@/components/retroui/Alert";
+import { Checkbox } from "@/components/retroui/Checkbox";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
-import { apiFetch } from "@/lib/api";
-import type { SubjectLoadStudioData } from "@/lib/api";
+import {
+  apiFetch,
+  applyPeriodTemplateOverride,
+  previewPeriodTemplateOverride,
+  type PeriodTemplateOverrideImpact,
+  type SubjectLoadStudioData,
+} from "@/lib/api";
 import { useSettings } from "@/context/SettingsContext";
 import { validatePeriodTimeRange } from "@/lib/time-utils";
 import { cn } from "@/lib/utils";
 import { classPathwayLabel } from "@/lib/class-pathway";
-import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus } from "lucide-react";
+import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus, ShieldAlert } from "lucide-react";
 
 export type PeriodTemplateSlotItem = {
   slot_id?: number | null;
@@ -42,6 +48,14 @@ const REQUIRED_JHS_SLOT_NAMES = new Set([
   "Enhanced Period 1", "Enhanced Period 2", "Afternoon Recess",
   "Period 6", "Period 7",
 ]);
+
+const REPLACE_CONFIRMATION = "REPLACE PUBLISHED SCHEDULES";
+
+function localIsoDate(): string {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+}
 
 function minutesToTime(total: number): string {
   const bounded = Math.max(0, Math.min(total, 23 * 60 + 59));
@@ -129,6 +143,11 @@ export default function BreakConfigDrawer({
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
   const [newGroupNameInput, setNewGroupNameInput] = useState("");
   const [newGroupError, setNewGroupError] = useState<string | null>(null);
+  const [applyImmediately, setApplyImmediately] = useState(false);
+  const [effectiveDate, setEffectiveDate] = useState("");
+  const [overridePreview, setOverridePreview] = useState<PeriodTemplateOverrideImpact | null>(null);
+  const [confirmationText, setConfirmationText] = useState("");
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   // Sync activeGroup whenever initialGroup changes or drawer opens
   useEffect(() => {
@@ -144,7 +163,8 @@ export default function BreakConfigDrawer({
       setIsLoading(true);
       setNotice(null);
       try {
-        const res = await apiFetch("/api/v1/subject-loads/period-templates");
+        const periodQuery = studioData?.active_period_id ? `?academic_period_id=${studioData.active_period_id}` : "";
+        const res = await apiFetch(`/api/v1/subject-loads/period-templates${periodQuery}`);
         if (res.ok) {
           const data = (await res.json()) as PeriodTemplateSlotItem[];
           if (data && data.length > 0) {
@@ -165,7 +185,7 @@ export default function BreakConfigDrawer({
       }
     };
     void fetchTemplates();
-  }, [open, initialSlots]);
+  }, [open, initialSlots, studioData?.active_period_id]);
 
   // Dynamically compute template groups from DB slots
   const templateGroups = useMemo(() => {
@@ -306,6 +326,10 @@ export default function BreakConfigDrawer({
   const handleSaveClick = () => {
     if (!changes.guardChanges()) return;
     setNotice(null);
+    setOverridePreview(null);
+    setConfirmationText("");
+    setApplyImmediately(false);
+    setEffectiveDate("");
     setShowConfirmModal(true);
   };
 
@@ -331,8 +355,55 @@ export default function BreakConfigDrawer({
       onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error saving break settings.";
-      toast.error({ title: "Unable to save break timelines", description: message });
+      setNotice(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const reviewPublishedReplacement = async () => {
+    if (!studioData?.active_period_id) {
+      setNotice("Select an academic period before replacing published schedules.");
+      return;
+    }
+    const targetDate = applyImmediately ? localIsoDate() : effectiveDate;
+    if (!targetDate) {
+      setNotice("Choose an effective date or explicitly select Apply immediately.");
+      return;
+    }
+    setIsPreviewing(true);
+    setNotice(null);
+    try {
+      const preview = await previewPeriodTemplateOverride(
+        studioData.active_period_id,
+        targetDate,
+        slots,
+      );
+      setOverridePreview(preview);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Unable to preview the schedule replacement.");
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
+  const executePublishedReplacement = async () => {
+    if (!overridePreview) return;
+    setIsSaving(true);
+    setNotice(null);
+    try {
+      const result = await applyPeriodTemplateOverride(overridePreview.preview_token, confirmationText);
       setShowConfirmModal(false);
+      toast.success({
+        title: result.status === "active" ? "Published schedules replaced" : "Schedule adjustment scheduled",
+        description: result.message,
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Unable to replace the published schedules.");
+      setOverridePreview(null);
+      setConfirmationText("");
     } finally {
       setIsSaving(false);
     }
@@ -343,48 +414,81 @@ export default function BreakConfigDrawer({
   }, [studioData, activeGroup]);
 
   const otherClasses = useMemo(() => {
-    return (studioData?.classes || []).filter((c) => {
-      const grade = studioData?.academic_levels.find(
-        (level) => level.academic_level_id === c.academic_level_id
-      )?.grade_level;
-      return c.period_template_group !== activeGroup && !(grade && grade >= 7 && grade <= 10);
-    });
+    return (studioData?.classes || []).filter((c) => c.period_template_group !== activeGroup);
   }, [studioData, activeGroup]);
 
   const impactSummary = useMemo(() => {
     const originalById = new Map(
       savedSlots.filter((slot) => slot.slot_id).map((slot) => [slot.slot_id, slot])
     );
-    const changedIds = new Set(
-      slots
-        .filter((slot) => {
-          if (slot.template_group !== activeGroup || !slot.slot_id) return false;
-          const original = originalById.get(slot.slot_id);
-          return Boolean(original && (
-            original.start_time !== slot.start_time ||
-            original.end_time !== slot.end_time ||
-            original.slot_type !== slot.slot_type ||
-            original.slot_name !== slot.slot_name
-          ));
-        })
-        .map((slot) => slot.slot_id)
+    const hasTemplateChanges = slots.some((slot) => {
+      if (slot.template_group !== activeGroup) return false;
+      if (!slot.slot_id) return true;
+      const original = originalById.get(slot.slot_id);
+      return Boolean(original && (
+        original.start_time !== slot.start_time ||
+        original.end_time !== slot.end_time ||
+        original.slot_type !== slot.slot_type ||
+        original.slot_name !== slot.slot_name
+      ));
+    });
+    const sharedFirstSlotChanged = slots.some((slot) => {
+      if (slot.slot_name !== "Period 1" || !slot.slot_id) return false;
+      const original = originalById.get(slot.slot_id);
+      return Boolean(original && (
+        original.start_time !== slot.start_time ||
+        original.end_time !== slot.end_time ||
+        original.slot_type !== slot.slot_type ||
+        original.slot_name !== slot.slot_name
+      ));
+    });
+    const jhsLevelIds = new Set(
+      (studioData?.academic_levels || [])
+        .filter((level) => level.grade_level >= 7 && level.grade_level <= 10)
+        .map((level) => level.academic_level_id)
     );
-    const changedLegacyTimes = new Set(
-      [...changedIds]
-        .map((slotId) => originalById.get(slotId))
-        .filter((slot): slot is PeriodTemplateSlotItem => Boolean(slot))
-        .map((slot) => `${slot.start_time}|${slot.end_time}`)
+    const locallyAffectedClasses = sharedFirstSlotChanged
+      ? (studioData?.classes || []).filter((item) => jhsLevelIds.has(item.academic_level_id))
+      : assignedClasses;
+    const assignedClassIds = new Set(locallyAffectedClasses.map((item) => item.class_id));
+    const affectedLoads = (studioData?.existing_loads || []).filter(
+      (load) => hasTemplateChanges && assignedClassIds.has(load.class_id)
     );
-    const affectedLoads = (studioData?.existing_loads || []).filter((load) =>
-      (load.slot_id != null && changedIds.has(load.slot_id)) ||
-      (load.slot_id == null && changedLegacyTimes.has(`${load.start_time}|${load.end_time}`))
-    );
+    const publishedCount = hasTemplateChanges
+      ? locallyAffectedClasses.reduce((total, item) => (
+          total + (studioData?.published_load_count_by_class?.[item.class_id] ??
+            affectedLoads.filter((load) => load.class_id === item.class_id &&
+              (load.status === "published" || load.status === "active")).length)
+        ), 0)
+      : 0;
     return {
-      sectionCount: assignedClasses.length,
+      sectionCount: locallyAffectedClasses.length,
       draftCount: affectedLoads.filter((load) => load.status === "draft").length,
-      publishedCount: affectedLoads.filter((load) => load.status === "published" || load.status === "active").length,
+      publishedCount,
     };
-  }, [activeGroup, assignedClasses.length, savedSlots, slots, studioData]);
+  }, [activeGroup, assignedClasses, savedSlots, slots, studioData]);
+
+  const changedSlotSummary = useMemo(() => {
+    const originalById = new Map(savedSlots.filter((slot) => slot.slot_id).map((slot) => [slot.slot_id, slot]));
+    return slots.flatMap((slot) => {
+      if (slot.template_group !== activeGroup || !slot.slot_id) return [];
+      const original = originalById.get(slot.slot_id);
+      if (!original || (
+        original.start_time === slot.start_time &&
+        original.end_time === slot.end_time &&
+        original.slot_name === slot.slot_name &&
+        original.slot_type === slot.slot_type
+      )) return [];
+      return [{
+        slot_id: slot.slot_id,
+        slot_name: slot.slot_name,
+        old_start_time: original.start_time,
+        old_end_time: original.end_time,
+        new_start_time: slot.start_time,
+        new_end_time: slot.end_time,
+      }];
+    });
+  }, [activeGroup, savedSlots, slots]);
 
   const handleReassignClass = async (classId: number, targetGroup: string) => {
     setIsReassigning(true);
@@ -670,58 +774,147 @@ export default function BreakConfigDrawer({
         </Dialog.Content>
       </Dialog >
 
-      {/* Themed RetroUI Confirmation Modal */}
-      < Dialog open={showConfirmModal} onOpenChange={(val) => { if (!val && !isSaving) setShowConfirmModal(false); }
-      }>
-        <Dialog.Content size="sm">
+      <Dialog open={showConfirmModal} onOpenChange={(val) => { if (!val && !isSaving && !isPreviewing) setShowConfirmModal(false); }}>
+        <Dialog.Content size={impactSummary.publishedCount > 0 ? "lg" : "sm"} className="max-h-[90vh]">
           <Dialog.Header position="static">
             <div className="flex items-center gap-2">
+              {impactSummary.publishedCount > 0 && <ShieldAlert className="size-5 text-destructive" />}
               <Text as="h5" className="text-lg font-sans font-bold">
-                Confirm Period Template Update
+                {impactSummary.publishedCount > 0 ? "Replace published schedules?" : "Confirm Period Template Update"}
               </Text>
             </div>
           </Dialog.Header>
 
-          <section className="flex flex-col gap-3 p-5 text-sm">
+          <section className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto p-5 text-sm">
+            {notice && <Alert status="error">{notice}</Alert>}
             <Text as="p" className="font-normal text-foreground">
               Saving changes will update the master period template for{" "}
               <span className="font-bold">{formatGroupName(activeGroup)}</span>.
             </Text>
-            <Text className="text-xs text-muted-foreground font-medium">
-              This will update the bell schedule and apply new times across all matching subject loads and active timetables in this group.
-            </Text>
+            {impactSummary.publishedCount > 0 ? (
+              <Alert status="warning">
+                This is a high-impact replacement. New published revisions will be created; current published revisions will be archived, never edited or deleted. Teachers and students will see the revised times on the effective date.
+              </Alert>
+            ) : (
+              <Text className="text-xs text-muted-foreground font-medium">
+                This updates the bell schedule for matching editable drafts in this template.
+              </Text>
+            )}
             <Card className="p-3 shadow-none bg-muted/40">
               <Text as="p" className="text-xs font-bold">Impact summary</Text>
               <Text as="p" className="text-xs text-muted-foreground">
                 {impactSummary.sectionCount} section(s) use this template; {impactSummary.draftCount} linked draft load(s) will follow changed class periods.
               </Text>
-              {impactSummary.publishedCount > 0 && (
-                <Alert status="warning">
-                  {impactSummary.publishedCount} linked published load(s) are locked. Unlock and revise those sections before saving this change.
-                </Alert>
-              )}
+              {impactSummary.publishedCount > 0 && <Text as="p" className="mt-1 text-xs font-bold text-destructive">{impactSummary.publishedCount} linked published load(s) require replacement.</Text>}
             </Card>
+
+            {changedSlotSummary.length > 0 && (
+              <Card className="p-3 shadow-none">
+                <Text as="p" className="mb-2 text-xs font-bold">Changed slots</Text>
+                <div className="space-y-1.5">
+                  {(overridePreview?.changed_slots || changedSlotSummary).map((slot) => (
+                    <div key={slot.slot_id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="font-bold">{slot.slot_name}</span>
+                      <span>{slot.old_start_time}–{slot.old_end_time} → <strong>{slot.new_start_time}–{slot.new_end_time}</strong></span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {impactSummary.publishedCount > 0 && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="schedule-effective-date" className="text-xs font-bold">Effective date</Label>
+                  <Input
+                    id="schedule-effective-date"
+                    type="date"
+                    min={localIsoDate()}
+                    value={applyImmediately ? localIsoDate() : effectiveDate}
+                    disabled={applyImmediately || Boolean(overridePreview)}
+                    onChange={(event) => { setEffectiveDate(event.target.value); setOverridePreview(null); }}
+                  />
+                  <label className="flex items-center gap-2 text-xs font-semibold">
+                    <Checkbox
+                      checked={applyImmediately}
+                      disabled={Boolean(overridePreview)}
+                      onCheckedChange={(checked) => {
+                        setApplyImmediately(checked === true);
+                        setEffectiveDate("");
+                        setOverridePreview(null);
+                      }}
+                    />
+                    Apply immediately
+                  </label>
+                </div>
+
+                {overridePreview && (
+                  <>
+                    <Card className="p-3 shadow-none bg-muted/40">
+                      <Text as="p" className="text-xs font-bold">Server-verified impact</Text>
+                      <Text as="p" className="text-xs text-muted-foreground">
+                        {overridePreview.affected_section_count} affected section(s); {overridePreview.affected_published_load_count} published load(s) will move with the changed periods.
+                      </Text>
+                      {overridePreview.affected_sections.length > 0 && (
+                        <Text as="p" className="mt-1 text-xs">{overridePreview.affected_sections.map((section) => section.section_name).join(", ")}</Text>
+                      )}
+                    </Card>
+                    {overridePreview.conflicts.filter((conflict) => conflict.severity === "error").map((conflict, index) => (
+                      <Alert status="error" key={`${conflict.rule}-${index}`}>{conflict.message}</Alert>
+                    ))}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="published-replacement-confirmation" className="text-xs font-bold">
+                        Type <span className="font-mono">{REPLACE_CONFIRMATION}</span> to continue
+                      </Label>
+                      <Input
+                        id="published-replacement-confirmation"
+                        value={confirmationText}
+                        onChange={(event) => setConfirmationText(event.target.value)}
+                        autoComplete="off"
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
 
           </section>
 
           <Dialog.Footer position="static">
             <Button
               variant="outline"
-              disabled={isSaving}
+              disabled={isSaving || isPreviewing}
               onClick={() => setShowConfirmModal(false)}
             >
               Cancel
             </Button>
-            <Button
-              disabled={isSaving || impactSummary.publishedCount > 0}
-              onClick={() => void executeSave()}
-            >
-              <Save className="size-4 mr-1.5" />
-              Confirm
-            </Button>
+            {impactSummary.publishedCount > 0 ? (
+              overridePreview ? (
+                <Button
+                  disabled={isSaving || !overridePreview.can_apply || confirmationText !== REPLACE_CONFIRMATION}
+                  onClick={() => void executePublishedReplacement()}
+                >
+                  <ShieldAlert className="size-4 mr-1.5" />
+                  Replace Published Schedules
+                </Button>
+              ) : (
+                <Button
+                  disabled={isPreviewing || isSaving || (!applyImmediately && !effectiveDate)}
+                  onClick={() => void reviewPublishedReplacement()}
+                >
+                  <ShieldAlert className="size-4 mr-1.5" />
+                  Review Replacement
+                </Button>
+              )
+            ) : (
+              <Button disabled={isSaving} onClick={() => void executeSave()}>
+                <Save className="size-4 mr-1.5" />
+                Confirm
+              </Button>
+            )}
           </Dialog.Footer>
         </Dialog.Content>
-      </Dialog >
+      </Dialog>
 
       {/* Themed RetroUI New Template Group Modal */}
       < Dialog open={showNewGroupModal} onOpenChange={(val) => { if (!val) setShowNewGroupModal(false); }}>

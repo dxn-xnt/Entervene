@@ -76,7 +76,7 @@ export default function TeacherProfile() {
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <div className="flex flex-col items-start">
-                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
                     Profile
                   </h1>
                 </div>
@@ -98,7 +98,7 @@ export default function TeacherProfile() {
               <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
                 {/* Left column */}
                 <div className="flex flex-col gap-3">
-                  <h2 className="text-lg font-bold tracking-tight">
+                  <h2 className="text-lg font-bold">
                     My Schedule
                   </h2>
                   <DynamicScheduleTable

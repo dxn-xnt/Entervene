@@ -21,7 +21,6 @@ class Subject(Base):
         nullable=False,
         default=1,
     )
-    is_math_or_science: Mapped[bool | None] = mapped_column(Boolean, default=False)
     is_core: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str | None] = mapped_column(String(20), default="active")
     description: Mapped[str | None] = mapped_column(Text)

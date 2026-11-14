@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { AdminBreadcrumb as Breadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Badge } from "@/components/retroui/Badge";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Empty } from "@/components/retroui/Empty";
@@ -84,7 +84,7 @@ export default function AdminSubjectView() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <Breadcrumb className="min-w-0 overflow-hidden">
                   <Breadcrumb.List className="flex-nowrap">

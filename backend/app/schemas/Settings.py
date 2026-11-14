@@ -61,6 +61,12 @@ class AcademicPeriodCreateRequest(BaseModel):
     periods: list[AcademicPeriodCreateItem]
 
 
+class AcademicPeriodUpdateRequest(BaseModel):
+    start_date: str
+    end_date: str
+    period_name: str | None = None
+
+
 class AcademicPeriodRead(BaseModel):
     academic_period_id: int
     academic_year_id: int

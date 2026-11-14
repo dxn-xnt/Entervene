@@ -38,7 +38,7 @@ const Grades = () => {
           <div className="flex flex-1 flex-col">
             <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <SidebarTrigger className="shrink-0 md:hidden" />
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Grades</h1>
+              <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Grades</h1>
             </header>
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {isLoading ? <LoadingPanel label="Loading subjects..." /> : error ? (

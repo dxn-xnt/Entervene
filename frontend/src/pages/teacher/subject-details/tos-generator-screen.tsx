@@ -35,7 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Switch } from "@/components/retroui/Switch";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";

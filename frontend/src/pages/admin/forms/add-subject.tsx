@@ -44,13 +44,13 @@ type SubjectFormState = {
   grading_template_id: string;
   description: string;
   status: SubjectStatus;
-  is_math_or_science: boolean;
 };
 
 type OfferingFormState = {
   academic_year_id: string;
   academic_period_ids: string[];
   pathway: SubjectOfferingPathway;
+  minutes: string;
 };
 
 const emptyForm: SubjectFormState = {
@@ -60,14 +60,16 @@ const emptyForm: SubjectFormState = {
   grading_template_id: "",
   description: "",
   status: "active",
-  is_math_or_science: false,
 };
 
 const emptyOfferingForm: OfferingFormState = {
   academic_year_id: "",
   academic_period_ids: [],
   pathway: "general",
+  minutes: "",
 };
+
+const COMMON_DURATIONS = [45, 60, 72, 96] as const;
 
 function pathwayLabel(pathway: SubjectOfferingPathway) {
   if (pathway === "general") return "General";
@@ -118,6 +120,7 @@ export default function AddSubjectModal({
   const [form, setForm] = React.useState<SubjectFormState>(emptyForm);
   const [existingSubjects, setExistingSubjects] = React.useState<SubjectListItem[]>([]);
   const [offerNow, setOfferNow] = React.useState(false);
+  const [useCustomDuration, setUseCustomDuration] = React.useState(false);
   const [offeringForm, setOfferingForm] =
     React.useState<OfferingFormState>(emptyOfferingForm);
   const [isLoadingOptions, setIsLoadingOptions] = React.useState(false);
@@ -135,6 +138,7 @@ export default function AddSubjectModal({
     // a brand-new "Add Subject" flow (where subjectToEdit stays null).
     setSuccessMessage(null);
     setError(null);
+    if (open && !subjectToEdit) setUseCustomDuration(false);
     if (subjectToEdit) {
       setForm({
         academic_level_id: String(
@@ -145,9 +149,9 @@ export default function AddSubjectModal({
         grading_template_id: String(subjectToEdit.grading_template_id ?? ""),
         description: subjectToEdit.description || "",
         status: subjectToEdit.status,
-        is_math_or_science: subjectToEdit.is_math_or_science || false,
       });
       setOfferNow(false);
+      setUseCustomDuration(false);
     }
   }, [open, subjectToEdit]);
 
@@ -324,6 +328,7 @@ export default function AddSubjectModal({
   ) => {
     setOfferingForm((current) => ({ ...current, [key]: value }));
     if (key === "pathway" && error === "Select a pathway for the offering." && value) setError(null);
+    if (key === "minutes" && error === "Duration must be a positive whole number." && Number.isInteger(Number(value)) && Number(value) > 0) setError(null);
   };
 
   const handleYearChange = (value: string) => {
@@ -348,7 +353,6 @@ export default function AddSubjectModal({
   const subjectValues = (value: SubjectFormState) => [
     value.subject_name.trim(), value.subject_codename.trim(),
     value.grading_template_id, value.description.trim(), value.status,
-    value.is_math_or_science,
   ];
   const changes = useEditFormChanges({
     enabled: !!subjectToEdit,
@@ -360,7 +364,6 @@ export default function AddSubjectModal({
       grading_template_id: String(subjectToEdit.grading_template_id ?? ""),
       description: subjectToEdit.description || "",
       status: subjectToEdit.status,
-      is_math_or_science: subjectToEdit.is_math_or_science || false,
     }) : null,
     values: subjectValues(form),
   });
@@ -389,6 +392,11 @@ export default function AddSubjectModal({
         failValidation("Select a pathway for the offering.");
         return;
       }
+      const minutes = Number(offeringForm.minutes);
+      if (!Number.isInteger(minutes) || minutes <= 0) {
+        failValidation("Duration must be a positive whole number.");
+        return;
+      }
     }
 
     if (!selectedTemplateObj) {
@@ -406,7 +414,6 @@ export default function AddSubjectModal({
           grading_template_id: gradingTemplateId,
           description: form.description.trim() || null,
           status: form.status,
-          is_math_or_science: form.is_math_or_science,
         });
         setSuccessMessage(`${form.subject_name.trim()} updated successfully.`);
         changes.markSaved();
@@ -422,7 +429,6 @@ export default function AddSubjectModal({
         academic_level_id: Number(form.academic_level_id),
         description: form.description.trim() || null,
         status: form.status,
-        is_math_or_science: form.is_math_or_science,
       });
       if (!offerNow) {
         setExistingSubjects((current) => [...current, created]);
@@ -444,6 +450,7 @@ export default function AddSubjectModal({
               academic_level_id: Number(form.academic_level_id),
               academic_period_id: Number(periodId),
               pathway: requiresPathway ? offeringForm.pathway : "general",
+              minutes: Number(offeringForm.minutes),
               status: "active",
             }),
           ),
@@ -455,7 +462,8 @@ export default function AddSubjectModal({
         setExistingSubjects((current) => [...current, created]);
         setForm(formWithDefaults(options));
         setOfferNow(false);
-        setOfferingForm((current) => ({ ...current, academic_period_ids: [] }));
+        setUseCustomDuration(false);
+        setOfferingForm((current) => ({ ...current, academic_period_ids: [], minutes: "" }));
         await onCreated?.();
       } catch (offeringErr) {
         setError(
@@ -530,7 +538,7 @@ export default function AddSubjectModal({
       </Dialog.Header>
       <section className="flex flex-col gap-4 px-5 py-4">
         <AdminValidationAlert
-          message={error && !["Select a grade level.", "Subject name is required.", "Select an academic year for the offering.", "Select at least one term for the offering.", "Select a pathway for the offering.", "Select an active grading template."].includes(error) ? error : null}
+          message={error && !["Select a grade level.", "Subject name is required.", "Select an academic year for the offering.", "Select at least one term for the offering.", "Select a pathway for the offering.", "Select an active grading template.", "Duration must be a positive whole number."].includes(error) ? error : null}
           attempt={validationAttempt}
           firstInvalidFieldId={error === "Select a grade level." ? "subject-level" : error === "Subject name is required." ? "subject-name" : error === "Select an active grading template." ? "grading-template" : error === "Select an academic year for the offering." ? "offering-year" : undefined}
         />
@@ -650,28 +658,6 @@ export default function AddSubjectModal({
               placeholder="Optional description"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-start gap-3 mt-2 rounded! border-2 border-black p-3 shadow-[2px_2px_0_#000]">
-              <Checkbox
-                id="is-math-science"
-                checked={form.is_math_or_science}
-                onCheckedChange={(checked) =>
-                  setField("is_math_or_science", checked === true)
-                }
-                className="mt-1 shrink-0"
-              />
-              <div className="flex flex-col gap-1">
-                <label htmlFor="is-math-science" className="text-sm font-medium">
-                  Is Core Math or Science? (60-min requirement)
-                </label>
-                <p className="text-sm text-muted-foreground">
-                  Checking this flag enforces a 60-minute duration requirement
-                  for this subject during automatic and manual scheduling to
-                  comply with core curriculum standards.
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
         <section className="rounded! border-2 border-black bg-[#fff7d6] p-3 shadow-[3px_3px_0_#000]">
           <div className="flex items-start gap-3">
@@ -772,6 +758,44 @@ export default function AddSubjectModal({
                   {error === "Select a pathway for the offering." && <FormMessage id="offering-pathway-error">{error}</FormMessage>}
                 </div>
               ) : null}
+              <div className="flex flex-col gap-1">
+                <label htmlFor="offering-duration" className="text-sm font-medium">
+                  Duration (Minutes) <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={useCustomDuration ? "custom" : (COMMON_DURATIONS.map(String).includes(offeringForm.minutes) ? offeringForm.minutes : "")}
+                  onValueChange={(value) => {
+                    const custom = value === "custom";
+                    setUseCustomDuration(custom);
+                    setOfferingField("minutes", custom ? "" : value);
+                  }}
+                >
+                  <Select.Trigger id="offering-duration" aria-invalid={error === "Duration must be a positive whole number."} className="w-full min-w-0 aria-[invalid=true]:border-destructive">
+                    <Select.Value placeholder="Select duration" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      {COMMON_DURATIONS.map((minutes) => (
+                        <Select.Item key={minutes} value={String(minutes)}>{minutes} minutes</Select.Item>
+                      ))}
+                      <Select.Item value="custom">Custom</Select.Item>
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
+                {useCustomDuration ? (
+                  <Input
+                    id="offering-duration-custom"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={offeringForm.minutes}
+                    onChange={(event) => setOfferingField("minutes", event.target.value)}
+                    placeholder="Enter custom minutes"
+                  />
+                ) : null}
+                {error === "Duration must be a positive whole number." ? <FormMessage>{error}</FormMessage> : null}
+                <p className="text-xs text-muted-foreground">Minutes per class period for all selected offerings. Timetable placement is configured later in Classes.</p>
+              </div>
               <div className="flex flex-col gap-2 md:col-span-2">
                 <div>
                   <p className="text-sm font-medium">Term(s) <span className="text-red-500">*</span></p>

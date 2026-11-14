@@ -1,6 +1,11 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from typing import Annotated
+
+from pydantic import BaseModel, Field, StrictInt
+
+
+PositiveMinutes = Annotated[StrictInt, Field(gt=0)]
 
 
 from app.schemas.AcademicPathway import AcademicPathwayRead
@@ -10,7 +15,10 @@ class SubjectOfferingSubject(BaseModel):
     subject_id: int
     subject_name: str
     subject_codename: str | None
+    grading_template_id: int
     grading_template: str | None = None
+    grading_template_assignment_locked: bool = False
+    grading_template_assignment_lock_reason: str | None = None
     is_core: bool = False
 
 
@@ -41,7 +49,7 @@ class SubjectOfferingCreate(BaseModel):
     academic_period_id: int
     pathway: str | None = None
     pathway_ids: list[int] = []
-    minutes: int | None = None
+    minutes: PositiveMinutes | None = None
     status: str = "active"
 
 
@@ -52,8 +60,9 @@ class SubjectOfferingUpdate(BaseModel):
     academic_period_id: int | None = None
     pathway: str | None = None
     pathway_ids: list[int] | None = None
-    minutes: int | None = None
+    minutes: PositiveMinutes | None = None
     status: str | None = None
+    grading_template_id: int | None = None
 
 
 class SubjectOfferingCopyAcademicYearRequest(BaseModel):
@@ -116,6 +125,12 @@ class SubjectOfferingFormSubject(BaseModel):
     is_core: bool = False
 
 
+class SubjectOfferingFormGradingTemplate(BaseModel):
+    grading_template_id: int
+    template_name: str
+    status: str
+
+
 class SubjectOfferingFormAcademicYear(SubjectOfferingAcademicYear):
     start_date: date
     end_date: date
@@ -129,6 +144,7 @@ class SubjectOfferingFormOptions(BaseModel):
     statuses: list[str]
     default_status: str
     active_subjects: list[SubjectOfferingFormSubject]
+    grading_templates: list[SubjectOfferingFormGradingTemplate]
 
 
 class SubjectOfferingImportError(BaseModel):

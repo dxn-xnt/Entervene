@@ -44,6 +44,11 @@ def ensure_future_academic_years(db: Session, years_ahead: int = 2) -> list[Acad
     # 2. Query all existing year labels into a set
     existing_years = db.query(AcademicYear).all()
     existing_labels = {ay.year_label.strip().casefold() for ay in existing_years}
+    existing_start_years = {
+        _parse_start_year(ay.year_label)
+        for ay in existing_years
+        if _parse_start_year(ay.year_label) is not None
+    }
 
     created_any = False
     for offset in range(years_ahead + 1):
@@ -51,7 +56,7 @@ def ensure_future_academic_years(db: Session, years_ahead: int = 2) -> list[Acad
         sy_end = sy_start + 1
         label = f"{sy_start}-{sy_end}"
 
-        if label.casefold() not in existing_labels:
+        if label.casefold() not in existing_labels and sy_start not in existing_start_years:
             new_ay = AcademicYear(
                 year_label=label,
                 start_date=date(sy_start, 8, 1),
@@ -60,6 +65,7 @@ def ensure_future_academic_years(db: Session, years_ahead: int = 2) -> list[Acad
             )
             db.add(new_ay)
             existing_labels.add(label.casefold())
+            existing_start_years.add(sy_start)
             created_any = True
 
     if created_any:

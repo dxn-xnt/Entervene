@@ -70,15 +70,14 @@ describe("SubjectSectionCard", () => {
     const link = screen.getByRole("link", { name: /View Demo Archimedes predictions/i });
     expect(link.getAttribute("href")).toBe("/teacher/predictions/subject/1/section/10");
 
-    expect(screen.getByText("On Track")).toBeDefined();
+    expect(screen.queryByText("On Track")).toBeNull();
     expect(screen.getByText("Moderate Risk")).toBeDefined();
     expect(screen.getByText("High Risk")).toBeDefined();
-    expect(screen.getByText("78%")).toBeDefined();
     expect(screen.getByText("22%")).toBeDefined();
     expect(screen.getByText("0%")).toBeDefined();
   });
 
-  it("combines monitoring predictions into the On Track section category", () => {
+  it("combines monitoring predictions into the assessed risk categories without displaying On Track", () => {
     render(
       <MemoryRouter>
         <SubjectSectionCard
@@ -96,8 +95,10 @@ describe("SubjectSectionCard", () => {
     );
 
     expect(screen.getByText("Moderate Risk")).toBeDefined();
-    expect(screen.getByText("On Track")).toBeDefined();
-    expect(screen.getAllByText("50%")).toHaveLength(2);
+    expect(screen.getByText("High Risk")).toBeDefined();
+    expect(screen.queryByText("On Track")).toBeNull();
+    expect(screen.getByText("50%")).toBeDefined();
+    expect(screen.getByText("0%")).toBeDefined();
   });
 
   it("labels singular prediction accurately", () => {
@@ -114,7 +115,9 @@ describe("SubjectSectionCard", () => {
     );
 
     expect(screen.getByText("1 Prediction")).toBeDefined();
-    expect(screen.getByText("On Track")).toBeDefined();
+    expect(screen.queryByText("On Track")).toBeNull();
+    expect(screen.getByText("Moderate Risk")).toBeDefined();
+    expect(screen.getByText("High Risk")).toBeDefined();
   });
 
   it("handles zero predictions gracefully with distinct empty banner", () => {
@@ -133,7 +136,7 @@ describe("SubjectSectionCard", () => {
     expect(screen.getByText("No Predictions Yet")).toBeDefined();
   });
 
-  it("shows assessed zero-risk categories when all predictions are On Track", () => {
+  it("shows assessed zero-risk categories when all predictions are On Track without displaying On Track column", () => {
     render(
       <MemoryRouter>
         <SubjectSectionCard
@@ -147,8 +150,10 @@ describe("SubjectSectionCard", () => {
     );
 
     expect(screen.getByText("5 Predictions")).toBeDefined();
-    expect(screen.getByText("On Track")).toBeDefined();
-    expect(screen.getByText("100%")).toBeDefined();
+    expect(screen.queryByText("On Track")).toBeNull();
+    expect(screen.getByText("Moderate Risk")).toBeDefined();
+    expect(screen.getByText("High Risk")).toBeDefined();
+    expect(screen.getAllByText("0%")).toHaveLength(2);
   });
 
   it("keeps predictions without an assessed category out of percentages", () => {

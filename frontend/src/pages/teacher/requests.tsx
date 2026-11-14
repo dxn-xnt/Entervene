@@ -14,7 +14,7 @@ export default function TeacherRequestsPage() {
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <div className="flex items-center gap-2">
                   <Repeat className="size-6 text-foreground" />
-                  <h1 className="text-xl font-bold sm:text-2xl md:text-3xl font-head text-foreground">
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-3xl text-foreground">
                     Repost &amp; Material Workspace
                   </h1>
                 </div>

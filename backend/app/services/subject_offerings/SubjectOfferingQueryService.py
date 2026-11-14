@@ -9,6 +9,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+from app.models.academic.GradingTemplate import GradingTemplate
 from app.core.pathways import canonicalize_pathway
 from app.services.subject_offerings.SubjectOfferingShared import (
     ALLOWED_OFFERING_STATUSES,
@@ -46,6 +47,12 @@ def get_subject_offering_form_options_data(db: Session) -> dict:
         db.query(AcademicPathway)
         .filter(AcademicPathway.is_enabled.is_(True))
         .order_by(AcademicPathway.sort_order, func.lower(AcademicPathway.name))
+        .all()
+    )
+    grading_templates = (
+        db.query(GradingTemplate)
+        .filter(func.lower(func.coalesce(GradingTemplate.status, "active")) == "active")
+        .order_by(func.lower(GradingTemplate.template_name))
         .all()
     )
     return {
@@ -100,6 +107,14 @@ def get_subject_offering_form_options_data(db: Session) -> dict:
                 "is_core": getattr(subject, "is_core", False),
             }
             for subject in active_subjects
+        ],
+        "grading_templates": [
+            {
+                "grading_template_id": template.grading_template_id,
+                "template_name": template.template_name,
+                "status": template.status,
+            }
+            for template in grading_templates
         ],
     }
 
@@ -209,6 +224,28 @@ def list_subject_offerings_data(
         )
         .all()
     )
+    template_contexts: dict[tuple[int, int], tuple[object, bool, str | None]] = {}
+    from app.services.subject_offerings.SubjectOfferingTemplateService import (
+        resolve_subject_year_template,
+    )
+
+    items = []
+    for offering, subject, academic_year, academic_level, academic_period in rows:
+        key = (subject.subject_id, academic_year.academic_year_id)
+        if key not in template_contexts:
+            template_contexts[key] = resolve_subject_year_template(
+                db, subject, academic_year.academic_year_id
+            )
+        items.append(
+            offering_to_item(
+                offering,
+                subject,
+                academic_year,
+                academic_level,
+                academic_period,
+                grading_template_context=template_contexts[key],
+            )
+        )
     active_offerings = sum(1 for offering, *_ in all_rows if (offering.status or DEFAULT_OFFERING_STATUS).casefold() == "active")
     archived_offerings = sum(1 for offering, *_ in all_rows if (offering.status or "").casefold() == "archived")
     return {
@@ -217,10 +254,7 @@ def list_subject_offerings_data(
             "active_offerings": active_offerings,
             "archived_offerings": archived_offerings,
         },
-        "subject_offerings": [
-            offering_to_item(offering, subject, academic_year, academic_level, academic_period)
-            for offering, subject, academic_year, academic_level, academic_period in rows
-        ],
+        "subject_offerings": items,
     }
 
 
@@ -238,4 +272,4 @@ def get_subject_offering_detail_data(db: Session, subject_offering_id: int) -> d
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Subject offering not found.")
     offering, subject, academic_year, academic_level, academic_period = row
-    return offering_to_item(offering, subject, academic_year, academic_level, academic_period)
+    return offering_to_item(offering, subject, academic_year, academic_level, academic_period, db=db)

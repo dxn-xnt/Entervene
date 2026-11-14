@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   Archive,
   CheckCircle2,
@@ -29,7 +29,8 @@ type Props = {
   classId: number;
   student: TeacherAdvisoryStudentItem;
   subjectLoads: TeacherAdvisorySubjectLoadItem[];
-  displayMode?: "panel" | "header";
+  displayMode?: "panel" | "header" | "row";
+  additionalActions?: ReactNode;
 };
 
 export function ManualSuggestionPanel({
@@ -37,6 +38,7 @@ export function ManualSuggestionPanel({
   student,
   subjectLoads,
   displayMode = "panel",
+  additionalActions,
 }: Props) {
   const toast = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -91,11 +93,17 @@ export function ManualSuggestionPanel({
   const activeCount = currentHistory.filter((item) => item.status === "ACTIVE").length;
   const draftCount = currentHistory.filter((item) => item.status === "DRAFT").length;
 
-  const Container = displayMode === "header" ? "div" : Card;
+  const Container = displayMode === "panel" ? Card : "div";
 
   return (
     <Container
-      className={displayMode === "header" ? "relative min-w-0" : "p-3 shadow-none"}
+      className={
+        displayMode === "header"
+          ? "relative min-w-0"
+          : displayMode === "row"
+            ? "min-w-0"
+            : "p-3 shadow-none"
+      }
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div
@@ -103,19 +111,25 @@ export function ManualSuggestionPanel({
             displayMode === "header" ? "sr-only" : "flex flex-col gap-0.5"
           }
         >
-          <p className="text-md font-semibold">Study Suggestions</p>
-          <p className="text-xs text-muted-foreground">
+          {displayMode !== "row" && <p className="text-md font-semibold">Study Suggestions</p>}
+          <p className={displayMode === "row" ? "text-sm text-muted-foreground" : "text-xs text-muted-foreground"}>
             {activeCount} active, {draftCount} draft
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {(history.length > 0 || displayMode !== "header") && (
+        <div
+          className={
+            displayMode === "header"
+              ? "flex items-center gap-2"
+              : "flex flex-wrap items-center gap-2 pb-1 pr-1"
+          }
+        >
+          {(history.length > 0 || displayMode === "panel") && (
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => setShowHistory((prev) => !prev)}
-              className="gap-1 border-black text-xs font-bold"
+              className={displayMode === "row" ? "gap-2" : "gap-1 border-black text-xs font-bold"}
             >
               {showHistory ? (
                 <>
@@ -135,10 +149,12 @@ export function ManualSuggestionPanel({
             variant="default"
             size={displayMode === "header" ? "header" : "sm"}
             onClick={() => setIsDialogOpen(true)}
+            className={displayMode === "row" ? "gap-2 [&_svg]:size-4" : undefined}
           >
             <Lightbulb />
             Suggest Material
           </Button>
+          {additionalActions}
         </div>
       </div>
 

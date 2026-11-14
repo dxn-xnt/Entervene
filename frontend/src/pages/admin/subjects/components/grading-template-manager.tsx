@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Lock, Pencil, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, BookOpen, Lock, Pencil, Plus, Search, X } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
@@ -20,6 +20,7 @@ import {
   type SubjectStatus,
 } from "@/lib/api";
 import { EmptyStateCard } from "./empty-state-card";
+import { Alert } from "@/components/retroui/Alert";
 
 type Props = {
   templates: GradingTemplateListItem[];
@@ -84,26 +85,50 @@ export function GradingTemplateManager({
   const [templateGradeFilter, setTemplateGradeFilter] = useState("all");
   const [templateStatusFilter, setTemplateStatusFilter] = useState<SubjectStatus | "all">("all");
 
+  const subjectCatalog = useMemo(() => {
+    const seenIds = new Set<number>();
+    const seenCodes = new Set<string>();
+    const duplicateLabels = new Set<string>();
+    const items: SubjectListItem[] = [];
+    for (const subject of subjects) {
+      const gradeLevel = subject.academic_level?.grade_level ?? 0;
+      const normalizedCode = subject.subject_codename?.trim().toLocaleLowerCase() ?? "";
+      const codeKey = normalizedCode ? `${gradeLevel}:${normalizedCode}` : "";
+      if (seenIds.has(subject.subject_id)) {
+        duplicateLabels.add(`subject ID ${subject.subject_id}`);
+        continue;
+      }
+      if (codeKey && seenCodes.has(codeKey)) {
+        duplicateLabels.add(`${subject.subject_codename} (Grade ${gradeLevel})`);
+        continue;
+      }
+      seenIds.add(subject.subject_id);
+      if (codeKey) seenCodes.add(codeKey);
+      items.push(subject);
+    }
+    return { items, duplicateLabels: [...duplicateLabels] };
+  }, [subjects]);
+
   const grades = useMemo(() => {
     const list = [
       ...new Set(
-        subjects
+        subjectCatalog.items
           .map((subject) => subject.academic_level?.grade_level)
           .filter((g): g is number => g != null),
       ),
     ].sort((a, b) => a - b);
     return list.length ? list : [7, 8, 9, 10, 11, 12];
-  }, [subjects]);
+  }, [subjectCatalog.items]);
 
   const subjectGradeMap = useMemo(() => {
     const map = new Map<number, number>();
-    for (const s of subjects) {
+    for (const s of subjectCatalog.items) {
       if (s.academic_level?.grade_level != null) {
         map.set(s.subject_id, s.academic_level.grade_level);
       }
     }
     return map;
-  }, [subjects]);
+  }, [subjectCatalog.items]);
 
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
@@ -134,7 +159,7 @@ export function GradingTemplateManager({
   }, [templates, templateSearch, templateGradeFilter, templateStatusFilter, subjectGradeMap]);
   const visibleSubjects = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return subjects.filter(
+    return subjectCatalog.items.filter(
       (subject) =>
         (grade === "all" ||
           String(subject.academic_level.grade_level) === grade) &&
@@ -143,10 +168,10 @@ export function GradingTemplateManager({
             value.toLowerCase().includes(query),
           )),
     );
-  }, [grade, search, subjects]);
+  }, [grade, search, subjectCatalog.items]);
   const selectedSubjects = useMemo(
-    () => subjects.filter((subject) => form.subjectIds.has(subject.subject_id)),
-    [form.subjectIds, subjects],
+    () => subjectCatalog.items.filter((subject) => form.subjectIds.has(subject.subject_id)),
+    [form.subjectIds, subjectCatalog.items],
   );
   const removedIds = editing
     ? editing.assigned_subjects
@@ -198,13 +223,36 @@ export function GradingTemplateManager({
       ),
     );
   };
-  const toggleSubject = (id: number) =>
+  const toggleSubject = (subject: SubjectListItem) => {
+    if (subject.grading_template_assignment_locked) {
+      setError(subject.grading_template_assignment_lock_reason || "Recorded grades prevent changing this subject's grading template.");
+      setValidationAttempt((attempt) => attempt + 1);
+      return;
+    }
     setForm((current) => {
       const subjectIds = new Set(current.subjectIds);
-      if (subjectIds.has(id)) subjectIds.delete(id);
-      else subjectIds.add(id);
+      if (subjectIds.has(subject.subject_id)) {
+        subjectIds.delete(subject.subject_id);
+      } else subjectIds.add(subject.subject_id);
       return { ...current, subjectIds };
     });
+  };
+
+  const clearRemovableSubjects = () => {
+    const lockedIds = new Set(
+      selectedSubjects
+        .filter((subject) => subject.grading_template_assignment_locked)
+        .map((subject) => subject.subject_id),
+    );
+    setForm((current) => ({
+      ...current,
+      subjectIds: lockedIds,
+    }));
+    if (lockedIds.size) {
+      setError(`${lockedIds.size} subject${lockedIds.size === 1 ? " is" : "s are"} kept because recorded grades lock the grading template assignment.`);
+      setValidationAttempt((attempt) => attempt + 1);
+    }
+  };
   const templateValues = (value: EditorState) => ({
     subjects: unorderedValues([...value.subjectIds]),
     ...(!editing?.is_locked ? {
@@ -303,10 +351,8 @@ export function GradingTemplateManager({
         caught instanceof Error
           ? caught.message
           : "Unable to save grading template.";
-      toast.error({
-        title: "Unable to save grading template",
-        description: message,
-      });
+      setError(message);
+      setValidationAttempt((attempt) => attempt + 1);
     } finally {
       setSaving(false);
     }
@@ -465,7 +511,9 @@ export function GradingTemplateManager({
       <Dialog
         open={editing !== undefined}
         onOpenChange={(open) => {
-          if (!open) setEditing(undefined);
+          if (!open) {
+            setEditing(undefined);
+          }
         }}
       >
         <Dialog.Content size="4xl" className="max-h-[calc(100dvh-1rem)]">
@@ -656,9 +704,7 @@ export function GradingTemplateManager({
                   {selectedSubjects.length ? (
                     <Button
                       size="sm"
-                      onClick={() =>
-                        setForm({ ...form, subjectIds: new Set() })
-                      }
+                      onClick={clearRemovableSubjects}
                     >
                       Clear All
                     </Button>
@@ -671,11 +717,13 @@ export function GradingTemplateManager({
                       size="sm"
                       autoIcon={false}
                       key={subject.subject_id}
-                      onClick={() => toggleSubject(subject.subject_id)}
+                      disabled={subject.grading_template_assignment_locked}
+                      title={subject.grading_template_assignment_lock_reason ?? undefined}
+                      onClick={() => toggleSubject(subject)}
                       className="border-black bg-primary font-bold"
                     >
                       {subject.subject_name}
-                      <X className="size-3.5" />
+                      {subject.grading_template_assignment_locked ? <Lock className="size-3.5" /> : <X className="size-3.5" />}
                     </Button>
                   ))}
                   {!selectedSubjects.length ? (
@@ -712,37 +760,65 @@ export function GradingTemplateManager({
                   </Select.Content>
                 </Select>
               </div>
-              <div className="mt-3 max-h-72 overflow-y-auto rounded! border-2 border-black">
-                {visibleSubjects.map((subject) => {
-                  const selected = form.subjectIds.has(subject.subject_id);
-                  return (
-                    <label
-                      key={subject.subject_id}
-                      className={`grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-black/30 px-3 py-2.5 last:border-b-0 ${selected ? "bg-primary" : "bg-white hover:bg-primary/15"}`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="size-5 accent-black"
-                        checked={selected}
-                        onChange={() => toggleSubject(subject.subject_id)}
-                      />
-                      <strong className="truncate text-sm">
-                        {subject.subject_name}
-                      </strong>
-                      <span className="flex gap-5 text-sm text-black/65">
-                        <span>{subject.subject_codename ?? "No code"}</span>
-                        <span>Grade {subject.academic_level.grade_level}</span>
-                      </span>
-                    </label>
-                  );
-                })}
+              {subjectCatalog.duplicateLabels.length ? (
+                <Alert status="warning" className="mt-3 py-3">
+                  <Alert.Title className="flex items-center gap-2 font-bold">
+                    <AlertTriangle className="size-4" />Duplicate catalog entries detected
+                  </Alert.Title>
+                  <Alert.Description className="text-sm text-black/75">
+                    Duplicate IDs or grade-level subject codes were shown once: {subjectCatalog.duplicateLabels.join(", ")}.
+                  </Alert.Description>
+                </Alert>
+              ) : null}
+              <div className="mt-3 max-h-72 overflow-y-auto rounded! border-2 border-black bg-white">
                 {!visibleSubjects.length ? (
-                  <p className="p-3 text-sm">No matching subjects.</p>
-                ) : null}
+                  <EmptyStateCard
+                    compact
+                    icon={<Search />}
+                    title="No matching subjects"
+                    description="Try another subject name, code, or grade filter."
+                  />
+                ) : (
+                  visibleSubjects.map((subject) => {
+                    const selected = form.subjectIds.has(subject.subject_id);
+                    const assignedElsewhere = Boolean(
+                      subject.grading_template_id
+                      && subject.grading_template_id !== editing?.grading_template_id,
+                    );
+                    const locked = Boolean(subject.grading_template_assignment_locked);
+                    const disabled = assignedElsewhere || locked;
+                    const lockTitle = locked
+                      ? subject.grading_template_assignment_lock_reason ?? "Recorded grades lock this assignment."
+                      : assignedElsewhere
+                        ? `Assigned to ${subject.grading_template.template_name}`
+                        : undefined;
+                    return (
+                      <label
+                        key={subject.subject_id}
+                        title={lockTitle}
+                        className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-black/30 px-3 py-2.5 last:border-b-0 ${selected ? "bg-primary" : "bg-white"} ${disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:bg-primary/15"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-5 accent-black"
+                          checked={selected}
+                          disabled={disabled}
+                          onChange={() => toggleSubject(subject)}
+                        />
+                        <strong className="truncate text-sm">{subject.subject_name}</strong>
+                        <span className="flex flex-wrap items-center justify-end gap-3 text-xs text-black/65">
+                          <span>{subject.subject_codename ?? "No code"}</span>
+                          <span>Grade {subject.academic_level.grade_level}</span>
+                          {assignedElsewhere ? <Badge variant="outline" size="sm">{subject.grading_template.template_name}</Badge> : null}
+                          {locked ? <Lock className="size-3.5" aria-label="Assignment locked" /> : null}
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
               </div>
               <p className="mt-2 text-xs text-black/60">
-                Select subjects that will use this grading template. Subjects
-                with recorded grades cannot move.
+                Subjects assigned to another template or containing recorded grades are locked here.
               </p>
             </section>
 

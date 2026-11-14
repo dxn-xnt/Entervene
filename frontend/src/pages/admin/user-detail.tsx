@@ -2,7 +2,7 @@ import AppLayout from "../../layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { AdminBreadcrumb as Breadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -286,7 +286,7 @@ export default function AdminUserDetail() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <Breadcrumb className="min-w-0 overflow-hidden">
                   <Breadcrumb.List className="flex-nowrap">
@@ -327,7 +327,7 @@ export default function AdminUserDetail() {
               </div>
 
               {user && (
-                <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
+                <div className="flex w-full shrink-0 flex-wrap items-center gap-2 md:w-auto">
                   {isPending && (
                     <Button
                       type="button"

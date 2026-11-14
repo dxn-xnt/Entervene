@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Table } from "@/components/retroui/Table";
 import { Tabs } from "@/components/retroui/Tabs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -1043,7 +1043,7 @@ const TeacherGradeView = () => {
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
               <header className="flex min-w-0 flex-col items-stretch gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:gap-3 md:px-6">
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <SidebarTrigger className="shrink-0 md:hidden" />
                   <Breadcrumb className="min-w-0 overflow-hidden">
                     <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">

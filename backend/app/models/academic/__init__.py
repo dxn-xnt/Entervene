@@ -7,6 +7,7 @@ from .AcademicPeriod import AcademicPeriod
 from .AcademicLevel  import AcademicLevel
 from .Subject        import Subject
 from .SubjectOffering import SubjectOffering
+from .SubjectYearGradingTemplate import SubjectYearGradingTemplate
 from .GradingTemplate import GradingTemplate
 from .GradingTemplateComponent import GradingTemplateComponent
 from .AcademicYearPassingPolicy import AcademicYearPassingPolicy, PassingPolicyAudit
@@ -21,6 +22,8 @@ from .StudentAssessmentScore import StudentAssessmentScore
 from .StudentPeriodGrade import StudentPeriodGrade
 from .LessonPlanModel import LessonPlanModel
 from .PeriodTemplateSlot import PeriodTemplateSlot
+from .PeriodTemplateRevision import PeriodTemplateRevision
+from .PeriodTemplateOverridePreview import PeriodTemplateOverridePreview
 from .Competency import Competency
 from .TeacherSubstitution import TeacherSubstitution
 from .GradeSubmissionLog import GradeSubmissionLog

@@ -227,7 +227,12 @@ def calculate_subject_grade_projection(
         threshold_policy = None
         weights = None
         try:
-            weights = resolve_subject_grading_weights(db, subject_id, scope.class_.academic_level_id)
+            weights = resolve_subject_grading_weights(
+                db,
+                subject_id,
+                scope.class_.academic_level_id,
+                academic_year_id=scope.year.academic_year_id,
+            )
             policy_context = read_passing_threshold_context_or_422(
                 db,
                 academic_year_id=scope.year.academic_year_id,

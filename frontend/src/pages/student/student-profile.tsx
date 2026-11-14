@@ -142,7 +142,7 @@ const StudentProfile = () => {
           <div className="flex flex-1 flex-col">
             <header className="flex items-center gap-2 bg-background justify-between px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <SidebarTrigger className="shrink-0 md:hidden" />
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
+              <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
                 Profile
               </h1>
               <Button
@@ -192,7 +192,7 @@ const StudentProfile = () => {
                   studentProfile?.section_name) && (
                   <div className="flex flex-col items-start gap-1 text-sm sm:items-end">
                     {studentProfile?.student_lrn && (
-                      <Badge variant="solid" size="sm" className="tracking-wider">
+                      <Badge variant="solid" size="sm">
                         LRN: {studentProfile.student_lrn}
                       </Badge>
                     )}
@@ -217,7 +217,7 @@ const StudentProfile = () => {
 
               <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
                 <div className="flex flex-col gap-3 flex-1">
-                  <p className="text-2xl md:text-3xl font-bold tracking-tight">
+                  <p className="text-2xl md:text-3xl font-bold">
                     My Schedule
                   </p>
                   <DynamicScheduleTable
@@ -229,7 +229,7 @@ const StudentProfile = () => {
 
                 <div className="flex flex-col gap-3 w-full lg:w-80">
                   <div className="flex flex-row items-center justify-between">
-                    <p className="text-2xl md:text-3xl font-bold tracking-tight">
+                    <p className="text-2xl md:text-3xl font-bold">
                       Current Week
                     </p>
                   </div>

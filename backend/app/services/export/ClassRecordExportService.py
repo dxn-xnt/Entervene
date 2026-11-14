@@ -425,7 +425,13 @@ def _generate_class_record_sheet(
     # 4. Resolve dynamic GradingTemplate components
     class_obj = db.get(Class, class_id)
     academic_level_id = getattr(class_obj, "academic_level_id", None)
-    weights = resolve_subject_grading_weights(db, subject_id, academic_level_id)
+    period_obj = db.get(AcademicPeriod, academic_period_id)
+    weights = resolve_subject_grading_weights(
+        db,
+        subject_id,
+        academic_level_id,
+        academic_year_id=period_obj.academic_year_id if period_obj else None,
+    )
 
     db_components: list[GradingTemplateComponent] = []
     if weights.template_id:

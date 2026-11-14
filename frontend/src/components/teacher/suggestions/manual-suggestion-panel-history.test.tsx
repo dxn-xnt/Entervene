@@ -113,3 +113,23 @@ it("shows inaccessible and missing historical lessons without a guessed class UR
   expect(screen.getAllByText("Read-only")).toHaveLength(2);
   expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
 });
+
+it("supports advisory row mode and renders additionalActions alongside clean history labels", async () => {
+  render(
+    <ManualSuggestionPanel
+      classId={3}
+      student={{ student_id: "student" } as TeacherAdvisoryStudentItem}
+      subjectLoads={[]}
+      displayMode="row"
+      additionalActions={<button type="button">SF9 Report</button>}
+    />
+  );
+  expect(screen.getByRole("button", { name: "SF9 Report" })).toBeTruthy();
+  const toggleBtn = await screen.findByRole("button", { name: /View History/ });
+  expect(toggleBtn.textContent).toBe("View History");
+  fireEvent.click(toggleBtn);
+  expect(screen.getByText("Current Period")).toBeTruthy();
+  expect(screen.getByText("Previous Periods")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Hide History" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Hide History" }).textContent).toBe("Hide History");
+});

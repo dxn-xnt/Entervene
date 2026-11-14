@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
+import { Alert } from "@/components/retroui/Alert";
 import { Text } from "@/components/retroui/Text";
 import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
@@ -32,6 +33,8 @@ import {
   targetLevels,
   type OfferingFormState,
 } from "./subject-utils";
+
+const COMMON_DURATIONS = [45, 60, 72, 96] as const;
 
 export function OfferingModal({
   open,
@@ -70,6 +73,7 @@ export function OfferingModal({
     pathway: "general",
     minutes: "",
     status: "active",
+    grading_template_id: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +147,9 @@ export function OfferingModal({
         .then((res) => {
           if (!isMounted) return;
           const subjectOfferings = res.subject_offerings.filter(
-            (o) => o.subject.subject_id === offering.subject.subject_id && o.status === "active"
+            (o) => o.subject.subject_id === offering.subject.subject_id
+              && o.status === "active"
+              && o.pathway === offering.pathway
           );
           setExistingSubjectOfferings(subjectOfferings);
           const periodIds = subjectOfferings.map((o) => String(o.academic_period.academic_period_id));
@@ -159,6 +165,7 @@ export function OfferingModal({
             pathway: offering.pathway,
             minutes: offering.minutes != null ? String(offering.minutes) : "",
             status: offering.status,
+            grading_template_id: String(offering.subject.grading_template_id),
           });
         })
         .catch(() => {
@@ -174,6 +181,7 @@ export function OfferingModal({
             pathway: offering.pathway,
             minutes: offering.minutes != null ? String(offering.minutes) : "",
             status: offering.status,
+            grading_template_id: String(offering.subject.grading_template_id),
           });
         });
 
@@ -209,6 +217,7 @@ export function OfferingModal({
       pathway: initialPathway,
       minutes: "",
       status: options?.default_status ?? "active",
+      grading_template_id: "",
       });
   }, [catalogSubjects, gradeLevels, offering, open, options]);
 
@@ -245,7 +254,7 @@ export function OfferingModal({
 
   const setField = <TKey extends keyof OfferingFormState>(key: TKey, value: OfferingFormState[TKey]) => {
     setForm((current) => ({ ...current, [key]: value }));
-    if ((key === "pathway" && error === "Select a valid pathway for the selected grade level.") || (key === "minutes" && error === "Minutes must be a positive number." && (!String(value).trim() || Number(value) > 0))) setError(null);
+    if ((key === "pathway" && error === "Select a valid pathway for the selected grade level.") || (key === "minutes" && error === "Minutes must be a positive whole number." && Number.isInteger(Number(value)) && Number(value) > 0)) setError(null);
   };
 
   const failValidation = (message: string) => {
@@ -352,10 +361,11 @@ export function OfferingModal({
       String(offering.academic_level.academic_level_id),
       unorderedValues(existingSubjectOfferings.length ? existingSubjectOfferings.map(item => String(item.academic_period.academic_period_id)) : [String(offering.academic_period.academic_period_id)]),
       offering.pathway, optionalNumber(offering.minutes), offering.status,
+      String(offering.subject.grading_template_id),
     ] : null,
     values: [form.subject_id, form.academic_year_id, form.academic_level_id,
       unorderedValues(form.academic_period_ids), requiresPathway ? form.pathway : "general",
-      optionalNumber(form.minutes), form.status],
+      optionalNumber(form.minutes), form.status, form.grading_template_id],
   });
   const handleSubmit = async () => {
     if (!changes.guardChanges()) return;
@@ -380,8 +390,8 @@ export function OfferingModal({
     }
 
     const parsedMinutes = form.minutes.trim() ? Number(form.minutes) : null;
-    if (parsedMinutes !== null && (isNaN(parsedMinutes) || parsedMinutes <= 0)) {
-      failValidation("Minutes must be a positive number.");
+    if (parsedMinutes === null || !Number.isInteger(parsedMinutes) || parsedMinutes <= 0) {
+      failValidation("Minutes must be a positive whole number.");
       return;
     }
 
@@ -425,6 +435,7 @@ export function OfferingModal({
               pathway: requiresPathway ? form.pathway : "general",
               minutes: parsedMinutes,
               status: form.status,
+              grading_template_id: Number(form.grading_template_id),
             });
           } else {
             await archiveSubjectOffering(existingItem.subject_offering_id);
@@ -508,7 +519,7 @@ export function OfferingModal({
                 This offering will be added to the current active academic year. Change active year or active term in System Settings.
               </p>
             </div>
-            <AdminValidationAlert message={error && !["Select setup details, at least one term, and at least one subject.", "No valid academic terms are available for the selected academic year.", "Select a valid pathway for the selected grade level.", "Minutes must be a positive number."].includes(error) ? error : null} attempt={validationAttempt} />
+            <AdminValidationAlert message={error && !["Select setup details, at least one term, and at least one subject.", "No valid academic terms are available for the selected academic year.", "Select a valid pathway for the selected grade level.", "Minutes must be a positive whole number."].includes(error) ? error : null} attempt={validationAttempt} />
             {readOnly ? (
               <div className="rounded! border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                 <p className="font-bold">Read-only academic year</p>
@@ -575,19 +586,22 @@ export function OfferingModal({
                 ) : null}
                 {isCreateMode ? (
                   <div className="flex flex-col gap-1">
-                    <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (Minutes)</label>
+                    <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (Minutes) <span className="text-red-500">*</span></label>
                     <Input
                       id="create-offering-minutes"
-                      aria-invalid={error === "Minutes must be a positive number."}
-                      aria-describedby={error === "Minutes must be a positive number." ? "create-offering-minutes-error" : undefined}
+                      aria-invalid={error === "Minutes must be a positive whole number."}
+                      aria-describedby={error === "Minutes must be a positive whole number." ? "create-offering-minutes-error" : undefined}
                       type="number"
                       min={1}
                       value={form.minutes}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
-                      placeholder="e.g. 45, 60, 72, 96 (optional)"
+                      placeholder="e.g. 45, 60, 72, 96"
                     />
-                    {error === "Minutes must be a positive number." && <FormMessage id="create-offering-minutes-error">{error}</FormMessage>}
-                    <p className="text-xs text-muted-foreground">Minutes per class period (optional now, required for publishing).</p>
+                    <div className="flex flex-wrap gap-1" aria-label="Common durations">
+                      {COMMON_DURATIONS.map((minutes) => <Button key={minutes} type="button" size="sm" variant={form.minutes === String(minutes) ? "default" : "outline"} onClick={() => setField("minutes", String(minutes))}>{minutes}</Button>)}
+                    </div>
+                    {error === "Minutes must be a positive whole number." && <FormMessage id="create-offering-minutes-error">{error}</FormMessage>}
+                    <p className="text-xs text-muted-foreground">Minutes per class period for all selected terms. Required for scheduling.</p>
                   </div>
                 ) : null}
                 <div className="flex flex-col gap-2 md:col-span-2">
@@ -687,20 +701,44 @@ export function OfferingModal({
                     <label className="text-sm font-semibold" htmlFor="offering-minutes">Duration (Minutes)</label>
                     <Input
                       id="offering-minutes"
-                      aria-invalid={error === "Minutes must be a positive number."}
-                      aria-describedby={error === "Minutes must be a positive number." ? "offering-minutes-error" : undefined}
+                      aria-invalid={error === "Minutes must be a positive whole number."}
+                      aria-describedby={error === "Minutes must be a positive whole number." ? "offering-minutes-error" : undefined}
                       type="number"
                       min={1}
                       value={form.minutes}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
                       placeholder="e.g. 45, 60, 72, 96"
                     />
-                    {error === "Minutes must be a positive number." && <FormMessage id="offering-minutes-error">{error}</FormMessage>}
+                    <div className="flex flex-wrap gap-1" aria-label="Common durations">
+                      {COMMON_DURATIONS.map((minutes) => <Button key={minutes} type="button" size="sm" variant={form.minutes === String(minutes) ? "default" : "outline"} onClick={() => setField("minutes", String(minutes))}>{minutes}</Button>)}
+                    </div>
+                    {error === "Minutes must be a positive whole number." && <FormMessage id="offering-minutes-error">{error}</FormMessage>}
                     <p className="text-xs text-muted-foreground">Minutes per period. Required for publishing.</p>
                   </div>
-                  <div className="text-sm">
-                    <strong>Grading Template:</strong> {offering?.subject.grading_template ?? "Set in Subject Catalog"}
-                    <p className="text-xs text-muted-foreground">Change this in Add/Edit Subject.</p>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-semibold" htmlFor="offering-grading-template">Grading Template</label>
+                    <Select
+                      value={form.grading_template_id}
+                      onValueChange={(value) => setField("grading_template_id", value)}
+                      disabled={offering.subject.grading_template_assignment_locked}
+                    >
+                      <Select.Trigger id="offering-grading-template" className="w-full">
+                        <Select.Value placeholder="Select template" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          {(options?.grading_templates ?? []).map((template) => (
+                            <Select.Item
+                              key={template.grading_template_id}
+                              value={String(template.grading_template_id)}
+                            >
+                              {template.template_name}
+                            </Select.Item>
+                          ))}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Applies to every term and pathway in {offering.academic_year.year_label}.</p>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold" htmlFor="offering-status">Status</label>
@@ -720,6 +758,14 @@ export function OfferingModal({
                     </Select>
                   </div>
                 </div>
+                {offering.subject.grading_template_assignment_locked ? (
+                  <Alert status="warning" className="md:col-span-3 py-3">
+                    <Alert.Title className="font-bold">Grading template locked</Alert.Title>
+                    <Alert.Description className="text-sm text-yellow-950">
+                      {offering.subject.grading_template_assignment_lock_reason}
+                    </Alert.Description>
+                  </Alert>
+                ) : null}
               </>
             ) : (
               <div className="rounded! border-2 border-black p-3 shadow-[3px_3px_0_#000]">

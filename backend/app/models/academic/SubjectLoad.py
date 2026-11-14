@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, JSON
+from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.Base import Base
@@ -24,6 +24,7 @@ class SubjectLoad(Base):
     class_id               = Column(Integer, ForeignKey("class.class_id"), nullable=False)
     academic_period_id     = Column(Integer, ForeignKey("academic_period.academic_period_id"), nullable=False)
     slot_id                = Column(Integer, ForeignKey("period_template_slot.slot_id"), nullable=True)
+    template_revision_id   = Column(Integer, ForeignKey("period_template_revision.revision_id"), nullable=True)
     start_time             = Column(String(10), nullable=True)
     end_time               = Column(String(10), nullable=True)
     days_of_week           = Column(JSON, nullable=True)
@@ -36,6 +37,8 @@ class SubjectLoad(Base):
     is_locked              = Column(Boolean, default=False)
     locked_at              = Column(DateTime(timezone=True), nullable=True)
     published_at           = Column(DateTime(timezone=True), nullable=True)
+    effective_from         = Column(Date, nullable=True)
+    effective_to           = Column(Date, nullable=True)
     published_by           = Column(String(50), nullable=True)
     last_modified_by       = Column(String(50), nullable=True)
     draft_notes            = Column(String(255), nullable=True)

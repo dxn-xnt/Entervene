@@ -42,7 +42,6 @@ export function SubjectSectionCard({
   const riskList = [
     { key: "moderate_risk", label: "Moderate Risk", count: displaySummary.MODERATE_RISK },
     { key: "high_risk", label: "High Risk", count: displaySummary.HIGH_RISK },
-    { key: "on_track", label: "On Track", count: displaySummary.ON_TRACK },
   ].map((risk) => ({
     ...risk,
     percentage: getTeacherRiskPercentage(risk.count, displaySummary.assessedTotal),
@@ -66,7 +65,7 @@ export function SubjectSectionCard({
             </div>
           </div>
           {displaySummary.assessedTotal > 0 ? (
-            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
               {riskList.map((risk) => (
                 <Card
                   key={risk.key}

@@ -34,6 +34,10 @@ def threshold_metadata():
         Column("passing_threshold", Numeric(5, 2)), Column("status", String(20)))
     Table("subject", metadata,
         Column("subject_id", Integer, primary_key=True), Column("grading_template_id", Integer))
+    Table("subject_year_grading_template", metadata,
+        Column("subject_year_grading_template_id", Integer, primary_key=True),
+        Column("subject_id", Integer), Column("academic_year_id", Integer),
+        Column("grading_template_id", Integer))
     Table("academic_year_passing_policy", metadata,
         Column("academic_year_id", Integer, primary_key=True),
         Column("general_average_threshold", Numeric(5, 2), nullable=True))
@@ -237,6 +241,28 @@ def test_activation_flags_are_irrelevant_to_requested_year(sqlite_config_session
     db.commit()
     ctx = read_passing_threshold_context(db, academic_year_id=2, subject_ids=[10])
     assert resolve_passing_threshold(ctx, academic_year_id=2, scope="subject", subject_id=10).threshold == Decimal("85")
+
+
+def test_year_template_assignment_overrides_catalog_default(sqlite_config_session):
+    db, metadata = sqlite_config_session
+    seed_context(db, metadata)
+    db.execute(insert(metadata.tables["subject_year_grading_template"]), {
+        "subject_year_grading_template_id": 1,
+        "subject_id": 10,
+        "academic_year_id": 2,
+        "grading_template_id": 21,
+    })
+    db.commit()
+
+    year_one = read_passing_threshold_context(db, academic_year_id=1, subject_ids=[10])
+    year_two = read_passing_threshold_context(db, academic_year_id=2, subject_ids=[10])
+
+    assert resolve_passing_threshold(
+        year_one, academic_year_id=1, scope="subject", subject_id=10
+    ).threshold == Decimal("85")
+    assert resolve_passing_threshold(
+        year_two, academic_year_id=2, scope="subject", subject_id=10
+    ).threshold == Decimal("83")
 
 
 def test_only_existing_configuration_columns_are_selected(sqlite_config_session):

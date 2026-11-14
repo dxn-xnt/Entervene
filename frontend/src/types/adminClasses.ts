@@ -312,6 +312,7 @@ export type UpdateClassStudentListRequest = {
 
 export type ManualSectionDraft = {
   localId: string;
+  officialSectionId?: number;
   sectionName: string;
   adviserStaffId: string;
   adviserName?: string;

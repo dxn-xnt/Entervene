@@ -49,7 +49,7 @@ const baseline = {
   academic_levels: [{ academic_level_id: 9, level_name: "Grade 9", grade_level: 9 }],
   classes: [{ class_id: 8, section_name: "Archimedes", academic_level_id: 9, academic_year_id: 1, period_template_group: "JHS_45MIN" }],
   subjects: [{ subject_id: 3, subject_name: "Filipino 9", subject_codename: "F9", academic_level_id: 9, subject_group: "Core" }],
-  subject_offerings: [{ subject_offering_id: 30, subject_id: 3, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [] }],
+  subject_offerings: [{ subject_offering_id: 30, subject_id: 3, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [], minutes: 45 }],
   teachers: [{ staff_id: "T1", name: "Maria Cruz", department: "Filipino", specialization: "Filipino" }],
   existing_loads: [{ subject_load_id: 12, class_id: 8, subject_id: 3, staff_id: "T1", academic_period_id: 1,
     slot_id: 2, start_time: "08:00", end_time: "08:45", days_of_week: ["MON"], status: "published", is_locked: true, section_revision: 1 }],
