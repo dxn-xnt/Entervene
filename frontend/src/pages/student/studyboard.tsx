@@ -1005,6 +1005,7 @@ const StoryBoard = () => {
                           icon={<CheckSquare />}
                           title="You're all caught up!"
                           description="You have no pending classwork right now."
+                          className="shadow-none"
                         />
                       ) : (
                         <div className="flex flex-col gap-2.5">
