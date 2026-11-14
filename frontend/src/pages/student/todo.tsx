@@ -94,7 +94,7 @@ export default function ToDo() {
             <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <SidebarTrigger className="shrink-0 md:hidden" />
               <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
-                To do
+                To Do
               </h1>
             </header>
             <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
