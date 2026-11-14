@@ -211,9 +211,10 @@ describe("shared prediction page access", () => {
     render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
 
     await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
-    expect([7, 8, 9, 10, 11, 12].map((grade) =>
-      screen.getByRole("heading", { name: `Grade ${grade}` }).textContent
-    )).toHaveLength(6);
+    expect(screen.getByRole("heading", { name: "Grade 9" })).toBeTruthy();
+    [7, 8, 10, 11, 12].forEach((grade) => {
+      expect(screen.queryByRole("heading", { name: `Grade ${grade}` })).toBeNull();
+    });
     expect(screen.getByRole("link", { name: "View Grade 9 predictions" })).toBeTruthy();
     expect(screen.getAllByText(/No predictions yet/i).length).toBeGreaterThan(0);
     expect(screen.queryByText("No current-term projections available")).toBeNull();

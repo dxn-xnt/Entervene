@@ -13,6 +13,8 @@ interface AdminPredictionGradeCardProps {
 }
 
 export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProps) {
+  if (!group.sections.length) return null;
+
   const moderateRisk = group.sections.reduce((total, section) => total + section.moderate_risk_count, 0);
   const highRisk = group.sections.reduce((total, section) => total + section.high_risk_count, 0);
   const gradePath = `/admin/predictions/${group.grade_level}`;
