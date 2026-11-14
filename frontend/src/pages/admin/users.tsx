@@ -316,7 +316,7 @@ export default function AdminUsers() {
               <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
                 <div className="flex min-w-0 items-center gap-3">
                   <SidebarTrigger className="shrink-0 md:hidden" />
-                  <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Users</h1>
+                  <h1 className="truncate text-xl font-bold sm:text-2xl md:text-4xl">Users</h1>
                 </div>
                 <Button
                   size="header"

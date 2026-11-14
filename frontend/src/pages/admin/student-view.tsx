@@ -1,6 +1,6 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { AdminBreadcrumb as Breadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Progress } from "@/components/retroui/Progress";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -13,7 +13,7 @@ export default function AdminStudentView() {
                 <div className="@container/main flex flex-1 flex-col">
                     <div className="flex flex-1 flex-col">
                         {/* Breadcrumb Header */}
-                        <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+                        <header className="flex min-w-0 flex-1 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
                             <SidebarTrigger className="shrink-0 md:hidden" />
                             <Breadcrumb>
                                 <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { AdminBreadcrumb as Breadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
@@ -135,7 +135,7 @@ export default function AdminSubjectLevel() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <Breadcrumb className="min-w-0 overflow-hidden">
                   <Breadcrumb.List className="flex-nowrap">

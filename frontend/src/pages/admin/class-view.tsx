@@ -8,7 +8,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";
 import { Table } from "@/components/retroui/Table";
 import { Avatar } from "@/components/retroui/Avatar";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { AdminBreadcrumb as Breadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -372,7 +372,7 @@ export default function AdminClassDetail() {
             <div data-page-tabs-sticky-region>
               {/* Header with Breadcrumb & Context Actions */}
               <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
-                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                   <SidebarTrigger className="shrink-0 md:hidden" />
                   <Breadcrumb className="min-w-0 overflow-hidden">
                     <Breadcrumb.List className="flex-nowrap">

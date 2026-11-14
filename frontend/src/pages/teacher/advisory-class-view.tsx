@@ -3,7 +3,7 @@ import { Award, BookOpen, ChevronDown, FileSpreadsheet, FileText, Loader2, Searc
 import { TeacherEmptyAvatarGroup, TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";

@@ -39,7 +39,7 @@ import { Avatar } from "@/components/retroui/Avatar";
 import QuizAnalysisView from "./classworks/quiz-analysis-view";
 import StudentSubmissionView from "./student-submission-view";
 import EditClassworkModal from "./forms/edit-classwork";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import AppLayout from "@/layouts/app-layout";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";

@@ -23,7 +23,8 @@ import {
   fetchDashboardFilters,
   fetchDashboardGradeSummaries,
 } from "@/lib/prediction-api";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
+import { AdminBreadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { BrainCircuit, School, TrendingUp } from "lucide-react";
@@ -49,6 +50,7 @@ export default function GradePredictions() {
 }
 
 export function AdminCurrentTermGradePredictions() {
+  const Breadcrumb = AdminBreadcrumb;
   const { grade, classId: classSlug } = useParams<{ grade: string; classId?: string }>();
   const { selectedPeriodId } = useAcademicPeriod();
   const numericGrade = grade ? Number(grade) : undefined;

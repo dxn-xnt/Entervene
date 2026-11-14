@@ -278,7 +278,7 @@ export default function AdminClasses() {
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <div>
-                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
                     Classes
                   </h1>
                 </div>

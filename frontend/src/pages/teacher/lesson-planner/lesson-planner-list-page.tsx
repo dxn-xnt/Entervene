@@ -8,7 +8,7 @@ import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Alert } from "@/components/retroui/Alert";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import {
   ArrowLeft,
   BookOpen,
@@ -151,7 +151,7 @@ export const LessonPlannerListPage: React.FC = () => {
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
               <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                   <SidebarTrigger className="shrink-0 md:hidden" />
                   <Breadcrumb className="min-w-0">
                     <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
