@@ -34,6 +34,7 @@ import {
   type TeacherDashboardHealthResponse,
 } from "@/lib/api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { AdminBreadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Button } from "@/components/teacher/button";
 import {
   buildCurrentTermDashboard,
@@ -421,6 +422,7 @@ export function LegacySectionPredictions() {
 }
 
 function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "admin" | "teacher" }) {
+  const BreadcrumbComponent = viewerRole === "admin" ? AdminBreadcrumb : Breadcrumb;
   const isTeacher = viewerRole === "teacher";
   const predictionBasePath = `/${viewerRole}/predictions`;
   const { grade, classId: classSlug, subjectId: routeSubjectSlug } = useParams<{
@@ -683,7 +685,7 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
       <div className="flex flex-1 flex-col">
         <header className="flex items-center gap-3 bg-background px-4 py-4 md:px-6">
           <SidebarTrigger className="md:hidden" />
-          <Breadcrumb>
+          <BreadcrumbComponent>
             <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
               <Breadcrumb.Item>
                 <Breadcrumb.Link asChild>
@@ -735,7 +737,7 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
                 </>
               )}
             </Breadcrumb.List>
-          </Breadcrumb>
+          </BreadcrumbComponent>
         </header>
 
         <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">

@@ -559,7 +559,7 @@ export default function AdminSubjects() {
               <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
                 <div className="flex items-center gap-3">
                   <SidebarTrigger className="shrink-0 md:hidden" />
-                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Subjects</h1>
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Subjects</h1>
                 </div>
                 <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap [&_button]:min-w-0 [&_button]:w-full md:[&_button]:w-auto">
                   {activeSection === "catalog" ? (
