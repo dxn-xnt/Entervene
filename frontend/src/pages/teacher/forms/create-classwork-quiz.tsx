@@ -301,9 +301,9 @@ export default function CreateClassworkQuizModal({
             }));
             setCreateStep("details");
         } catch (err) {
-            setCreateError(
-                err instanceof Error ? err.message : "Unable to import quiz file.",
-            );
+            const message = err instanceof Error ? err.message : "Unable to import quiz file.";
+            setCreateError(message);
+            toast.error({ title: "Unable to import quiz file", description: message });
         } finally {
             setIsImportingQuiz(false);
         }
@@ -552,12 +552,14 @@ export default function CreateClassworkQuizModal({
         const detailsValError = validateDetails();
         if (detailsValError) {
             setCreateError(detailsValError);
+            toast.error({ title: detailsValError });
             setCreateStep("details");
             return;
         }
         const quizValError = validateQuizBuilder();
         if (quizValError) {
             setCreateError(quizValError);
+            toast.error({ title: quizValError });
             setCreateStep("quiz");
             return;
         }
@@ -582,14 +584,18 @@ export default function CreateClassworkQuizModal({
             if (format === "pdf") {
                 const result = await exportQuizPdf(quizQuestions, draft.title || "Quiz", activeSubjectName, includeExportAnswerKey);
                 if (result?.warnings?.length) {
-                    setCreateError(`Export notice: ${result.warnings.join(" ")}`);
+                    const notice = `Export notice: ${result.warnings.join(" ")}`;
+                    setCreateError(notice);
+                    toast.warning({ title: notice });
                 }
             } else {
                 await exportQuizDocx(quizQuestions, draft.title || "Quiz", activeSubjectName, includeExportAnswerKey);
             }
         } catch (err) {
             console.error("Export error:", err);
-            setCreateError(err instanceof Error ? err.message : "Failed to export questionnaire.");
+            const message = err instanceof Error ? err.message : "Failed to export questionnaire.";
+            setCreateError(message);
+            toast.error({ title: "Failed to export questionnaire", description: message });
         } finally {
             setIsExporting(null);
         }
@@ -737,25 +743,33 @@ export default function CreateClassworkQuizModal({
         const detailsValError = validateDetails();
         if (detailsValError) {
             setCreateError(detailsValError);
+            toast.error({ title: detailsValError });
             setCreateStep("details");
             return;
         }
         const quizValError = validateQuizBuilder();
         if (quizValError) {
             setCreateError(quizValError);
+            toast.error({ title: quizValError });
             setCreateStep("quiz");
             return;
         }
         if (selectedClassIds.length === 0) {
-            setCreateError("Select at least one section to assign this quiz.");
+            const msg = "Select at least one section to assign this quiz.";
+            setCreateError(msg);
+            toast.error({ title: msg });
             return;
         }
         if (selectedLessonIds.length === 0) {
-            setCreateError("Select the lesson where this quiz should appear.");
+            const msg = "Select the lesson where this quiz should appear.";
+            setCreateError(msg);
+            toast.error({ title: msg });
             return;
         }
         if (quizSettings.summary_release_mode === "AFTER_DUE_DATE" && !draft.due_date) {
-            setCreateError("A due date is required when Quiz Summary Availability is set to 'After the quiz due date'. Please specify a due date below.");
+            const msg = "A due date is required when Quiz Summary Availability is set to 'After the quiz due date'. Please specify a due date below.";
+            setCreateError(msg);
+            toast.error({ title: msg });
             return;
         }
 
@@ -873,9 +887,6 @@ export default function CreateClassworkQuizModal({
                     </Dialog.Header>
 
                     <section className="flex flex-col gap-4 p-5">
-                        {createError && !(createStep === "details" && ["Choose a subject.", "Topic title is required.", "Choose an Examination sub-type explicitly.", "Total points must be greater than zero."].includes(createError)) && !(createStep === "assign" && ["Select at least one section to assign this quiz.", "Select the lesson where this quiz should appear.", "A due date is required when Quiz Summary Availability is set to 'After the quiz due date'. Please specify a due date below."].includes(createError)) && (
-                            <FormMessage className="mb-2">{createError}</FormMessage>
-                        )}
 
                         {createStep === "quiz-source" && (
                             <div className="grid gap-4 sm:grid-cols-3">

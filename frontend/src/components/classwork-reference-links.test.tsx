@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ReferenceLinkEditor, ReferenceLinkList } from "./classwork-reference-links";
 import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
 
@@ -41,4 +41,16 @@ it("rejects unsafe links and displays titles and safe URL fallbacks", () => {
     expect(anchor.getAttribute("rel")).toBe("noopener noreferrer");
   }
   expect(screen.queryByText("Unsafe")).toBeNull();
+});
+
+it("renders empty state with the add reference link button inside", () => {
+  const onChange = vi.fn();
+  render(<ReferenceLinkEditor links={[]} onChange={onChange} />);
+  const emptyState = screen.getByText("No reference links").closest('[data-slot="empty"]');
+  expect(emptyState).toBeTruthy();
+  const button = screen.getByRole("button", { name: "Add Reference Link" });
+  expect(emptyState?.contains(button)).toBe(true);
+
+  fireEvent.click(button);
+  expect(onChange).toHaveBeenCalledWith([{ url: "", title: "" }]);
 });

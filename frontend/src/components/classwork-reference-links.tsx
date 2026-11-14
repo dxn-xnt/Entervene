@@ -29,7 +29,21 @@ export function ReferenceLinkEditor({ links, onChange, disabled = false }: {
       <h3 className="font-semibold">Reference Links</h3>
       <p className="text-sm text-muted-foreground">Optional websites or documents for students to read. Sharing permissions are managed by the linked site.</p>
     </div>
-    {links.length === 0 ? <div className="space-y-2"><TeacherEmptyState compact icon={<Link2 />} title="No reference links" description="Add a website, document, or video for this classwork." /><Button type="button" size="sm" disabled={disabled} onClick={add}><Plus size={16} />Add Reference Link</Button></div> : <div className="space-y-3">
+    {links.length === 0 ? (
+      <TeacherEmptyState
+        compact
+        icon={<Link2 />}
+        title="No reference links"
+        description="Add a website, document, or video for this classwork."
+        action={{
+          label: "Add Reference Link",
+          icon: <Plus size={16} />,
+          disabled,
+          onClick: add,
+        }}
+      />
+    ) : (
+      <div className="space-y-3">
       {links.map((link, index) => <div key={index} className="grid gap-2 border-2 border-black bg-white p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <label className="min-w-0 text-sm font-semibold">URL
           <Input aria-label={`Reference link ${index + 1} URL`} type="url" value={link.url} placeholder="https://example.com/resource" className="mt-1 w-full shadow-none" disabled={disabled} onChange={(event) => onChange(links.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} />
@@ -44,7 +58,7 @@ export function ReferenceLinkEditor({ links, onChange, disabled = false }: {
         </div>
       </div>)}
       <Button type="button" variant="outline" size="sm" disabled={disabled || links.length >= MAX_LINKS} onClick={add}><Plus size={16} />Add Another Link</Button>
-    </div>}
+    </div>)}
   </section>;
 }
 
