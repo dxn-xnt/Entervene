@@ -198,6 +198,7 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         total_points=float(cw.total_points) if cw.total_points is not None else None,
         is_published=cw.is_published,
         show_scores=cw.show_scores,
+        auto_ai_feedback_enabled=getattr(cw, "auto_ai_feedback_enabled", False),
         is_locked=cw.is_locked,
         is_archived=cw.is_archived,
         subject_id=cw.subject_id,

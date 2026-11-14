@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import QuizFeedbackAssistant from "./quiz-feedback-assistant";
 import {
-  generateSubmissionFeedbackSuggestion,
-  getSubmissionFeedbackEligibility,
+  discardSubmissionFeedbackDraft,
+  getSubmissionFeedbackDraft,
   publishSubmissionFeedback,
   SubmissionFeedbackApiError,
+  type FeedbackDraft,
 } from "@/lib/submission-feedback-api";
 
 const toastSuccess = vi.fn();
@@ -22,64 +24,93 @@ vi.mock("@/lib/submission-feedback-api", async () => {
   );
   return {
     ...actual,
-    getSubmissionFeedbackEligibility: vi.fn(),
-    generateSubmissionFeedbackSuggestion: vi.fn(),
+    getSubmissionFeedbackDraft: vi.fn(),
+    discardSubmissionFeedbackDraft: vi.fn(),
     publishSubmissionFeedback: vi.fn(),
   };
 });
 
-const getEligibilityMock = vi.mocked(getSubmissionFeedbackEligibility);
-const generateMock = vi.mocked(generateSubmissionFeedbackSuggestion);
+const getDraftMock = vi.mocked(getSubmissionFeedbackDraft);
+const discardDraftMock = vi.mocked(discardSubmissionFeedbackDraft);
 const publishMock = vi.mocked(publishSubmissionFeedback);
 
-const eligible = {
+const readyDraft: FeedbackDraft = {
   submission_id: 41,
-  eligible: true,
-  answer_release_authorized: true,
-  code: null,
-  message: null,
-};
-
-const suggestion = {
-  submission_id: 41,
-  feedback: "Review the lesson concept, then explain each step in your own words.",
-  detail_level: "DETAILED" as const,
-  answer_release_authorized: true,
-  attempt_count: 1,
-  evidence_item_count: 4,
-  included_item_count: 4,
+  status: "READY",
+  draft_feedback: "Review the lesson concept, then explain each step in your own words.",
   evidence_fingerprint: "a".repeat(64),
   feedback_fingerprint: "b".repeat(64),
-  generated_at: "2026-11-09T09:00:00Z",
+  detail_level: "GENERAL",
+  auto_ai_feedback_enabled: true,
+  error_message: null,
+  created_at: "2026-11-15T00:00:00Z",
+  updated_at: "2026-11-15T00:00:00Z",
 };
 
-function renderAssistant(options: { fullyGraded?: boolean; existingFeedback?: string } = {}) {
-  const onPublished = vi.fn();
-  render(
-    <QuizFeedbackAssistant
-      submissionId={41}
-      fullyGraded={options.fullyGraded ?? true}
-      existingFeedback={options.existingFeedback ?? ""}
-      onPublished={onPublished}
-    />,
+const noneDraft: FeedbackDraft = {
+  submission_id: 41,
+  status: "NONE",
+  draft_feedback: null,
+  evidence_fingerprint: null,
+  feedback_fingerprint: null,
+  detail_level: "GENERAL",
+  auto_ai_feedback_enabled: false,
+  error_message: null,
+  created_at: null,
+  updated_at: null,
+};
+
+type HarnessOptions = {
+  submissionId?: number;
+  fullyGraded?: boolean;
+  savedFeedback?: string;
+  initialDraft?: string;
+  classworkKind?: "QUIZ" | "ASSIGNMENT" | "ACTIVITY";
+  onConflictReload?: (submissionId: number) => Promise<void>;
+  onPublished?: (feedback: string, fingerprint: string) => void;
+  onReviewChange?: (reviewing: boolean) => void;
+};
+
+/** Mirrors a host: one Teacher Feedback editor owned by the page. */
+function TeacherFeedbackHarness(options: HarnessOptions) {
+  const saved = options.savedFeedback ?? "";
+  const [draft, setDraft] = useState(options.initialDraft ?? saved);
+  return (
+    <div>
+      <label htmlFor="teacher-feedback">Teacher Feedback</label>
+      <textarea id="teacher-feedback" value={draft} onChange={(event) => setDraft(event.target.value)} />
+      <QuizFeedbackAssistant
+        submissionId={options.submissionId ?? 41}
+        fullyGraded={options.fullyGraded ?? true}
+        existingFeedback={saved}
+        feedbackDraft={draft}
+        onFeedbackDraftChange={setDraft}
+        onPublished={options.onPublished ?? vi.fn()}
+        classworkKind={options.classworkKind}
+        onConflictReload={options.onConflictReload}
+        onReviewChange={options.onReviewChange}
+      />
+    </div>
   );
-  return { onPublished };
 }
 
-async function generateSuggestion() {
-  await screen.findByRole("button", { name: "Generate Feedback" });
-  fireEvent.click(screen.getByRole("button", { name: "Generate Feedback" }));
-  await screen.findByText(suggestion.feedback);
+function renderAssistant(options: HarnessOptions = {}) {
+  const onPublished = options.onPublished ?? vi.fn();
+  const onReviewChange = options.onReviewChange ?? vi.fn();
+  const view = render(<TeacherFeedbackHarness {...options} onPublished={onPublished} onReviewChange={onReviewChange} />);
+  return { onPublished, onReviewChange, view };
 }
 
-describe("QuizFeedbackAssistant", () => {
+const editor = () => screen.getByLabelText("Teacher Feedback") as HTMLTextAreaElement;
+
+describe("Teacher Feedback inline AI automatic draft controls", () => {
   beforeEach(() => {
-    getEligibilityMock.mockResolvedValue(eligible);
-    generateMock.mockResolvedValue(suggestion);
+    getDraftMock.mockResolvedValue(readyDraft);
+    discardDraftMock.mockResolvedValue({ ...readyDraft, status: "DISCARDED" });
     publishMock.mockImplementation(async (_submissionId, payload) => ({
       submission_id: 41,
       feedback: payload.feedback,
-      evidence_fingerprint: suggestion.evidence_fingerprint,
+      evidence_fingerprint: readyDraft.evidence_fingerprint!,
       feedback_fingerprint: "c".repeat(64),
     }));
     toastSuccess.mockClear();
@@ -90,216 +121,115 @@ describe("QuizFeedbackAssistant", () => {
     vi.clearAllMocks();
   });
 
-  it("keeps generation unavailable while manual grading is pending", () => {
-    renderAssistant({ fullyGraded: false });
-
-    expect(screen.getByText("Finish manual grading first")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Generate Feedback" })).toBeNull();
-    expect(getEligibilityMock).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ["FEEDBACK_RETAKE_AVAILABLE", "Feedback can be generated after the final available quiz attempt"],
-    ["FEEDBACK_CORRECT_ANSWERS_DISABLED", "Correct-answer display is disabled for this quiz"],
-    ["FEEDBACK_AI_UNAVAILABLE", "AI feedback is unavailable in this environment"],
-  ])("shows a server-derived unavailable state for %s", async (code, message) => {
-    getEligibilityMock.mockResolvedValue({
-      ...eligible,
-      eligible: false,
-      answer_release_authorized: false,
-      code,
-      message,
-    });
+  it("renders no separate assistant interface, second editor, or manual generate button", async () => {
     renderAssistant();
-
-    expect(await screen.findByText(message)).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Generate Feedback" })).toBeNull();
-    expect(generateMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(getDraftMock).toHaveBeenCalledWith(41));
+    expect(screen.queryByText("AI Feedback Assistant")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Generate AI Feedback" })).toBeNull();
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
   });
 
-  it("generates a private suggestion without posting or overwriting existing feedback", async () => {
-    const { onPublished } = renderAssistant({ existingFeedback: "Teacher's original comment." });
-
-    await generateSuggestion();
-
-    expect(generateMock).toHaveBeenCalledWith(41);
-    expect(screen.getByText("AI suggestion — not posted")).toBeDefined();
-    expect(publishMock).not.toHaveBeenCalled();
-    expect(onPublished).not.toHaveBeenCalled();
-    expect(screen.queryByLabelText("Final teacher-approved feedback")).toBeNull();
+  it("automatically loads a ready draft into the single Teacher Feedback editor", async () => {
+    const { onReviewChange } = renderAssistant();
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
+    expect(onReviewChange).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("button", { name: "Post Feedback" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Discard Draft" })).toBeDefined();
   });
 
-  it("uses a suggestion only after the teacher chooses it and allows editing", async () => {
+  it("supports direct click-to-edit in the single editor without separate modal or adopt step", async () => {
     renderAssistant();
-    await generateSuggestion();
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
 
-    fireEvent.click(screen.getByRole("button", { name: "Use Suggestion" }));
-    const editor = screen.getByLabelText("Final teacher-approved feedback") as HTMLTextAreaElement;
-    expect(editor.value).toBe(suggestion.feedback);
-    fireEvent.change(editor, { target: { value: "Teacher-edited final feedback." } });
-    expect(editor.value).toBe("Teacher-edited final feedback.");
+    fireEvent.change(editor(), { target: { value: "Teacher edited text directly in place." } });
+    expect(editor().value).toBe("Teacher edited text directly in place.");
     expect(publishMock).not.toHaveBeenCalled();
   });
 
-  it("appends to existing feedback without publishing automatically", async () => {
-    renderAssistant({ existingFeedback: "Existing teacher feedback." });
-    await generateSuggestion();
+  it("discards the draft, calls server discard endpoint, and restores previous feedback", async () => {
+    const { onReviewChange } = renderAssistant({ savedFeedback: "Original saved feedback." });
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
 
-    fireEvent.click(screen.getByRole("button", { name: "Append Suggestion" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
 
-    expect((screen.getByLabelText("Final teacher-approved feedback") as HTMLTextAreaElement).value).toBe(
-      `Existing teacher feedback.\n\n${suggestion.feedback}`,
-    );
-    expect(publishMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(discardDraftMock).toHaveBeenCalledWith(41));
+    expect(editor().value).toBe("Original saved feedback.");
+    await waitFor(() => expect(onReviewChange).toHaveBeenLastCalledWith(false));
+    expect(toastSuccess).toHaveBeenCalledWith({ title: "AI feedback draft discarded" });
   });
 
-  it("requires explicit confirmation before preparing a replacement", async () => {
-    renderAssistant({ existingFeedback: "Existing teacher feedback." });
-    await generateSuggestion();
+  it("posts approved feedback with evidence and comment fingerprints", async () => {
+    const { onPublished, onReviewChange } = renderAssistant();
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
 
-    fireEvent.click(screen.getByRole("button", { name: "Replace Existing Feedback" }));
-    expect(screen.queryByLabelText("Final teacher-approved feedback")).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Use as Replacement" }));
-
-    await waitFor(() => {
-      expect((screen.getByLabelText("Final teacher-approved feedback") as HTMLTextAreaElement).value).toBe(
-        suggestion.feedback,
-      );
-    });
-    expect(publishMock).not.toHaveBeenCalled();
-  });
-
-  it("discards an unposted suggestion", async () => {
-    renderAssistant();
-    await generateSuggestion();
-
-    fireEvent.click(screen.getByRole("button", { name: "Discard Suggestion" }));
-
-    expect(screen.queryByText(suggestion.feedback)).toBeNull();
-    expect(publishMock).not.toHaveBeenCalled();
-  });
-
-  it("posts only the explicitly approved text with both fingerprints", async () => {
-    const { onPublished } = renderAssistant();
-    await generateSuggestion();
-    fireEvent.click(screen.getByRole("button", { name: "Use Suggestion" }));
-    fireEvent.change(screen.getByLabelText("Final teacher-approved feedback"), {
-      target: { value: "Teacher-approved final wording." },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Post Approved Feedback" }));
+    fireEvent.change(editor(), { target: { value: "Approved feedback with minor edit." } });
+    fireEvent.click(screen.getByRole("button", { name: "Post Feedback" }));
 
     await waitFor(() => expect(publishMock).toHaveBeenCalledWith(41, {
-      feedback: "Teacher-approved final wording.",
-      expected_evidence_fingerprint: suggestion.evidence_fingerprint,
-      expected_feedback_fingerprint: suggestion.feedback_fingerprint,
+      feedback: "Approved feedback with minor edit.",
+      expected_evidence_fingerprint: readyDraft.evidence_fingerprint,
+      expected_feedback_fingerprint: readyDraft.feedback_fingerprint,
     }));
-    expect(onPublished).toHaveBeenCalledWith("Teacher-approved final wording.", "c".repeat(64));
+    expect(onPublished).toHaveBeenCalledWith("Approved feedback with minor edit.", "c".repeat(64));
     expect(toastSuccess).toHaveBeenCalledWith({ title: "Teacher feedback posted" });
+    await waitFor(() => expect(onReviewChange).toHaveBeenLastCalledWith(false));
+  });
+
+  it("preserves unsaved manual edits when an AI draft arrives and offers explicit choice", async () => {
+    const { onReviewChange } = renderAssistant({
+      savedFeedback: "",
+      initialDraft: "Teacher's manual draft note already in editor.",
+    });
+
+    await waitFor(() => expect(getDraftMock).toHaveBeenCalledWith(41));
+    // Manual text is preserved!
+    expect(editor().value).toBe("Teacher's manual draft note already in editor.");
+    expect(screen.getByText("AI feedback draft ready")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Review AI Draft" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Keep My Notes" })).toBeDefined();
+
+    // Teacher decides to review AI draft
+    fireEvent.click(screen.getByRole("button", { name: "Review AI Draft" }));
+    expect(editor().value).toBe(readyDraft.draft_feedback);
+    expect(onReviewChange).toHaveBeenCalledWith(true);
+  });
+
+  it("renders nothing when Automatic AI Feedback toggle is OFF", async () => {
+    getDraftMock.mockResolvedValue(noneDraft);
+    const { onReviewChange } = renderAssistant();
+
+    await waitFor(() => expect(getDraftMock).toHaveBeenCalledWith(41));
+    expect(editor().value).toBe("");
+    expect(onReviewChange).not.toHaveBeenCalledWith(true);
+    expect(screen.queryByRole("button", { name: "Post Feedback" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Discard Draft" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Generate AI Feedback" })).toBeNull();
+  });
+
+  it("does not fetch draft when submission is not fully graded", () => {
+    renderAssistant({ fullyGraded: false });
+    expect(getDraftMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Generate AI Feedback" })).toBeNull();
+  });
+
+  it("blocks posting text over 1200 characters", async () => {
+    renderAssistant();
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
+
+    fireEvent.change(editor(), { target: { value: "a".repeat(1201) } });
+    expect((screen.getByRole("button", { name: "Post Feedback" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("1201/1200 characters")).toBeDefined();
   });
 
   it.each([
     ["FEEDBACK_EVIDENCE_STALE", "Quiz scores or answers changed"],
     ["FEEDBACK_COMMENT_STALE", "Saved teacher feedback changed elsewhere"],
-    ["FEEDBACK_ANSWER_RELEASE_PENDING", "Correct answers are not released yet"],
-  ])("keeps the draft and explains publication conflict %s", async (code, expected) => {
-    publishMock.mockRejectedValue(new SubmissionFeedbackApiError(409, "Correct answers are not released yet", code));
+  ])("explains publication conflict %s", async (code, expected) => {
+    publishMock.mockRejectedValue(new SubmissionFeedbackApiError(409, "Conflict", code));
     renderAssistant();
-    await generateSuggestion();
-    fireEvent.click(screen.getByRole("button", { name: "Use Suggestion" }));
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
 
-    fireEvent.click(screen.getByRole("button", { name: "Post Approved Feedback" }));
-
+    fireEvent.click(screen.getByRole("button", { name: "Post Feedback" }));
     expect(await screen.findByText(new RegExp(expected))).toBeDefined();
-    expect(screen.getByLabelText("Final teacher-approved feedback")).toBeDefined();
-  });
-
-  it("shows provider failures without creating a review draft or posting", async () => {
-    generateMock.mockRejectedValue(new SubmissionFeedbackApiError(503, "AI provider unavailable", "FEEDBACK_AI_UNAVAILABLE"));
-    renderAssistant();
-
-    await screen.findByRole("button", { name: "Generate Feedback" });
-    fireEvent.click(screen.getByRole("button", { name: "Generate Feedback" }));
-
-    expect(await screen.findByText("AI provider unavailable")).toBeDefined();
-    expect(screen.queryByLabelText("Final teacher-approved feedback")).toBeNull();
-    expect(publishMock).not.toHaveBeenCalled();
-  });
-
-  it("ignores a late suggestion response after the selected submission changes", async () => {
-    let resolveSuggestion: ((value: typeof suggestion) => void) | undefined;
-    generateMock.mockReturnValueOnce(new Promise((resolve) => {
-      resolveSuggestion = resolve;
-    }));
-    const onPublished = vi.fn();
-    const view = render(
-      <QuizFeedbackAssistant
-        submissionId={41}
-        fullyGraded
-        existingFeedback=""
-        onPublished={onPublished}
-      />,
-    );
-    await screen.findByRole("button", { name: "Generate Feedback" });
-    fireEvent.click(screen.getByRole("button", { name: "Generate Feedback" }));
-
-    view.rerender(
-      <QuizFeedbackAssistant
-        submissionId={42}
-        fullyGraded
-        existingFeedback="Another student's feedback."
-        onPublished={onPublished}
-      />,
-    );
-    resolveSuggestion?.(suggestion);
-
-    await waitFor(() => expect(getEligibilityMock).toHaveBeenCalledWith(42));
-    expect(screen.queryByText(suggestion.feedback)).toBeNull();
-    expect(publishMock).not.toHaveBeenCalled();
-  });
-
-  it("does not apply a late publication response to a newly selected submission", async () => {
-    let resolvePublication: ((value: {
-      submission_id: number;
-      feedback: string;
-      evidence_fingerprint: string;
-      feedback_fingerprint: string;
-    }) => void) | undefined;
-    publishMock.mockReturnValueOnce(new Promise((resolve) => {
-      resolvePublication = resolve;
-    }));
-    const firstPublished = vi.fn();
-    const secondPublished = vi.fn();
-    const view = render(
-      <QuizFeedbackAssistant
-        submissionId={41}
-        fullyGraded
-        existingFeedback=""
-        onPublished={firstPublished}
-      />,
-    );
-    await generateSuggestion();
-    fireEvent.click(screen.getByRole("button", { name: "Use Suggestion" }));
-    fireEvent.click(screen.getByRole("button", { name: "Post Approved Feedback" }));
-
-    view.rerender(
-      <QuizFeedbackAssistant
-        submissionId={42}
-        fullyGraded
-        existingFeedback="Another student's feedback."
-        onPublished={secondPublished}
-      />,
-    );
-    resolvePublication?.({
-      submission_id: 41,
-      feedback: suggestion.feedback,
-      evidence_fingerprint: suggestion.evidence_fingerprint,
-      feedback_fingerprint: "c".repeat(64),
-    });
-
-    await waitFor(() => expect(getEligibilityMock).toHaveBeenCalledWith(42));
-    expect(firstPublished).not.toHaveBeenCalled();
-    expect(secondPublished).not.toHaveBeenCalled();
-    expect(screen.queryByText(suggestion.feedback)).toBeNull();
   });
 });

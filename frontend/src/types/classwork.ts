@@ -56,6 +56,7 @@ export type TeacherClasswork = {
   description?: string | null;
   instructions?: string | null;
   classwork_type: ClassworkType;
+  activity_mode?: "ONLINE" | "MANUAL" | string | null;
   classwork_category?: string | null;
   exam_subtype?: string | null;
   total_points?: number | null;
@@ -74,6 +75,9 @@ export type TeacherClasswork = {
   rubric_levels?: ActivityRubricLevel[];
   has_submissions?: boolean;
   has_graded_submissions?: boolean;
+  is_graded?: boolean;
+  due_date?: string | null;
+  auto_ai_feedback_enabled?: boolean;
 };
 
 export type TeacherClassLoad = {
@@ -183,6 +187,7 @@ export type CreateDraft = {
   max_attempts: string;
   is_published: boolean;
   show_scores: boolean;
+  auto_ai_feedback_enabled: boolean;
 };
 
 export type EditDraft = {
@@ -199,4 +204,5 @@ export type EditDraft = {
   max_attempts: string;
   is_published: boolean;
   show_scores: boolean;
+  auto_ai_feedback_enabled: boolean;
 };

@@ -153,6 +153,10 @@ export default function CreateClassworkQuizModal({
             exam_subtype: remediationOriginalExam?.subtype ?? "",
             total_points: defaultTotalPoints,
             max_attempts: defaultAttempts,
+            // Unified quiz results visibility defaults to hidden until the
+            // teacher explicitly enables scores and correct answers.
+            show_scores: defaultQuizSettings.show_correct_answers,
+            auto_ai_feedback_enabled: false,
             subject_id: preferredId,
         };
     });
@@ -684,7 +688,7 @@ export default function CreateClassworkQuizModal({
         return () => {
             isActive = false;
         };
-    }, [createStep, draft.subject_id, selectedClassIds]);
+    }, [createStep, draft.subject_id, initialLessonId, remediationFocus, selectedClassIds]);
 
     const buildQuizPayload = () => ({
         duration_minutes: quizSettings.duration_minutes
@@ -697,7 +701,7 @@ export default function CreateClassworkQuizModal({
             enable_per_question_time_limits:
                 quizSettings.enable_per_question_time_limits,
             max_attempts: Number(quizSettings.max_attempts || draft.max_attempts),
-            show_correct_answers: quizSettings.show_correct_answers,
+            show_correct_answers: draft.show_scores,
             summary_release_mode: quizSettings.summary_release_mode,
             summary_release_at:
                 quizSettings.summary_release_mode === "SCHEDULED" &&
@@ -777,6 +781,10 @@ export default function CreateClassworkQuizModal({
             formData.append("is_published", String(draftOnly ? false : draft.is_published));
             formData.append("subject_id", String(draft.subject_id));
             formData.append("show_scores", String(draft.show_scores));
+            formData.append(
+                "auto_ai_feedback_enabled",
+                String(!remediationTarget && draft.auto_ai_feedback_enabled),
+            );
             formData.append("class_ids", JSON.stringify(selectedClassIds));
             if (remediationTarget) {
                 formData.append("intervention_id", String(remediationTarget.intervention_id));
@@ -1772,7 +1780,7 @@ export default function CreateClassworkQuizModal({
 
                                 </div>
 
-                                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <div className="mt-4 grid gap-3 sm:grid-cols-3">
                                     {[
                                         {
                                             key: "is_shuffle_questions",
@@ -1786,17 +1794,12 @@ export default function CreateClassworkQuizModal({
                                             key: "enable_per_question_time_limits",
                                             label: "Enable individual question time limits",
                                         },
-                                        {
-                                            key: "show_correct_answers",
-                                            label: "Show correct answers after submission",
-                                        },
                                     ].map((setting) => {
                                         const key = setting.key as keyof Pick<
                                             QuizSettingsDraft,
                                             | "is_shuffle_questions"
                                             | "enable_per_question_scoring"
                                             | "enable_per_question_time_limits"
-                                            | "show_correct_answers"
                                         >;
                                         const enabled = quizSettings[key];
                                         return (
@@ -1882,19 +1885,50 @@ export default function CreateClassworkQuizModal({
 
                                 <div className="flex items-center gap-2 mt-2">
                                     <Switch
+                                        aria-label="Show quiz results (scores and correct answers)"
                                         checked={draft.show_scores}
-                                        onCheckedChange={(checked) =>
+                                        onCheckedChange={(checked) => {
                                             setDraft((current) => ({
                                                 ...current,
                                                 show_scores: checked,
-                                            }))
-                                        }
+                                            }));
+                                            setQuizSettings((current) => ({
+                                                ...current,
+                                                show_correct_answers: checked,
+                                            }));
+                                        }}
                                         disabled={isCreating}
                                     />
                                     <label className="text-sm font-medium text-gray-700">
-                                        Show scores to students
+                                        Show quiz results (scores and correct answers)
                                     </label>
                                 </div>
+
+                                {!remediationDraft && !remediationTarget && (
+                                    <div className="mt-4 rounded-md border-2 border-black bg-white p-3 shadow-sm">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <label className="text-sm font-bold text-gray-900 block">
+                                                    Automatic AI Feedback
+                                                </label>
+                                                <p className="text-xs text-gray-600 mt-0.5">
+                                                    Automatically prepare AI-generated feedback after grading. Teachers can review and edit the feedback before posting it to students.
+                                                </p>
+                                            </div>
+                                            <Switch
+                                                aria-label="Automatic AI Feedback"
+                                                checked={draft.auto_ai_feedback_enabled}
+                                                onCheckedChange={(checked) =>
+                                                    setDraft((current) => ({
+                                                        ...current,
+                                                        auto_ai_feedback_enabled: checked,
+                                                    }))
+                                                }
+                                                disabled={isCreating}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="grid gap-4 sm:grid-cols-2 mt-4">
                                     <Field label="Locked Until">

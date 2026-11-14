@@ -145,6 +145,10 @@ export default function ClassworkView({
   const [gradeDraft, setGradeDraft] = useState("");
   const [feedbackDraft, setFeedbackDraft] = useState("");
   const [isPostingGrade, setIsPostingGrade] = useState(false);
+  const [isPostingAiFeedback, setIsPostingAiFeedback] = useState(false);
+  const [settingsRevision, setSettingsRevision] = useState(0);
+  const selectedSubmissionDetailRef = useRef<TeacherSubmissionDetail | null>(null);
+  selectedSubmissionDetailRef.current = selectedSubmissionDetail;
 
   useEffect(() => {
     if (contextState === "historical") {
@@ -361,7 +365,7 @@ export default function ClassworkView({
   };
 
   const postGrade = async () => {
-    if (blocksLiveActions || !selectedSubmissionDetail || !selected) return;
+    if (blocksLiveActions || isPostingAiFeedback || !selectedSubmissionDetail || !selected) return;
     const grade = Number(gradeDraft);
     if (!Number.isFinite(grade) || grade < 0) {
       setGradeError("Enter a valid score.");
@@ -405,6 +409,8 @@ export default function ClassworkView({
       }
       const updated = (await response.json()) as TeacherSubmissionDetail;
       setSelectedSubmissionDetail(updated);
+      setGradeDraft(updated.grade != null ? String(updated.grade) : "");
+      setFeedbackDraft(updated.feedback ?? "");
       setSelectedStudent((current) =>
         current
           ? { ...current, status: updated.status, grade: updated.grade ?? null }
@@ -517,7 +523,7 @@ export default function ClassworkView({
       const dueDate =
         tracking?.due_date ||
         selected?.assignments?.[0]?.due_date ||
-        (selected as any)?.due_date;
+        selected?.due_date;
       if (
         student.submitted_at &&
         dueDate &&
@@ -545,7 +551,7 @@ export default function ClassworkView({
 
   const needsGrading = Boolean(
     selected &&
-    (selected as any).is_graded !== false &&
+    selected.is_graded !== false &&
     !isReading,
   );
 
@@ -617,7 +623,7 @@ export default function ClassworkView({
         gradeDraft={gradeDraft}
         feedbackDraft={feedbackDraft}
         gradeError={gradeError}
-        isPostingGrade={isPostingGrade}
+        isPostingGrade={isPostingGrade || isPostingAiFeedback}
         isReadOnly={blocksLiveActions}
         onClose={closeStudentSubmission}
         onGradeChange={(value) => {
@@ -631,6 +637,25 @@ export default function ClassworkView({
         onPostGrade={postGrade}
         onOpenQuizGrading={(submissionId) => {
           if (!blocksLiveActions) setSelectedGradingSubmissionId(submissionId);
+        }}
+        onAiFeedbackPublished={(feedback, fingerprint) => {
+          setSelectedSubmissionDetail((current) => current
+            ? { ...current, feedback, feedback_fingerprint: fingerprint }
+            : current);
+          setFeedbackDraft(feedback);
+        }}
+        onAiPublishingChange={setIsPostingAiFeedback}
+        onAiConflictReload={async (submissionId) => {
+          const response = await apiFetch(`/api/v1/submissions/${submissionId}/detail`);
+          if (!response.ok) throw new Error("Unable to reload saved feedback.");
+          const fresh = (await response.json()) as TeacherSubmissionDetail;
+          const current = selectedSubmissionDetailRef.current;
+          if (current?.submission_id !== submissionId) return;
+          setSelectedSubmissionDetail(fresh);
+          setGradeDraft(fresh.grade != null ? String(fresh.grade) : "");
+          // The rejected AI review draft lived in the single Teacher Feedback
+          // editor; replace it with the authoritative saved comment.
+          setFeedbackDraft(fresh.feedback ?? "");
         }}
       />
     );
@@ -1363,6 +1388,7 @@ export default function ClassworkView({
         onClose={() => setShowEditModal(false)}
         onSuccess={(updated) => {
           setSelected(updated);
+          setSettingsRevision((current) => current + 1);
           onUpdated?.(updated);
         }}
       />
@@ -1370,6 +1396,7 @@ export default function ClassworkView({
       {selectedGradingSubmissionId && !blocksLiveActions && (
         <QuizGradingModal
           submissionId={selectedGradingSubmissionId}
+          eligibilityRevision={settingsRevision}
           isOpen={Boolean(selectedGradingSubmissionId)}
           onClose={() => setSelectedGradingSubmissionId(null)}
           onSuccess={() => {

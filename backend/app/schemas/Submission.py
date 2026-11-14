@@ -94,5 +94,19 @@ class FeedbackPublicationResponse(BaseModel):
     feedback_fingerprint: str = Field(min_length=64, max_length=64)
 
 
+class FeedbackDraftResponse(BaseModel):
+    submission_id: int
+    status: Literal["NONE", "PENDING", "READY", "UNDER_REVIEW", "APPROVED", "DISCARDED", "STALE", "FAILED", "NOT_ELIGIBLE"]
+    draft_feedback: Optional[str] = None
+    evidence_fingerprint: Optional[str] = None
+    feedback_fingerprint: Optional[str] = None
+    detail_level: str = "GENERAL"
+    auto_ai_feedback_enabled: bool = False
+    error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+
 class ReadingFocusPayload(BaseModel):
     focused_seconds: int = Field(gt=0, le=300, strict=True)

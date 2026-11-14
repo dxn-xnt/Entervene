@@ -780,7 +780,8 @@ export default function StudentClassworkView() {
                             ? "Your Submission"
                             : "Submit Your Work"}
                     </h2>
-                    {!isQuiz && !isReading && submission?.grade != null && (
+                    {!isQuiz && !isReading && submission?.status === "graded" &&
+                      (submission.grade != null || detail.show_scores === false) && (
                       <Badge variant="success" size="md">
                         {detail.show_scores
                           ? `Score: ${submission.grade}${detail.total_points != null ? `/${detail.total_points}` : ""}`
@@ -895,6 +896,10 @@ export default function StudentClassworkView() {
                       allowLateSubmissions={detail.allow_late_submissions}
                       maxAttempts={detail.max_attempts}
                       showScores={detail.show_scores}
+                      hideFeedbackWithScores={
+                        detail.classwork_type?.toUpperCase() === "ASSIGNMENT" ||
+                        (detail.classwork_type?.toUpperCase() === "ACTIVITY" && detail.activity_mode?.toUpperCase() === "ONLINE")
+                      }
                       hideGrade
                       isDeleting={actionLoading}
                       onDeleteSubmission={deleteSubmission}
