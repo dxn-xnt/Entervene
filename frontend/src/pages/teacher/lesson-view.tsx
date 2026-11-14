@@ -12,7 +12,7 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/retroui/Badge";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -539,7 +539,7 @@ export function TeacherLessonView({
             {/* ── Universal Header ── */}
             <div data-page-tabs-sticky-region className="border-b-2 border-border">
                 <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                         <SidebarTrigger className="shrink-0 md:hidden" />
                         <Breadcrumb className="min-w-0">
                             <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
@@ -586,7 +586,7 @@ export function TeacherLessonView({
                         </Breadcrumb>
                     </div>
 
-                    <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
+                    <div className="flex shrink-0 flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
                         {!isReadOnly && !isTaught && onConfirmDelivery && (
                             <Button
                                 type="button"

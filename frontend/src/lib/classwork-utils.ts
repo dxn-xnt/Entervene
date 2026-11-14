@@ -92,7 +92,7 @@ export function rubricPointBounds(points: number, levelPoints: number[]) {
 /** Display stored level scores as inclusive ranges without changing grading values. */
 export function rubricPointRange(points: number, levelPoints: number[]) {
   const { minimum, maximum } = rubricPointBounds(points, levelPoints);
-  return minimum === maximum ? `${maximum}` : `${minimum}–${maximum}`;
+  return minimum === maximum ? `${maximum}` : `${maximum}–${minimum}`;
 }
 
 export function isReadingType(value?: string | null) {

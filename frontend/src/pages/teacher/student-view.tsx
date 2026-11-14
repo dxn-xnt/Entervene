@@ -7,7 +7,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/teacher/button";
 import { Progress } from "@/components/retroui/Progress";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { OverviewCard } from "@/components/overview-cards";
 import { ClassworkItemLine } from "@/components/item-line/classwork";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -441,7 +441,7 @@ export function TeacherStudentView({
       {/* ── Universal Header with Breadcrumbs ── */}
       <div data-page-tabs-sticky-region>
         <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <SidebarTrigger className="shrink-0 md:hidden" />
             <Breadcrumb className="min-w-0">
               <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
@@ -492,7 +492,7 @@ export function TeacherStudentView({
             </Breadcrumb>
           </div>
 
-          <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center justify-end">
+          <div className="flex shrink-0 flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center justify-end">
             {(student || studentDetail?.student) && subjectLoads && subjectLoads.length > 0 && (
               <ManualSuggestionPanel
                 classId={Number(classId)}

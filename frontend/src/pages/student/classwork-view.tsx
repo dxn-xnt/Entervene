@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/student/button";
@@ -400,7 +400,7 @@ export default function StudentClassworkView() {
         <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
           <header
             data-student-detail-header
-            className="flex min-w-0 items-center gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6"
+            className="flex min-w-0 flex-1 items-center gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6"
           >
             <SidebarTrigger className="shrink-0 md:hidden" />
             <Breadcrumb className="min-w-0 flex-1">

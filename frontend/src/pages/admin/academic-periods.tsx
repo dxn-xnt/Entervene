@@ -5,7 +5,7 @@ import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { AdminBreadcrumb as Breadcrumb } from "@/components/admin/admin-breadcrumb";
 import { ArrowUpRight, AlertCircle, Pencil } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -70,7 +70,7 @@ export default function AdminAcademicPeriods() {
           <div className="flex flex-1 flex-col">
             <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <SidebarTrigger className="shrink-0 md:hidden" />
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
                 <Breadcrumb>
                   <Breadcrumb.List>
                     <Breadcrumb.Item>
