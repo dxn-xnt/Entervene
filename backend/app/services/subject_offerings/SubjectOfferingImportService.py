@@ -26,6 +26,7 @@ SUBJECT_OFFERING_IMPORT_HEADERS = [
     "pathway",
     "term",
     "subject_code",
+    "minutes",
 ]
 
 
@@ -33,10 +34,10 @@ def subject_offering_import_template_csv() -> str:
     output = io.StringIO()
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(SUBJECT_OFFERING_IMPORT_HEADERS)
-    writer.writerow(["2026-2027", "Grade 7", "general", "Term 1", "MATH7"])
-    writer.writerow(["2026-2027", "Grade 11", "both", "Term 1", "GENMATH11"])
-    writer.writerow(["2026-2027", "Grade 11", "stem_medical", "Term 2", "BIO1"])
-    writer.writerow(["2026-2027", "Grade 11", "stem_engineering", "Term 2", "PRECAL11"])
+    writer.writerow(["2026-2027", "Grade 7", "general", "Term 1", "MATH7", "60"])
+    writer.writerow(["2026-2027", "Grade 11", "both", "Term 1", "GENMATH11", "60"])
+    writer.writerow(["2026-2027", "Grade 11", "stem_medical", "Term 2", "BIO1", "96"])
+    writer.writerow(["2026-2027", "Grade 11", "stem_engineering", "Term 2", "PRECAL11", "96"])
     return output.getvalue()
 
 
@@ -169,6 +170,14 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
         grade_level_text = row["grade_level"].strip()
         term = row["term"].strip()
         subject_code = row["subject_code"].strip()
+        minutes_text = row["minutes"].strip()
+        minutes = None
+        try:
+            minutes = int(minutes_text)
+            if minutes <= 0 or str(minutes) != minutes_text:
+                raise ValueError
+        except (TypeError, ValueError):
+            row_errors.append("minutes must be a positive whole number.")
         pathway_text = row["pathway"].strip()
 
         academic_year = years.get(year_label.casefold()) if year_label else None
@@ -290,6 +299,7 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             academic_year_id=academic_year.academic_year_id,
             academic_level_id=academic_level.academic_level_id,
             academic_period_id=academic_period.academic_period_id,
+            minutes=minutes,
             status="active",
         )
         created.append((offering, pathway_ids))

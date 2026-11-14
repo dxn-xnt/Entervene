@@ -29,6 +29,20 @@ from app.services.academic.PeriodTemplateRevisionService import (
 )
 
 
+def add_offerings(db, class_obj, subjects, minutes=45, period_id=1):
+    for subject in subjects:
+        duration = minutes[subject.subject_id] if isinstance(minutes, dict) else minutes
+        db.add(SubjectOffering(
+            subject_id=subject.subject_id,
+            academic_year_id=class_obj.academic_year_id,
+            academic_level_id=class_obj.academic_level_id,
+            academic_period_id=period_id,
+            minutes=duration,
+            status="active",
+        ))
+    db.commit()
+
+
 @pytest.fixture
 def db():
     engine = create_engine(
@@ -105,9 +119,10 @@ def test_dynamic_period_slot_change_reflected_in_auto_schedule(db):
     db.commit()
 
     cls = Class(class_id=1, section_name="Archimedes", academic_year_id=1, academic_level_id=9, period_template_group="JHS_45MIN")
-    sub = Subject(subject_id=101, subject_name="Filipino 9", is_core=True, is_math_or_science=False)
+    sub = Subject(subject_id=101, subject_name="Filipino 9", is_core=True)
     db.add_all([cls, sub])
     db.commit()
+    add_offerings(db, cls, [sub], 45)
 
     loads = [SubjectLoadItem(class_id=1, subject_id=101, academic_period_id=1)]
     scheduled = AutoSchedulerService.auto_schedule_loads(db=db, loads=loads)
@@ -122,20 +137,21 @@ def test_zero_overlap_with_locked_breaks(db):
     """
     cls = Class(class_id=1, section_name="Archimedes", academic_year_id=1, academic_level_id=9, period_template_group="JHS_45MIN")
     subs = [
-        Subject(subject_id=1, subject_name="Math 9", is_core=True, is_math_or_science=True),
-        Subject(subject_id=2, subject_name="Science 9", is_core=True, is_math_or_science=True),
-        Subject(subject_id=3, subject_name="Filipino 9", is_core=True, is_math_or_science=False),
-        Subject(subject_id=4, subject_name="English 9", is_core=True, is_math_or_science=False),
-        Subject(subject_id=5, subject_name="AP 9", is_core=True, is_math_or_science=False),
-        Subject(subject_id=6, subject_name="MAPEH 9", is_core=True, is_math_or_science=False),
-        Subject(subject_id=7, subject_name="TLE 9", is_core=True, is_math_or_science=False),
-        Subject(subject_id=8, subject_name="Values 9", is_core=True, is_math_or_science=False),
-        Subject(subject_id=9, subject_name="French 9", is_core=False, is_math_or_science=False),
-        Subject(subject_id=10, subject_name="Research 9", is_core=False, is_math_or_science=False),
+        Subject(subject_id=1, subject_name="Math 9", is_core=True),
+        Subject(subject_id=2, subject_name="Science 9", is_core=True),
+        Subject(subject_id=3, subject_name="Filipino 9", is_core=True),
+        Subject(subject_id=4, subject_name="English 9", is_core=True),
+        Subject(subject_id=5, subject_name="AP 9", is_core=True),
+        Subject(subject_id=6, subject_name="MAPEH 9", is_core=True),
+        Subject(subject_id=7, subject_name="TLE 9", is_core=True),
+        Subject(subject_id=8, subject_name="Values 9", is_core=True),
+        Subject(subject_id=9, subject_name="French 9", is_core=False),
+        Subject(subject_id=10, subject_name="Research 9", is_core=False),
     ]
     db.add(cls)
     db.add_all(subs)
     db.commit()
+    add_offerings(db, cls, subs, {1: 60, 2: 60, **{i: 45 for i in range(3, 11)}})
 
     loads = [SubjectLoadItem(class_id=1, subject_id=s.subject_id, academic_period_id=1) for s in subs]
     scheduled = AutoSchedulerService.auto_schedule_loads(db=db, loads=loads)
@@ -167,8 +183,8 @@ def test_shared_jhs_template_across_grades_7_to_10(db):
 
     for c in classes:
         enhanced, standard, breaks = AutoSchedulerService.get_group_template_slots(c.period_template_group, db)
-        assert len(enhanced) == 2
-        assert len(standard) == 7
+        assert len(enhanced) == 0
+        assert len(standard) == 9
         assert len(breaks) == 4
 
 
@@ -309,18 +325,17 @@ def test_complete_jhs_template_rejects_overlapping_periods(db):
         _validate_period_template_payload(db, payload, 360, 1200, "06:00", "20:00")
 
 
-def test_db_is_math_or_science_flag_strictly_controls_enhanced_slots(db):
+def test_offering_duration_strictly_controls_matching_slots(db):
     """
-    Asserts that subjects with is_math_or_science=True get the Enhanced slots,
-    while non-math/science subjects with 'science' in their name (e.g. Science Research)
-    do NOT take enhanced slots and route to standard periods without colliding.
+    Offering minutes, not subject names, control slot placement.
     """
     cls = Class(class_id=1, section_name="Archimedes", academic_year_id=1, academic_level_id=9, period_template_group="JHS_45MIN")
-    s_math = Subject(subject_id=1, subject_name="Enhanced Mathematics 9", is_core=True, is_math_or_science=True)
-    s_sci = Subject(subject_id=2, subject_name="Enhanced Science 9", is_core=True, is_math_or_science=True)
-    s_res = Subject(subject_id=3, subject_name="Science Research", is_core=False, is_math_or_science=False)
+    s_math = Subject(subject_id=1, subject_name="Enhanced Mathematics 9", is_core=True)
+    s_sci = Subject(subject_id=2, subject_name="Enhanced Science 9", is_core=True)
+    s_res = Subject(subject_id=3, subject_name="Science Research", is_core=False)
     db.add_all([cls, s_math, s_sci, s_res])
     db.commit()
+    add_offerings(db, cls, [s_math, s_sci, s_res], {1: 60, 2: 60, 3: 45})
 
     loads = [
         SubjectLoadItem(class_id=1, subject_id=1, academic_period_id=1),
@@ -343,10 +358,11 @@ def test_locked_sections_remain_untouched_during_auto_generate_all(db):
     """
     cls1 = Class(class_id=1, section_name="Archimedes", academic_year_id=1, academic_level_id=9, period_template_group="JHS_45MIN")
     cls2 = Class(class_id=2, section_name="Copernicus", academic_year_id=1, academic_level_id=9, period_template_group="JHS_45MIN")
-    sub = Subject(subject_id=1, subject_name="Math 9", is_core=True, is_math_or_science=True)
+    sub = Subject(subject_id=1, subject_name="Math 9", is_core=True)
     teacher = AcademicStaff(staff_id="T001", first_name="Angel", last_name="Alcantara")
     db.add_all([cls1, cls2, sub, teacher])
     db.commit()
+    add_offerings(db, cls1, [sub], 60)
 
     locked_load = SubjectLoadItem(
         class_id=1,
@@ -387,16 +403,17 @@ def test_is_core_subjects_prioritized_for_5day_slots(db):
     """
     cls = Class(class_id=1, section_name="Archimedes", academic_year_id=1, academic_level_id=9, period_template_group="JHS_45MIN")
     core_subs = [
-        Subject(subject_id=i, subject_name=f"Core {i}", is_core=True, is_math_or_science=False)
+        Subject(subject_id=i, subject_name=f"Core {i}", is_core=True)
         for i in range(1, 7)
     ]
     non_core_subs = [
-        Subject(subject_id=7, subject_name="Elective A", is_core=False, is_math_or_science=False),
-        Subject(subject_id=8, subject_name="Elective B", is_core=False, is_math_or_science=False),
+        Subject(subject_id=7, subject_name="Elective A", is_core=False),
+        Subject(subject_id=8, subject_name="Elective B", is_core=False),
     ]
     db.add(cls)
     db.add_all(core_subs + non_core_subs)
     db.commit()
+    add_offerings(db, cls, core_subs + non_core_subs, 45)
 
     loads = [SubjectLoadItem(class_id=1, subject_id=s.subject_id, academic_period_id=1) for s in core_subs + non_core_subs]
     scheduled = AutoSchedulerService.auto_schedule_loads(db=db, loads=loads)
@@ -421,10 +438,11 @@ def test_teacher_conflict_demotion_and_live_rebalance(db):
     cls2 = Class(class_id=2, section_name="Copernicus", academic_year_id=1, academic_level_id=9, period_template_group="JHS_45MIN")
     t1 = AcademicStaff(staff_id="T001", first_name="Busy", last_name="Teacher")
     t2 = AcademicStaff(staff_id="T002", first_name="Free", last_name="Teacher")
-    s1 = Subject(subject_id=1, subject_name="Core Subject 1", is_core=True, is_math_or_science=False)
-    s2 = Subject(subject_id=2, subject_name="Core Subject 2", is_core=True, is_math_or_science=False)
+    s1 = Subject(subject_id=1, subject_name="Core Subject 1", is_core=True)
+    s2 = Subject(subject_id=2, subject_name="Core Subject 2", is_core=True)
     db.add_all([cls1, cls2, t1, t2, s1, s2])
     db.commit()
+    add_offerings(db, cls1, [s1, s2], 45)
 
     # Pre-occupy T1 on MON, WED, FRI across all standard morning slots in Class 1
     locked_loads = [
@@ -829,6 +847,11 @@ def test_published_template_override_creates_new_revision_without_mutating_histo
         display_order=row.display_order,
     ) for row in effective_rows]
     future_date = today + timedelta(days=1)
+    db.query(SubjectOffering).filter(
+        SubjectOffering.subject_id == subject.subject_id,
+        SubjectOffering.academic_period_id == period.academic_period_id,
+    ).update({"minutes": 35})
+    db.commit()
     future_preview = PeriodTemplateRevisionService.create_preview(
         db,
         period=period,

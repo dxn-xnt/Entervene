@@ -34,6 +34,8 @@ import {
   type OfferingFormState,
 } from "./subject-utils";
 
+const COMMON_DURATIONS = [45, 60, 72, 96] as const;
+
 export function OfferingModal({
   open,
   onOpenChange,
@@ -145,7 +147,9 @@ export function OfferingModal({
         .then((res) => {
           if (!isMounted) return;
           const subjectOfferings = res.subject_offerings.filter(
-            (o) => o.subject.subject_id === offering.subject.subject_id && o.status === "active"
+            (o) => o.subject.subject_id === offering.subject.subject_id
+              && o.status === "active"
+              && o.pathway === offering.pathway
           );
           setExistingSubjectOfferings(subjectOfferings);
           const periodIds = subjectOfferings.map((o) => String(o.academic_period.academic_period_id));
@@ -250,7 +254,7 @@ export function OfferingModal({
 
   const setField = <TKey extends keyof OfferingFormState>(key: TKey, value: OfferingFormState[TKey]) => {
     setForm((current) => ({ ...current, [key]: value }));
-    if ((key === "pathway" && error === "Select a valid pathway for the selected grade level.") || (key === "minutes" && error === "Minutes must be a positive number." && (!String(value).trim() || Number(value) > 0))) setError(null);
+    if ((key === "pathway" && error === "Select a valid pathway for the selected grade level.") || (key === "minutes" && error === "Minutes must be a positive whole number." && Number.isInteger(Number(value)) && Number(value) > 0)) setError(null);
   };
 
   const failValidation = (message: string) => {
@@ -386,8 +390,8 @@ export function OfferingModal({
     }
 
     const parsedMinutes = form.minutes.trim() ? Number(form.minutes) : null;
-    if (parsedMinutes !== null && (isNaN(parsedMinutes) || parsedMinutes <= 0)) {
-      failValidation("Minutes must be a positive number.");
+    if (parsedMinutes === null || !Number.isInteger(parsedMinutes) || parsedMinutes <= 0) {
+      failValidation("Minutes must be a positive whole number.");
       return;
     }
 
@@ -515,7 +519,7 @@ export function OfferingModal({
                 This offering will be added to the current active academic year. Change active year or active term in System Settings.
               </p>
             </div>
-            <AdminValidationAlert message={error && !["Select setup details, at least one term, and at least one subject.", "No valid academic terms are available for the selected academic year.", "Select a valid pathway for the selected grade level.", "Minutes must be a positive number."].includes(error) ? error : null} attempt={validationAttempt} />
+            <AdminValidationAlert message={error && !["Select setup details, at least one term, and at least one subject.", "No valid academic terms are available for the selected academic year.", "Select a valid pathway for the selected grade level.", "Minutes must be a positive whole number."].includes(error) ? error : null} attempt={validationAttempt} />
             {readOnly ? (
               <div className="rounded! border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                 <p className="font-bold">Read-only academic year</p>
@@ -582,19 +586,22 @@ export function OfferingModal({
                 ) : null}
                 {isCreateMode ? (
                   <div className="flex flex-col gap-1">
-                    <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (Minutes)</label>
+                    <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (Minutes) <span className="text-red-500">*</span></label>
                     <Input
                       id="create-offering-minutes"
-                      aria-invalid={error === "Minutes must be a positive number."}
-                      aria-describedby={error === "Minutes must be a positive number." ? "create-offering-minutes-error" : undefined}
+                      aria-invalid={error === "Minutes must be a positive whole number."}
+                      aria-describedby={error === "Minutes must be a positive whole number." ? "create-offering-minutes-error" : undefined}
                       type="number"
                       min={1}
                       value={form.minutes}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
-                      placeholder="e.g. 45, 60, 72, 96 (optional)"
+                      placeholder="e.g. 45, 60, 72, 96"
                     />
-                    {error === "Minutes must be a positive number." && <FormMessage id="create-offering-minutes-error">{error}</FormMessage>}
-                    <p className="text-xs text-muted-foreground">Minutes per class period (optional now, required for publishing).</p>
+                    <div className="flex flex-wrap gap-1" aria-label="Common durations">
+                      {COMMON_DURATIONS.map((minutes) => <Button key={minutes} type="button" size="sm" variant={form.minutes === String(minutes) ? "default" : "outline"} onClick={() => setField("minutes", String(minutes))}>{minutes}</Button>)}
+                    </div>
+                    {error === "Minutes must be a positive whole number." && <FormMessage id="create-offering-minutes-error">{error}</FormMessage>}
+                    <p className="text-xs text-muted-foreground">Minutes per class period for all selected terms. Required for scheduling.</p>
                   </div>
                 ) : null}
                 <div className="flex flex-col gap-2 md:col-span-2">
@@ -694,15 +701,18 @@ export function OfferingModal({
                     <label className="text-sm font-semibold" htmlFor="offering-minutes">Duration (Minutes)</label>
                     <Input
                       id="offering-minutes"
-                      aria-invalid={error === "Minutes must be a positive number."}
-                      aria-describedby={error === "Minutes must be a positive number." ? "offering-minutes-error" : undefined}
+                      aria-invalid={error === "Minutes must be a positive whole number."}
+                      aria-describedby={error === "Minutes must be a positive whole number." ? "offering-minutes-error" : undefined}
                       type="number"
                       min={1}
                       value={form.minutes}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
                       placeholder="e.g. 45, 60, 72, 96"
                     />
-                    {error === "Minutes must be a positive number." && <FormMessage id="offering-minutes-error">{error}</FormMessage>}
+                    <div className="flex flex-wrap gap-1" aria-label="Common durations">
+                      {COMMON_DURATIONS.map((minutes) => <Button key={minutes} type="button" size="sm" variant={form.minutes === String(minutes) ? "default" : "outline"} onClick={() => setField("minutes", String(minutes))}>{minutes}</Button>)}
+                    </div>
+                    {error === "Minutes must be a positive whole number." && <FormMessage id="offering-minutes-error">{error}</FormMessage>}
                     <p className="text-xs text-muted-foreground">Minutes per period. Required for publishing.</p>
                   </div>
                   <div className="flex flex-col gap-1">

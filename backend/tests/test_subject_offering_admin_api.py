@@ -312,6 +312,25 @@ def test_create_offering_works(client, db, offering_context):
     assert db.query(SubjectOffering).count() == 1
 
 
+@pytest.mark.parametrize("minutes", [45, 60, 72, 92, 96, 37])
+def test_create_offering_accepts_positive_whole_minutes(client, offering_context, minutes):
+    response = client.post(
+        "/api/v1/subject-offerings",
+        json=offering_payload(offering_context, minutes=minutes),
+    )
+    assert response.status_code == 201
+    assert response.json()["minutes"] == minutes
+
+
+@pytest.mark.parametrize("minutes", [0, -1, 1.5, True, "45"])
+def test_create_offering_rejects_invalid_minutes(client, offering_context, minutes):
+    response = client.post(
+        "/api/v1/subject-offerings",
+        json=offering_payload(offering_context, minutes=minutes),
+    )
+    assert response.status_code == 422
+
+
 def test_copy_source_inactive_year_to_active_target_year_succeeds(client, db, offering_context):
     ctx = offering_context
     source_offering = create_offering(

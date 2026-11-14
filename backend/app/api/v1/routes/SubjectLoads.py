@@ -124,7 +124,6 @@ def _effective_period_template_payload(
 
 def ensure_default_period_templates(db: Session):
     try:
-        db.execute(text("ALTER TABLE subject ADD COLUMN IF NOT EXISTS is_math_or_science BOOLEAN DEFAULT FALSE;"))
         db.execute(text("ALTER TABLE subject ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';"))
         db.execute(text("ALTER TABLE subject ADD COLUMN IF NOT EXISTS academic_level_id INTEGER;"))
         db.execute(text("ALTER TABLE subject ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();"))
@@ -711,14 +710,6 @@ def get_subject_load_studio_data(
                 "academic_level_id": s.academic_level_id,
                 "grading_template": s.grading_template.template_name,
                 "is_core": bool(getattr(s, "is_core", False)),
-                "is_math_or_science": bool(
-                    getattr(s, "is_math_or_science", False)
-                    or any(
-                        k in (s.subject_name or "").lower()
-                        or k in (s.subject_codename or "").lower()
-                        for k in ["math", "mathematics", "science", "physics", "chemistry", "biology"]
-                    )
-                ),
             }
             for s in subjects
         ],
@@ -1123,7 +1114,15 @@ def auto_schedule_subject_loads(
             "class_id": item.class_id,
             "subject_id": item.subject_id,
             "staff_id": item.staff_id,
-            "reason": "No conflict-free timetable slot is available.",
+            "reason": next(
+                (
+                    conflict.message for conflict in validation_res.conflicts
+                    if conflict.class_id == item.class_id
+                    and conflict.subject_id == item.subject_id
+                    and conflict.rule in {"NO_MATCHING_DURATION_SLOT", "MISSING_OFFERING_DURATION", "SUBJECT_NOT_OFFERED_IN_PERIOD"}
+                ),
+                "No conflict-free timetable slot is available.",
+            ),
         }
         for item in auto_scheduled_loads
         if not item.start_time or not item.end_time or not item.days_of_week

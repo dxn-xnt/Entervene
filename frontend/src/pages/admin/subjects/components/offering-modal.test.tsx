@@ -77,7 +77,6 @@ const catalogSubject = {
   description: null,
   status: "active",
   academic_level: options.academic_levels[0],
-  is_math_or_science: true,
   created_at: null,
   updated_at: null,
 } satisfies SubjectListItem;

@@ -16,6 +16,10 @@ class SubjectOffering(Base):
             "status IN ('active', 'archived')",
             name="ck_subject_offering_status",
         ),
+        CheckConstraint(
+            "minutes IS NULL OR minutes > 0",
+            name="ck_subject_offering_minutes_positive",
+        ),
         Index("ix_subject_offering_subject_id", "subject_id"),
         Index("ix_subject_offering_academic_year_id", "academic_year_id"),
         Index("ix_subject_offering_academic_level_id", "academic_level_id"),
@@ -37,4 +41,4 @@ class SubjectOffering(Base):
     academic_year: Mapped[object] = relationship("AcademicYear", back_populates="subject_offerings")
     academic_level: Mapped[object] = relationship("AcademicLevel", back_populates="subject_offerings")
     academic_period: Mapped[object] = relationship("AcademicPeriod", back_populates="subject_offerings")
-    offering_pathways: Mapped[list[object]] = relationship("SubjectOfferingPathway", back_populates="subject_offering", cascade="all, delete-orphan")   
+    offering_pathways: Mapped[list[object]] = relationship("SubjectOfferingPathway", back_populates="subject_offering", cascade="all, delete-orphan")
