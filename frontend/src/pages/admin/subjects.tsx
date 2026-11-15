@@ -1077,6 +1077,7 @@ export default function AdminSubjects() {
         options={offeringOptions}
         offering={editingOffering}
         catalogSubjects={subjects}
+        defaultAcademicYearId={selectedYearId}
         readOnly={isViewingInactiveAcademicYear}
         readOnlyReason={readOnlyReason}
         onSaved={async (savedMeta) => {

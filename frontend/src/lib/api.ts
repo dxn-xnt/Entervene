@@ -230,6 +230,7 @@ export type SubjectAcademicLevel = {
 };
 export type SubjectListItem = {
   subject_id: number;
+  is_core?: boolean;
   grading_template_id: number;
   grading_template: {
     grading_template_id: number;
@@ -315,6 +316,7 @@ export type SubjectOfferingListItem = {
   academic_level: SubjectAcademicLevel;
   academic_period: SubjectOfferingAcademicPeriod;
   pathway: SubjectOfferingPathway;
+  pathway_ids?: number[];
   minutes?: number | null;
   status: SubjectStatus;
   created_at: string | null;
@@ -391,6 +393,21 @@ export type SubjectOfferingCreatePayload = {
   pathway: SubjectOfferingPathway;
   minutes?: number | null;
   status?: SubjectStatus;
+};
+export type SubjectOfferingBatchCreatePayload = {
+  academic_year_id: number;
+  academic_level_id: number;
+  items: Array<{
+    subject_id: number;
+    academic_period_id: number;
+    pathway: SubjectOfferingPathway;
+  }>;
+  minutes?: number | null;
+  status?: SubjectStatus;
+};
+export type SubjectOfferingBatchResponse = {
+  created_count: number;
+  subject_offerings: SubjectOfferingListItem[];
 };
 export type SubjectOfferingUpdatePayload = Partial<SubjectOfferingCreatePayload>;
 export type SubjectOfferingEditPayload = SubjectOfferingUpdatePayload & {
@@ -1415,6 +1432,19 @@ export async function createSubjectOffering(payload: SubjectOfferingCreatePayloa
     throw new ApiRequestError(apiErrorMessage(data, "Unable to create subject offering."), response.status, data);
   }
   return (await response.json()) as SubjectOfferingResponse;
+}
+
+export async function createSubjectOfferingsBatch(payload: SubjectOfferingBatchCreatePayload): Promise<SubjectOfferingBatchResponse> {
+  const response = await apiFetch("/api/v1/subject-offerings/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(apiErrorMessage(data, "Unable to create subject offerings."), response.status, data);
+  }
+  return (await response.json()) as SubjectOfferingBatchResponse;
 }
 
 export async function updateSubjectOffering(subjectOfferingId: string | number, payload: SubjectOfferingEditPayload): Promise<SubjectOfferingResponse> {

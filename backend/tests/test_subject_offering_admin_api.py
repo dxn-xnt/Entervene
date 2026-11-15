@@ -312,6 +312,149 @@ def test_create_offering_works(client, db, offering_context):
     assert db.query(SubjectOffering).count() == 1
 
 
+def batch_payload(ctx, items, **overrides):
+    payload = {
+        "academic_year_id": ctx["year"].academic_year_id,
+        "academic_level_id": ctx["grade_11"].academic_level_id,
+        "items": items,
+        "minutes": 60,
+        "status": "active",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_batch_creation_isolated_by_academic_year(client, db, offering_context):
+    ctx = offering_context
+    create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+    )
+    db.commit()
+
+    response = client.post("/api/v1/subject-offerings/batch", json=batch_payload(ctx, [{
+        "subject_id": ctx["biology"].subject_id,
+        "academic_period_id": ctx["term_1"].academic_period_id,
+        "pathway": "stem_medical",
+    }]))
+
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == 1
+    assert {row.academic_year_id for row in db.query(SubjectOffering).all()} == {
+        ctx["year"].academic_year_id,
+        ctx["other_year"].academic_year_id,
+    }
+
+
+def test_batch_creates_only_requested_missing_term(client, db, offering_context):
+    ctx = offering_context
+    create_offering(db, ctx)
+    db.commit()
+
+    response = client.post("/api/v1/subject-offerings/batch", json=batch_payload(ctx, [{
+        "subject_id": ctx["biology"].subject_id,
+        "academic_period_id": ctx["term_2"].academic_period_id,
+        "pathway": "stem_medical",
+    }]))
+
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == 1
+    assert {row.academic_period_id for row in db.query(SubjectOffering).all()} == {
+        ctx["term_1"].academic_period_id,
+        ctx["term_2"].academic_period_id,
+    }
+
+
+def test_batch_duplicate_conflict_is_atomic(client, db, offering_context):
+    ctx = offering_context
+    create_offering(db, ctx)
+    db.commit()
+
+    response = client.post("/api/v1/subject-offerings/batch", json=batch_payload(ctx, [
+        {
+            "subject_id": ctx["biology"].subject_id,
+            "academic_period_id": ctx["term_1"].academic_period_id,
+            "pathway": "stem_medical",
+        },
+        {
+            "subject_id": ctx["biology"].subject_id,
+            "academic_period_id": ctx["term_2"].academic_period_id,
+            "pathway": "stem_medical",
+        },
+    ]))
+
+    assert response.status_code == 409
+    assert "General Biology 1" in response.json()["detail"]
+    assert "Term 1" in response.json()["detail"]
+    assert db.query(SubjectOffering).count() == 1
+
+
+def test_batch_rejects_duplicate_items(client, db, offering_context):
+    ctx = offering_context
+    item = {
+        "subject_id": ctx["biology"].subject_id,
+        "academic_period_id": ctx["term_1"].academic_period_id,
+        "pathway": "stem_medical",
+    }
+    response = client.post(
+        "/api/v1/subject-offerings/batch",
+        json=batch_payload(ctx, [item, item]),
+    )
+    assert response.status_code == 422
+    assert db.query(SubjectOffering).count() == 0
+
+
+def test_batch_respects_pathway_overlap_rules(client, db, offering_context):
+    ctx = offering_context
+    create_offering(db, ctx, pathway="stem_medical")
+    db.commit()
+
+    engineering = client.post("/api/v1/subject-offerings/batch", json=batch_payload(ctx, [{
+        "subject_id": ctx["biology"].subject_id,
+        "academic_period_id": ctx["term_1"].academic_period_id,
+        "pathway": "stem_engineering",
+    }]))
+    assert engineering.status_code == 201, engineering.text
+
+    shared = client.post("/api/v1/subject-offerings/batch", json=batch_payload(ctx, [{
+        "subject_id": ctx["biology"].subject_id,
+        "academic_period_id": ctx["term_1"].academic_period_id,
+        "pathway": "both",
+    }]))
+    assert shared.status_code == 409
+    assert db.query(SubjectOffering).count() == 2
+
+
+def test_batch_rejects_period_from_another_year(client, db, offering_context):
+    ctx = offering_context
+    response = client.post("/api/v1/subject-offerings/batch", json=batch_payload(ctx, [{
+        "subject_id": ctx["biology"].subject_id,
+        "academic_period_id": ctx["other_year_term"].academic_period_id,
+        "pathway": "stem_medical",
+    }]))
+    assert response.status_code == 422
+    assert "must belong to the selected academic year" in response.json()["detail"]
+    assert db.query(SubjectOffering).count() == 0
+
+
+def test_batch_rejects_unknown_academic_year(client, db, offering_context):
+    ctx = offering_context
+    response = client.post("/api/v1/subject-offerings/batch", json=batch_payload(
+        ctx,
+        [{
+            "subject_id": ctx["biology"].subject_id,
+            "academic_period_id": ctx["term_1"].academic_period_id,
+            "pathway": "stem_medical",
+        }],
+        academic_year_id=999999,
+    ))
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Academic year not found."
+    assert db.query(SubjectOffering).count() == 0
+
+
 @pytest.mark.parametrize("minutes", [45, 60, 72, 92, 96, 37])
 def test_create_offering_accepts_positive_whole_minutes(client, offering_context, minutes):
     response = client.post(

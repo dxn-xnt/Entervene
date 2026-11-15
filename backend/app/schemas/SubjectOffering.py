@@ -53,6 +53,21 @@ class SubjectOfferingCreate(BaseModel):
     status: str = "active"
 
 
+class SubjectOfferingBatchItem(BaseModel):
+    subject_id: int
+    academic_period_id: int
+    pathway: str | None = None
+    pathway_ids: list[int] = Field(default_factory=list)
+
+
+class SubjectOfferingBatchCreate(BaseModel):
+    academic_year_id: int
+    academic_level_id: int
+    items: list[SubjectOfferingBatchItem] = Field(min_length=1)
+    minutes: PositiveMinutes | None = None
+    status: str = "active"
+
+
 class SubjectOfferingUpdate(BaseModel):
     subject_id: int | None = None
     academic_year_id: int | None = None
@@ -103,6 +118,11 @@ class SubjectOfferingListItem(BaseModel):
 
 class SubjectOfferingResponse(SubjectOfferingListItem):
     pass
+
+
+class SubjectOfferingBatchResponse(BaseModel):
+    created_count: int
+    subject_offerings: list[SubjectOfferingListItem]
 
 
 class SubjectOfferingListSummary(BaseModel):
