@@ -254,7 +254,7 @@ export default function SubjectPrediction() {
           </Breadcrumb>
         </header>
 
-        <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+        <div className="-mt-[1px] border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <div className="flex flex-col gap-4">
             <PredictionFilters
               filters={scopedFilters}
