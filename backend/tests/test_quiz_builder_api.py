@@ -373,6 +373,139 @@ def test_quiz_builder_blocks_edits_and_delete_after_attempt_exists(quiz_api_cont
     assert delete_response.status_code == 409
 
 
+def test_quiz_results_settings_update_both_visibility_fields_after_attempt_exists(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    assert c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}",
+        json=_valid_payload(c["lesson"].lesson_id),
+    ).status_code == 200
+    c["db"].add(StudentSubmission(
+        student_id=c["student"].student_id,
+        classwork_assignment_id=c["assignment"].classwork_assignment_id,
+        status="graded",
+        grade=Decimal("8.00"),
+    ))
+    c["db"].commit()
+
+    needs_confirmation = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={
+            "show_quiz_results": True,
+            "summary_release_mode": "IMMEDIATE",
+            "summary_release_at": None,
+        },
+    )
+    assert needs_confirmation.status_code == 409
+    assert needs_confirmation.json()["detail"]["code"] == "QUIZ_RESULTS_REVEAL_CONFIRMATION_REQUIRED"
+
+    response = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={
+            "show_quiz_results": True,
+            "summary_release_mode": "IMMEDIATE",
+            "summary_release_at": None,
+            "confirm_answer_reveal": True,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["show_scores"] is True
+    assert response.json()["show_correct_answers"] is True
+    c["db"].refresh(c["quiz_classwork"])
+    setting = c["db"].query(QuizSetting).filter(QuizSetting.classwork_id == classwork_id).one()
+    assert c["quiz_classwork"].show_scores is True
+    assert setting.show_correct_answers is True
+
+
+def test_quiz_results_settings_preserve_mixed_visibility_until_explicit_choice(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    assert c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}",
+        json=_valid_payload(c["lesson"].lesson_id),
+    ).status_code == 200
+    c["quiz_classwork"].show_scores = True
+    setting = c["db"].query(QuizSetting).filter(QuizSetting.classwork_id == classwork_id).one()
+    setting.show_correct_answers = False
+    c["db"].commit()
+
+    response = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={
+            "show_quiz_results": None,
+            "summary_release_mode": "NEVER",
+            "summary_release_at": None,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["show_scores"] is True
+    assert response.json()["show_correct_answers"] is False
+    assert response.json()["has_mixed_visibility"] is True
+
+    # Moving out of NEVER when legacy show_correct_answers is True could reveal
+    # answers, so confirmation is required even while show_quiz_results stays None.
+    c["quiz_classwork"].show_scores = False
+    setting.show_correct_answers = True
+    c["db"].commit()
+    needs_confirmation = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={
+            "show_quiz_results": None,
+            "summary_release_mode": "IMMEDIATE",
+            "summary_release_at": None,
+        },
+    )
+    assert needs_confirmation.status_code == 409
+    assert needs_confirmation.json()["detail"]["code"] == "QUIZ_RESULTS_REVEAL_CONFIRMATION_REQUIRED"
+
+    # Setting release mode to NEVER hides the summary, so no reveal confirmation
+    # is required even if show_quiz_results is already True.
+    c["quiz_classwork"].show_scores = True
+    setting.show_correct_answers = True
+    c["db"].commit()
+    never_response = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={
+            "show_quiz_results": True,
+            "summary_release_mode": "NEVER",
+            "summary_release_at": None,
+        },
+    )
+    assert never_response.status_code == 200
+    assert never_response.json()["summary_release_mode"] == "NEVER"
+
+
+def test_quiz_results_settings_reject_foreign_teacher(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    assert c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}",
+        json=_valid_payload(c["lesson"].lesson_id),
+    ).status_code == 200
+    c["identity"]["sub"] = c["accounts"]["other_teacher"].user_id
+
+    response = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={
+            "show_quiz_results": False,
+            "summary_release_mode": "NEVER",
+        },
+    )
+    assert response.status_code == 403
+    c["db"].refresh(c["quiz_classwork"])
+    assert c["quiz_classwork"].show_scores is True
+
+    c["identity"]["sub"] = c["accounts"]["owner"].user_id
+    foreign_unassigned = c["client"].put(
+        f"/api/v1/quizzes/classwork/{c['foreign_quiz'].classwork_id}/results-settings",
+        json={
+            "show_quiz_results": False,
+            "summary_release_mode": "NEVER",
+        },
+    )
+    assert foreign_unassigned.status_code == 404
+
+
 def test_teacher_can_reset_builder_before_attempts_exist(quiz_api_context):
     c = quiz_api_context
     classwork_id = c["quiz_classwork"].classwork_id

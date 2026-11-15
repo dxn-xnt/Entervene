@@ -265,9 +265,17 @@ def submit_student_quiz_attempt(
     else:
         submission.status = "graded"
         submission.graded_at = now
+        from app.services.submission.SubmissionFeedbackService import (
+            enqueue_automatic_feedback_draft,
+            dispatch_background_draft_processing,
+        )
+        enqueue_automatic_feedback_draft(db, submission.submission_id, None)
+
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, student.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
+    if not has_manual:
+        dispatch_background_draft_processing()
     if refresh_needed:
         refresh_after_committed_grade_change(
             db.get_bind(),
@@ -427,11 +435,13 @@ def _attempt_response(
 ) -> QuizAttemptResponse:
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
     summary_available, release_at, summary_message = _summary_release_state(setting, assignment, submission)
+    can_submit = _can_submit(db, assignment, classwork, submission)
     visibility = _attempt_feedback_visibility(
         setting,
         submission,
         summary_available=summary_available,
         reveal_answers=reveal_answers,
+        retake_available=can_submit,
     )
     answers = {
         answer.quiz_question_id: answer
@@ -475,6 +485,7 @@ def _attempt_feedback_visibility(
     *,
     summary_available: bool,
     reveal_answers: bool = False,
+    retake_available: bool = False,
 ) -> _AttemptFeedbackVisibility:
     status = submission.status if submission else None
     is_completed = status in COMPLETED_ATTEMPT_STATUSES
@@ -482,7 +493,9 @@ def _attempt_feedback_visibility(
         submission
         and (status == "pending" or (is_completed and summary_available))
     )
-    evaluation = bool(is_completed and summary_available)
+    # While an eligible retake remains permitted, withhold evaluation,
+    # correctness markers, correct answers, and explanations from student views.
+    evaluation = bool(is_completed and summary_available and not retake_available)
     correct_answers = bool(
         evaluation
         and (reveal_answers or (setting and setting.show_correct_answers))

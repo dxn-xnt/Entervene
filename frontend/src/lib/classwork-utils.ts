@@ -43,6 +43,7 @@ export const emptyClassworkDraft: CreateDraft = {
   max_attempts: "1",
   is_published: true,
   show_scores: true,
+  auto_ai_feedback_enabled: false,
 };
 
 export const allowedClassworkMaterialExtensions = [".pdf", ".docx", ".ppt", ".pptx", ".jpg", ".jpeg", ".png"];
@@ -123,6 +124,7 @@ export const classworkToEditDraft = (item: TeacherClasswork): EditDraft => ({
       max_attempts: firstAssignment?.max_attempts ? String(firstAssignment.max_attempts) : "1",
       is_published: firstAssignment?.is_published ?? item.is_published,
       show_scores: item.show_scores ?? true,
+      auto_ai_feedback_enabled: item.auto_ai_feedback_enabled ?? false,
     };
   })(),
   title: item.title,
@@ -133,3 +135,15 @@ export const classworkToEditDraft = (item: TeacherClasswork): EditDraft => ({
   exam_subtype: item.exam_subtype ?? "",
   total_points: item.total_points !== null && item.total_points !== undefined ? String(item.total_points) : "",
 });
+
+export function isAutoAiFeedbackSupported(
+  classworkType?: string | null,
+  activityMode?: string | null,
+  isRemediationOrIntervention?: boolean,
+): boolean {
+  if (isRemediationOrIntervention) return false;
+  const normalized = (classworkType || "").trim().toUpperCase();
+  if (normalized === "QUIZ" || normalized === "ASSIGNMENT") return true;
+  if (normalized === "ACTIVITY" && (activityMode || "ONLINE").toUpperCase() === "ONLINE") return true;
+  return false;
+}

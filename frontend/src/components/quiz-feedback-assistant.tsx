@@ -1,34 +1,48 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
 
-import ConfirmDialog from "@/components/confirm-dialog";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
-import { Card } from "@/components/retroui/Card";
 import { useToast } from "@/components/retroui/Toast";
 import {
-  generateSubmissionFeedbackSuggestion,
-  getSubmissionFeedbackEligibility,
+  discardSubmissionFeedbackDraft,
+  getSubmissionFeedbackDraft,
   publishSubmissionFeedback,
   SubmissionFeedbackApiError,
-  type FeedbackEligibility,
-  type FeedbackSuggestion,
+  type FeedbackDraft,
 } from "@/lib/submission-feedback-api";
+
+export const AI_FEEDBACK_MAX_LENGTH = 1200;
 
 type QuizFeedbackAssistantProps = {
   submissionId: number;
   fullyGraded: boolean;
+  /** The currently saved teacher feedback. */
   existingFeedback: string;
+  /** The value of the host Teacher Feedback editor. */
+  feedbackDraft: string;
+  onFeedbackDraftChange: (value: string) => void;
   onPublished: (feedback: string, feedbackFingerprint: string) => void;
+  classworkKind?: "QUIZ" | "ASSIGNMENT" | "ACTIVITY";
+  /** Increment or change when classwork/quiz settings are saved to refresh eligibility. */
+  eligibilityRevision?: string | number;
+  onPublishingChange?: (publishing: boolean) => void;
+  /** Reports whether an AI-generated draft is under review in the host editor. */
+  onReviewChange?: (reviewing: boolean) => void;
+  onConflictReload?: (submissionId: number) => Promise<void>;
+  disabled?: boolean;
 };
 
-function publicationConflictMessage(error: SubmissionFeedbackApiError): string {
+function publicationConflictMessage(error: SubmissionFeedbackApiError, classworkKind: string): string {
   switch (error.code) {
     case "FEEDBACK_EVIDENCE_STALE":
     case "FEEDBACK_SUBMISSION_CHANGED":
-      return "Quiz scores or answers changed. Generate a new suggestion before posting.";
+      return classworkKind === "QUIZ"
+        ? "Quiz scores or answers changed. Reloading submission for an updated draft."
+        : "The saved score or classwork settings changed. Reloading submission for an updated draft.";
     case "FEEDBACK_COMMENT_STALE":
-      return "Saved teacher feedback changed elsewhere. Reload before posting so it is not overwritten.";
+      return classworkKind === "QUIZ"
+        ? "Saved teacher feedback changed elsewhere. Reload before posting so it is not overwritten."
+        : "Saved teacher feedback changed elsewhere. The latest comment was reloaded.";
     case "FEEDBACK_ANSWER_RELEASE_PENDING":
     case "FEEDBACK_ANSWER_RELEASE_NEVER":
     case "FEEDBACK_ANSWER_RELEASE_INVALID":
@@ -43,27 +57,45 @@ export default function QuizFeedbackAssistant({
   submissionId,
   fullyGraded,
   existingFeedback,
+  feedbackDraft,
+  onFeedbackDraftChange,
   onPublished,
+  classworkKind = "QUIZ",
+  eligibilityRevision,
+  onPublishingChange,
+  onReviewChange,
+  onConflictReload,
+  disabled = false,
 }: QuizFeedbackAssistantProps) {
   const toast = useToast();
-  const [eligibility, setEligibility] = useState<FeedbackEligibility | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [draft, setDraft] = useState<FeedbackDraft | null>(null);
+  const [fetchingDraft, setFetchingDraft] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [suggestion, setSuggestion] = useState<FeedbackSuggestion | null>(null);
-  const [reviewDraft, setReviewDraft] = useState<string | null>(null);
+  const [discarding, setDiscarding] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [previousDraft, setPreviousDraft] = useState<string>("");
+  const [promptPending, setPromptPending] = useState<{ aiText: string; manualText: string } | null>(null);
   const [notice, setNotice] = useState<{ status: "error" | "warning"; message: string } | null>(null);
-  const [replaceOpen, setReplaceOpen] = useState(false);
+
   const mountedRef = useRef(true);
   const activeContextRef = useRef({ submissionId, fullyGraded });
   activeContextRef.current = { submissionId, fullyGraded };
+  const feedbackDraftRef = useRef(feedbackDraft);
+  feedbackDraftRef.current = feedbackDraft;
+  const onReviewChangeRef = useRef(onReviewChange);
+  onReviewChangeRef.current = onReviewChange;
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      onReviewChangeRef.current?.(false);
     };
   }, []);
+
+  useEffect(() => {
+    onReviewChangeRef.current?.(reviewing);
+  }, [reviewing]);
 
   const isActiveContext = useCallback(
     (requestedSubmissionId: number) => {
@@ -73,231 +105,212 @@ export default function QuizFeedbackAssistant({
     [],
   );
 
-  const checkEligibility = useCallback(async () => {
-    if (!fullyGraded) return;
+  const loadDraft = useCallback(async () => {
+    if (!fullyGraded) {
+      setDraft(null);
+      setReviewing(false);
+      return;
+    }
     const requestedSubmissionId = submissionId;
-    setChecking(true);
+    setFetchingDraft(true);
     setNotice(null);
     try {
-      const result = await getSubmissionFeedbackEligibility(requestedSubmissionId);
+      const result = await getSubmissionFeedbackDraft(requestedSubmissionId);
       if (!isActiveContext(requestedSubmissionId)) return;
-      setEligibility(result);
+      setDraft(result);
+
+      if (result.status === "READY" && result.draft_feedback) {
+        const currentDraft = feedbackDraftRef.current;
+        const currentTrim = currentDraft.trim();
+        const existingTrim = existingFeedback.trim();
+        const aiTrim = result.draft_feedback.trim();
+
+        // If the teacher has typed manual text different from saved feedback and different from the AI text
+        if (currentTrim !== "" && currentTrim !== existingTrim && currentTrim !== aiTrim) {
+          setPromptPending({ aiText: result.draft_feedback, manualText: currentDraft });
+        } else {
+          setPreviousDraft(currentDraft || existingFeedback);
+          onFeedbackDraftChange(result.draft_feedback);
+          setReviewing(true);
+        }
+      } else {
+        setReviewing(false);
+      }
     } catch (error) {
       if (!isActiveContext(requestedSubmissionId)) return;
-      const message = error instanceof Error ? error.message : "Unable to check AI feedback availability.";
-      setEligibility(null);
+      const message = error instanceof Error ? error.message : "Unable to load feedback draft.";
       setNotice({ status: "error", message });
+      setReviewing(false);
     } finally {
-      if (isActiveContext(requestedSubmissionId)) setChecking(false);
+      if (isActiveContext(requestedSubmissionId)) setFetchingDraft(false);
     }
-  }, [fullyGraded, isActiveContext, submissionId]);
+  }, [existingFeedback, fullyGraded, isActiveContext, onFeedbackDraftChange, submissionId]);
 
   useEffect(() => {
-    setEligibility(null);
-    setSuggestion(null);
-    setReviewDraft(null);
+    setDraft(null);
+    setReviewing(false);
+    setPromptPending(null);
     setNotice(null);
-    setReplaceOpen(false);
-    if (fullyGraded) void checkEligibility();
-  }, [checkEligibility, fullyGraded, submissionId]);
+    if (fullyGraded) {
+      void loadDraft();
+    }
+  }, [eligibilityRevision, fullyGraded, loadDraft, submissionId]);
 
-  const generateSuggestion = async () => {
-    if (!eligibility?.eligible || generating) return;
-    setGenerating(true);
+  const handleDiscard = async () => {
+    if (discarding || publishing) return;
+    setDiscarding(true);
     setNotice(null);
-    setSuggestion(null);
-    setReviewDraft(null);
     const requestedSubmissionId = submissionId;
     try {
-      const generated = await generateSubmissionFeedbackSuggestion(requestedSubmissionId);
+      await discardSubmissionFeedbackDraft(requestedSubmissionId);
       if (!isActiveContext(requestedSubmissionId)) return;
-      setSuggestion(generated);
+      onFeedbackDraftChange(previousDraft || existingFeedback);
+      setReviewing(false);
+      setDraft(null);
+      toast.success({ title: "AI feedback draft discarded" });
     } catch (error) {
       if (!isActiveContext(requestedSubmissionId)) return;
-      const message = error instanceof Error ? error.message : "Unable to generate an AI feedback suggestion.";
+      const message = error instanceof Error ? error.message : "Unable to discard draft.";
       setNotice({ status: "error", message });
-      if (error instanceof SubmissionFeedbackApiError && error.status === 409) {
-        await checkEligibility();
-      }
     } finally {
-      if (isActiveContext(requestedSubmissionId)) setGenerating(false);
+      if (isActiveContext(requestedSubmissionId)) setDiscarding(false);
     }
   };
 
-  const appendSuggestion = () => {
-    if (!suggestion) return;
-    const current = existingFeedback.trim();
-    setReviewDraft(current ? `${current}\n\n${suggestion.feedback}` : suggestion.feedback);
-    setNotice(null);
-  };
+  const finalText = feedbackDraft.trim();
+  const overLimit = finalText.length > AI_FEEDBACK_MAX_LENGTH;
 
-  const replaceSuggestion = () => {
-    if (!suggestion) return;
-    setReviewDraft(suggestion.feedback);
-    setReplaceOpen(false);
-    setNotice(null);
-  };
-
-  const discardSuggestion = () => {
-    setSuggestion(null);
-    setReviewDraft(null);
-    setNotice(null);
-  };
-
-  const publishFeedback = async () => {
-    if (!suggestion || reviewDraft === null || publishing) return;
-    const finalText = reviewDraft.trim();
+  const handlePublish = async () => {
+    if (!draft || publishing || discarding) return;
     if (!finalText) {
-      setNotice({ status: "error", message: "Enter the final teacher-approved feedback before posting." });
+      setNotice({ status: "error", message: "Enter teacher feedback before posting." });
+      return;
+    }
+    if (overLimit) {
+      setNotice({ status: "error", message: `Teacher feedback must be ${AI_FEEDBACK_MAX_LENGTH} characters or fewer.` });
       return;
     }
     setPublishing(true);
+    onPublishingChange?.(true);
     setNotice(null);
     const requestedSubmissionId = submissionId;
     try {
       const saved = await publishSubmissionFeedback(requestedSubmissionId, {
         feedback: finalText,
-        expected_evidence_fingerprint: suggestion.evidence_fingerprint,
-        expected_feedback_fingerprint: suggestion.feedback_fingerprint,
+        expected_evidence_fingerprint: draft.evidence_fingerprint || "",
+        expected_feedback_fingerprint: draft.feedback_fingerprint || "",
       });
       if (!isActiveContext(requestedSubmissionId)) return;
       onPublished(saved.feedback, saved.feedback_fingerprint);
-      setSuggestion(null);
-      setReviewDraft(null);
+      setReviewing(false);
+      setDraft(null);
       toast.success({ title: "Teacher feedback posted" });
-      await checkEligibility();
     } catch (error) {
       if (!isActiveContext(requestedSubmissionId)) return;
       const message =
         error instanceof SubmissionFeedbackApiError
-          ? publicationConflictMessage(error)
+          ? publicationConflictMessage(error, classworkKind)
           : error instanceof Error
             ? error.message
             : "Unable to post the approved feedback.";
       if (error instanceof SubmissionFeedbackApiError && error.status === 409) {
-        await checkEligibility();
+        if (classworkKind !== "QUIZ" && onConflictReload) {
+          try {
+            await onConflictReload(requestedSubmissionId);
+          } catch {
+            setNotice({ status: "error", message: "Reload the submission before continuing." });
+            return;
+          }
+        }
+        await loadDraft();
       }
       setNotice({ status: "error", message });
     } finally {
       if (isActiveContext(requestedSubmissionId)) setPublishing(false);
+      onPublishingChange?.(false);
     }
   };
 
+  if (!fullyGraded) {
+    return null;
+  }
+
   return (
-    <Card className="block w-full space-y-3 border-2 border-black bg-primary/10 p-4 shadow-none">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Sparkles aria-hidden="true" className="size-5" />
-            <h3 className="text-base font-extrabold text-black">AI Feedback Assistant</h3>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Generate a private suggestion, review its wording, then post it yourself. Scores are never changed.
-          </p>
-        </div>
-        {fullyGraded && eligibility?.eligible && !suggestion ? (
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void generateSuggestion()}
-            disabled={checking || generating || publishing}
-          >
-            {generating ? "Generating..." : "Generate Feedback"}
-          </Button>
-        ) : null}
-      </div>
-
-      {!fullyGraded ? (
-        <Alert status="warning">
-          <Alert.Title>Finish manual grading first</Alert.Title>
-          <Alert.Description>
-            Every quiz question must have an awarded score before an AI suggestion can be generated.
-          </Alert.Description>
-        </Alert>
-      ) : checking ? (
-        <p role="status" className="text-sm font-semibold text-muted-foreground">
-          Checking feedback availability...
-        </p>
-      ) : eligibility && !eligibility.eligible ? (
-        <Alert status="warning">
-          <Alert.Title>AI feedback unavailable</Alert.Title>
-          <Alert.Description>{eligibility.message || "This submission is not eligible for AI feedback."}</Alert.Description>
-        </Alert>
-      ) : null}
-
-      {notice ? (
+    <div className="space-y-2 pt-1" data-testid="teacher-feedback-ai-controls">
+      {notice && (
         <Alert status={notice.status} onClose={() => setNotice(null)}>
           <Alert.Description>{notice.message}</Alert.Description>
         </Alert>
-      ) : null}
+      )}
 
-      {suggestion ? (
-        <div className="space-y-3">
-          <div className="rounded border-2 border-black bg-background p-3">
-            <p className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">AI suggestion — not posted</p>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-black">{suggestion.feedback}</p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {!existingFeedback.trim() ? (
-              <Button type="button" size="sm" onClick={() => setReviewDraft(suggestion.feedback)}>
-                Use Suggestion
-              </Button>
-            ) : (
-              <>
-                <Button type="button" size="sm" variant="outline" onClick={appendSuggestion}>
-                  Append Suggestion
-                </Button>
-                <Button type="button" size="sm" variant="destructive" onClick={() => setReplaceOpen(true)}>
-                  Replace Existing Feedback
-                </Button>
-              </>
-            )}
-            <Button type="button" size="sm" variant="outline" onClick={discardSuggestion}>
-              Discard Suggestion
+      {promptPending && (
+        <Alert status="warning">
+          <Alert.Title>AI feedback draft ready</Alert.Title>
+          <Alert.Description>
+            An AI-generated draft has been automatically prepared. Would you like to review it or keep your current notes?
+          </Alert.Description>
+          <div className="flex gap-2 mt-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setPreviousDraft(promptPending.manualText);
+                onFeedbackDraftChange(promptPending.aiText);
+                setReviewing(true);
+                setPromptPending(null);
+              }}
+            >
+              Review AI Draft
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setPromptPending(null)}
+            >
+              Keep My Notes
             </Button>
           </div>
+        </Alert>
+      )}
 
-          {reviewDraft !== null ? (
-            <div className="space-y-2">
-              <label htmlFor={`ai-feedback-review-${submissionId}`} className="block text-sm font-bold text-black">
-                Final teacher-approved feedback
-              </label>
-              <textarea
-                id={`ai-feedback-review-${submissionId}`}
-                value={reviewDraft}
-                onChange={(event) => setReviewDraft(event.target.value)}
-                maxLength={1200}
-                rows={4}
-                className="w-full rounded! border-2 border-black px-3 py-2 text-sm focus:outline-none"
-              />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-muted-foreground">{reviewDraft.length}/1200 characters</span>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => void publishFeedback()}
-                  disabled={publishing || !reviewDraft.trim()}
-                >
-                  {publishing ? "Posting Feedback..." : "Post Approved Feedback"}
-                </Button>
-              </div>
-            </div>
-          ) : null}
+      {fetchingDraft && draft?.status === "PENDING" && (
+        <p role="status" className="text-xs text-muted-foreground italic">
+          Preparing AI feedback...
+        </p>
+      )}
+
+      {reviewing && (
+        <div className="space-y-2 pt-1" data-testid="ai-feedback-review-actions">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">
+              AI-generated draft under review — click and edit text directly above.
+            </span>
+            <span className={`text-xs ${overLimit ? "font-bold text-destructive" : "text-muted-foreground"}`}>
+              {finalText.length}/{AI_FEEDBACK_MAX_LENGTH} characters
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleDiscard()}
+              disabled={publishing || discarding || disabled}
+            >
+              {discarding ? "Discarding..." : "Discard Draft"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void handlePublish()}
+              disabled={publishing || discarding || disabled || !finalText || overLimit}
+            >
+              {publishing ? "Posting Feedback..." : "Post Feedback"}
+            </Button>
+          </div>
         </div>
-      ) : null}
-
-      <ConfirmDialog
-        open={replaceOpen}
-        onOpenChange={setReplaceOpen}
-        title="Replace Existing Feedback"
-        confirmationTitle="Replace the currently saved teacher feedback with this AI suggestion?"
-        description="You can still edit the replacement before explicitly posting it. Nothing is saved by this confirmation alone."
-        confirmLabel="Use as Replacement"
-        confirmVariant="destructive"
-        onCancel={() => setReplaceOpen(false)}
-        onConfirm={replaceSuggestion}
-      />
-    </Card>
+      )}
+    </div>
   );
 }

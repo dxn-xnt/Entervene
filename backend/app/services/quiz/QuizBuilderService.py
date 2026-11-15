@@ -24,6 +24,8 @@ from app.schemas.Quiz import (
     QuizQuestionIn,
     QuizQuestionOut,
     QuizReadinessResponse,
+    QuizResultsSettingsResponse,
+    QuizResultsSettingsUpdate,
     QuizSettingOut,
 )
 from app.services.classwork.ClassworkShared import is_quiz_type
@@ -245,6 +247,77 @@ def upsert_quiz_builder(
     db.flush()
     db.expire(quiz, ["questions"])
     return build_quiz_response(db, classwork, quiz)
+
+
+def update_quiz_results_settings(
+    db: Session,
+    classwork: Classwork,
+    payload: QuizResultsSettingsUpdate,
+) -> QuizResultsSettingsResponse:
+    """Update only quiz result visibility without rebuilding quiz questions."""
+    locked_classwork = (
+        db.query(Classwork)
+        .filter(Classwork.classwork_id == classwork.classwork_id)
+        .with_for_update()
+        .one()
+    )
+    setting = (
+        db.query(QuizSetting)
+        .filter(QuizSetting.classwork_id == classwork.classwork_id)
+        .with_for_update()
+        .first()
+    )
+    if setting is None:
+        raise HTTPException(status_code=404, detail="Quiz settings not found")
+
+    release_mode = payload.summary_release_mode.strip().upper()
+    if release_mode == "SCHEDULED" and payload.summary_release_at is None:
+        raise HTTPException(status_code=422, detail="Quiz results release date and time is required")
+    if release_mode != "SCHEDULED" and payload.summary_release_at is not None:
+        raise HTTPException(status_code=422, detail="Quiz results release date is only allowed for scheduled release")
+    if release_mode == "AFTER_DUE_DATE" and not _classwork_has_due_date(db, classwork.classwork_id):
+        raise HTTPException(status_code=422, detail="Set a quiz due date before releasing results after the due date")
+
+    visibility_changed = payload.show_quiz_results is not None and (
+        locked_classwork.show_scores != payload.show_quiz_results
+        or setting.show_correct_answers != payload.show_quiz_results
+    )
+    release_changed = (
+        setting.summary_release_mode != release_mode
+        or setting.summary_release_at != payload.summary_release_at
+    )
+    answers_will_be_enabled = (
+        payload.show_quiz_results is True
+        if payload.show_quiz_results is not None
+        else bool(setting.show_correct_answers)
+    )
+    could_reveal_answers = (
+        (payload.show_quiz_results is True and visibility_changed)
+        or (release_changed and release_mode != "NEVER" and answers_will_be_enabled)
+    )
+    if could_reveal_answers and not payload.confirm_answer_reveal:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "QUIZ_RESULTS_REVEAL_CONFIRMATION_REQUIRED",
+                "message": "Confirm this change because it may reveal quiz scores and correct answers to students.",
+            },
+        )
+
+    if payload.show_quiz_results is not None:
+        locked_classwork.show_scores = payload.show_quiz_results
+        setting.show_correct_answers = payload.show_quiz_results
+    setting.summary_release_mode = release_mode
+    setting.summary_release_at = payload.summary_release_at
+    db.flush()
+    return QuizResultsSettingsResponse(
+        classwork_id=locked_classwork.classwork_id,
+        show_scores=locked_classwork.show_scores,
+        show_correct_answers=setting.show_correct_answers,
+        summary_release_mode=setting.summary_release_mode,
+        summary_release_at=setting.summary_release_at,
+        has_mixed_visibility=locked_classwork.show_scores != setting.show_correct_answers,
+    )
 
 
 def delete_quiz_builder(db: Session, classwork: Classwork) -> None:

@@ -21,6 +21,30 @@ export type FeedbackSuggestion = {
   generated_at: string;
 };
 
+export type FeedbackDraftStatus =
+  | "NONE"
+  | "PENDING"
+  | "READY"
+  | "UNDER_REVIEW"
+  | "APPROVED"
+  | "DISCARDED"
+  | "STALE"
+  | "FAILED"
+  | "NOT_ELIGIBLE";
+
+export type FeedbackDraft = {
+  submission_id: number;
+  status: FeedbackDraftStatus;
+  draft_feedback: string | null;
+  evidence_fingerprint: string | null;
+  feedback_fingerprint: string | null;
+  detail_level: string;
+  auto_ai_feedback_enabled: boolean;
+  error_message: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type FeedbackPublication = {
   submission_id: number;
   feedback: string;
@@ -71,6 +95,25 @@ export async function generateSubmissionFeedbackSuggestion(
     { method: "POST" },
   );
   return readResponse<FeedbackSuggestion>(response, "Unable to generate an AI feedback suggestion.");
+}
+
+export async function getSubmissionFeedbackDraft(
+  submissionId: number,
+): Promise<FeedbackDraft> {
+  const response = await apiFetch(
+    `/api/v1/submissions/${encodeURIComponent(String(submissionId))}/feedback/draft`,
+  );
+  return readResponse<FeedbackDraft>(response, "Unable to get feedback draft.");
+}
+
+export async function discardSubmissionFeedbackDraft(
+  submissionId: number,
+): Promise<FeedbackDraft> {
+  const response = await apiFetch(
+    `/api/v1/submissions/${encodeURIComponent(String(submissionId))}/feedback/draft/discard`,
+    { method: "POST" },
+  );
+  return readResponse<FeedbackDraft>(response, "Unable to discard feedback draft.");
 }
 
 export async function publishSubmissionFeedback(
