@@ -1589,7 +1589,6 @@ def test_scored_zero_is_valid_and_feedback_publication_changes_only_comment(feed
     ("score_above_maximum", "FEEDBACK_INVALID_GRADING_EVIDENCE"),
     ("unpublished_classwork", "FEEDBACK_CLASSWORK_NOT_PUBLISHED"),
     ("unpublished_assignment", "FEEDBACK_CLASSWORK_NOT_PUBLISHED"),
-    ("hidden_scores", "FEEDBACK_SCORES_HIDDEN"),
     ("manual_activity", "FEEDBACK_UNSUPPORTED_SUBMISSION"),
     ("reading", "FEEDBACK_UNSUPPORTED_SUBMISSION"),
 ])
@@ -1644,7 +1643,7 @@ def test_scored_classwork_ineligible_before_provider(feedback_context, monkeypat
     ("maximum", "FEEDBACK_EVIDENCE_STALE"),
     ("type", "FEEDBACK_EVIDENCE_STALE"),
     ("feedback", "FEEDBACK_COMMENT_STALE"),
-    ("hidden_scores", "FEEDBACK_SCORES_HIDDEN"),
+    ("hidden_scores", "FEEDBACK_EVIDENCE_STALE"),
     ("unpublished", "FEEDBACK_CLASSWORK_NOT_PUBLISHED"),
 ])
 def test_scored_classwork_publication_rechecks_evidence_and_release(feedback_context, monkeypatch, mutation, code):
@@ -2122,3 +2121,137 @@ def test_auto_ai_feedback_bounded_retries_on_provider_failure(feedback_context, 
     assert draft.retry_count == 3
     assert draft.status == "FAILED"
     assert "Provider connection timeout" in draft.error_message
+
+
+def test_scored_classwork_eligible_with_hidden_scores(feedback_context, monkeypatch):
+    """Verifies that non-quiz classwork with show_scores=False can generate and approve private drafts."""
+    _set_scored_classwork(feedback_context)
+    classwork = feedback_context["classwork"]
+    classwork.show_scores = False
+    classwork.auto_ai_feedback_enabled = True
+    feedback_context["db"].commit()
+
+    captured = _capture_provider(monkeypatch, feedback=_SCORE_SUGGESTION)
+    submission_id = feedback_context["submission"].submission_id
+
+    # 1. Enqueue automatic draft
+    draft = feedback_service.enqueue_automatic_feedback_draft(feedback_context["db"], submission_id, "T-FEEDBACK")
+    assert draft is not None
+    assert draft.status == "QUEUED"
+    assert draft.scheduled_for is not None
+    feedback_context["db"].commit()
+
+    # 2. Worker processes it successfully
+    success = asyncio.run(feedback_service.process_feedback_draft_job(feedback_context["db"], draft.draft_id))
+    assert success is True
+    feedback_context["db"].refresh(draft)
+    assert draft.status == "READY"
+    assert draft.draft_feedback == _SCORE_SUGGESTION
+    assert captured["calls"] == 1
+
+    # 3. Teacher can retrieve the draft
+    draft_resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert draft_resp.status_code == 200, draft_resp.text
+    data = draft_resp.json()
+    assert data["status"] == "READY"
+    assert data["draft_feedback"] == _SCORE_SUGGESTION
+
+    # 4. Teacher can approve/publish feedback privately while show_scores is False
+    pub_body = {
+        "feedback": _SCORE_SUGGESTION,
+        "expected_evidence_fingerprint": data["evidence_fingerprint"],
+        "expected_feedback_fingerprint": data["feedback_fingerprint"],
+    }
+    pub_resp = feedback_context["client"].put(
+        f"/api/v1/submissions/{submission_id}/feedback",
+        json=pub_body,
+    )
+    assert pub_resp.status_code == 200, pub_resp.text
+    assert pub_resp.json()["feedback"] == _SCORE_SUGGESTION
+    feedback_context["db"].refresh(draft)
+    assert draft.status == "APPROVED"
+
+
+def test_student_cannot_see_feedback_when_scores_hidden(feedback_context, monkeypatch):
+    """Verifies student responses withhold approved feedback and grades when show_scores=False."""
+    from app.services.submission.SubmissionService import build_submission_response
+
+    _set_scored_classwork(feedback_context)
+    classwork = feedback_context["classwork"]
+    classwork.show_scores = False
+    submission = feedback_context["submission"]
+    submission.feedback = "Private teacher note for student."
+    feedback_context["db"].commit()
+
+    # Student serialization withholds grade and feedback
+    student_resp = build_submission_response(submission, feedback_context["db"], for_student=True)
+    assert student_resp.feedback is None
+    assert student_resp.grade is None
+
+    # Teacher serialization retains grade and feedback
+    teacher_resp = build_submission_response(submission, feedback_context["db"], for_student=False)
+    assert teacher_resp.feedback == "Private teacher note for student."
+    assert teacher_resp.grade == 21.0
+
+    # Once teacher releases scores, student receives both
+    classwork.show_scores = True
+    feedback_context["db"].commit()
+    student_released = build_submission_response(submission, feedback_context["db"], for_student=True)
+    assert student_released.feedback == "Private teacher note for student."
+    assert student_released.grade == 21.0
+
+
+def test_valid_zero_grade_eligible_for_feedback(feedback_context, monkeypatch):
+    """Verifies that a valid zero grade on scored work remains eligible for feedback."""
+    _set_scored_classwork(feedback_context)
+    classwork = feedback_context["classwork"]
+    classwork.auto_ai_feedback_enabled = True
+    submission = feedback_context["submission"]
+    submission.grade = Decimal("0.00")
+    feedback_context["db"].commit()
+
+    zero_suggestion = "The overall score shows no credit for this work."
+    _capture_provider(monkeypatch, feedback=zero_suggestion)
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        feedback_context["db"],
+        submission.submission_id,
+        "T-FEEDBACK",
+    )
+    assert draft is not None
+    assert draft.status == "QUEUED"
+    assert draft.scheduled_for is not None
+    feedback_context["db"].commit()
+
+    success = asyncio.run(feedback_service.process_feedback_draft_job(feedback_context["db"], draft.draft_id))
+    assert success is True
+    feedback_context["db"].refresh(draft)
+    assert draft.status == "READY"
+    assert draft.draft_feedback == zero_suggestion
+
+
+def test_reactivate_unscheduled_feedback_drafts(feedback_context):
+    """Verifies that reactivate_unscheduled_feedback_drafts safely activates queued drafts held without schedule."""
+    _set_scored_classwork(feedback_context)
+    classwork = feedback_context["classwork"]
+    classwork.show_scores = False
+    classwork.auto_ai_feedback_enabled = True
+    submission = feedback_context["submission"]
+    feedback_context["db"].commit()
+
+    # Insert a queued draft that had scheduled_for = None (e.g. from prior restriction)
+    blocked_draft = feedback_service.SubmissionFeedbackDraft(
+        submission_id=submission.submission_id,
+        status="QUEUED",
+        staff_id="T-FEEDBACK",
+        scheduled_for=None,
+        retry_count=0,
+    )
+    feedback_context["db"].add(blocked_draft)
+    feedback_context["db"].commit()
+
+    # Call reactivation
+    count = feedback_service.reactivate_unscheduled_feedback_drafts(feedback_context["db"], limit=10)
+    assert count == 1
+    feedback_context["db"].refresh(blocked_draft)
+    assert blocked_draft.scheduled_for is not None

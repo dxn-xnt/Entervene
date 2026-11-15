@@ -332,7 +332,7 @@ export default function StudentSubmissionView({
                       key={selectedSubmissionDetail.submission_id}
                       classworkKind={classworkKind as "ASSIGNMENT" | "ACTIVITY"}
                       submissionId={selectedSubmissionDetail.submission_id}
-                      eligibilityRevision={`${selected.is_published}:${selected.show_scores}`}
+                      eligibilityRevision={`${selected.is_published}:${selected.show_scores}:${selected.auto_ai_feedback_enabled}`}
                       fullyGraded={selectedSubmissionDetail.status === "graded" && selectedSubmissionDetail.grade != null && !hasUnsavedGradeChanges}
                       existingFeedback={selectedSubmissionDetail.feedback ?? ""}
                       feedbackDraft={feedbackDraft}
@@ -345,6 +345,8 @@ export default function StudentSubmissionView({
                         onAiPublishingChange(publishing);
                       }}
                       onConflictReload={onAiConflictReload}
+                      showScores={selected.show_scores}
+                      autoAiFeedbackEnabled={selected.auto_ai_feedback_enabled}
                     />
                   ) : null}
                 </div>

@@ -384,8 +384,6 @@ def _load_scored_classwork_context(
     _assert_ordinary_assignment(db, assignment)
     if not classwork.is_published or not assignment.is_published:
         raise _error(409, "FEEDBACK_CLASSWORK_NOT_PUBLISHED", "Publish this classwork before generating AI feedback")
-    if not classwork.show_scores:
-        raise _error(409, "FEEDBACK_SCORES_HIDDEN", "Release scores before generating score-based AI feedback")
     if not classwork.is_graded or submission.status != "graded" or submission.grade is None or (
         submission.submitted_at is None or submission.graded_at is None
     ):
@@ -1062,8 +1060,6 @@ def _determine_scheduled_release_time(
 ) -> datetime | None:
     now = datetime.now(timezone.utc)
     if not is_quiz_type(classwork.classwork_type):
-        if not getattr(classwork, "show_scores", True):
-            return None
         return now
 
     setting = db.query(QuizSetting).filter_by(classwork_id=classwork.classwork_id).first()
@@ -1361,6 +1357,42 @@ async def process_feedback_draft_job(db: Session, draft_id: int) -> bool:
     return True
 
 
+def reactivate_unscheduled_feedback_drafts(
+    db: Session,
+    limit: int = 10,
+) -> int:
+    """Safely reactivate queued feedback draft jobs that were held without a schedule.
+
+    Under the private grading policy, eligible non-quiz drafts become scheduled
+    immediately upon grading even if student score visibility is disabled.
+    """
+    unscheduled = (
+        db.query(SubmissionFeedbackDraft)
+        .filter(
+            SubmissionFeedbackDraft.status == "QUEUED",
+            SubmissionFeedbackDraft.scheduled_for.is_(None),
+        )
+        .order_by(SubmissionFeedbackDraft.draft_id.asc())
+        .limit(limit)
+        .all()
+    )
+    reactivated = 0
+    for draft in unscheduled:
+        sub = db.get(StudentSubmission, draft.submission_id)
+        if not sub:
+            continue
+        asgn = db.get(ClassworkAssignment, sub.classwork_assignment_id)
+        cw = db.get(Classwork, asgn.classwork_id) if asgn else None
+        if cw and asgn:
+            sched = _determine_scheduled_release_time(db, asgn, cw, sub)
+            if sched is not None:
+                draft.scheduled_for = sched
+                reactivated += 1
+    if reactivated > 0:
+        db.commit()
+    return reactivated
+
+
 async def process_pending_feedback_draft_jobs(
     db: Session | None = None,
     limit: int = 10,
@@ -1372,6 +1404,7 @@ async def process_pending_feedback_draft_jobs(
         owns_db = True
 
     try:
+        reactivate_unscheduled_feedback_drafts(db, limit=limit)
         now = datetime.now(timezone.utc)
         ready_draft_ids = (
             db.query(SubmissionFeedbackDraft.draft_id)

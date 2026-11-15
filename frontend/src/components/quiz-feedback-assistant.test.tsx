@@ -60,6 +60,32 @@ const noneDraft: FeedbackDraft = {
   updated_at: null,
 };
 
+const pendingDraft: FeedbackDraft = {
+  submission_id: 41,
+  status: "PENDING",
+  draft_feedback: null,
+  evidence_fingerprint: null,
+  feedback_fingerprint: null,
+  detail_level: "GENERAL",
+  auto_ai_feedback_enabled: true,
+  error_message: null,
+  created_at: "2026-11-15T00:00:00Z",
+  updated_at: "2026-11-15T00:00:00Z",
+};
+
+const failedDraft: FeedbackDraft = {
+  submission_id: 41,
+  status: "FAILED",
+  draft_feedback: null,
+  evidence_fingerprint: null,
+  feedback_fingerprint: null,
+  detail_level: "GENERAL",
+  auto_ai_feedback_enabled: true,
+  error_message: "Provider timeout",
+  created_at: "2026-11-15T00:00:00Z",
+  updated_at: "2026-11-15T00:00:00Z",
+};
+
 type HarnessOptions = {
   submissionId?: number;
   fullyGraded?: boolean;
@@ -69,6 +95,8 @@ type HarnessOptions = {
   onConflictReload?: (submissionId: number) => Promise<void>;
   onPublished?: (feedback: string, fingerprint: string) => void;
   onReviewChange?: (reviewing: boolean) => void;
+  showScores?: boolean;
+  autoAiFeedbackEnabled?: boolean;
 };
 
 /** Mirrors a host: one Teacher Feedback editor owned by the page. */
@@ -89,6 +117,8 @@ function TeacherFeedbackHarness(options: HarnessOptions) {
         classworkKind={options.classworkKind}
         onConflictReload={options.onConflictReload}
         onReviewChange={options.onReviewChange}
+        showScores={options.showScores}
+        autoAiFeedbackEnabled={options.autoAiFeedbackEnabled}
       />
     </div>
   );
@@ -231,5 +261,144 @@ describe("Teacher Feedback inline AI automatic draft controls", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Post Feedback" }));
     expect(await screen.findByText(new RegExp(expected))).toBeDefined();
+  });
+
+  it("triggers controlled polling when draft is pending and updates editor upon completion", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getDraftMock
+      .mockResolvedValueOnce(pendingDraft)
+      .mockResolvedValueOnce(readyDraft);
+
+    const { onReviewChange } = renderAssistant();
+
+    // First fetch shows preparing
+    await waitFor(() => expect(screen.getByText("Preparing AI-generated feedback...")).toBeDefined());
+    expect(editor().value).toBe("");
+    expect(onReviewChange).not.toHaveBeenCalledWith(true);
+
+    // Advance timer past first polling interval (1000ms)
+    await vi.advanceTimersByTimeAsync(1200);
+
+    // Now ready draft should be populated
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
+    expect(onReviewChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByText("Preparing AI-generated feedback...")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("displays taking longer status after multiple pending polls", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getDraftMock.mockResolvedValue(pendingDraft);
+
+    renderAssistant();
+
+    await waitFor(() => expect(screen.getByText("Preparing AI-generated feedback...")).toBeDefined());
+
+    // Advance across multiple intervals (1000, 1500, 2000 ms)
+    await vi.advanceTimersByTimeAsync(5000);
+
+    await waitFor(() => {
+      expect(screen.getByText("AI feedback is still being prepared. You can continue grading while it finishes.")).toBeDefined();
+    });
+    vi.useRealTimers();
+  });
+
+  it("automatically receives draft when worker is delayed to periodic cycle (~35s)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let callCount = 0;
+    getDraftMock.mockImplementation(async () => {
+      callCount += 1;
+      if (callCount <= 8) {
+        return pendingDraft;
+      }
+      return readyDraft;
+    });
+
+    const { onReviewChange } = renderAssistant();
+
+    await waitFor(() => expect(screen.getByText("Preparing AI-generated feedback...")).toBeDefined());
+
+    // Advance to 37 seconds (periodic worker picked it up at 30s and completed)
+    await vi.advanceTimersByTimeAsync(37000);
+
+    // Editor should automatically receive the ready draft without page refresh
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
+    expect(onReviewChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByText("Preparing AI-generated feedback...")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("displays Check Status button when polling intervals expire and resumes polling", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getDraftMock.mockResolvedValue(pendingDraft);
+
+    renderAssistant();
+
+    // Advance through the entire ~76.5s window
+    await vi.advanceTimersByTimeAsync(80000);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Check Status" })).toBeDefined();
+    });
+
+    getDraftMock.mockResolvedValueOnce(readyDraft);
+    fireEvent.click(screen.getByRole("button", { name: "Check Status" }));
+
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
+    vi.useRealTimers();
+  });
+
+  it("displays failed state with helpful message and does not block manual feedback", async () => {
+    getDraftMock.mockResolvedValue(failedDraft);
+    renderAssistant();
+
+    await waitFor(() => {
+      expect(screen.getByText("AI feedback couldn't be prepared. You can still write feedback manually.")).toBeDefined();
+    });
+    expect(editor().value).toBe("");
+    expect(screen.queryByRole("button", { name: "Post Feedback" })).toBeNull();
+  });
+
+  it("renders Save Approved Feedback and private notice when showScores is false", async () => {
+    renderAssistant({ showScores: false });
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
+
+    expect(screen.getByRole("button", { name: "Save Approved Feedback" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Post Feedback" })).toBeNull();
+    expect(
+      screen.getByText("Approved feedback is saved privately and will become visible to the student once scores are released."),
+    ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Approved Feedback" }));
+    await waitFor(() => expect(publishMock).toHaveBeenCalled());
+    expect(toastSuccess).toHaveBeenCalledWith({ title: "Approved feedback saved privately" });
+  });
+
+  it("switching submissions cancels stale pending requests and resets draft", async () => {
+    getDraftMock.mockImplementation(async (subId) => {
+      if (subId === 41) return pendingDraft;
+      return { ...readyDraft, submission_id: 42, draft_feedback: "Feedback for submission 42" };
+    });
+
+    const { view } = renderAssistant({ submissionId: 41 });
+    await waitFor(() => expect(screen.getByText("Preparing AI-generated feedback...")).toBeDefined());
+
+    view.rerender(<TeacherFeedbackHarness submissionId={42} />);
+    await waitFor(() => expect(editor().value).toBe("Feedback for submission 42"));
+  });
+
+  it("handles network errors with bounded retry and displays notice", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getDraftMock.mockRejectedValue(new Error("Network connection lost"));
+
+    renderAssistant();
+
+    // After 3 errors (with backoff 2000ms each)
+    await vi.advanceTimersByTimeAsync(8000);
+
+    await waitFor(() => {
+      expect(screen.getByText("Network connection lost")).toBeDefined();
+    });
+    vi.useRealTimers();
   });
 });

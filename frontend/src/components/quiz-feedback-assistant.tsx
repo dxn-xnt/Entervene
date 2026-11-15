@@ -11,7 +11,11 @@ import {
   type FeedbackDraft,
 } from "@/lib/submission-feedback-api";
 
-export const AI_FEEDBACK_MAX_LENGTH = 1200;
+const AI_FEEDBACK_MAX_LENGTH = 1200;
+
+const INITIAL_POLL_INTERVALS_MS = [1000, 1500, 2000, 3000, 4000, 5000];
+const STEADY_POLL_INTERVAL_MS = 5000;
+const MAX_TOTAL_POLL_ATTEMPTS = 18; // ~76.5 seconds total coverage for delayed periodic worker sweeps
 
 type QuizFeedbackAssistantProps = {
   submissionId: number;
@@ -30,6 +34,8 @@ type QuizFeedbackAssistantProps = {
   onReviewChange?: (reviewing: boolean) => void;
   onConflictReload?: (submissionId: number) => Promise<void>;
   disabled?: boolean;
+  showScores?: boolean;
+  autoAiFeedbackEnabled?: boolean;
 };
 
 function publicationConflictMessage(error: SubmissionFeedbackApiError, classworkKind: string): string {
@@ -66,6 +72,8 @@ export default function QuizFeedbackAssistant({
   onReviewChange,
   onConflictReload,
   disabled = false,
+  showScores = true,
+  autoAiFeedbackEnabled,
 }: QuizFeedbackAssistantProps) {
   const toast = useToast();
   const [draft, setDraft] = useState<FeedbackDraft | null>(null);
@@ -76,10 +84,16 @@ export default function QuizFeedbackAssistant({
   const [previousDraft, setPreviousDraft] = useState<string>("");
   const [promptPending, setPromptPending] = useState<{ aiText: string; manualText: string } | null>(null);
   const [notice, setNotice] = useState<{ status: "error" | "warning"; message: string } | null>(null);
+  const [pollingExpired, setPollingExpired] = useState(false);
+  const [isTakingLonger, setIsTakingLonger] = useState(false);
 
   const mountedRef = useRef(true);
-  const activeContextRef = useRef({ submissionId, fullyGraded });
-  activeContextRef.current = { submissionId, fullyGraded };
+  const activeSubmissionIdRef = useRef(submissionId);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollIndexRef = useRef(0);
+  const networkErrorsRef = useRef(0);
+  const inFlightRef = useRef(false);
+
   const feedbackDraftRef = useRef(feedbackDraft);
   feedbackDraftRef.current = feedbackDraft;
   const onReviewChangeRef = useRef(onReviewChange);
@@ -89,76 +103,176 @@ export default function QuizFeedbackAssistant({
   const existingFeedbackRef = useRef(existingFeedback);
   existingFeedbackRef.current = existingFeedback;
 
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current !== null) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      stopPolling();
       onReviewChangeRef.current?.(false);
     };
-  }, []);
+  }, [stopPolling]);
 
   useEffect(() => {
     onReviewChangeRef.current?.(reviewing);
   }, [reviewing]);
 
-  const isActiveContext = useCallback(
-    (requestedSubmissionId: number) => {
-      const current = activeContextRef.current;
-      return mountedRef.current && current.submissionId === requestedSubmissionId && current.fullyGraded;
+  const fetchDraft = useCallback(
+    async (isPollingAttempt = false) => {
+      if (!fullyGraded) {
+        stopPolling();
+        setDraft(null);
+        setReviewing(false);
+        return;
+      }
+
+      const requestedSubmissionId = submissionId;
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
+      setFetchingDraft(true);
+      if (!isPollingAttempt) {
+        setNotice(null);
+      }
+
+      try {
+        const result = await getSubmissionFeedbackDraft(requestedSubmissionId);
+        if (!mountedRef.current || activeSubmissionIdRef.current !== requestedSubmissionId) return;
+
+        networkErrorsRef.current = 0;
+        setDraft(result);
+
+        if (!result.auto_ai_feedback_enabled) {
+          stopPolling();
+          setReviewing(false);
+          return;
+        }
+
+        if (result.status === "READY" && result.draft_feedback) {
+          stopPolling();
+          const currentDraft = feedbackDraftRef.current;
+          const currentTrim = currentDraft.trim();
+          const existingTrim = existingFeedbackRef.current.trim();
+          const aiTrim = result.draft_feedback.trim();
+
+          // If the teacher has typed manual text different from saved feedback and different from the AI text
+          if (currentTrim !== "" && currentTrim !== existingTrim && currentTrim !== aiTrim) {
+            setPromptPending({ aiText: result.draft_feedback, manualText: currentDraft });
+          } else {
+            setPreviousDraft(currentDraft || existingFeedbackRef.current);
+            onFeedbackDraftChangeRef.current(result.draft_feedback);
+            setReviewing(true);
+          }
+          return;
+        }
+
+        if (result.status === "FAILED") {
+          stopPolling();
+          setReviewing(false);
+          return;
+        }
+
+        if (
+          result.status === "DISCARDED" ||
+          result.status === "APPROVED" ||
+          result.status === "STALE" ||
+          result.status === "NOT_ELIGIBLE"
+        ) {
+          stopPolling();
+          setReviewing(false);
+          return;
+        }
+
+        const isPending =
+          result.status === "PENDING" ||
+          (result.status as string) === "QUEUED" ||
+          (result.status as string) === "CLAIMED";
+
+        if (isPending) {
+          setReviewing(false);
+          const nextIndex = pollIndexRef.current;
+          if (nextIndex >= 3) {
+            setIsTakingLonger(true);
+          }
+          if (nextIndex < MAX_TOTAL_POLL_ATTEMPTS) {
+            const delay =
+              nextIndex < INITIAL_POLL_INTERVALS_MS.length
+                ? INITIAL_POLL_INTERVALS_MS[nextIndex]
+                : STEADY_POLL_INTERVAL_MS;
+            pollIndexRef.current = nextIndex + 1;
+            stopPolling();
+            pollTimerRef.current = setTimeout(() => {
+              void fetchDraft(true);
+            }, delay);
+          } else {
+            stopPolling();
+            setPollingExpired(true);
+          }
+          return;
+        }
+
+        // result.status === "NONE" or unhandled
+        stopPolling();
+        setReviewing(false);
+      } catch (error) {
+        if (!mountedRef.current || activeSubmissionIdRef.current !== requestedSubmissionId) return;
+        networkErrorsRef.current += 1;
+        if (networkErrorsRef.current < 3) {
+          stopPolling();
+          pollTimerRef.current = setTimeout(() => {
+            void fetchDraft(true);
+          }, 2000);
+        } else {
+          stopPolling();
+          setPollingExpired(true);
+          const message = error instanceof Error ? error.message : "Unable to load feedback draft.";
+          setNotice({ status: "error", message });
+          setReviewing(false);
+        }
+      } finally {
+        inFlightRef.current = false;
+        if (mountedRef.current && activeSubmissionIdRef.current === requestedSubmissionId) {
+          setFetchingDraft(false);
+        }
+      }
     },
-    [],
+    [fullyGraded, stopPolling, submissionId],
   );
 
-  const loadDraft = useCallback(async () => {
-    if (!fullyGraded) {
-      setDraft(null);
-      setReviewing(false);
-      return;
-    }
-    const requestedSubmissionId = submissionId;
-    setFetchingDraft(true);
-    setNotice(null);
-    try {
-      const result = await getSubmissionFeedbackDraft(requestedSubmissionId);
-      if (!isActiveContext(requestedSubmissionId)) return;
-      setDraft(result);
-
-      if (result.status === "READY" && result.draft_feedback) {
-        const currentDraft = feedbackDraftRef.current;
-        const currentTrim = currentDraft.trim();
-        const existingTrim = existingFeedbackRef.current.trim();
-        const aiTrim = result.draft_feedback.trim();
-
-        // If the teacher has typed manual text different from saved feedback and different from the AI text
-        if (currentTrim !== "" && currentTrim !== existingTrim && currentTrim !== aiTrim) {
-          setPromptPending({ aiText: result.draft_feedback, manualText: currentDraft });
-        } else {
-          setPreviousDraft(currentDraft || existingFeedbackRef.current);
-          onFeedbackDraftChangeRef.current(result.draft_feedback);
-          setReviewing(true);
-        }
-      } else {
-        setReviewing(false);
-      }
-    } catch (error) {
-      if (!isActiveContext(requestedSubmissionId)) return;
-      const message = error instanceof Error ? error.message : "Unable to load feedback draft.";
-      setNotice({ status: "error", message });
-      setReviewing(false);
-    } finally {
-      if (isActiveContext(requestedSubmissionId)) setFetchingDraft(false);
-    }
-  }, [fullyGraded, isActiveContext, submissionId]);
-
   useEffect(() => {
+    activeSubmissionIdRef.current = submissionId;
+    stopPolling();
+    pollIndexRef.current = 0;
+    networkErrorsRef.current = 0;
+    setPollingExpired(false);
+    setIsTakingLonger(false);
     setDraft(null);
     setReviewing(false);
     setPromptPending(null);
     setNotice(null);
+
     if (fullyGraded) {
-      void loadDraft();
+      void fetchDraft(false);
     }
-  }, [eligibilityRevision, fullyGraded, loadDraft, submissionId]);
+
+    return () => {
+      stopPolling();
+    };
+  }, [eligibilityRevision, fullyGraded, fetchDraft, stopPolling, submissionId]);
+
+  const resumePolling = useCallback(() => {
+    pollIndexRef.current = 0;
+    networkErrorsRef.current = 0;
+    setPollingExpired(false);
+    setIsTakingLonger(false);
+    setNotice(null);
+    void fetchDraft(false);
+  }, [fetchDraft]);
 
   const handleDiscard = async () => {
     if (discarding || publishing) return;
@@ -167,17 +281,19 @@ export default function QuizFeedbackAssistant({
     const requestedSubmissionId = submissionId;
     try {
       await discardSubmissionFeedbackDraft(requestedSubmissionId);
-      if (!isActiveContext(requestedSubmissionId)) return;
+      if (!mountedRef.current || activeSubmissionIdRef.current !== requestedSubmissionId) return;
       onFeedbackDraftChange(previousDraft || existingFeedback);
       setReviewing(false);
       setDraft(null);
       toast.success({ title: "AI feedback draft discarded" });
     } catch (error) {
-      if (!isActiveContext(requestedSubmissionId)) return;
+      if (!mountedRef.current || activeSubmissionIdRef.current !== requestedSubmissionId) return;
       const message = error instanceof Error ? error.message : "Unable to discard draft.";
       setNotice({ status: "error", message });
     } finally {
-      if (isActiveContext(requestedSubmissionId)) setDiscarding(false);
+      if (mountedRef.current && activeSubmissionIdRef.current === requestedSubmissionId) {
+        setDiscarding(false);
+      }
     }
   };
 
@@ -204,13 +320,15 @@ export default function QuizFeedbackAssistant({
         expected_evidence_fingerprint: draft.evidence_fingerprint || "",
         expected_feedback_fingerprint: draft.feedback_fingerprint || "",
       });
-      if (!isActiveContext(requestedSubmissionId)) return;
+      if (!mountedRef.current || activeSubmissionIdRef.current !== requestedSubmissionId) return;
       onPublished(saved.feedback, saved.feedback_fingerprint);
       setReviewing(false);
       setDraft(null);
-      toast.success({ title: "Teacher feedback posted" });
+      toast.success({
+        title: showScores === false ? "Approved feedback saved privately" : "Teacher feedback posted",
+      });
     } catch (error) {
-      if (!isActiveContext(requestedSubmissionId)) return;
+      if (!mountedRef.current || activeSubmissionIdRef.current !== requestedSubmissionId) return;
       const message =
         error instanceof SubmissionFeedbackApiError
           ? publicationConflictMessage(error, classworkKind)
@@ -226,18 +344,50 @@ export default function QuizFeedbackAssistant({
             return;
           }
         }
-        await loadDraft();
+        await fetchDraft(false);
       }
       setNotice({ status: "error", message });
     } finally {
-      if (isActiveContext(requestedSubmissionId)) setPublishing(false);
+      if (mountedRef.current && activeSubmissionIdRef.current === requestedSubmissionId) {
+        setPublishing(false);
+      }
       onPublishingChange?.(false);
     }
   };
 
+  // 1. Not fully graded state
   if (!fullyGraded) {
-    return null;
+    if (autoAiFeedbackEnabled === false) {
+      return (
+        <p className="text-xs text-muted-foreground italic py-1" data-testid="ai-feedback-disabled">
+          Automatic AI Feedback is disabled for this classwork.
+        </p>
+      );
+    }
+    return (
+      <p className="text-xs text-muted-foreground italic py-1" data-testid="ai-feedback-not-graded">
+        AI feedback will be prepared after grading is finalized.
+      </p>
+    );
   }
+
+  // 2. Disabled state
+  const isDisabled = autoAiFeedbackEnabled === false || (draft !== null && draft.auto_ai_feedback_enabled === false);
+  if (isDisabled) {
+    return (
+      <p className="text-xs text-muted-foreground italic py-1" data-testid="ai-feedback-disabled">
+        Automatic AI Feedback is disabled for this classwork.
+      </p>
+    );
+  }
+
+  const isPending =
+    draft?.status === "PENDING" ||
+    (draft?.status as string) === "QUEUED" ||
+    (draft?.status as string) === "CLAIMED" ||
+    (fetchingDraft && !draft) ||
+    pollTimerRef.current !== null ||
+    pollingExpired;
 
   return (
     <div className="space-y-2 pt-1" data-testid="teacher-feedback-ai-controls">
@@ -278,10 +428,33 @@ export default function QuizFeedbackAssistant({
         </Alert>
       )}
 
-      {fetchingDraft && draft?.status === "PENDING" && (
-        <p role="status" className="text-xs text-muted-foreground italic">
-          Preparing AI feedback...
+      {draft?.status === "FAILED" && (
+        <p className="text-xs text-muted-foreground italic py-1" data-testid="ai-feedback-failed">
+          AI feedback couldn't be prepared. You can still write feedback manually.
         </p>
+      )}
+
+      {!reviewing && isPending && (
+        <div className="flex flex-wrap items-center gap-2 py-1 text-xs text-muted-foreground" data-testid="ai-feedback-preparing">
+          <span className="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+          <span>
+            {isTakingLonger
+              ? "AI feedback is still being prepared. You can continue grading while it finishes."
+              : "Preparing AI-generated feedback..."}
+          </span>
+          {pollingExpired && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-xs"
+              onClick={resumePolling}
+              disabled={fetchingDraft}
+            >
+              Check Status
+            </Button>
+          )}
+        </div>
       )}
 
       {reviewing && (
@@ -294,6 +467,11 @@ export default function QuizFeedbackAssistant({
               {finalText.length}/{AI_FEEDBACK_MAX_LENGTH} characters
             </span>
           </div>
+          {showScores === false && (
+            <p className="text-xs text-muted-foreground italic" data-testid="ai-feedback-private-note">
+              Approved feedback is saved privately and will become visible to the student once scores are released.
+            </p>
+          )}
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
@@ -310,7 +488,9 @@ export default function QuizFeedbackAssistant({
               onClick={() => void handlePublish()}
               disabled={publishing || discarding || disabled || !finalText || overLimit}
             >
-              {publishing ? "Posting Feedback..." : "Post Feedback"}
+              {publishing
+                ? (showScores === false ? "Saving Feedback..." : "Posting Feedback...")
+                : (showScores === false ? "Save Approved Feedback" : "Post Feedback")}
             </Button>
           </div>
         </div>
