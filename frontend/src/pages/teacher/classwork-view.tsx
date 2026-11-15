@@ -359,6 +359,11 @@ export default function ClassworkView({
     setSubmissionDetailError("");
   };
 
+  const handleFeedbackChange = useCallback((value: string) => {
+    setFeedbackDraft(value);
+    setGradeError("");
+  }, []);
+
   const handleSelectSection = (id: number | "all") => {
     setSelectedAssignmentId(id);
     closeStudentSubmission();
@@ -630,10 +635,7 @@ export default function ClassworkView({
           setGradeDraft(value);
           setGradeError("");
         }}
-        onFeedbackChange={(value) => {
-          setFeedbackDraft(value);
-          setGradeError("");
-        }}
+        onFeedbackChange={handleFeedbackChange}
         onPostGrade={postGrade}
         onOpenQuizGrading={(submissionId) => {
           if (!blocksLiveActions) setSelectedGradingSubmissionId(submissionId);

@@ -84,6 +84,10 @@ export default function QuizFeedbackAssistant({
   feedbackDraftRef.current = feedbackDraft;
   const onReviewChangeRef = useRef(onReviewChange);
   onReviewChangeRef.current = onReviewChange;
+  const onFeedbackDraftChangeRef = useRef(onFeedbackDraftChange);
+  onFeedbackDraftChangeRef.current = onFeedbackDraftChange;
+  const existingFeedbackRef = useRef(existingFeedback);
+  existingFeedbackRef.current = existingFeedback;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -122,15 +126,15 @@ export default function QuizFeedbackAssistant({
       if (result.status === "READY" && result.draft_feedback) {
         const currentDraft = feedbackDraftRef.current;
         const currentTrim = currentDraft.trim();
-        const existingTrim = existingFeedback.trim();
+        const existingTrim = existingFeedbackRef.current.trim();
         const aiTrim = result.draft_feedback.trim();
 
         // If the teacher has typed manual text different from saved feedback and different from the AI text
         if (currentTrim !== "" && currentTrim !== existingTrim && currentTrim !== aiTrim) {
           setPromptPending({ aiText: result.draft_feedback, manualText: currentDraft });
         } else {
-          setPreviousDraft(currentDraft || existingFeedback);
-          onFeedbackDraftChange(result.draft_feedback);
+          setPreviousDraft(currentDraft || existingFeedbackRef.current);
+          onFeedbackDraftChangeRef.current(result.draft_feedback);
           setReviewing(true);
         }
       } else {
@@ -144,7 +148,7 @@ export default function QuizFeedbackAssistant({
     } finally {
       if (isActiveContext(requestedSubmissionId)) setFetchingDraft(false);
     }
-  }, [existingFeedback, fullyGraded, isActiveContext, onFeedbackDraftChange, submissionId]);
+  }, [fullyGraded, isActiveContext, submissionId]);
 
   useEffect(() => {
     setDraft(null);
