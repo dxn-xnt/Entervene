@@ -7,6 +7,8 @@ from app.db.Session import get_db
 from app.schemas.SubjectOffering import (
     SubjectOfferingCopyAcademicYearRequest,
     SubjectOfferingCopyAcademicYearResponse,
+    SubjectOfferingBatchCreate,
+    SubjectOfferingBatchResponse,
     SubjectOfferingCreate,
     SubjectOfferingFormOptions,
     SubjectOfferingImportResponse,
@@ -26,6 +28,7 @@ from app.services.subject_offerings.SubjectOfferingQueryService import (
 from app.services.subject_offerings.SubjectOfferingService import (
     archive_subject_offering_record,
     copy_subject_offerings_between_academic_years,
+    create_subject_offerings_batch_record,
     create_subject_offering_record,
     restore_subject_offering_record,
     update_subject_offering_record,
@@ -92,6 +95,15 @@ def copy_subject_offerings_from_academic_year(
     db: Session = Depends(get_db),
 ):
     return copy_subject_offerings_between_academic_years(db=db, payload=payload)
+
+
+@router.post("/batch", response_model=SubjectOfferingBatchResponse, status_code=201)
+def create_subject_offerings_batch(
+    payload: SubjectOfferingBatchCreate,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return create_subject_offerings_batch_record(db=db, payload=payload)
 
 
 @router.get("/{subject_offering_id}", response_model=SubjectOfferingResponse)
