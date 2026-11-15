@@ -161,7 +161,7 @@ export default function AdvisoryClassDetail() {
               </div>
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4 min-w-0 w-full max-w-full">
+            <div className="border-t-1 border-border -mt-[1px] px-3 py-3 sm:px-4 sm:py-4 md:px-6 flex flex-col gap-4 min-w-0 w-full max-w-full">
 
               <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
                 <Card.Content>
@@ -875,7 +875,7 @@ function StatePanel({
   children?: ReactNode;
 }) {
   return (
-    <main className="flex flex-1 flex-col gap-5 px-4 py-4 md:px-6 md:py-5">
+    <main className="flex flex-1 flex-col gap-5 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
       <Card className="block w-full border-black">
         <Card.Content className="p-8 text-center text-sm text-black/60">
           <p className="font-bold text-black">{message}</p>

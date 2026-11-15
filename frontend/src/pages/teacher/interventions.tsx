@@ -500,7 +500,7 @@ export default function TeacherInterventions() {
               </div>
             </div>
 
-            <main className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-4 sm:px-4 md:px-6">
+            <main className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {showingLoading ? (
                 <div
                   aria-label={

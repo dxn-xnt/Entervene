@@ -864,7 +864,7 @@ export default function TeacherAttendancePage() {
               </nav>
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] flex min-w-0 flex-1 flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
+            <div className="border-t-1 border-border -mt-[1px] flex min-w-0 flex-1 flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
               {/* Stats Overview */}
               <div className="mb-1 grid min-w-0 grid-cols-2 gap-3 [&_h3]:text-2xl [&_p]:text-xs sm:grid-cols-5 sm:[&_h3]:text-3xl sm:[&_p]:text-sm">

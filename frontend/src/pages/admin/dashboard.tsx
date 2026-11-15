@@ -278,7 +278,7 @@ export default function AdminDashboard() {
               </Button>
             </header>
 
-            <main className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-3 md:gap-6 md:px-6">
+            <main className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:gap-6 md:px-6">
               {error && (
                 <Alert status="error" className="flex items-center gap-2">
                   <AlertCircle className="size-4 shrink-0" />

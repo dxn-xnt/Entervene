@@ -52,7 +52,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
               </div>
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <div>
                 {activeTab === "lessons" && <SubjectLessonTab subject={subject} />}
                 {activeTab === "classwork" && <SubjectClassworkTab />}
