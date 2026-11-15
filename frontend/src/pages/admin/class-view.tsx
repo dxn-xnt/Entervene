@@ -261,7 +261,7 @@ export default function AdminClassDetail() {
   if (isLoading || isRouteChanging) {
     return (
       <AppLayout>
-        <div className="flex flex-1 flex-col p-4 md:p-6">
+        <div className="flex flex-1 flex-col px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted-foreground" role="status">
             <Loader size="sm" />
             Loading class details...
@@ -274,7 +274,7 @@ export default function AdminClassDetail() {
   if (loadError || !classDetail) {
     return (
       <AppLayout>
-        <div className="flex flex-1 flex-col p-4 md:p-6">
+        <div className="flex flex-1 flex-col px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <RetroCard className="bg-accent p-4">
             <Text as="h2" className="font-sans text-xl font-bold">
               Unable to load class details

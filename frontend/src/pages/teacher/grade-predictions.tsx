@@ -173,7 +173,7 @@ export function AdminCurrentTermGradePredictions() {
           </Breadcrumb>
         </header>
 
-        <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+        <div className="-mt-[1px] border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           {loadError ? (
             <Alert status="error" className="font-semibold">{loadError}</Alert>
           ) : loading ? (
