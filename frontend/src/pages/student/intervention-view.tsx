@@ -353,7 +353,7 @@ export default function StudentInterventionView() {
               </Breadcrumb>
             </header>
 
-            <div className="-mt-[1px] flex min-w-0 flex-col gap-6 border-t-2 border-border px-3 py-4 sm:px-4 sm:py-4 md:px-6">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-6 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <div className="mx-auto w-full flex flex-col gap-4">
                 {/* Hero Support Information Card */}
                 <Card className="w-full flex flex-col gap-3 bg-primary border-2 border-border p-3 sm:p-4 shadow-md">
