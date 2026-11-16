@@ -171,6 +171,7 @@ export type TeacherSubmissionDetail = {
   attachments: SubmissionAttachment[];
   links?: SubmissionLink[];
   total_points?: number | null;
+  feedback_focus_points?: string[] | null;
 };
 
 export type CreateDraft = {

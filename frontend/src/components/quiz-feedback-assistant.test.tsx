@@ -95,6 +95,7 @@ type HarnessOptions = {
   onConflictReload?: (submissionId: number) => Promise<void>;
   onPublished?: (feedback: string, fingerprint: string) => void;
   onReviewChange?: (reviewing: boolean) => void;
+  eligibilityRevision?: string | number;
   showScores?: boolean;
   autoAiFeedbackEnabled?: boolean;
 };
@@ -103,6 +104,15 @@ type HarnessOptions = {
 function TeacherFeedbackHarness(options: HarnessOptions) {
   const saved = options.savedFeedback ?? "";
   const [draft, setDraft] = useState(options.initialDraft ?? saved);
+  const [prevInitialDraft, setPrevInitialDraft] = useState(options.initialDraft);
+
+  if (options.initialDraft !== prevInitialDraft) {
+    setPrevInitialDraft(options.initialDraft);
+    if (options.initialDraft !== undefined) {
+      setDraft(options.initialDraft);
+    }
+  }
+
   return (
     <div>
       <label htmlFor="teacher-feedback">Teacher Feedback</label>
@@ -115,6 +125,7 @@ function TeacherFeedbackHarness(options: HarnessOptions) {
         onFeedbackDraftChange={setDraft}
         onPublished={options.onPublished ?? vi.fn()}
         classworkKind={options.classworkKind}
+        eligibilityRevision={options.eligibilityRevision}
         onConflictReload={options.onConflictReload}
         onReviewChange={options.onReviewChange}
         showScores={options.showScores}
@@ -183,7 +194,7 @@ describe("Teacher Feedback inline AI automatic draft controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
 
     await waitFor(() => expect(discardDraftMock).toHaveBeenCalledWith(41));
-    expect(editor().value).toBe("Original saved feedback.");
+    await waitFor(() => expect(editor().value).toBe("Original saved feedback."));
     await waitFor(() => expect(onReviewChange).toHaveBeenLastCalledWith(false));
     expect(toastSuccess).toHaveBeenCalledWith({ title: "AI feedback draft discarded" });
   });
@@ -400,5 +411,100 @@ describe("Teacher Feedback inline AI automatic draft controls", () => {
       expect(screen.getByText("Network connection lost")).toBeDefined();
     });
     vi.useRealTimers();
+  });
+
+  it("preserves teacher edits in editor when grade is modified or evidence is in flux", async () => {
+    const { view } = renderAssistant();
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
+
+    // Teacher manually edits the draft
+    fireEvent.change(editor(), {
+      target: { value: "Clear and supportive AI draft. Custom teacher thesis observation." },
+    });
+    expect(editor().value).toBe("Clear and supportive AI draft. Custom teacher thesis observation.");
+
+    // Teacher changes grade in input (fullyGraded becomes false)
+    view.rerender(
+      <TeacherFeedbackHarness
+        fullyGraded={false}
+        initialDraft="Clear and supportive AI draft. Custom teacher thesis observation."
+      />,
+    );
+
+    // Edits must NOT disappear!
+    expect(editor().value).toBe("Clear and supportive AI draft. Custom teacher thesis observation.");
+
+    // Teacher restores original grade without saving (fullyGraded becomes true again)
+    view.rerender(
+      <TeacherFeedbackHarness
+        fullyGraded={true}
+        initialDraft="Clear and supportive AI draft. Custom teacher thesis observation."
+      />,
+    );
+    expect(editor().value).toBe("Clear and supportive AI draft. Custom teacher thesis observation.");
+  });
+
+  it("shows prompt and preserved notes notice when new draft arrives and teacher has custom edits", async () => {
+    const { view } = renderAssistant();
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
+
+    // Teacher manually edits the draft
+    fireEvent.change(editor(), {
+      target: { value: "Teacher customized observation." },
+    });
+
+    // New draft arrives for updated grade
+    getDraftMock.mockResolvedValue({
+      ...readyDraft,
+      draft_feedback: "Brand new AI draft for updated score 95.",
+      evidence_fingerprint: "d".repeat(64),
+    });
+
+    // Re-trigger fetchDraft via revision update
+    view.rerender(
+      <TeacherFeedbackHarness
+        eligibilityRevision="2"
+        initialDraft="Teacher customized observation."
+      />,
+    );
+
+    // Alert choice appears
+    await waitFor(() => {
+      expect(screen.getByText(/Would you like to review it or keep your current notes/i)).toBeDefined();
+    });
+
+    // Teacher clicks "Keep My Notes"
+    fireEvent.click(screen.getByRole("button", { name: "Keep My Notes" }));
+
+    // Editor still has teacher notes
+    expect(editor().value).toBe("Teacher customized observation.");
+    expect(screen.getByTestId("ai-feedback-notes-preserved")).toBeDefined();
+    expect(screen.getByText("Teacher edits preserved in editor.")).toBeDefined();
+
+    // Teacher can intentionally switch to the new AI draft
+    fireEvent.click(screen.getByRole("button", { name: "Review AI Draft" }));
+    expect(editor().value).toBe("Brand new AI draft for updated score 95.");
+  });
+
+  it("allows teacher to intentionally discard custom edits", async () => {
+    renderAssistant({ savedFeedback: "Old saved comment." });
+    await waitFor(() => expect(editor().value).toBe(readyDraft.draft_feedback));
+
+    // Teacher modifies the text
+    fireEvent.change(editor(), {
+      target: { value: "Some experimental edits." },
+    });
+
+    // Trigger prompt
+    getDraftMock.mockResolvedValue({
+      ...readyDraft,
+      draft_feedback: "Updated draft.",
+    });
+
+    // Discard via prompt/review
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    await waitFor(() => {
+      expect(discardDraftMock).toHaveBeenCalled();
+    });
   });
 });

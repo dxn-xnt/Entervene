@@ -13,6 +13,7 @@ import { Avatar } from "@/components/retroui/Avatar";
 import { Alert } from "@/components/retroui/Alert";
 import { useNavigate } from "react-router-dom";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
+import FeedbackFocusSelector from "@/components/feedback-focus-selector";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import QuizFeedbackAssistant from "@/components/quiz-feedback-assistant";
 import {
@@ -45,6 +46,8 @@ export type StudentSubmissionViewProps = {
   onAiPublishingChange: (publishing: boolean) => void;
   onAiConflictReload: (submissionId: number) => Promise<void>;
   isReadOnly?: boolean;
+  focusPointsDraft?: string[];
+  onFocusPointsChange?: (codes: string[]) => void;
 };
 
 export default function StudentSubmissionView({
@@ -66,6 +69,8 @@ export default function StudentSubmissionView({
   onAiPublishingChange,
   onAiConflictReload,
   isReadOnly = false,
+  focusPointsDraft = [],
+  onFocusPointsChange,
 }: StudentSubmissionViewProps) {
   const navigate = useNavigate();
   const classworkKind = selected.classwork_type?.toUpperCase();
@@ -73,14 +78,18 @@ export default function StudentSubmissionView({
     classworkKind === "ASSIGNMENT"
       ? selected.activity_mode?.toUpperCase() !== "MANUAL"
       : classworkKind === "ACTIVITY" && selected.activity_mode?.toUpperCase() === "ONLINE";
-  const hasUnsavedGradeChanges = selectedSubmissionDetail != null &&
-    gradeDraft !== (selectedSubmissionDetail.grade != null ? String(selectedSubmissionDetail.grade) : "");
-  // While an AI-generated draft is under review, grade saving and score edits
-  // are paused so the draft can only be saved through the explicit,
-  // fingerprint-protected "Post Approved Feedback" action.
+  const savedFocusPoints = selectedSubmissionDetail?.feedback_focus_points ?? [];
+  const focusPointsChanged =
+    focusPointsDraft.length !== savedFocusPoints.length ||
+    focusPointsDraft.some((code) => !savedFocusPoints.includes(code));
+  const hasUnsavedGradeChanges =
+    selectedSubmissionDetail != null &&
+    (gradeDraft !== (selectedSubmissionDetail.grade != null ? String(selectedSubmissionDetail.grade) : "") ||
+      focusPointsChanged);
   const [isAiReviewing, setIsAiReviewing] = useState(false);
+  const [isReviewTemplate, setIsReviewTemplate] = useState(false);
+  const [isReviewPolicyFallback, setIsReviewPolicyFallback] = useState(false);
   const [isAiPublishing, setIsAiPublishing] = useState(false);
-  const aiLocksGrading = isAiReviewing || isAiPublishing;
 
   return (
     <main className="flex flex-1 flex-col overflow-x-hidden">
@@ -134,7 +143,7 @@ export default function StudentSubmissionView({
                     <Button
                       type="button"
                       onClick={onPostGrade}
-                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || aiLocksGrading}
+                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || isAiPublishing}
                       className="whitespace-nowrap"
                     >
                       {selectedSubmissionDetail?.status === "graded"
@@ -145,8 +154,6 @@ export default function StudentSubmissionView({
                 } />
                 {isReadOnly ? (
                   <TooltipContent>Historical records are read-only</TooltipContent>
-                ) : aiLocksGrading ? (
-                  <TooltipContent>Post or discard the AI-generated feedback draft first</TooltipContent>
                 ) : null}
               </Tooltip>
             </div>
@@ -281,7 +288,7 @@ export default function StudentSubmissionView({
                 }
                 selectedScore={gradeDraft !== "" ? Number(gradeDraft) : null}
                 onSelectScore={(points) => {
-                  if (selectedSubmissionDetail && !isPostingGrade && !isReadOnly && !aiLocksGrading) {
+                  if (selectedSubmissionDetail && !isPostingGrade && !isReadOnly && !isAiPublishing) {
                     onGradeChange(String(points));
                   }
                 }}
@@ -293,7 +300,7 @@ export default function StudentSubmissionView({
                       max={selected.total_points ?? undefined}
                       value={gradeDraft}
                       onChange={(event) => onGradeChange(event.target.value)}
-                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || aiLocksGrading}
+                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || isAiPublishing}
                       className="w-12 bg-transparent text-right text-lg font-extrabold outline-none"
                       placeholder="0"
                     />
@@ -304,6 +311,15 @@ export default function StudentSubmissionView({
                 }
               />
 
+              {/* Optional Focus Points for Assignments & Online Activities */}
+              {!isReadOnly && supportsAiFeedback && selectedSubmissionDetail && onFocusPointsChange && (
+                <FeedbackFocusSelector
+                  selectedCodes={focusPointsDraft}
+                  onChange={onFocusPointsChange}
+                  disabled={isPostingGrade || isAiPublishing}
+                />
+              )}
+
               {/* Feedback Comment Box & Actions */}
               <div className="block shadow-none">
                 {/* Feedback Comment Box — single Teacher Feedback editor with inline AI controls */}
@@ -313,10 +329,22 @@ export default function StudentSubmissionView({
                       Feedback &amp; Comments
                     </label>
                     {isAiReviewing && (
-                      <Badge size="sm" variant="outline" className="gap-1 bg-white font-bold">
-                        <Sparkles aria-hidden="true" className="size-3" />
-                        AI-generated
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 bg-white font-bold"
+                          data-testid="feedback-provenance-badge"
+                        >
+                          {!isReviewTemplate && <Sparkles aria-hidden="true" className="size-3" />}
+                          {isReviewTemplate ? "Score-based template" : "AI-generated draft"}
+                        </Badge>
+                        {isReviewPolicyFallback && (
+                          <span className="text-[11px] text-muted-foreground italic" data-testid="policy-fallback-note">
+                            (Contextual AI disabled by policy)
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                   <textarea
@@ -324,7 +352,7 @@ export default function StudentSubmissionView({
                     value={feedbackDraft}
                     onChange={(event) => onFeedbackChange(event.target.value)}
                     disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || isAiPublishing}
-                    className={`min-h-24 w-full border-2 border-black p-3 text-sm outline-none rounded! placeholder:text-muted-foreground disabled:opacity-50 ${isAiReviewing ? "italic text-black font-sans" : ""}`}
+                    className={`min-h-24 w-full border-2 border-black p-3 text-sm outline-none rounded! placeholder:text-muted-foreground disabled:opacity-50 ${isAiReviewing && !isReviewTemplate ? "italic text-black font-sans" : ""}`}
                     placeholder="Write constructive feedback for the student..."
                   />
                   {!isReadOnly && supportsAiFeedback && selectedSubmissionDetail ? (
@@ -332,13 +360,17 @@ export default function StudentSubmissionView({
                       key={selectedSubmissionDetail.submission_id}
                       classworkKind={classworkKind as "ASSIGNMENT" | "ACTIVITY"}
                       submissionId={selectedSubmissionDetail.submission_id}
-                      eligibilityRevision={`${selected.is_published}:${selected.show_scores}:${selected.auto_ai_feedback_enabled}`}
+                      eligibilityRevision={`${selected.is_published}:${selected.show_scores}:${selected.auto_ai_feedback_enabled}:${selectedSubmissionDetail.grade}:${(selectedSubmissionDetail.feedback_focus_points ?? []).join(",")}`}
                       fullyGraded={selectedSubmissionDetail.status === "graded" && selectedSubmissionDetail.grade != null && !hasUnsavedGradeChanges}
                       existingFeedback={selectedSubmissionDetail.feedback ?? ""}
                       feedbackDraft={feedbackDraft}
                       onFeedbackDraftChange={onFeedbackChange}
                       disabled={isPostingGrade}
-                      onReviewChange={setIsAiReviewing}
+                      onReviewChange={(reviewing, isTemplate = false, isPolicyFallback = false) => {
+                        setIsAiReviewing(reviewing);
+                        setIsReviewTemplate(isTemplate);
+                        setIsReviewPolicyFallback(isPolicyFallback);
+                      }}
                       onPublished={onAiFeedbackPublished}
                       onPublishingChange={(publishing) => {
                         setIsAiPublishing(publishing);

@@ -275,6 +275,7 @@ def build_submission_response(submission, db: Session, *, for_student: bool = Fa
         ) for link in submission.links],
         total_points=float(classwork.total_points) if classwork and classwork.total_points is not None else None,
         created_at=submission.created_at,
+        feedback_focus_points=None if for_student else getattr(submission, "feedback_focus_points", None),
     )
 
 
@@ -959,25 +960,44 @@ def grade_student_submission(
                 "message": "Saved teacher feedback changed elsewhere. Reload before saving the grade.",
             },
         )
+    from app.services.submission.SubmissionFeedbackService import (
+        validate_focus_points,
+        enqueue_automatic_feedback_draft,
+        dispatch_background_draft_processing,
+    )
+    if body.focus_points is None:
+        # Omitted: preserve existing focus points
+        validated_focus_points = submission.feedback_focus_points
+    elif len(body.focus_points) == 0:
+        # Explicit empty list: clear focus points
+        validated_focus_points = None
+    else:
+        validated_focus_points = validate_focus_points(body.focus_points)
+
     previous_grade = submission.grade
+    previous_focus_points = submission.feedback_focus_points
     submission.grade = Decimal(str(body.grade))
     submission.feedback = body.feedback
+    submission.feedback_focus_points = validated_focus_points
     submission.status = "graded"
     submission.graded_at = datetime.now(timezone.utc)
     submission.graded_by_staff_id = staff_id
 
-    # If grading changed, any prior unapproved AI draft becomes STALE
-    if previous_grade is not None and previous_grade != submission.grade:
+    # If grading changed or focus points changed, any prior unapproved AI draft becomes STALE
+    grade_changed = (previous_grade is not None and previous_grade != submission.grade)
+    focus_changed = (previous_focus_points != validated_focus_points)
+    if (grade_changed or focus_changed):
         prior_draft = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
-        if prior_draft and prior_draft.status in {"READY", "UNDER_REVIEW"}:
+        if prior_draft and prior_draft.status in {"READY", "UNDER_REVIEW", "PENDING", "QUEUED", "CLAIMED"}:
             prior_draft.status = "STALE"
 
     # Enqueue automatic feedback draft if enabled
-    from app.services.submission.SubmissionFeedbackService import (
-        enqueue_automatic_feedback_draft,
-        dispatch_background_draft_processing,
+    enqueue_automatic_feedback_draft(
+        db,
+        submission.submission_id,
+        staff_id,
+        focus_points=validated_focus_points,
     )
-    enqueue_automatic_feedback_draft(db, submission.submission_id, staff_id)
 
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()

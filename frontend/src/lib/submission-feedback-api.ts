@@ -43,6 +43,9 @@ export type FeedbackDraft = {
   error_message: string | null;
   created_at: string | null;
   updated_at: string | null;
+  focus_points?: string[] | null;
+  is_template?: boolean;
+  is_policy_fallback?: boolean;
 };
 
 export type FeedbackPublication = {

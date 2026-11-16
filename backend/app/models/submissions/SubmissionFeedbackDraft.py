@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, UniqueConstraint, Index, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.Base import Base
@@ -32,6 +32,7 @@ class SubmissionFeedbackDraft(Base):
     evidence_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     feedback_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     detail_level: Mapped[str] = mapped_column(String(20), default="GENERAL")
+    focus_points: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_retries: Mapped[int] = mapped_column(Integer, default=3, nullable=False)

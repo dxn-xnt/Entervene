@@ -33,7 +33,13 @@ const detail: TeacherSubmissionDetail = {
   total_points: 25,
 };
 
-function renderView(kind: "ASSIGNMENT" | "ACTIVITY" | "READING", mode = "ONLINE", feedbackDraft = detail.feedback ?? "") {
+function renderView(
+  kind: "ASSIGNMENT" | "ACTIVITY" | "READING",
+  mode = "ONLINE",
+  feedbackDraft = detail.feedback ?? "",
+  focusPointsDraft: string[] = [],
+  onFocusPointsChange = vi.fn(),
+) {
   const onFeedbackChange = vi.fn();
   const onPostGrade = vi.fn();
   const onAiFeedbackPublished = vi.fn();
@@ -60,6 +66,8 @@ function renderView(kind: "ASSIGNMENT" | "ACTIVITY" | "READING", mode = "ONLINE"
         submissionDetailError=""
         gradeDraft="0"
         feedbackDraft={feedbackDraft}
+        focusPointsDraft={focusPointsDraft}
+        onFocusPointsChange={onFocusPointsChange}
         gradeError=""
         isPostingGrade={false}
         onClose={vi.fn()}
@@ -73,7 +81,7 @@ function renderView(kind: "ASSIGNMENT" | "ACTIVITY" | "READING", mode = "ONLINE"
       />
     </MemoryRouter>,
   );
-  return { onFeedbackChange, onPostGrade, onAiFeedbackPublished };
+  return { onFeedbackChange, onPostGrade, onAiFeedbackPublished, onFocusPointsChange };
 }
 
 afterEach(() => {
@@ -104,23 +112,82 @@ describe("teacher scored-classwork grading view", () => {
     expect(handlers.onFeedbackChange).toHaveBeenCalledWith("AI draft text.");
   });
 
-  it("pauses grade saving while an AI-generated draft is under review", () => {
+  it("keeps grade saving enabled while an AI-generated draft is under review", () => {
     const handlers = renderView("ASSIGNMENT");
     act(() => {
       (assistantProps.current?.onReviewChange as (reviewing: boolean) => void)(true);
     });
     const updateButton = screen.getByRole("button", { name: "Update Grade" }) as HTMLButtonElement;
-    expect(updateButton.disabled).toBe(true);
+    expect(updateButton.disabled).toBe(false);
     fireEvent.click(updateButton);
-    expect(handlers.onPostGrade).not.toHaveBeenCalled();
-    act(() => {
-      (assistantProps.current?.onReviewChange as (reviewing: boolean) => void)(false);
-    });
-    expect((screen.getByRole("button", { name: "Update Grade" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(handlers.onPostGrade).toHaveBeenCalled();
   });
 
   it.each([["ACTIVITY", "MANUAL"], ["READING", "ONLINE"]] as const)("does not mount for %s in %s mode", (kind, mode) => {
     renderView(kind, mode);
     expect(screen.queryByTestId("shared-ai-assistant")).toBeNull();
+  });
+
+  it("renders FeedbackFocusSelector for Assignment and propagates chip toggles", () => {
+    const handlers = renderView("ASSIGNMENT", "ONLINE", "", ["STRUCTURE"]);
+    expect(screen.getByText("Feedback Focus Points")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeDefined();
+
+    // Verify Clear Structure chip is checked
+    const structureChip = screen.getByRole("checkbox", { name: "Clear Structure" });
+    expect(structureChip.getAttribute("aria-checked")).toBe("true");
+
+    // Toggle another strength
+    const analysisChip = screen.getByRole("checkbox", { name: "Thorough Analysis" });
+    fireEvent.click(analysisChip);
+    expect(handlers.onFocusPointsChange).toHaveBeenCalledWith(["STRUCTURE", "ANALYSIS"]);
+  });
+
+  it("renders AI-generated draft badge and italicizes textarea when an AI draft is under review", () => {
+    renderView("ASSIGNMENT");
+    const textarea = screen.getByPlaceholderText("Write constructive feedback for the student...") as HTMLTextAreaElement;
+    expect(screen.queryByTestId("feedback-provenance-badge")).toBeNull();
+    expect(textarea.className).not.toContain("italic");
+
+    act(() => {
+      (assistantProps.current?.onReviewChange as (reviewing: boolean, isTemplate?: boolean) => void)(true, false);
+    });
+
+    const badge = screen.getByTestId("feedback-provenance-badge");
+    expect(badge.textContent).toContain("AI-generated draft");
+    expect(textarea.className).toContain("italic");
+
+    act(() => {
+      (assistantProps.current?.onReviewChange as (reviewing: boolean) => void)(false);
+    });
+    expect(screen.queryByTestId("feedback-provenance-badge")).toBeNull();
+    expect(textarea.className).not.toContain("italic");
+  });
+
+  it("renders Score-based template badge with standard font when a template draft is under review", () => {
+    renderView("ASSIGNMENT");
+    const textarea = screen.getByPlaceholderText("Write constructive feedback for the student...") as HTMLTextAreaElement;
+
+    act(() => {
+      (assistantProps.current?.onReviewChange as (reviewing: boolean, isTemplate?: boolean) => void)(true, true);
+    });
+
+    const badge = screen.getByTestId("feedback-provenance-badge");
+    expect(badge.textContent).toBe("Score-based template");
+    expect(badge.textContent).not.toContain("AI-generated draft");
+    expect(textarea.className).not.toContain("italic");
+  });
+
+  it("renders Score-based template badge with policy fallback explanation note", () => {
+    renderView("ASSIGNMENT");
+
+    act(() => {
+      (assistantProps.current?.onReviewChange as (reviewing: boolean, isTemplate?: boolean, isPolicyFallback?: boolean) => void)(true, true, true);
+    });
+
+    const badge = screen.getByTestId("feedback-provenance-badge");
+    expect(badge.textContent).toBe("Score-based template");
+    const note = screen.getByTestId("policy-fallback-note");
+    expect(note.textContent).toContain("Contextual AI disabled by policy");
   });
 });

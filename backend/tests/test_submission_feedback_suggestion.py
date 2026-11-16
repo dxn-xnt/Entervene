@@ -45,9 +45,12 @@ from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
+from app.models.submissions.SubmissionFeedbackDraft import SubmissionFeedbackDraft
 from app.models.submissions.SubmissionLink import SubmissionLink
+from app.schemas.Submission import GradeRequest
 from app.services.ai.UsageGuard import actor
 from app.services.submission import SubmissionFeedbackService as feedback_service
+from app.services.submission import SubmissionService as submission_service
 
 
 @pytest.fixture
@@ -2131,11 +2134,18 @@ def test_scored_classwork_eligible_with_hidden_scores(feedback_context, monkeypa
     classwork.auto_ai_feedback_enabled = True
     feedback_context["db"].commit()
 
-    captured = _capture_provider(monkeypatch, feedback=_SCORE_SUGGESTION)
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", True)
+    expected_feedback = "The student demonstrated thorough analysis and clear structure."
+    captured = _capture_provider(monkeypatch, feedback=expected_feedback)
     submission_id = feedback_context["submission"].submission_id
 
-    # 1. Enqueue automatic draft
-    draft = feedback_service.enqueue_automatic_feedback_draft(feedback_context["db"], submission_id, "T-FEEDBACK")
+    # 1. Enqueue automatic draft with focus points
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        feedback_context["db"],
+        submission_id,
+        "T-FEEDBACK",
+        focus_points=["STRUCTURE", "ANALYSIS"],
+    )
     assert draft is not None
     assert draft.status == "QUEUED"
     assert draft.scheduled_for is not None
@@ -2146,7 +2156,8 @@ def test_scored_classwork_eligible_with_hidden_scores(feedback_context, monkeypa
     assert success is True
     feedback_context["db"].refresh(draft)
     assert draft.status == "READY"
-    assert draft.draft_feedback == _SCORE_SUGGESTION
+    assert draft.draft_feedback == expected_feedback
+    assert draft.detail_level == "CONTEXTUAL"
     assert captured["calls"] == 1
 
     # 3. Teacher can retrieve the draft
@@ -2154,11 +2165,13 @@ def test_scored_classwork_eligible_with_hidden_scores(feedback_context, monkeypa
     assert draft_resp.status_code == 200, draft_resp.text
     data = draft_resp.json()
     assert data["status"] == "READY"
-    assert data["draft_feedback"] == _SCORE_SUGGESTION
+    assert data["draft_feedback"] == expected_feedback
+    assert data["is_template"] is False
+    assert set(data["focus_points"]) == {"ANALYSIS", "STRUCTURE"}
 
     # 4. Teacher can approve/publish feedback privately while show_scores is False
     pub_body = {
-        "feedback": _SCORE_SUGGESTION,
+        "feedback": expected_feedback,
         "expected_evidence_fingerprint": data["evidence_fingerprint"],
         "expected_feedback_fingerprint": data["feedback_fingerprint"],
     }
@@ -2167,7 +2180,7 @@ def test_scored_classwork_eligible_with_hidden_scores(feedback_context, monkeypa
         json=pub_body,
     )
     assert pub_resp.status_code == 200, pub_resp.text
-    assert pub_resp.json()["feedback"] == _SCORE_SUGGESTION
+    assert pub_resp.json()["feedback"] == expected_feedback
     feedback_context["db"].refresh(draft)
     assert draft.status == "APPROVED"
 
@@ -2210,8 +2223,7 @@ def test_valid_zero_grade_eligible_for_feedback(feedback_context, monkeypatch):
     submission.grade = Decimal("0.00")
     feedback_context["db"].commit()
 
-    zero_suggestion = "The overall score shows no credit for this work."
-    _capture_provider(monkeypatch, feedback=zero_suggestion)
+    captured = _capture_provider(monkeypatch)
 
     draft = feedback_service.enqueue_automatic_feedback_draft(
         feedback_context["db"],
@@ -2227,7 +2239,12 @@ def test_valid_zero_grade_eligible_for_feedback(feedback_context, monkeypatch):
     assert success is True
     feedback_context["db"].refresh(draft)
     assert draft.status == "READY"
-    assert draft.draft_feedback == zero_suggestion
+    assert draft.draft_feedback == (
+        "The overall score shows no credit for this work. "
+        "Review your work with your teacher to identify a helpful starting point."
+    )
+    assert draft.detail_level == "TEMPLATE"
+    assert captured["calls"] == 0
 
 
 def test_reactivate_unscheduled_feedback_drafts(feedback_context):
@@ -2255,3 +2272,340 @@ def test_reactivate_unscheduled_feedback_drafts(feedback_context):
     assert count == 1
     feedback_context["db"].refresh(blocked_draft)
     assert blocked_draft.scheduled_for is not None
+
+
+# ==============================================================================
+# PHASE 2 TESTS: TEACHER-GROUNDED CONTEXTUAL FEEDBACK & FOCUS POINTS
+# ==============================================================================
+
+
+def test_focus_points_validation_and_limits():
+    """Verifies that focus points are allowlisted, limited to 2 per category, and canonicalized."""
+    # Valid selection within limits
+    valid = feedback_service.validate_focus_points(["STRUCTURE", "CLARITY"])
+    assert valid == ["CLARITY", "STRUCTURE"]
+
+    # Deduplication and case-insensitivity
+    deduped = feedback_service.validate_focus_points(["structure", "STRUCTURE"])
+    assert deduped == ["STRUCTURE"]
+
+    # Empty / None
+    assert feedback_service.validate_focus_points(None) is None
+    assert feedback_service.validate_focus_points([]) is None
+
+    # Unsupported focus point code
+    with pytest.raises(HTTPException) as exc_unsupported:
+        feedback_service.validate_focus_points(["INVALID_CODE"])
+    assert exc_unsupported.value.status_code == 400
+    assert exc_unsupported.value.detail["code"] == "FEEDBACK_INVALID_FOCUS_POINTS"
+
+    # More than 2 strengths
+    with pytest.raises(HTTPException) as exc_strengths:
+        feedback_service.validate_focus_points(["STRUCTURE", "EVIDENCE", "ANALYSIS"])
+    assert exc_strengths.value.status_code == 400
+    assert "At most 2 strengths" in exc_strengths.value.detail["message"]
+
+    # More than 2 improvements
+    with pytest.raises(HTTPException) as exc_improvements:
+        feedback_service.validate_focus_points(["DEEPEN_ANALYSIS", "CITATIONS", "CLARITY"])
+    assert exc_improvements.value.status_code == 400
+    assert "At most 2 improvement areas" in exc_improvements.value.detail["message"]
+
+
+def test_grade_save_with_focus_points_persists_and_restores(feedback_context):
+    """Saving a grade with focus points stores them transactionally and returns them to authorized teachers."""
+    from app.services.submission.SubmissionService import grade_student_submission, build_submission_response
+    from app.schemas.Submission import GradeRequest
+
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+
+    req = GradeRequest(
+        grade=24.0,
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+        focus_points=["STRUCTURE", "CONCLUSION"],
+    )
+    grade_student_submission(submission.submission_id, req, "T-FEEDBACK", db)
+    db.refresh(submission)
+
+    assert submission.feedback_focus_points == ["CONCLUSION", "STRUCTURE"]
+    assert float(submission.grade) == 24.0
+
+    # Teacher response includes focus points
+    teacher_resp = build_submission_response(submission, db, for_student=False)
+    assert teacher_resp.feedback_focus_points == ["CONCLUSION", "STRUCTURE"]
+
+    # Student response withholds focus points
+    student_resp = build_submission_response(submission, db, for_student=True)
+    assert student_resp.feedback_focus_points is None
+
+
+def test_grade_save_changing_focus_points_invalidates_unapproved_draft(feedback_context, monkeypatch):
+    """Changing focus points alone (with identical grade) marks existing draft STALE."""
+    from app.services.submission.SubmissionService import grade_student_submission
+    from app.schemas.Submission import GradeRequest
+
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", True)
+    _capture_provider(monkeypatch, feedback="Draft 1 constructive feedback.")
+
+    # 1. Post initial grade with focus point STRUCTURE
+    req1 = GradeRequest(
+        grade=20.0,
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+        focus_points=["STRUCTURE"],
+    )
+    grade_student_submission(submission.submission_id, req1, "T-FEEDBACK", db)
+    db.commit()
+
+    draft = db.query(feedback_service.SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
+    assert draft is not None
+    # Process draft to READY
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.status == "READY"
+    assert draft.detail_level == "CONTEXTUAL"
+
+    # 2. Re-save grade with identical score (20.0) but changed focus points (EVIDENCE)
+    req2 = GradeRequest(
+        grade=20.0,
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+        focus_points=["EVIDENCE"],
+    )
+    grade_student_submission(submission.submission_id, req2, "T-FEEDBACK", db)
+    db.commit()
+
+    db.refresh(draft)
+    # The draft is invalidated and re-enqueued as QUEUED
+    assert draft.status == "QUEUED"
+    assert draft.focus_points == ["EVIDENCE"]
+
+
+def test_contextual_ai_feedback_prompt_minimization_and_pii_exclusion(feedback_context, monkeypatch):
+    """Contextual prompt contains only server-mapped pedagogical meanings and excludes student PII, files, and free text."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", True)
+    captured = _capture_provider(monkeypatch, feedback="Thorough analysis shown in your calculations.")
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        db,
+        submission.submission_id,
+        "T-FEEDBACK",
+        focus_points=["ANALYSIS", "CALCULATIONS"],
+    )
+    db.commit()
+
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.status == "READY"
+    assert draft.detail_level == "CONTEXTUAL"
+    assert captured["calls"] == 1
+
+    prompt = captured["prompt"]
+    # Check that canonical human labels are present
+    assert "Thorough Analysis" in prompt
+    assert "Accurate Calculations" in prompt
+    assert "awarded_points" in prompt
+
+    # Verify PII and file text are excluded from the prompt
+    assert str(submission.student_id) not in prompt
+    assert "student_id" not in prompt
+    assert "submission_id" not in prompt
+    assert feedback_context["classwork"].title not in prompt
+    assert "essay" not in prompt.lower()
+    assert ".pdf" not in prompt.lower()
+
+
+def test_contextual_ai_feedback_fallback_when_feature_gate_disabled(feedback_context, monkeypatch):
+    """When institutional contextual_ai_feedback_authorized is False, falls back to deterministic template without calling AI."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    # Feature gate defaults/forced to False
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", False)
+    captured = _capture_provider(monkeypatch)
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        db,
+        submission.submission_id,
+        "T-FEEDBACK",
+        focus_points=["STRUCTURE", "CLARITY"],
+    )
+    db.commit()
+
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+
+    assert draft.status == "READY"
+    assert draft.detail_level == "POLICY_FALLBACK"
+    # Zero calls to external provider!
+    assert captured["calls"] == 0
+    assert "The overall score shows" in draft.draft_feedback
+
+    response = feedback_service.get_submission_feedback_draft_status(db, "T-FEEDBACK", submission.submission_id)
+    assert response.is_template is True
+    assert response.is_policy_fallback is True
+    assert response.focus_points == ["STRUCTURE", "CLARITY"]
+
+
+def test_contextual_ai_feedback_bounded_validation_rejects_hallucinations(feedback_context, monkeypatch):
+    """AI output claiming direct document inspection, links, or sensitive inferences is rejected."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", True)
+
+    # 1. Hallucinated file inspection rejection
+    _capture_provider(monkeypatch, feedback="I read your essay on page 3 and observed good evidence.")
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        db,
+        submission.submission_id,
+        "T-FEEDBACK",
+        focus_points=["EVIDENCE"],
+    )
+    db.commit()
+
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.retry_count == 1
+    assert "FEEDBACK_AI_OUTPUT_UNSAFE" in (draft.error_message or "")
+
+    # 2. Hallucinated external URL rejection
+    _capture_provider(monkeypatch, feedback="Check this link https://example.com/guide for additional help.")
+    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db.commit()
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.retry_count == 2
+    assert "FEEDBACK_AI_OUTPUT_UNSAFE" in (draft.error_message or "")
+
+    # 3. Sensitive effort / personal inferences rejection
+    _capture_provider(monkeypatch, feedback="The student was careless and rushed through their calculations.")
+    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db.commit()
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.retry_count == 3
+    assert "FEEDBACK_AI_OUTPUT_UNSAFE" in (draft.error_message or "")
+
+    # 4. Clean, bounded output succeeds
+    _capture_provider(monkeypatch, feedback="Clear structure is evident throughout this work. Keep refining your evidence.")
+    draft.retry_count = 0
+    draft.status = "QUEUED"
+    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db.commit()
+
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.status == "READY"
+    assert draft.draft_feedback == "Clear structure is evident throughout this work. Keep refining your evidence."
+
+
+def test_grade_save_focus_points_omitted_vs_cleared_semantics(feedback_context):
+    """Omitted focus points preserve previous selections; empty list clears them."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    staff_id = feedback_context["teacher"].staff_id
+    cw = feedback_context["classwork"]
+    cw.auto_ai_feedback_enabled = True
+    db.commit()
+
+    # Step 1: Save grade with explicit focus points
+    req1 = GradeRequest(
+        grade=20.0,
+        focus_points=["STRUCTURE", "CALCULATIONS"],
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    res1 = submission_service.grade_student_submission(submission.submission_id, req1, staff_id, db)
+    db.refresh(submission)
+    assert submission.feedback_focus_points == ["CALCULATIONS", "STRUCTURE"]
+    assert res1.feedback_focus_points == ["CALCULATIONS", "STRUCTURE"]
+
+    # Step 2: Save grade with focus_points=None (omitted) -> must PRESERVE existing
+    req2 = GradeRequest(
+        grade=22.0,
+        focus_points=None,
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    res2 = submission_service.grade_student_submission(submission.submission_id, req2, staff_id, db)
+    db.refresh(submission)
+    assert submission.feedback_focus_points == ["CALCULATIONS", "STRUCTURE"], "Omitted focus_points must not erase saved selections"
+    assert res2.feedback_focus_points == ["CALCULATIONS", "STRUCTURE"]
+
+    # Step 3: Save grade with focus_points=[] (explicit clear) -> must CLEAR to None
+    req3 = GradeRequest(
+        grade=22.0,
+        focus_points=[],
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    res3 = submission_service.grade_student_submission(submission.submission_id, req3, staff_id, db)
+    db.refresh(submission)
+    assert submission.feedback_focus_points is None, "Empty list focus_points must clear saved selections"
+    assert res3.feedback_focus_points is None
+
+
+def test_changing_only_focus_points_invalidates_prior_draft(feedback_context, monkeypatch):
+    """Changing focus points while score stays the same marks prior unapproved draft STALE and enqueues new job."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    staff_id = feedback_context["teacher"].staff_id
+    cw = feedback_context["classwork"]
+    cw.auto_ai_feedback_enabled = True
+    db.commit()
+
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", False)
+
+    # Initial grade with STRUCTURE
+    req1 = GradeRequest(
+        grade=20.0,
+        focus_points=["STRUCTURE"],
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    submission_service.grade_student_submission(submission.submission_id, req1, staff_id, db)
+    draft1 = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
+    assert draft1 is not None
+    # Process draft1 to READY
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft1.draft_id))
+    db.refresh(draft1)
+    assert draft1.status == "READY"
+    assert draft1.focus_points == ["STRUCTURE"]
+
+    # Teacher changes ONLY focus points to ANALYSIS (same grade 20.0)
+    req2 = GradeRequest(
+        grade=20.0,
+        focus_points=["ANALYSIS"],
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    submission_service.grade_student_submission(submission.submission_id, req2, staff_id, db)
+    db.refresh(draft1)
+    # Draft1 is updated to new enqueue with new focus points or marked STALE
+    draft2 = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
+    assert draft2.focus_points == ["ANALYSIS"]
+    assert draft2.status in {"QUEUED", "PENDING"}

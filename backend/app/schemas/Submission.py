@@ -43,12 +43,14 @@ class SubmissionResponse(BaseModel):
     links: list[SubmissionLinkResponse] = Field(default_factory=list)
     total_points: Optional[float] = None
     created_at: Optional[datetime] = None
+    feedback_focus_points: Optional[list[str]] = None
 
 
 class GradeRequest(BaseModel):
     grade: float
     feedback: Optional[str] = None
     expected_feedback_fingerprint: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    focus_points: Optional[list[str]] = Field(default=None)
 
 
 class FeedbackSuggestionResponse(BaseModel):
@@ -105,6 +107,9 @@ class FeedbackDraftResponse(BaseModel):
     error_message: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    focus_points: Optional[list[str]] = None
+    is_template: bool = False
+    is_policy_fallback: bool = False
 
 
 

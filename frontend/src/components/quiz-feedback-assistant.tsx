@@ -30,8 +30,8 @@ type QuizFeedbackAssistantProps = {
   /** Increment or change when classwork/quiz settings are saved to refresh eligibility. */
   eligibilityRevision?: string | number;
   onPublishingChange?: (publishing: boolean) => void;
-  /** Reports whether an AI-generated draft is under review in the host editor. */
-  onReviewChange?: (reviewing: boolean) => void;
+  /** Reports whether an AI-generated draft or score template is under review in the host editor. */
+  onReviewChange?: (reviewing: boolean, isTemplate?: boolean, isPolicyFallback?: boolean) => void;
   onConflictReload?: (submissionId: number) => Promise<void>;
   disabled?: boolean;
   showScores?: boolean;
@@ -82,6 +82,8 @@ export default function QuizFeedbackAssistant({
   const [discarding, setDiscarding] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [previousDraft, setPreviousDraft] = useState<string>("");
+  const previousDraftRef = useRef<string>("");
+  previousDraftRef.current = previousDraft;
   const [promptPending, setPromptPending] = useState<{ aiText: string; manualText: string } | null>(null);
   const [notice, setNotice] = useState<{ status: "error" | "warning"; message: string } | null>(null);
   const [pollingExpired, setPollingExpired] = useState(false);
@@ -119,9 +121,20 @@ export default function QuizFeedbackAssistant({
     };
   }, [stopPolling]);
 
+  const isTemplate = Boolean(draft?.is_template || draft?.detail_level === "TEMPLATE" || draft?.detail_level === "POLICY_FALLBACK");
+  const isPolicyFallback = Boolean(draft?.is_policy_fallback || draft?.detail_level === "POLICY_FALLBACK");
+
   useEffect(() => {
-    onReviewChangeRef.current?.(reviewing);
-  }, [reviewing]);
+    if (isTemplate) {
+      if (isPolicyFallback) {
+        onReviewChangeRef.current?.(reviewing, true, true);
+      } else {
+        onReviewChangeRef.current?.(reviewing, true);
+      }
+    } else {
+      onReviewChangeRef.current?.(reviewing);
+    }
+  }, [reviewing, isTemplate, isPolicyFallback]);
 
   const fetchDraft = useCallback(
     async (isPollingAttempt = false) => {
@@ -285,7 +298,7 @@ export default function QuizFeedbackAssistant({
       onFeedbackDraftChange(previousDraft || existingFeedback);
       setReviewing(false);
       setDraft(null);
-      toast.success({ title: "AI feedback draft discarded" });
+      toast.success({ title: isTemplate ? "Feedback template discarded" : "AI feedback draft discarded" });
     } catch (error) {
       if (!mountedRef.current || activeSubmissionIdRef.current !== requestedSubmissionId) return;
       const message = error instanceof Error ? error.message : "Unable to discard draft.";
@@ -399,9 +412,19 @@ export default function QuizFeedbackAssistant({
 
       {promptPending && (
         <Alert status="warning">
-          <Alert.Title>AI feedback draft ready</Alert.Title>
+          <Alert.Title>
+            {isPolicyFallback
+              ? "Score-based feedback template ready (AI disabled by policy)"
+              : isTemplate
+                ? "Score-based feedback template ready"
+                : "AI feedback draft ready"}
+          </Alert.Title>
           <Alert.Description>
-            An AI-generated draft has been automatically prepared. Would you like to review it or keep your current notes?
+            {isPolicyFallback
+              ? "Contextual AI generation is currently not authorized by policy. A standard score-based template has been prepared. Would you like to review it or keep your current notes?"
+              : isTemplate
+                ? "A standard feedback template based on the overall score has been prepared. Would you like to review it or keep your current notes?"
+                : "An AI-generated draft has been automatically prepared. Would you like to review it or keep your current notes?"}
           </Alert.Description>
           <div className="flex gap-2 mt-2">
             <Button
@@ -414,7 +437,7 @@ export default function QuizFeedbackAssistant({
                 setPromptPending(null);
               }}
             >
-              Review AI Draft
+              {isTemplate ? "Review Template" : "Review AI Draft"}
             </Button>
             <Button
               type="button"
@@ -428,6 +451,39 @@ export default function QuizFeedbackAssistant({
         </Alert>
       )}
 
+      {!reviewing && draft?.status === "READY" && !promptPending && feedbackDraft.trim() !== "" && feedbackDraft.trim() !== existingFeedback.trim() && (
+        <div className="flex flex-wrap items-center justify-between gap-2 py-1 text-xs text-muted-foreground" data-testid="ai-feedback-notes-preserved">
+          <span>Teacher edits preserved in editor.</span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-xs"
+              onClick={() => {
+                setPreviousDraft(feedbackDraft);
+                onFeedbackDraftChange(draft.draft_feedback || "");
+                setReviewing(true);
+              }}
+            >
+              {isTemplate ? "Review Template" : "Review AI Draft"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-xs"
+              onClick={() => {
+                onFeedbackDraftChange(existingFeedback);
+                setDraft(null);
+              }}
+            >
+              Discard Edits
+            </Button>
+          </div>
+        </div>
+      )}
+
       {draft?.status === "FAILED" && (
         <p className="text-xs text-muted-foreground italic py-1" data-testid="ai-feedback-failed">
           AI feedback couldn't be prepared. You can still write feedback manually.
@@ -438,9 +494,11 @@ export default function QuizFeedbackAssistant({
         <div className="flex flex-wrap items-center gap-2 py-1 text-xs text-muted-foreground" data-testid="ai-feedback-preparing">
           <span className="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
           <span>
-            {isTakingLonger
-              ? "AI feedback is still being prepared. You can continue grading while it finishes."
-              : "Preparing AI-generated feedback..."}
+            {isTemplate
+              ? "Preparing score-based feedback template..."
+              : isTakingLonger
+                ? "AI feedback is still being prepared. You can continue grading while it finishes."
+                : "Preparing AI-generated feedback..."}
           </span>
           {pollingExpired && (
             <Button
@@ -461,7 +519,11 @@ export default function QuizFeedbackAssistant({
         <div className="space-y-2 pt-1" data-testid="ai-feedback-review-actions">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">
-              AI-generated draft under review — click and edit text directly above.
+              {isPolicyFallback
+                ? "Contextual AI generation is disabled by policy. Standard score-based template under review — click and edit text directly above."
+                : isTemplate
+                  ? "Score-based template under review — click and edit text directly above."
+                  : "AI-generated draft under review — click and edit text directly above."}
             </span>
             <span className={`text-xs ${overLimit ? "font-bold text-destructive" : "text-muted-foreground"}`}>
               {finalText.length}/{AI_FEEDBACK_MAX_LENGTH} characters
@@ -480,7 +542,7 @@ export default function QuizFeedbackAssistant({
               onClick={() => void handleDiscard()}
               disabled={publishing || discarding || disabled}
             >
-              {discarding ? "Discarding..." : "Discard Draft"}
+              {discarding ? "Discarding..." : isTemplate ? "Discard Template" : "Discard Draft"}
             </Button>
             <Button
               type="button"
