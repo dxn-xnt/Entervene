@@ -14,8 +14,8 @@ import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Table } from "@/components/retroui/Table";
 import { OverviewCard } from "@/components/overview-cards";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import { SF9PreviewModal } from "@/pages/teacher/forms/sf9-preview-modal";
+import { Avatar } from "@/components/retroui/Avatar";
 import {
   exportTeacherAdvisoryBatchSF9,
   getClassSchedule,
@@ -41,6 +41,34 @@ export default function AdvisoryClassDetail() {
     useState<TeacherAdvisoryClassDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isBatchExportingXlsx, setIsBatchExportingXlsx] = useState(false);
+
+  const handleExportBatchSF9Xlsx = async () => {
+    if (!detail) return;
+    try {
+      setIsBatchExportingXlsx(true);
+      toast.info("Generating batch Excel (.xlsx) report cards for advisory class...");
+      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(detail.class_id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Advisory class SF9 report cards exported successfully.");
+    } catch (err) {
+      console.error("Batch SF9 export failed:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to export advisory SF9 report cards.",
+      );
+    } finally {
+      setIsBatchExportingXlsx(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -110,26 +138,44 @@ export default function AdvisoryClassDetail() {
         <div className="@container/main flex flex-1 flex-col min-w-0 w-full max-w-full">
           <div className="flex flex-1 flex-col min-w-0 w-full max-w-full">
             <div data-page-tabs-sticky-region>
-              <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-                <SidebarTrigger className="md:hidden" />
-                <Breadcrumb>
-                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Link
-                        onClick={() => navigate("/teacher/classes")}
-                        className="cursor-pointer"
-                      >
-                        Classes
-                      </Breadcrumb.Link>
-                    </Breadcrumb.Item>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page>
-                        {detail.section_name}
-                      </Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </Breadcrumb.List>
-                </Breadcrumb>
+              <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
+                <div className="flex min-w-0 items-center gap-3">
+                  <SidebarTrigger className="md:hidden" />
+                  <Breadcrumb>
+                    <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link
+                          onClick={() => navigate("/teacher/classes")}
+                          className="cursor-pointer"
+                        >
+                          Classes
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Page>
+                          {detail.section_name}
+                        </Breadcrumb.Page>
+                      </Breadcrumb.Item>
+                    </Breadcrumb.List>
+                  </Breadcrumb>
+                </div>
+
+                {tab === "grades" && (
+                  <Button
+                    variant="default"
+                    disabled={isBatchExportingXlsx || !detail.students.length}
+                    onClick={handleExportBatchSF9Xlsx}
+                    className="flex items-center gap-1.5 border-2 border-black bg-primary text-primary-foreground"
+                  >
+                    {isBatchExportingXlsx ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="size-3.5" />
+                    )}
+                    <span>{isBatchExportingXlsx ? "Exporting..." : "Export Excel"}</span>
+                  </Button>
+                )}
               </header>
               <div className="px-4 md:px-6 bg-background -mt-[1px]">
                 <Tabs<DetailTab>
@@ -213,7 +259,7 @@ function OverviewTab({
             {detail.subject_loads.length ? (
               detail.subject_loads.map((load) => (
                 <Card key={load.subject_load_id} className="block w-full">
-                  <Card.Content className="flex min-h-16 items-start justify-between gap-4">
+                  <Card.Content className="flex items-start justify-between gap-4">
                     <span>
                       <span className="block text-xl font-bold text-foreground/90">
                         {load.subject_name}
@@ -234,20 +280,17 @@ function OverviewTab({
           </div>
         </section>
         <aside className="flex flex-col gap-2 min-w-0 xl:row-span-2">
-          <div className="flex flex-col gap-2 min-w-0">
-            <h3 className="text-lg font-bold">Overview</h3>
-            <div className="flex flex-col gap-3 min-w-0">
-              <OverviewCard
-                title="Total Students"
-                count={String(detail.student_count ?? 0)}
-                statDescription="Real assigned students"
-              />
-              <OverviewCard
-                title="Total Subjects"
-                count={String(detail.subject_count ?? 0)}
-                statDescription="Active and historical subject loads"
-              />
-            </div>
+          <div className="flex flex-col gap-3 min-w-0">
+            <OverviewCard
+              title="Total Students"
+              count={String(detail.student_count ?? 0)}
+              statDescription="Real assigned students"
+            />
+            <OverviewCard
+              title="Total Subjects"
+              count={String(detail.subject_count ?? 0)}
+              statDescription="Active and historical subject loads"
+            />
           </div>
         </aside>
 
@@ -294,7 +337,7 @@ function StudentsTab({
       <section>
         <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <h3 className="text-xl font-bold">Students</h3>
-          <label className="relative w-full md:w-72">
+          <label className="relative w-full md:w-86">
             <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
             <Input
               value={search}
@@ -305,46 +348,45 @@ function StudentsTab({
           </label>
         </div>
         <div className="min-w-0">
-            {!detail.students.length ? (
-              <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
-            ) : !filteredStudents.length ? (
-              <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
-            ) : (
-              <div className="grid items-start gap-3">
-                {groupedStudents.map(([gender, students]) => (
-                  <details
-                    key={gender}
-                    open
-                    className="group overflow-hidden rounded border-2 border-border bg-background shadow-md transition-all hover:shadow-sm open:shadow-sm"
-                  >
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 bg-primary px-4 py-3 text-base font-bold text-foreground">
-                      <span>{gender.toUpperCase()}</span>
-                      <span className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          size="sm"
-                          className="rounded"
-                        >
-                          {students.length} student
-                          {students.length !== 1 ? "s" : ""}
-                        </Badge>
-                        <ChevronDown className="size-4" />
-                      </span>
-                    </summary>
-                    <div className="border-t-2 border-border">
-                      {students.map((student) => (
-                        <StudentRow
-                          key={student.student_id}
-                          student={student}
-                          classId={detail.class_id}
-                          subjectLoads={detail.subject_loads}
-                        />
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            )}
+          {!detail.students.length ? (
+            <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
+          ) : !filteredStudents.length ? (
+            <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
+          ) : (
+            <div className="grid items-start gap-3">
+              {groupedStudents.map(([gender, students]) => (
+                <details
+                  key={gender}
+                  open
+                  className="group overflow-hidden rounded border-2 border-border bg-background shadow-md transition-all hover:shadow-sm open:shadow-sm"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 bg-primary px-4 py-3 text-base font-bold text-foreground">
+                    <span>{gender}</span>
+                    <span className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        size="sm"
+                        className="rounded"
+                      >
+                        {students.length} student
+                        {students.length !== 1 ? "s" : ""}
+                      </Badge>
+                      <ChevronDown className="size-4" />
+                    </span>
+                  </summary>
+                  <div className="border-t-2 border-border">
+                    {students.map((student) => (
+                      <StudentRow
+                        key={student.student_id}
+                        student={student}
+                        classId={detail.class_id}
+                      />
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>
@@ -404,34 +446,6 @@ function GradesTab({ classId }: { classId: number }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [isBatchExportingXlsx, setIsBatchExportingXlsx] = useState(false);
-
-  const handleExportBatchSF9Xlsx = async () => {
-    try {
-      setIsBatchExportingXlsx(true);
-      toast.info("Generating batch Excel (.xlsx) report cards for advisory class...");
-      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(classId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.setAttribute("download", filename);
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success("Advisory class SF9 report cards exported successfully.");
-    } catch (err) {
-      console.error("Batch SF9 export failed:", err);
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Failed to export advisory SF9 report cards.",
-      );
-    } finally {
-      setIsBatchExportingXlsx(false);
-    }
-  };
-
 
   useEffect(() => {
     let isMounted = true;
@@ -515,95 +529,43 @@ function GradesTab({ classId }: { classId: number }) {
 
   return (
     <div className="flex flex-col gap-4 min-w-0 w-full max-w-full">
-      {/* Top Controls: Period selector, Search & Batch SF9 Export */}
-      <div className="flex flex-col gap-4 min-w-0 w-full">
-        <div className="flex flex-wrap items-center justify-between gap-3 min-w-0 w-full">
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <span className="text-xs font-bold text-muted-foreground mr-1">
-              Period:
-            </span>
-            {gradesData.periods.map((period) => (
-              <Button
-                key={period.academic_period_id}
-                variant={
-                  selectedPeriodId === period.academic_period_id
-                    ? "default"
-                    : "outline"
-                }
-                size="sm"
-                onClick={() => setSelectedPeriodId(period.academic_period_id)}
-                className="font-bold text-xs"
-              >
-                {period.period_name} {period.is_active ? "(Active)" : ""}
-              </Button>
-            ))}
-          </div>
+      {/* Metric Cards */}
+      <div className="grid gap-4 sm:grid-cols-3 min-w-0 w-full">
+        <OverviewCard
+          title="Total Students"
+          count={String(gradesData.total_students)}
+          statDescription="Enrolled in this section"
+        />
+        <OverviewCard
+          title="Total Subjects"
+          count={String(gradesData.subjects.length)}
+          statDescription="Assigned subject curriculum"
+        />
+        <OverviewCard
+          title="Fully Finalized"
+          count={`${fullyFinalizedCount} / ${gradesData.total_students}`}
+          statDescription="All subjects finalized"
+        />
+      </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <label className="relative w-full sm:w-64">
-              <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search students..."
-                className="h-10 w-full border-black pl-9 pr-3"
-              />
-            </label>
-            <Button
-              variant="default"
-              size="sm"
-              disabled={isBatchExportingXlsx || !gradesData.students.length}
-              onClick={handleExportBatchSF9Xlsx}
-              className="font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all shrink-0"
-            >
-              {isBatchExportingXlsx ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <FileSpreadsheet className="size-3.5" />
-              )}
-              <span>{isBatchExportingXlsx ? "Exporting..." : "Excel (.xlsx)"}</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Metric Cards */}
-        <div className="grid gap-4 sm:grid-cols-3 min-w-0 w-full">
-          <OverviewCard
-            title="Total Students"
-            count={String(gradesData.total_students)}
-            statDescription="Enrolled in this section"
-          />
-          <OverviewCard
-            title="Total Subjects"
-            count={String(gradesData.subjects.length)}
-            statDescription="Assigned subject curriculum"
-          />
-          <OverviewCard
-            title="Fully Finalized"
-            count={`${fullyFinalizedCount} / ${gradesData.total_students}`}
-            statDescription="All subjects finalized"
-          />
+      {/* Controls: Search */}
+      <div className="flex flex-wrap items-end justify-between gap-3 min-w-0 w-full">
+        <p className="text-xl font-bold text-foreground -mb-2">Grades Matrix</p>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <label className="relative w-full sm:w-86">
+            <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search students..."
+              className="h-10 w-full border-black pl-9 pr-3"
+            />
+          </label>
         </div>
       </div>
 
       {/* Grades Matrix Scrollable Frame */}
       <div className="block w-full min-w-0 max-w-full rounded border-2 border-black bg-card shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
-        {/* Frame Sub-header with Scroll Hint */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black bg-muted/40 px-4 py-2.5 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-foreground">
-              Grades Matrix
-            </span>
-            <Badge variant="outline" size="sm" className="rounded font-semibold text-[10px] border-black/40">
-              {gradesData.subjects.length} Subjects
-            </Badge>
-          </div>
-          <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
-            <span>Scroll horizontally & vertically</span>
-            <span className="hidden sm:inline">• Headers and student names remain pinned</span>
-          </span>
-        </div>
-
         {!gradesData.students.length ? (
           <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
         ) : !filteredStudents.length ? (
@@ -611,39 +573,35 @@ function GradesTab({ classId }: { classId: number }) {
         ) : (
           <Table
             wrapperClassName="border-0 shadow-none rounded-none min-w-0 w-full max-w-full"
-            containerClassName="max-h-[560px] overflow-auto overscroll-contain retro-scrollbar"
+            containerClassName="overflow-auto overscroll-contain retro-scrollbar"
             className="border-separate border-spacing-0 min-w-max w-full"
           >
             <Table.Header>
               <Table.Row className="bg-primary">
                 {/* 2D Pinned Corner Header */}
-                <Table.Head className="sticky top-0 left-0 z-50 min-w-[220px] max-w-[260px] w-[240px] bg-primary text-primary-foreground font-black border-r-2 border-b-2 border-black shadow-[3px_3px_5px_-2px_rgba(0,0,0,0.25)] px-4 py-3">
+                <Table.Head className="sticky top-0 left-0 z-50 min-w-[220px] max-w-[260px] w-[240px] bg-primary text-primary-foreground font-black border-b-2 border-black px-4 py-3">
                   Learner's Name
                 </Table.Head>
                 {gradesData.subjects.map((subj) => (
                   <Table.Head
                     key={subj.subject_id}
-                    className="sticky top-0 z-30 text-center min-w-[140px] max-w-[180px] font-bold px-3 py-2.5 border-r border-b-2 border-black/20 border-b-black bg-primary text-primary-foreground"
+                    className="sticky top-0 z-30 text-center min-w-[140px] max-w-[180px] font-bold px-3 py-2.5 border-b-2 border-black bg-primary text-primary-foreground"
                   >
                     <Tooltip>
-                      <TooltipTrigger render={<span className="block truncate font-bold text-xs" tabIndex={0}>{subj.subject_name}</span>} />
-                      <TooltipContent>{subj.subject_name}</TooltipContent>
+                      <TooltipTrigger render={<span className="block truncate text-base" tabIndex={0}>{subj.subject_name}</span>} />
+                      <TooltipContent>
+                        <div className="font-bold">{subj.subject_name}</div>
+                        {subj.teacher_name && (
+                          <div className="text-[11px] text-muted-foreground">{subj.teacher_name}</div>
+                        )}
+                      </TooltipContent>
                     </Tooltip>
-                    {subj.teacher_name && (
-                      <Tooltip>
-                        <TooltipTrigger render={<span className="block text-[10px] font-normal text-primary-foreground/75 truncate mt-0.5" tabIndex={0}>{subj.teacher_name}</span>} />
-                        <TooltipContent>{subj.teacher_name}</TooltipContent>
-                      </Tooltip>
-                    )}
                   </Table.Head>
                 ))}
-                <Table.Head className="sticky top-0 z-30 text-center min-w-[150px] font-black px-3 py-2.5 border-r border-b-2 border-black/20 border-b-black bg-primary text-primary-foreground">
-                  General Average (GWA)
+                <Table.Head className="sticky top-0 z-30 text-center min-w-[150px] font-black px-3 py-2.5 border-b-2 border-black bg-primary text-primary-foreground">
+                  General Average
                 </Table.Head>
-                <Table.Head className="sticky top-0 z-30 text-center min-w-[120px] font-black px-3 py-2.5 border-r border-b-2 border-black/20 border-b-black bg-primary text-primary-foreground">
-                  Status
-                </Table.Head>
-                <Table.Head className="sticky top-0 z-30 text-center min-w-[100px] font-black px-3 py-2.5 border-b-2 border-black bg-primary text-primary-foreground">
+                <Table.Head className="sticky top-0 z-30 text-center max-w-[70px] font-black px-3 py-2.5 border-b-2 border-black bg-primary text-primary-foreground">
                   SF9
                 </Table.Head>
               </Table.Row>
@@ -651,26 +609,35 @@ function GradesTab({ classId }: { classId: number }) {
             <Table.Body>
               {groupedStudents.map(([gender, students]) => (
                 <Fragment key={gender}>
-                  <Table.Row className="bg-muted/70 font-black">
+                  <Table.Row className="bg-muted font-black hover:bg-muted">
                     <Table.Cell
-                      colSpan={gradesData.subjects.length + 4}
-                      className="p-0 text-xs uppercase tracking-wider font-extrabold text-foreground border-y-2 border-black/30 bg-muted/70"
+                      colSpan={gradesData.subjects.length + 3}
+                      className="p-0! text-sm text-foreground border-b-1 bg-muted/70"
                     >
                       <div className="sticky left-0 z-20 inline-flex items-center gap-2 px-4 py-2 font-black">
                         <span>{gender}</span>
-                        <span className="text-muted-foreground font-semibold">({students.length})</span>
                       </div>
                     </Table.Cell>
                   </Table.Row>
                   {students.map((student) => (
                     <Table.Row
                       key={student.student_id}
-                      className="group text-xs hover:bg-muted/30 transition-colors"
+                      className="group text-xs transition-colors"
                     >
                       {/* Pinned Student Name Column */}
-                      <Table.Cell className="sticky left-0 z-20 min-w-[220px] max-w-[260px] w-[240px] bg-card group-hover:bg-muted/50 transition-colors border-r-2 border-black/30 border-b border-border font-semibold shadow-[3px_0_5px_-2px_rgba(0,0,0,0.15)] px-4 py-3">
+                      <Table.Cell className="sticky left-0 z-20 min-w-[220px] max-w-[260px] w-[240px] transition-colors border-b border-border font-semibold px-4 py-3">
                         <div className="flex items-center gap-2 min-w-0">
-                          <Avatar text={student.full_name} />
+                          <Avatar variant="student" className="size-8 shrink-0">
+                            <Avatar.Image
+                              src={student.avatar || "/avatars/student-avatars/1.svg"}
+                              alt={student.full_name}
+                            />
+                            <Avatar.Fallback>
+                              {(student.avatar_initial || student.full_name || "?")
+                                .charAt(0)
+                                .toUpperCase()}
+                            </Avatar.Fallback>
+                          </Avatar>
                           <div className="min-w-0 flex-1">
                             <Tooltip>
                               <TooltipTrigger render={<span className="block font-bold text-sm text-foreground truncate" tabIndex={0}>{student.full_name}</span>} />
@@ -678,7 +645,7 @@ function GradesTab({ classId }: { classId: number }) {
                             </Tooltip>
                             {student.student_lrn && (
                               <span className="block text-[10px] font-medium text-muted-foreground truncate">
-                                LRN {student.student_lrn}
+                                {student.student_lrn}
                               </span>
                             )}
                           </div>
@@ -689,7 +656,7 @@ function GradesTab({ classId }: { classId: number }) {
                         return (
                           <Table.Cell
                             key={subj.subject_id}
-                            className="text-center px-3 py-2.5 min-w-[140px] border-r border-border/60 border-b border-border"
+                            className="text-center px-3 py-2.5 min-w-[140px] border-b border-border"
                           >
                             {gradeItem &&
                               gradeItem.is_finalized &&
@@ -716,7 +683,7 @@ function GradesTab({ classId }: { classId: number }) {
                           </Table.Cell>
                         );
                       })}
-                      <Table.Cell className="text-center px-3 py-2.5 min-w-[150px] border-r border-border/60 border-b border-border">
+                      <Table.Cell className="text-center px-3 py-2.5 min-w-[150px] border-b border-border">
                         {student.is_all_finalized &&
                           student.gwa !== null ? (
                           <div className="flex flex-col items-center justify-center">
@@ -747,28 +714,8 @@ function GradesTab({ classId }: { classId: number }) {
                           </span>
                         )}
                       </Table.Cell>
-                      <Table.Cell className="text-center px-3 py-2.5 min-w-[120px] border-r border-border/60 border-b border-border">
-                        {student.is_all_finalized ? (
-                          <Badge
-                            variant="solid"
-                            size="sm"
-                            className="bg-[#79bd80] text-black font-black text-[10px]"
-                          >
-                            Complete
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            size="sm"
-                            className="font-bold text-muted-foreground text-[10px]"
-                          >
-                            {student.finalized_count}/
-                            {student.total_subjects_count} Finalized
-                          </Badge>
-                        )}
-                      </Table.Cell>
-                      <Table.Cell className="text-center px-3 py-2.5 min-w-[150px] border-b border-border">
-                        <div className="flex items-center justify-center">
+                      <Table.Cell className="text-right px-3 py-2.5 max-w-[70px] border-b border-border">
+                        <div className="flex items-center justify-end">
                           <StudentSF9Button
                             classId={classId}
                             studentId={student.student_id}
@@ -833,35 +780,39 @@ function StudentSF9Button({
 function StudentRow({
   student,
   classId,
-  subjectLoads,
 }: {
   student: TeacherAdvisoryStudentItem;
   classId: number;
-  subjectLoads: TeacherAdvisoryClassDetailResponse["subject_loads"];
 }) {
   return (
-    <div className="grid items-center gap-3 border-b border-border bg-background px-4 py-3 text-sm last:border-b-0 lg:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
+    <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-4 py-3 text-sm last:border-b-0">
       <div className="flex min-h-12 min-w-0 items-center gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Avatar text={student.avatar_initial || student.full_name} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-semibold">
-              {student.full_name}
-            </span>
-            {student.student_lrn && (
-              <span className="block text-[10px] font-semibold text-black/55">
-                LRN {student.student_lrn}
-              </span>
-            )}
+        <Avatar variant="student" className="size-8 shrink-0">
+          <Avatar.Image
+            src={student.avatar || "/avatars/student-avatars/1.svg"}
+            alt={student.full_name}
+          />
+          <Avatar.Fallback>
+            {(student.avatar_initial || student.full_name || "?")
+              .charAt(0)
+              .toUpperCase()}
+          </Avatar.Fallback>
+        </Avatar>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">
+            {student.full_name}
           </span>
-        </div>
+          {student.student_lrn && (
+            <span className="block text-[10px] font-semibold text-black/55">
+              {student.student_lrn}
+            </span>
+          )}
+        </span>
       </div>
-      <ManualSuggestionPanel
+      <StudentSF9Button
         classId={classId}
-        student={student}
-        subjectLoads={subjectLoads}
-        displayMode="row"
-        additionalActions={<StudentSF9Button classId={classId} studentId={student.student_id} studentName={student.full_name} />}
+        studentId={student.student_id}
+        studentName={student.full_name}
       />
     </div>
   );
@@ -903,14 +854,6 @@ function EmptyInline({ message }: { message: string }) {
         {message}
       </Card.Content>
     </Card>
-  );
-}
-
-function Avatar({ text }: { text: string }) {
-  return (
-    <span className="grid size-7 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-[13px] font-semibold text-amber-900">
-      {(text || "?").charAt(0)}
-    </span>
   );
 }
 
