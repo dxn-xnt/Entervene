@@ -35,8 +35,14 @@ class StudentSuggestion(Base):
             "external_url IS NOT NULL AND length(trim(external_url)) BETWEEN 1 AND 2048)",
             name="ck_student_suggestion_resource_link",
         ),
+        CheckConstraint(
+            "(origin_class_id IS NULL AND origin_academic_period_id IS NULL) OR "
+            "(origin_class_id IS NOT NULL AND origin_academic_period_id IS NOT NULL)",
+            name="ck_student_suggestion_origin_pair",
+        ),
         Index("ix_student_suggestion_student_status", "student_id", "status"),
         Index("ix_student_suggestion_subject_status", "subject_id", "status"),
+        Index("ix_student_suggestion_origin_period", "origin_academic_period_id"),
         # Lesson duplicates can be enforced directly; classwork duplicates are
         # checked in the suggestion service because the classwork link is a child row.
         Index(
@@ -88,6 +94,14 @@ class StudentSuggestion(Base):
         String(20),
         ForeignKey("academic_staff.staff_id", ondelete="SET NULL"),
     )
+    # Captured at creation: teaching loads can later be reassigned or removed.
+    # Both fields remain null for suggestions created before provenance existed.
+    origin_class_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("class.class_id", ondelete="RESTRICT"), nullable=True,
+    )
+    origin_academic_period_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("academic_period.academic_period_id", ondelete="RESTRICT"), nullable=True,
+    )
     prediction_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("ai_prediction.prediction_id", ondelete="SET NULL"),
@@ -98,6 +112,7 @@ class StudentSuggestion(Base):
     subject: Mapped[object] = relationship("Subject", backref=backref("study_suggestions"))
     lesson: Mapped[object | None] = relationship("Lesson", backref=backref("study_suggestions"))
     created_by_staff: Mapped[object | None] = relationship("AcademicStaff", backref=backref("study_suggestions"))
+    origin_period: Mapped[object | None] = relationship("AcademicPeriod")
     prediction: Mapped[object | None] = relationship("AIPrediction", backref=backref("suggestions"))
     classwork_link: Mapped["SuggestionClasswork | None"] = relationship(
         "SuggestionClasswork",

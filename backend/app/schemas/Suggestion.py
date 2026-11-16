@@ -60,6 +60,11 @@ class SuggestionResponse(BaseModel):
     subject_id: int
     lesson_id: Optional[int] = None
     created_by_staff_id: Optional[str] = None
+    origin_class_id: Optional[int] = None
+    origin_academic_period_id: Optional[int] = None
+    origin_period_label: str = "Unknown period"
+    is_historical: bool = False
+    can_manage: bool = False
     resource: SuggestionResourceSummary
     classwork_link: Optional[SuggestionClassworkResponse] = None
     source_metrics: Optional[dict] = None

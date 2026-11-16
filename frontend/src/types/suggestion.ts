@@ -40,6 +40,11 @@ export type SuggestionResponse = {
   subject_id: number;
   lesson_id?: number | null;
   created_by_staff_id?: string | null;
+  origin_class_id?: number | null;
+  origin_academic_period_id?: number | null;
+  origin_period_label?: string;
+  is_historical?: boolean;
+  can_manage?: boolean;
   resource: SuggestionResourceSummary;
   classwork_link?: SuggestionClassworkResponse | null;
   source_metrics?: Record<string, unknown> | null;

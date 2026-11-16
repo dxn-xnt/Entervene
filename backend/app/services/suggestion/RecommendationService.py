@@ -17,6 +17,8 @@ from app.models.suggestion.StudentSuggestion import StudentSuggestion
 from app.models.suggestion.SuggestionClasswork import SuggestionClasswork
 from app.schemas.Suggestion import RecommendationDraftRequest, SuggestionListResponse
 from app.services.suggestion.SuggestionService import build_suggestion_response
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
+from app.models.academic.Class_ import Class
 
 
 ACTIVE_DRAFT_STATUSES = {"DRAFT", "ACTIVE"}
@@ -27,10 +29,11 @@ def generate_recommendation_drafts(
     staff_id: str,
     body: RecommendationDraftRequest,
 ) -> SuggestionListResponse:
-    _ensure_teacher_load(db, staff_id, body.class_id, body.subject_id)
+    period = _ensure_teacher_load(db, staff_id, body.class_id, body.subject_id)
 
     created: list[StudentSuggestion] = []
-    weak_rows = _weak_submissions(db, body.class_id, body.subject_id, Decimal(str(body.low_score_threshold)))
+    weak_rows = _weak_submissions(db, body.class_id, body.subject_id, period.academic_period_id,
+                                  period.academic_year_id, Decimal(str(body.low_score_threshold)))
     for submission, assignment, classwork, score_percent in weak_rows:
         if len(created) >= body.limit:
             break
@@ -52,6 +55,8 @@ def generate_recommendation_drafts(
             resource_type=resource_type,
             resource_obj=resource_obj,
             subject_id=body.subject_id,
+            origin_class_id=body.class_id,
+            origin_academic_period_id=period.academic_period_id,
         )
         db.add(suggestion)
         created.append(suggestion)
@@ -61,26 +66,33 @@ def generate_recommendation_drafts(
         db.refresh(suggestion)
 
     return SuggestionListResponse(
-        suggestions=[build_suggestion_response(db, suggestion) for suggestion in created]
+        suggestions=[build_suggestion_response(db, suggestion,
+            current_period_id=period.academic_period_id, can_manage=True) for suggestion in created]
     )
 
 
-def _ensure_teacher_load(db: Session, staff_id: str, class_id: int, subject_id: int) -> None:
+def _ensure_teacher_load(db: Session, staff_id: str, class_id: int, subject_id: int):
+    period = resolve_active_academic_period(db)
     load = db.query(SubjectLoad).filter(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.class_id == class_id,
         SubjectLoad.subject_id == subject_id,
+        SubjectLoad.academic_period_id == period.academic_period_id,
         SubjectLoad.is_active_version.is_(True),
         SubjectLoad.status.in_(["active", "published"]),
     ).first()
-    if not load:
+    class_ = db.get(Class, class_id)
+    if not load or not class_ or class_.academic_year_id != period.academic_year_id:
         raise HTTPException(status_code=403, detail="Class/subject is not in your active teaching scope")
+    return period
 
 
 def _weak_submissions(
     db: Session,
     class_id: int,
     subject_id: int,
+    period_id: int,
+    academic_year_id: int,
     threshold: Decimal,
 ) -> list[tuple[StudentSubmission, ClassworkAssignment, Classwork, Decimal]]:
     rows = (
@@ -94,12 +106,14 @@ def _weak_submissions(
         )
         .filter(
             ClassworkAssignment.class_id == class_id,
+            ClassworkAssignment.academic_period_id == period_id,
             Classwork.subject_id == subject_id,
             Classwork.is_archived == False,
             Classwork.total_points.isnot(None),
             Classwork.total_points > 0,
             StudentSubmission.grade.isnot(None),
             StudentClass.enrollment_status == "enrolled",
+            StudentClass.academic_year_id == academic_year_id,
         )
         .order_by(StudentSubmission.grade.asc(), StudentSubmission.submission_id.asc())
         .all()
@@ -200,6 +214,8 @@ def _build_draft_suggestion(
     resource_type: str,
     resource_obj: Lesson | ClassworkAssignment,
     subject_id: int,
+    origin_class_id: int,
+    origin_academic_period_id: int,
 ) -> StudentSuggestion:
     priority = _priority_for_score(score_percent)
     resource_title = resource_obj.title if resource_type == "LESSON" else resource_obj.classwork.title
@@ -216,6 +232,8 @@ def _build_draft_suggestion(
         student_id=submission.student_id,
         subject_id=subject_id,
         created_by_staff_id=staff_id,
+        origin_class_id=origin_class_id,
+        origin_academic_period_id=origin_academic_period_id,
     )
     source_metrics = {
         "source": "LOW_CLASSWORK_SCORE",
