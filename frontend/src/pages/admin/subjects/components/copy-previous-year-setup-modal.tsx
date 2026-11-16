@@ -33,6 +33,7 @@ export function CopyPreviousYearSetupModal({
   const [isCopying, setIsCopying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationAttempt, setValidationAttempt] = useState(0);
+  const [preview, setPreview] = useState<SubjectOfferingCopyAcademicYearResult | null>(null);
 
   const activeYears = useMemo(
     () => options?.academic_years.filter((year) => year.is_active) ?? [],
@@ -76,6 +77,7 @@ export function CopyPreviousYearSetupModal({
     setTargetAcademicYearId(defaultTarget ? String(defaultTarget.academic_year_id) : "");
     setSourceAcademicYearId(defaultSource ? String(defaultSource.academic_year_id) : "");
     setOverwriteExisting(false);
+    setPreview(null);
     setError(null);
   }, [activeYears, defaultSourceAcademicYearId, defaultTargetAcademicYearId, open, options?.academic_years, targetYears]);
 
@@ -98,7 +100,12 @@ export function CopyPreviousYearSetupModal({
         source_academic_year_id: Number(sourceAcademicYearId),
         target_academic_year_id: Number(targetAcademicYearId),
         overwrite_existing: overwriteExisting,
+        preview_only: preview === null,
       });
+      if (preview === null) {
+        setPreview(result);
+        return;
+      }
       await onCopied(result);
       onOpenChange(false);
     } catch (err) {
@@ -120,9 +127,9 @@ export function CopyPreviousYearSetupModal({
         </Dialog.Header>
         <section className="flex flex-col gap-4 p-4">
           <div className="space-y-1 text-sm text-muted-foreground">
-            <p>This copies subject offerings only.</p>
+            <p>This copies subject offerings and their academic-year grading-template assignments.</p>
             <p>
-              It does not copy teachers, classes, grades, submissions, or predictions.
+              It does not copy term overrides, teachers, classes, grades, submissions, or predictions.
             </p>
           </div>
           <AdminValidationAlert message={error} attempt={validationAttempt} firstInvalidFieldId={!sourceAcademicYearId ? "copy-source-year" : !targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId ? "copy-target-year" : undefined} />
@@ -130,7 +137,7 @@ export function CopyPreviousYearSetupModal({
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label className="text-sm" htmlFor="copy-source-year">Source Academic Year</label>
-              <Select value={sourceAcademicYearId} onValueChange={(value) => { setSourceAcademicYearId(value); setError(null); }}>
+              <Select value={sourceAcademicYearId} onValueChange={(value) => { setSourceAcademicYearId(value); setPreview(null); setError(null); }}>
                 <Select.Trigger id="copy-source-year" aria-invalid={!!error && !sourceAcademicYearId} aria-describedby={error && !sourceAcademicYearId ? "copy-source-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                   <Select.Value placeholder="Select previous year" />
                 </Select.Trigger>
@@ -152,7 +159,7 @@ export function CopyPreviousYearSetupModal({
               <label className="text-sm" htmlFor="copy-target-year">Target Academic Year</label>
               <Select
                 value={targetAcademicYearId}
-                onValueChange={(value) => { setTargetAcademicYearId(value); setError(null); }}
+                onValueChange={(value) => { setTargetAcademicYearId(value); setPreview(null); setError(null); }}
                 disabled={targetYears.length <= 1}
               >
                 <Select.Trigger id="copy-target-year" aria-invalid={!!error && (!targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId)} aria-describedby={error && (!targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId) ? "copy-target-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
@@ -176,7 +183,7 @@ export function CopyPreviousYearSetupModal({
           <label className="flex cursor-pointer items-start gap-3 rounded! border-2 border-black bg-background p-3 text-sm shadow-[2px_2px_0_#000]">
             <Checkbox
               checked={overwriteExisting}
-              onCheckedChange={(checked) => setOverwriteExisting(checked === true)}
+              onCheckedChange={(checked) => { setOverwriteExisting(checked === true); setPreview(null); }}
               className="mt-1 shrink-0"
             />
             <span>
@@ -187,11 +194,26 @@ export function CopyPreviousYearSetupModal({
             </span>
           </label>
 
+          {preview ? (
+            <section className="rounded! border-2 border-black bg-primary p-3 text-sm shadow-[2px_2px_0_#000]">
+              <h6 className="font-bold">Copy preview</h6>
+              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3">
+                <span>Offerings created: <strong>{preview.created_count}</strong></span>
+                <span>Offerings updated: <strong>{preview.updated_count}</strong></span>
+                <span>Offerings skipped: <strong>{preview.skipped_count}</strong></span>
+                <span>Assignments created: <strong>{preview.grading_assignment_created_count}</strong></span>
+                <span>Assignments updated: <strong>{preview.grading_assignment_updated_count}</strong></span>
+                <span>Assignments skipped: <strong>{preview.grading_assignment_skipped_count}</strong></span>
+              </div>
+              <p className="mt-2 text-xs">No changes have been saved yet. Confirm to apply this preview.</p>
+            </section>
+          ) : null}
+
         </section>
         <Dialog.Footer>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isCopying}>Cancel</Button>
           <Button onClick={handleCopy} disabled={isCopying || !options || !sourceYears.length || !targetYears.length}>
-            Copy Previous Year Setup
+            {isCopying ? "Working..." : preview ? "Confirm Copy" : "Preview Copy"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

@@ -4,9 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import AdminSubjectLoadStudio from "./subject-load-studio";
 
+Element.prototype.scrollIntoView = vi.fn();
+
 const getStudio = vi.hoisted(() => vi.fn());
 const validate = vi.hoisted(() => vi.fn());
 const unlock = vi.hoisted(() => vi.fn());
+const toastSuccess = vi.hoisted(() => vi.fn());
+const toastError = vi.hoisted(() => vi.fn());
 const jhsSlots = vi.hoisted(() => [
   [1, "Homeroom Guidance", "HOMEROOM", "07:30", "08:00", true],
   [2, "Period 1", "CLASS", "08:00", "08:45", false],
@@ -30,8 +34,8 @@ vi.mock("@/layouts/app-layout", () => ({ default: ({ children }: { children: Rea
 vi.mock("@/components/ui/sidebar", () => ({ SidebarTrigger: () => null }));
 vi.mock("@/context/SettingsContext", () => ({ useSettings: () => ({ getSetting: (_: string, fallback: string) => fallback }) }));
 vi.mock("@/context/AcademicPeriodContext", () => ({ useAcademicPeriod: () => ({ selectedPeriodId: 1 }) }));
-vi.mock("@/components/retroui/use-toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
-vi.mock("@/components/retroui/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock("@/components/retroui/use-toast", () => ({ useToast: () => ({ success: toastSuccess, error: toastError }) }));
+vi.mock("@/components/retroui/Toast", () => ({ useToast: () => ({ success: toastSuccess, error: toastError }) }));
 vi.mock("@/lib/api", () => ({
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => jhsSlots }),
   getSubjectLoadStudioData: getStudio,
@@ -59,6 +63,14 @@ const baseline = {
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
+async function chooseSchedulePeriod(subjectName: string, periodName: string) {
+  const trigger = await screen.findByRole("combobox", { name: `Schedule period for ${subjectName}` });
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  const option = await screen.findByRole("option", { name: new RegExp(`^${periodName}\\b`) });
+  fireEvent.click(option);
+  return trigger;
+}
+
 describe("Subject Load Studio locked section", () => {
   it("shows the lock, keeps assignments visible, and disables list edits", async () => {
     getStudio.mockResolvedValue(baseline);
@@ -71,6 +83,7 @@ describe("Subject Load Studio locked section", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /Maria Cruz/i })).toBeTruthy());
     expect((screen.getByRole("button", { name: /Maria Cruz/i }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "M" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("combobox", { name: "Schedule period for Filipino 9" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getAllByText(/Teacher overlap in Archimedes/i).length).toBeGreaterThan(0);
   });
 
@@ -309,8 +322,8 @@ describe("Subject Load Studio timetable grid editing", () => {
       { subject_id: 4, subject_name: "English 9", subject_codename: "E9", academic_level_id: 9, subject_group: "Core" },
     ],
     subject_offerings: [
-      { subject_offering_id: 30, subject_id: 3, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [] },
-      { subject_offering_id: 31, subject_id: 4, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [] },
+      { subject_offering_id: 30, subject_id: 3, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [], minutes: 45 },
+      { subject_offering_id: 31, subject_id: 4, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [], minutes: 45 },
     ],
     existing_loads: [
       { subject_load_id: 21, class_id: 8, subject_id: 3, staff_id: "T1", academic_period_id: 1, start_time: "08:00", end_time: "08:45",
@@ -373,5 +386,186 @@ describe("Subject Load Studio timetable grid editing", () => {
 
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByText(/cell selected/)).toBeNull());
+  });
+
+  it("moves a List-view subject directly when the destination period is empty", async () => {
+    getStudio.mockResolvedValue(draftGridData);
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    fireEvent.click(await screen.findByText("List"));
+    await screen.findByRole("combobox", { name: "Schedule period for English 9" });
+    await waitFor(() => expect(validate).toHaveBeenCalled());
+    validate.mockClear();
+    await chooseSchedulePeriod("English 9", "Period 3");
+
+    await waitFor(() => expect(validate).toHaveBeenCalledTimes(1));
+    const updated = validate.mock.calls[0][1] as Array<{ subject_id: number; start_time: string; end_time: string }>;
+    expect(updated.find((load) => load.subject_id === 4)).toMatchObject({ start_time: "09:45", end_time: "10:30" });
+    expect(screen.queryByText("Swap occupied periods?")).toBeNull();
+  });
+
+  it("opens a confirmation without mutating loads when a List destination is occupied", async () => {
+    getStudio.mockResolvedValue(draftGridData);
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    fireEvent.click(await screen.findByText("List"));
+    await screen.findByRole("combobox", { name: "Schedule period for English 9" });
+    validate.mockClear();
+    await chooseSchedulePeriod("English 9", "Period 1");
+
+    expect(await screen.findByText("Swap occupied periods?")).toBeTruthy();
+    expect(screen.getByText(/English 9 and Filipino 9|occupied by Filipino 9/i)).toBeTruthy();
+    expect(validate).not.toHaveBeenCalled();
+  });
+
+  it("atomically swaps both List loads, preserves identity, teachers, and days, and validates once", async () => {
+    getStudio.mockResolvedValue(draftGridData);
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    fireEvent.click(await screen.findByText("List"));
+    await screen.findByRole("combobox", { name: "Schedule period for English 9" });
+    validate.mockClear();
+    await chooseSchedulePeriod("English 9", "Period 1");
+    fireEvent.click(await screen.findByRole("button", { name: "Swap Periods" }));
+
+    await waitFor(() => expect(validate).toHaveBeenCalledTimes(1));
+    const updated = validate.mock.calls[0][1] as Array<{
+      subject_id: number; subject_load_id: number; staff_id: string | null; start_time: string;
+      end_time: string; days_of_week: string[]; status: string; is_locked: boolean;
+    }>;
+    expect(updated.find((load) => load.subject_id === 3)).toMatchObject({
+      subject_load_id: 21, staff_id: "T1", start_time: "08:45", end_time: "09:30",
+      days_of_week: ["MON", "TUE", "WED", "THU", "FRI"], status: "draft", is_locked: false,
+    });
+    expect(updated.find((load) => load.subject_id === 4)).toMatchObject({
+      subject_load_id: 22, staff_id: null, start_time: "08:00", end_time: "08:45",
+      days_of_week: ["MON", "TUE", "WED", "THU", "FRI"], status: "draft", is_locked: false,
+    });
+    expect(toastSuccess).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Periods swapped",
+      description: expect.stringContaining("English 9 and Filipino 9"),
+    }));
+  });
+
+  it("cancels an occupied-period change, leaves loads unchanged, and restores trigger focus", async () => {
+    getStudio.mockResolvedValue(draftGridData);
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    fireEvent.click(await screen.findByText("List"));
+    const trigger = await screen.findByRole("combobox", { name: "Schedule period for English 9" });
+    validate.mockClear();
+    await chooseSchedulePeriod("English 9", "Period 1");
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByText("Swap occupied periods?")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(validate).not.toHaveBeenCalled();
+    expect(trigger.textContent).toContain("Period 2");
+  });
+
+  it("treats selecting the current List period as a no-op", async () => {
+    getStudio.mockResolvedValue(draftGridData);
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    fireEvent.click(await screen.findByText("List"));
+    await screen.findByRole("combobox", { name: "Schedule period for English 9" });
+    validate.mockClear();
+    await chooseSchedulePeriod("English 9", "Period 2");
+
+    expect(validate).not.toHaveBeenCalled();
+    expect(screen.queryByText("Swap occupied periods?")).toBeNull();
+  });
+
+  it("does not silently swap a partial-day collision and can open Timetable view", async () => {
+    getStudio.mockResolvedValue({
+      ...draftGridData,
+      existing_loads: [
+        { ...draftGridData.existing_loads[0], days_of_week: ["MON", "TUE"] },
+        draftGridData.existing_loads[1],
+      ],
+    });
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    fireEvent.click(await screen.findByText("List"));
+    await screen.findByRole("combobox", { name: "Schedule period for English 9" });
+    validate.mockClear();
+    await chooseSchedulePeriod("English 9", "Period 1");
+
+    expect(await screen.findByText("Resolve schedule change")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("No schedule was changed");
+    expect(validate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Open Timetable" }));
+    await waitFor(() => expect(screen.queryByText("Resolve schedule change")).toBeNull());
+    expect(screen.getByText(/Drag a subject onto another to swap them/)).toBeTruthy();
+  });
+
+  it("does not silently choose among multiple destination occupants", async () => {
+    getStudio.mockResolvedValue({
+      ...draftGridData,
+      subjects: [
+        ...draftGridData.subjects,
+        { subject_id: 5, subject_name: "Science 9", subject_codename: "S9", academic_level_id: 9, subject_group: "Core" },
+      ],
+      subject_offerings: [
+        ...draftGridData.subject_offerings,
+        { subject_offering_id: 32, subject_id: 5, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [], minutes: 45 },
+      ],
+      existing_loads: [
+        ...draftGridData.existing_loads,
+        { subject_load_id: 23, class_id: 8, subject_id: 5, staff_id: null, academic_period_id: 1, start_time: "08:00", end_time: "08:45",
+          days_of_week: ["MON", "TUE", "WED", "THU", "FRI"], status: "draft", is_locked: false },
+      ],
+    });
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    fireEvent.click(await screen.findByText("List"));
+    await screen.findByRole("combobox", { name: "Schedule period for English 9" });
+    validate.mockClear();
+    await chooseSchedulePeriod("English 9", "Period 1");
+
+    expect(await screen.findByText("Resolve schedule change")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Filipino 9, Science 9");
+    expect(validate).not.toHaveBeenCalled();
+  });
+
+  it("keeps a conflicting confirmed swap as a draft and blocks publishing", async () => {
+    const assignedLoads = draftGridData.existing_loads.map((load, index) => ({
+      ...load,
+      staff_id: index === 0 ? "T1" : "T2",
+    }));
+    getStudio.mockResolvedValue({
+      ...draftGridData,
+      teachers: [
+        ...draftGridData.teachers,
+        { staff_id: "T2", name: "Teacher Two", department: "English", specialization: "English" },
+      ],
+      existing_loads: assignedLoads,
+    });
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+    render(<AdminSubjectLoadStudio />);
+
+    fireEvent.click(await screen.findByText("List"));
+    await screen.findByRole("combobox", { name: "Schedule period for English 9" });
+    await waitFor(() => expect(validate).toHaveBeenCalled());
+    validate.mockClear();
+    validate.mockResolvedValueOnce({
+      conflicts: [{ rule: "TEACHER_OVERLAP", severity: "error", message: "Teacher Two is double-booked", class_id: 8, subject_id: 4 }],
+      teacher_workloads: [], is_valid: false,
+    });
+    await chooseSchedulePeriod("English 9", "Period 1");
+    fireEvent.click(await screen.findByRole("button", { name: "Swap Periods" }));
+
+    await waitFor(() => expect(screen.getAllByText(/Teacher Two is double-booked/).length).toBeGreaterThan(0));
+    expect((screen.getByRole("button", { name: "Publish Master Schedule" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Publish" }) as HTMLButtonElement).disabled).toBe(true);
+    const updated = validate.mock.calls[0][1] as Array<{ status: string }>;
+    expect(updated.every((load) => load.status === "draft")).toBe(true);
   });
 });
