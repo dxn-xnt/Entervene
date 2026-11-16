@@ -6,11 +6,15 @@ import { SuggestionPanel } from "./suggestion-panel-modal";
 import type { TeacherAdvisoryStudentItem, TeacherAdvisorySubjectLoadItem } from "@/types/adminClasses";
 
 const mocks = vi.hoisted(() => ({
-  create: vi.fn(), apiFetch: vi.fn(), success: vi.fn(),
+  create: vi.fn(),
+  createBulk: vi.fn(),
+  apiFetch: vi.fn(),
+  success: vi.fn(),
 }));
 
 vi.mock("@/lib/suggestion-api", () => ({
   createManualSuggestion: mocks.create,
+  createBulkManualSuggestion: mocks.createBulk,
   generateRecommendationDrafts: vi.fn(),
 }));
 vi.mock("@/lib/api", () => ({ apiFetch: mocks.apiFetch }));
@@ -89,4 +93,29 @@ it("shows invalid URL feedback and keeps the classwork payload unchanged", async
   await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
   expect(mocks.create.mock.calls[0][0]).toMatchObject({ resource_type: "CLASSWORK", classwork_assignment_id: 9, lesson_id: null });
   expect(mocks.create.mock.calls[0][0]).not.toHaveProperty("external_url");
+});
+
+it("supports bulk suggestions when multiple students are passed", async () => {
+  mocks.createBulk.mockResolvedValue({ created_count: 2, skipped_count: 0, suggestions: [] });
+  const students = [
+    { student_id: "s1", full_name: "Student One" } as TeacherAdvisoryStudentItem,
+    { student_id: "s2", full_name: "Student Two" } as TeacherAdvisoryStudentItem,
+  ];
+
+  render(<SuggestionPanel open classId={3} students={students} subjectLoads={subjectLoads} />);
+  expect(screen.getByText("Target Recipients (2)")).toBeTruthy();
+  expect(screen.getByText("2 students selected")).toBeTruthy();
+
+  fireEvent.change(screen.getAllByRole("combobox")[1], { target: { value: "LINK" } });
+  fireEvent.change(screen.getByRole("textbox", { name: /External URL/ }), { target: { value: "https://example.org/bulk-guide" } });
+  fireEvent.change(screen.getByRole("textbox", { name: /Title/ }), { target: { value: "Class study guide" } });
+  fireEvent.click(screen.getByRole("button", { name: /Send Suggestion to 2 Students/ }));
+
+  await waitFor(() => expect(mocks.createBulk).toHaveBeenCalledOnce());
+  expect(mocks.createBulk).toHaveBeenCalledWith(expect.objectContaining({
+    student_ids: ["s1", "s2"],
+    resource_type: "LINK",
+    external_url: "https://example.org/bulk-guide",
+    title: "Class study guide",
+  }));
 });

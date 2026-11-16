@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -77,6 +77,24 @@ class QuizSettingOut(BaseModel):
     show_correct_answers: bool
     summary_release_mode: str
     summary_release_at: Optional[datetime] = None
+
+
+class QuizResultsSettingsUpdate(BaseModel):
+    """Settings-only quiz results update used after quiz attempts exist."""
+
+    show_quiz_results: Optional[bool] = None
+    summary_release_mode: Literal["IMMEDIATE", "SCHEDULED", "AFTER_DUE_DATE", "NEVER"]
+    summary_release_at: Optional[datetime] = None
+    confirm_answer_reveal: bool = False
+
+
+class QuizResultsSettingsResponse(BaseModel):
+    classwork_id: int
+    show_scores: bool
+    show_correct_answers: bool
+    summary_release_mode: str
+    summary_release_at: Optional[datetime] = None
+    has_mixed_visibility: bool
 
 
 class QuizBuilderResponse(BaseModel):

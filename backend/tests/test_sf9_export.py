@@ -324,3 +324,47 @@ def test_api_export_sf9_endpoints():
     assert "application/vnd.openxmlformats-officedocument.wordprocessingml.document" in res5.headers["content-type"]
     assert len(res5.content) > 1000
 
+    # 6. ZIP batch export containing individual .xlsx workbooks
+    import zipfile
+    res6 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/export-sf9-batch?format=zip")
+    assert res6.status_code == 200
+    assert res6.headers["content-type"] == "application/zip"
+    zip_buf = io.BytesIO(res6.content)
+    with zipfile.ZipFile(zip_buf, "r") as zf:
+        namelist = zf.namelist()
+        assert len(namelist) == 2
+        assert any("Reyes" in name for name in namelist)
+        assert any("Santos" in name for name in namelist)
+        # Check first workbook
+        wb_sample = openpyxl.load_workbook(io.BytesIO(zf.read(namelist[0])))
+        assert len(wb_sample.sheetnames) == 1
+
+    # 7. ZIP export filtered by student_ids
+    res7 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/export-sf9-batch?format=zip&student_ids={ctx['student1_id']}")
+    assert res7.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(res7.content), "r") as zf:
+        namelist = zf.namelist()
+        assert len(namelist) == 1
+        assert "Reyes" in namelist[0]
+
+    # 8. SF9 batch data endpoint (all students in advisory class)
+    res8 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/sf9-batch-data")
+    assert res8.status_code == 200
+    batch_all = res8.json()
+    assert len(batch_all) == 2
+    # Verify DepEd ordering: Male first, Female second
+    assert batch_all[0]["student"]["gender"] == "Male"
+    assert batch_all[1]["student"]["gender"] == "Female"
+
+    # 9. SF9 batch data filtered by student_ids
+    res9 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/sf9-batch-data?student_ids={ctx['student1_id']}")
+    assert res9.status_code == 200
+    batch_sel = res9.json()
+    assert len(batch_sel) == 1
+    assert batch_sel[0]["student"]["student_id"] == str(ctx["student1_id"])
+
+    # 10. SF9 batch data with unauthorized/unknown student_id returns 404
+    fake_id = uuid.uuid4()
+    res10 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/sf9-batch-data?student_ids={fake_id}")
+    assert res10.status_code == 404
+

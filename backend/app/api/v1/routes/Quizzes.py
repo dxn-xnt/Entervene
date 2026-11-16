@@ -10,6 +10,8 @@ from app.schemas.Quiz import (
     QuizBuilderUpsert,
     QuizImportPreviewResponse,
     QuizReadinessResponse,
+    QuizResultsSettingsResponse,
+    QuizResultsSettingsUpdate,
     QuizSubmitRequest,
     TeacherGradeQuizSubmissionRequest,
     TeacherQuizSubmissionDetailResponse,
@@ -30,6 +32,7 @@ from app.services.quiz.QuizBuilderService import (
     get_quiz_for_classwork,
     get_teacher_quiz_classwork,
     quiz_readiness,
+    update_quiz_results_settings,
     upsert_quiz_builder,
 )
 from app.services.quiz.QuizImportService import preview_quiz_import
@@ -113,6 +116,34 @@ def upsert_quiz(
     try:
         response = upsert_quiz_builder(db, classwork, body)
         db.commit()
+        return response
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.put(
+    "/classwork/{classwork_id}/results-settings",
+    response_model=QuizResultsSettingsResponse,
+)
+def update_quiz_result_visibility(
+    classwork_id: int,
+    body: QuizResultsSettingsUpdate,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    classwork = get_teacher_quiz_classwork(
+        db,
+        staff_id,
+        classwork_id,
+        write_required=True,
+        live_operation=True,
+    )
+    try:
+        response = update_quiz_results_settings(db, classwork, body)
+        db.commit()
+        from app.services.submission.SubmissionFeedbackService import sync_and_dispatch_classwork_draft_jobs
+        sync_and_dispatch_classwork_draft_jobs(db, classwork_id, staff_id)
         return response
     except Exception:
         db.rollback()

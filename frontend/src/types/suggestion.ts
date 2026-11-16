@@ -66,6 +66,24 @@ export type ManualSuggestionCreate = {
   external_url?: string | null;
 };
 
+export type ManualBulkSuggestionCreate = {
+  student_ids: string[];
+  subject_id: number;
+  resource_type: SuggestionResourceType;
+  title: string;
+  description?: string | null;
+  priority: SuggestionPriority;
+  lesson_id?: number | null;
+  classwork_assignment_id?: number | null;
+  external_url?: string | null;
+};
+
+export type BulkSuggestionResponse = {
+  created_count: number;
+  skipped_count: number;
+  suggestions: SuggestionResponse[];
+};
+
 export type RecommendationDraftRequest = {
   class_id: number;
   subject_id: number;

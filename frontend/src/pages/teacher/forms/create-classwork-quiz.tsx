@@ -11,7 +11,7 @@ import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { FormMessage } from "@/components/retroui/FormMessage";
-import { Switch } from "@/components/retroui/Switch";
+import { ClassworkSettingRow } from "@/components/classwork-setting-row";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import Field from "@/components/admin/classes/fields/Field";
 import { Card } from "@/components/retroui/Card";
@@ -153,6 +153,10 @@ export default function CreateClassworkQuizModal({
             exam_subtype: remediationOriginalExam?.subtype ?? "",
             total_points: defaultTotalPoints,
             max_attempts: defaultAttempts,
+            // Unified quiz results visibility defaults to hidden until the
+            // teacher explicitly enables scores and correct answers.
+            show_scores: defaultQuizSettings.show_correct_answers,
+            auto_ai_feedback_enabled: false,
             subject_id: preferredId,
         };
     });
@@ -690,7 +694,7 @@ export default function CreateClassworkQuizModal({
         return () => {
             isActive = false;
         };
-    }, [createStep, draft.subject_id, selectedClassIds]);
+    }, [createStep, draft.subject_id, initialLessonId, remediationFocus, selectedClassIds]);
 
     const buildQuizPayload = () => ({
         duration_minutes: quizSettings.duration_minutes
@@ -703,7 +707,7 @@ export default function CreateClassworkQuizModal({
             enable_per_question_time_limits:
                 quizSettings.enable_per_question_time_limits,
             max_attempts: Number(quizSettings.max_attempts || draft.max_attempts),
-            show_correct_answers: quizSettings.show_correct_answers,
+            show_correct_answers: draft.show_scores,
             summary_release_mode: quizSettings.summary_release_mode,
             summary_release_at:
                 quizSettings.summary_release_mode === "SCHEDULED" &&
@@ -791,6 +795,10 @@ export default function CreateClassworkQuizModal({
             formData.append("is_published", String(draftOnly ? false : draft.is_published));
             formData.append("subject_id", String(draft.subject_id));
             formData.append("show_scores", String(draft.show_scores));
+            formData.append(
+                "auto_ai_feedback_enabled",
+                String(!remediationTarget && draft.auto_ai_feedback_enabled),
+            );
             formData.append("class_ids", JSON.stringify(selectedClassIds));
             if (remediationTarget) {
                 formData.append("intervention_id", String(remediationTarget.intervention_id));
@@ -1783,7 +1791,7 @@ export default function CreateClassworkQuizModal({
 
                                 </div>
 
-                                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <div className="mt-4 grid gap-3 sm:grid-cols-3">
                                     {[
                                         {
                                             key: "is_shuffle_questions",
@@ -1797,17 +1805,12 @@ export default function CreateClassworkQuizModal({
                                             key: "enable_per_question_time_limits",
                                             label: "Enable individual question time limits",
                                         },
-                                        {
-                                            key: "show_correct_answers",
-                                            label: "Show correct answers after submission",
-                                        },
                                     ].map((setting) => {
                                         const key = setting.key as keyof Pick<
                                             QuizSettingsDraft,
                                             | "is_shuffle_questions"
                                             | "enable_per_question_scoring"
                                             | "enable_per_question_time_limits"
-                                            | "show_correct_answers"
                                         >;
                                         const enabled = quizSettings[key];
                                         return (
@@ -1891,20 +1894,38 @@ export default function CreateClassworkQuizModal({
                                     </Field>
                                 </div>
 
-                                <div className="flex items-center gap-2 mt-2">
-                                    <Switch
+                                <div className="flex flex-col gap-3 mt-2">
+                                    <ClassworkSettingRow
+                                        label="Show quiz results to students"
+                                        tooltip="Controls student access to quiz scores and correct answers. When enabled, results unlock according to the configured release schedule (immediately, after due date, or scheduled time) and max attempt policies. Enabling this does not necessarily release correct answers immediately. When disabled, quiz results remain hidden."
                                         checked={draft.show_scores}
-                                        onCheckedChange={(checked) =>
+                                        onCheckedChange={(checked) => {
                                             setDraft((current) => ({
                                                 ...current,
                                                 show_scores: checked,
-                                            }))
-                                        }
+                                            }));
+                                            setQuizSettings((current) => ({
+                                                ...current,
+                                                show_correct_answers: checked,
+                                            }));
+                                        }}
                                         disabled={isCreating}
                                     />
-                                    <label className="text-sm font-medium text-gray-700">
-                                        Show scores to students
-                                    </label>
+
+                                    {!remediationDraft && !remediationTarget && (
+                                        <ClassworkSettingRow
+                                            label="Automatic AI Feedback"
+                                            tooltip="Automatically prepares an AI feedback draft after grading when quiz result-release and attempt restrictions permit. Teachers review and approve feedback before it is posted. Correct-answer visibility remains subject to the quiz release settings."
+                                            checked={draft.auto_ai_feedback_enabled}
+                                            onCheckedChange={(checked) =>
+                                                setDraft((current) => ({
+                                                    ...current,
+                                                    auto_ai_feedback_enabled: checked,
+                                                }))
+                                            }
+                                            disabled={isCreating}
+                                        />
+                                    )}
                                 </div>
 
                                 <div className="grid gap-4 sm:grid-cols-2 mt-4">

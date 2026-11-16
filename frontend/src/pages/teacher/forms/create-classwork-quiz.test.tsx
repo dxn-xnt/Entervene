@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import type { TeacherInterventionDetail } from "@/lib/teacher-interventions-api";
 import CreateClassworkQuizModal from "./create-classwork-quiz";
 
 const api = vi.hoisted(() => ({ fetch: vi.fn() }));
@@ -72,8 +73,48 @@ it("submits the selected lesson on an Examination quiz question", async () => {
   const form = call![1].body as FormData;
   expect(form.get("classwork_category")).toBe("QUARTERLY_ASSESSMENT");
   expect(form.get("exam_subtype")).toBe("SUMMATIVE_1");
+  expect(form.get("show_scores")).toBe("false");
+  expect(JSON.parse(String(form.get("quiz_payload"))).settings.show_correct_answers).toBe(false);
   expect(JSON.parse(String(form.get("quiz_payload"))).questions[0].lesson_id).toBe(42);
   expect(JSON.parse(String(form.get("reference_links")))).toEqual([{ url: "https://example.test/quiz-guide", title: null }]);
+});
+
+it("uses a single unified quiz results switch to set both show_scores and show_correct_answers", async () => {
+  api.fetch.mockImplementation(async (path: string) => {
+    if (path.includes("/lessons/my-class/")) return { ok: true, json: async () => [{ lesson_id: 42, title: "Variables", subject_id: 5, is_published: true, is_draft: false, show_scores: true }] };
+    return { ok: true, json: async () => ({}) };
+  });
+  const onSuccess = vi.fn();
+  render(<CreateClassworkQuizModal
+    selectedType="QUIZ"
+    subjects={[{ id: 5, name: "Mathematics" }]}
+    loads={[{ subject_load_id: 9, subject_id: 5, subject_name: "Mathematics", class_id: 7, section_name: "Sapphire", academic_period_id: 3 }]}
+    onClose={vi.fn()} onSuccess={onSuccess} onBack={vi.fn()}
+  />);
+
+  fireEvent.click(screen.getByRole("button", { name: /Create manually/i }));
+  fireEvent.change(screen.getByPlaceholderText("Introduction to Programming Quiz"), { target: { value: "Unified Results Quiz" } });
+  fireEvent.change(screen.getByText("Total points").parentElement!.querySelector("input")!, { target: { value: "1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  fireEvent.change(screen.getByPlaceholderText("Which of the following is the primary function of a CPU?"), { target: { value: "What is 1 + 1?" } });
+  fireEvent.change(screen.getByPlaceholderText("Choice 1"), { target: { value: "2" } });
+  fireEvent.change(screen.getByPlaceholderText("Choice 2"), { target: { value: "3" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+  expect(screen.queryByText("Show correct answers after submission")).toBeNull();
+  expect(screen.queryByText("Show scores to students")).toBeNull();
+  fireEvent.click(screen.getByRole("switch", { name: "Show quiz results to students" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sapphire Active Section" }));
+  const lessonButton = (await screen.findByText("Variables")).closest("button")!;
+  fireEvent.click(lessonButton);
+  fireEvent.click(await screen.findByRole("button", { name: "Variables" }));
+  fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+
+  await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+  const call = api.fetch.mock.calls.find(([path, options]) => path === "/api/v1/classwork-assignments/with-assignments" && options?.method === "POST");
+  const form = call![1].body as FormData;
+  expect(form.get("show_scores")).toBe("true");
+  expect(JSON.parse(String(form.get("quiz_payload"))).settings.show_correct_answers).toBe(true);
 });
 
 it("requires an explicit Examination subtype before leaving quiz details", async () => {
@@ -243,7 +284,7 @@ it("locks attempts to 1, matches target points, and submits original_classwork_a
       subject_name: "Mathematics",
       current_risk_level: "HIGH",
       status: "ACTIVE",
-    } as any}
+    } as unknown as TeacherInterventionDetail}
     remediationOriginalTargets={[target]}
     initialTargetAssignmentId={201}
     onClose={vi.fn()}
