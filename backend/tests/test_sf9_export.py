@@ -347,3 +347,24 @@ def test_api_export_sf9_endpoints():
         assert len(namelist) == 1
         assert "Reyes" in namelist[0]
 
+    # 8. SF9 batch data endpoint (all students in advisory class)
+    res8 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/sf9-batch-data")
+    assert res8.status_code == 200
+    batch_all = res8.json()
+    assert len(batch_all) == 2
+    # Verify DepEd ordering: Male first, Female second
+    assert batch_all[0]["student"]["gender"] == "Male"
+    assert batch_all[1]["student"]["gender"] == "Female"
+
+    # 9. SF9 batch data filtered by student_ids
+    res9 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/sf9-batch-data?student_ids={ctx['student1_id']}")
+    assert res9.status_code == 200
+    batch_sel = res9.json()
+    assert len(batch_sel) == 1
+    assert batch_sel[0]["student"]["student_id"] == str(ctx["student1_id"])
+
+    # 10. SF9 batch data with unauthorized/unknown student_id returns 404
+    fake_id = uuid.uuid4()
+    res10 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/sf9-batch-data?student_ids={fake_id}")
+    assert res10.status_code == 404
+

@@ -369,11 +369,21 @@ def get_teacher_advisory_student_sf9_data(
 @router.get("/teacher/advisory/{class_id}/sf9-batch-data")
 def get_teacher_advisory_class_sf9_batch_data(
     class_id: int,
+    student_ids: str | None = Query(None, description="Comma-separated student UUIDs"),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    parsed_student_ids: list[UUID] | None = None
+    if student_ids:
+        try:
+            parsed_student_ids = [UUID(s.strip()) for s in student_ids.split(",") if s.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid student UUID format in student_ids")
+
     from app.services.export.SF9ExportService import gather_advisory_class_sf9_batch_data
-    return gather_advisory_class_sf9_batch_data(db=db, class_id=class_id, staff_id=staff_id)
+    return gather_advisory_class_sf9_batch_data(
+        db=db, class_id=class_id, staff_id=staff_id, student_ids=parsed_student_ids
+    )
 
 
 @router.get("/teacher/advisory/{class_id}/students/{student_id}/export-sf9")

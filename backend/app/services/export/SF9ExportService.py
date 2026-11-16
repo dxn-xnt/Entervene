@@ -1080,11 +1080,12 @@ def gather_advisory_class_sf9_batch_data(
     db: Session,
     class_id: int,
     staff_id: str,
+    student_ids: list[uuid.UUID] | None = None,
 ) -> list[dict[str, Any]]:
-    """Compile structured JSON data for all enrolled students in the advisory class."""
+    """Compile structured JSON data for enrolled students in the advisory class."""
     class_obj = _require_advisory_class(db, class_id, staff_id)
 
-    student_rows = (
+    query = (
         db.query(Student)
         .join(StudentClass, Student.student_id == StudentClass.student_id)
         .filter(
@@ -1092,9 +1093,22 @@ def gather_advisory_class_sf9_batch_data(
             StudentClass.academic_year_id == class_obj.academic_year_id,
             func.lower(func.coalesce(StudentClass.enrollment_status, "enrolled")) == "enrolled",
         )
+    )
+
+    if student_ids:
+        query = query.filter(Student.student_id.in_(student_ids))
+
+    student_rows = (
+        query
         .order_by(Student.gender.desc(), Student.last_name.asc(), Student.first_name.asc())
         .all()
     )
+
+    if student_ids:
+        found_ids = {s.student_id for s in student_rows}
+        for sid in student_ids:
+            if sid not in found_ids:
+                raise HTTPException(status_code=404, detail=f"Student {sid} not found in this advisory class")
 
     batch_data = []
     for s in student_rows:

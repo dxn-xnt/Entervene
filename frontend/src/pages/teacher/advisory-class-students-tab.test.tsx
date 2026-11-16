@@ -65,6 +65,8 @@ const api = vi.hoisted(() => ({
   getClassDetail: vi.fn(),
   exportBatchSF9: vi.fn(),
   getTeacherSuggestions: vi.fn(),
+  getStudentSF9Data: vi.fn(),
+  getClassSF9BatchData: vi.fn(),
 }));
 
 vi.mock("@/layouts/app-layout", () => ({
@@ -87,6 +89,8 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 vi.mock("@/lib/api", () => ({
   getTeacherAdvisoryClassDetail: api.getClassDetail,
   exportTeacherAdvisoryBatchSF9: api.exportBatchSF9,
+  getTeacherAdvisoryStudentSF9Data: api.getStudentSF9Data,
+  getTeacherAdvisoryClassSF9BatchData: api.getClassSF9BatchData,
   getClassSchedule: vi.fn().mockResolvedValue({ entries: [] }),
   getTeacherAdvisoryClassGrades: vi.fn().mockResolvedValue({ grades: [], students: [] }),
 }));
@@ -117,6 +121,57 @@ describe("AdvisoryClassDetail - StudentsTab Integration", () => {
   beforeEach(() => {
     api.getClassDetail.mockResolvedValue(mockClassDetail);
     api.getTeacherSuggestions.mockResolvedValue({ suggestions: [] });
+    api.getStudentSF9Data.mockResolvedValue({
+      school_info: {
+        school_name: "Entervene Demonstration School",
+        school_id: "303012",
+        region: "Region IV-A",
+        division: "Schools Division Office",
+        district: "District I",
+        municipality: "Medellin",
+        principal_name: "School Principal",
+      },
+      student: {
+        student_id: "stud-m1",
+        student_lrn: "123456789001",
+        full_name: "Juan Dela Cruz",
+        gender: "Male",
+        dob: "2010-01-01",
+        age: 14,
+        track: "",
+      },
+      class_info: {
+        class_id: 1,
+        grade_level: "Grade 8",
+        section_name: "Diamond",
+        academic_year: "2026-2027",
+        adviser_name: "Adviser Teacher",
+      },
+      periods: [
+        { academic_period_id: 1, period_name: "Term 1", period_sequence: 1 },
+      ],
+      learning_areas: {
+        core: [],
+        electives: [],
+      },
+      general_average: {
+        final_rating: 88.5,
+        descriptor: "Very Satisfactory",
+        remarks: "Passed",
+      },
+      descriptors: [
+        { scale: "90-100", description: "Advancing", remarks: "Passed" },
+      ],
+      attendance: {
+        months: [],
+        total: {
+          class_days: 200,
+          present: 195,
+          absent: 5,
+        },
+      },
+    });
+    api.getClassSF9BatchData.mockImplementation(() => new Promise(() => {}));
     api.exportBatchSF9.mockResolvedValue({
       blob: new Blob(["test"], { type: "application/zip" }),
       filename: "SF9_Advisory_Class_1.zip",
@@ -145,8 +200,9 @@ describe("AdvisoryClassDetail - StudentsTab Integration", () => {
     await waitFor(() => expect(screen.getByRole("tab", { name: /Students/i })).toBeTruthy());
     fireEvent.click(screen.getByRole("tab", { name: /Students/i }));
 
-    // Verify header buttons exist
-    expect(await screen.findByRole("button", { name: /Export SF9/i })).toBeTruthy();
+    // Verify all 3 primary header actions exist
+    expect(await screen.findByRole("button", { name: /SF9 \(PDF\)/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /SF9 \(Excel\)/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Suggest Material/i })).toBeTruthy();
 
     // Verify student roster is displayed
@@ -237,16 +293,73 @@ describe("AdvisoryClassDetail - StudentsTab Integration", () => {
     });
   });
 
-  it("invokes export SF9 for all students when Export All is selected", async () => {
+  it("handles SF9 (PDF) dropdown actions: Preview Individual, Download Selected, and Download All", async () => {
     renderView();
     await waitFor(() => expect(screen.getByRole("tab", { name: /Students/i })).toBeTruthy());
     fireEvent.click(screen.getByRole("tab", { name: /Students/i }));
 
     await screen.findByText("Juan Dela Cruz");
 
-    // Open Export SF9 dropdown
-    const exportBtn = screen.getByRole("button", { name: /Export SF9/i });
-    fireEvent.click(exportBtn);
+    // Initially with 0 students selected:
+    // Preview Individual should be disabled
+    const previewItem = screen.getByRole("button", { name: /Preview Individual/i });
+    expect(previewItem.hasAttribute("disabled")).toBe(true);
+
+    // Download Selected should be disabled
+    const downloadSelectedItem = screen.getByRole("button", { name: /Download Selected/i });
+    expect(downloadSelectedItem.hasAttribute("disabled")).toBe(true);
+
+    // Download All should be enabled
+    const downloadAllItem = screen.getByRole("button", { name: /Download All/i });
+    expect(downloadAllItem.hasAttribute("disabled")).toBe(false);
+
+    // Trigger Download All -> opens batch PDF modal with "Export All Students"
+    fireEvent.click(downloadAllItem);
+    expect(await screen.findByText(/Export All Students — Printable PDF/i)).toBeTruthy();
+
+    // Close the batch modal
+    fireEvent.click(screen.getByRole("button", { name: /Cancel/i }));
+
+    // Select exactly 1 student: Juan Dela Cruz
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Juan Dela Cruz" }));
+
+    // Both Preview Individual and Download Selected should now be enabled
+    expect(previewItem.hasAttribute("disabled")).toBe(false);
+    expect(downloadSelectedItem.hasAttribute("disabled")).toBe(false);
+
+    // Click Preview Individual -> opens preview modal
+    fireEvent.click(previewItem);
+    expect(await screen.findByText(/Learner's Performance Report \(SF9 \/ Form 138\)/i)).toBeTruthy();
+    expect(api.getStudentSF9Data).toHaveBeenCalledWith(1, "stud-m1");
+
+    // Close preview modal
+    const closeButtons = screen.getAllByRole("button", { name: /Close/i });
+    fireEvent.click(closeButtons[0]);
+
+    // Select a second student: Ben Santos (total 2 selected)
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Ben Santos" }));
+
+    // Preview Individual should now be disabled (requires exactly 1)
+    expect(previewItem.hasAttribute("disabled")).toBe(true);
+
+    // Download Selected should still be enabled (2 selected)
+    expect(downloadSelectedItem.hasAttribute("disabled")).toBe(false);
+
+    // Click Download Selected -> opens batch PDF modal with "Export Selected Students"
+    fireEvent.click(downloadSelectedItem);
+    expect(await screen.findByText(/Export Selected Students — Printable PDF/i)).toBeTruthy();
+  });
+
+  it("invokes export SF9 Excel for all students when Export All is selected", async () => {
+    renderView();
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Students/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole("tab", { name: /Students/i }));
+
+    await screen.findByText("Juan Dela Cruz");
+
+    // Open Export SF9 Excel dropdown
+    const exportExcelBtn = screen.getByRole("button", { name: /SF9 \(Excel\)/i });
+    fireEvent.click(exportExcelBtn);
 
     // Click Export All Students
     const exportAllItem = await screen.findByText("Export All Students");
@@ -257,7 +370,7 @@ describe("AdvisoryClassDetail - StudentsTab Integration", () => {
     });
   });
 
-  it("invokes export SF9 for selected students when Export Selected is chosen", async () => {
+  it("invokes export SF9 Excel for selected students when Export Selected is chosen", async () => {
     renderView();
     await waitFor(() => expect(screen.getByRole("tab", { name: /Students/i })).toBeTruthy());
     fireEvent.click(screen.getByRole("tab", { name: /Students/i }));
@@ -267,9 +380,9 @@ describe("AdvisoryClassDetail - StudentsTab Integration", () => {
     // Select Ana Reyes
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Ana Reyes" }));
 
-    // Open Export SF9 dropdown
-    const exportBtn = screen.getByRole("button", { name: /Export SF9/i });
-    fireEvent.click(exportBtn);
+    // Open Export SF9 Excel dropdown
+    const exportExcelBtn = screen.getByRole("button", { name: /SF9 \(Excel\)/i });
+    fireEvent.click(exportExcelBtn);
 
     // Click Export Selected Students
     const exportSelectedItem = await screen.findByText("Export Selected Students");
