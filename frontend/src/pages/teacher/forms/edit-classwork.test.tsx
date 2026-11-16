@@ -198,7 +198,7 @@ it("loads quiz results settings and requires confirmation before enabling unifie
   render(<EditClassworkModal classwork={quiz} isOpen onClose={vi.fn()} onSuccess={onSuccess} />);
 
   const toggle = await screen.findByRole("switch", {
-    name: "Show quiz results (scores and correct answers)",
+    name: "Show quiz results to students",
   });
   await waitFor(() => expect(screen.getByText("Summary unlocks automatically after the due date.")).toBeTruthy());
   expect(screen.queryByText("Show scores to students")).toBeNull();
