@@ -148,7 +148,7 @@ export function LessonView({
         <div className="border-b-2 border-black" aria-hidden="true" />
       </div>
 
-      <div className="-mt-4! flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+      <div className="flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
         {/* ── Hero Lesson Information Card ── */}
         <Card className="block w-full border-2 border-black bg-primary p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex flex-col gap-4">

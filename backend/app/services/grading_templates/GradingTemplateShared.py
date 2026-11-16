@@ -8,9 +8,11 @@ from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectYearGradingTemplate import SubjectYearGradingTemplate
+from app.models.academic.SubjectPeriodGradingTemplate import SubjectPeriodGradingTemplate
 
 
-ALLOWED_GRADING_TEMPLATE_STATUSES = ["active", "archived"]
+ALLOWED_GRADING_TEMPLATE_STATUSES = ["draft", "active", "superseded", "archived"]
 DEFAULT_GRADING_TEMPLATE_STATUS = "active"
 DEFAULT_GRADING_TEMPLATE_COMPONENTS = [
     {"component_name": "Written Work", "weight": Decimal("20.00"), "display_order": 1},
@@ -31,7 +33,7 @@ def normalize_optional_text(value: Any) -> str | None:
 def normalize_status(value: Any) -> str:
     status = readable_text(value or DEFAULT_GRADING_TEMPLATE_STATUS).casefold()
     if status not in ALLOWED_GRADING_TEMPLATE_STATUSES:
-        raise HTTPException(status_code=422, detail="Grading template status must be active or archived.")
+        raise HTTPException(status_code=422, detail="Grading template status must be draft, active, superseded, or archived.")
     return status
 
 
@@ -90,8 +92,16 @@ def component_to_item(component: GradingTemplateComponent) -> dict:
 
 
 def get_assigned_subjects(db: Session, template: GradingTemplate) -> list[dict]:
+    year_subject_ids = db.query(SubjectYearGradingTemplate.subject_id).filter(
+        SubjectYearGradingTemplate.grading_template_id == template.grading_template_id
+    )
+    period_subject_ids = db.query(SubjectPeriodGradingTemplate.subject_id).filter(
+        SubjectPeriodGradingTemplate.grading_template_id == template.grading_template_id
+    )
     subjects = db.query(Subject).options(joinedload(Subject.academic_level)).filter(
-        Subject.grading_template_id == template.grading_template_id
+        (Subject.grading_template_id == template.grading_template_id)
+        | Subject.subject_id.in_(year_subject_ids)
+        | Subject.subject_id.in_(period_subject_ids)
     ).all()
     assigned = []
     seen = set()
@@ -110,6 +120,12 @@ def get_assigned_subjects(db: Session, template: GradingTemplate) -> list[dict]:
 
 def check_template_locked(db: Session, template: GradingTemplate) -> tuple[bool, str | None]:
     """Fail closed: database errors must never make recorded grades editable."""
+    if db.query(SubjectYearGradingTemplate.subject_year_grading_template_id).filter(
+        SubjectYearGradingTemplate.grading_template_id == template.grading_template_id
+    ).first() or db.query(SubjectPeriodGradingTemplate.subject_period_grading_template_id).filter(
+        SubjectPeriodGradingTemplate.grading_template_id == template.grading_template_id
+    ).first():
+        return True, "This revision is immutable because it is assigned to an academic year or term. Create a new revision instead."
     subject_ids = [row["subject_id"] for row in get_assigned_subjects(db, template)]
     if subject_ids:
         if db.query(StudentPeriodGrade.period_grade_id).filter(StudentPeriodGrade.subject_id.in_(subject_ids)).first():
@@ -135,6 +151,11 @@ def template_to_item(template: GradingTemplate, db: Session | None = None) -> di
     return {
         "grading_template_id": template.grading_template_id,
         "template_name": template.template_name,
+        "template_family_code": template.template_family_code,
+        "revision": template.revision,
+        "supersedes_template_id": template.supersedes_template_id,
+        "policy_reference": template.policy_reference,
+        "change_reason": template.change_reason,
         "description": template.description,
         "passing_threshold": float(template.passing_threshold),
         "assigned_subjects": assigned_subjects,

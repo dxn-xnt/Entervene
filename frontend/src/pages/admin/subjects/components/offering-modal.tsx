@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { Button } from "@/components/retroui/Button";
 import { Checkbox } from "@/components/retroui/Checkbox";
@@ -11,11 +11,12 @@ import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage"
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { optionalNumber, unorderedValues } from "@/lib/form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
+import { LoadingPanel } from "@/components/loading-panel";
 import { formatPeriodLabel } from "@/lib/academic-periods";
 import {
-  ApiRequestError,
   archiveSubjectOffering,
   createSubjectOffering,
+  createSubjectOfferingsBatch,
   getSubjectOfferings,
   updateSubjectOffering,
   type SubjectListItem,
@@ -35,6 +36,10 @@ import {
 } from "./subject-utils";
 
 const COMMON_DURATIONS = [45, 60, 72, 96] as const;
+const pathwayScopesOverlap = (existingIds: number[], targetIds: number[]) =>
+  !existingIds.length
+  || !targetIds.length
+  || existingIds.some((pathwayId) => targetIds.includes(pathwayId));
 
 export function OfferingModal({
   open,
@@ -44,6 +49,7 @@ export function OfferingModal({
   catalogSubjects,
   readOnly = false,
   readOnlyReason,
+  defaultAcademicYearId,
   onSaved,
 }: {
   open: boolean;
@@ -53,6 +59,7 @@ export function OfferingModal({
   catalogSubjects: SubjectListItem[];
   readOnly?: boolean;
   readOnlyReason?: string;
+  defaultAcademicYearId?: number | null;
   onSaved: (meta?: {
     message?: string;
     partialFailure?: boolean;
@@ -62,7 +69,9 @@ export function OfferingModal({
   }) => Promise<void>;
 }) {
   const [existingSubjectOfferings, setExistingSubjectOfferings] = useState<SubjectOfferingListItem[]>([]);
-  const [alreadyOfferedSubjectIds, setAlreadyOfferedSubjectIds] = useState<Set<string>>(new Set());
+  const [isLoadingEligibility, setIsLoadingEligibility] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
+  const eligibilityRequestIdRef = useRef(0);
   const [form, setForm] = useState<OfferingFormState>({
     subject_id: "",
     subject_ids: [],
@@ -131,9 +140,106 @@ export function OfferingModal({
     ? `${selectedYear.year_label} - ${formatPeriodLabel(contextPeriod)}`
     : selectedYear?.year_label ?? "Current setup context unavailable";
 
+  const effectivePathwayForSubject = useCallback(
+    (subject: SubjectListItem): SubjectOfferingPathway =>
+      subject.is_core ? "general" : (requiresPathway ? form.pathway : "general"),
+    [form.pathway, requiresPathway],
+  );
+  const pathwayIdsForCode = useCallback((pathway: string) => {
+    if (!pathway || pathway === "general") return [];
+    if (pathway === "both") return (options?.pathways ?? []).map((item) => item.id);
+    const normalized = pathway.toLocaleLowerCase();
+    const match = (options?.pathways ?? []).find((item) => {
+      const code = item.code.toLocaleLowerCase();
+      if (code === normalized) return true;
+      if (normalized === "stem_medical") return code.includes("medical");
+      if (normalized === "stem_engineering") return code.includes("engineering");
+      return false;
+    });
+    return match ? [match.id] : [];
+  }, [options?.pathways]);
+  const targetPathwayIdsForSubject = useCallback(
+    (subject: SubjectListItem) => pathwayIdsForCode(effectivePathwayForSubject(subject)),
+    [effectivePathwayForSubject, pathwayIdsForCode],
+  );
+  const periodLabelById = useMemo(
+    () => new Map(periods.map((period) => [String(period.academic_period_id), formatPeriodLabel(period)])),
+    [periods],
+  );
+  const availabilityBySubjectId = useMemo(() => {
+    const availability = new Map<string, { disabled: boolean; status: string }>();
+    if (!form.academic_period_ids.length) return availability;
+    for (const subject of subjects) {
+      const subjectId = String(subject.subject_id);
+      const targetPathwayIds = targetPathwayIdsForSubject(subject);
+      const occupiedPeriodIds = new Set(
+        existingSubjectOfferings
+          .filter((item) => item.subject.subject_id === subject.subject_id)
+          .filter((item) => pathwayScopesOverlap(
+            item.pathway_ids ?? pathwayIdsForCode(item.pathway),
+            targetPathwayIds,
+          ))
+          .map((item) => String(item.academic_period.academic_period_id)),
+      );
+      const alreadyOffered = form.academic_period_ids.filter((periodId) => occupiedPeriodIds.has(periodId));
+      const missing = form.academic_period_ids.filter((periodId) => !occupiedPeriodIds.has(periodId));
+      if (!alreadyOffered.length) continue;
+      if (!missing.length) {
+        availability.set(subjectId, {
+          disabled: true,
+          status: "Already offered in all selected terms.",
+        });
+      } else {
+        availability.set(subjectId, {
+          disabled: false,
+          status: `Already offered: ${alreadyOffered.map((id) => periodLabelById.get(id) ?? id).join(", ")} · Will add: ${missing.map((id) => periodLabelById.get(id) ?? id).join(", ")}.`,
+        });
+      }
+    }
+    return availability;
+  }, [existingSubjectOfferings, form.academic_period_ids, pathwayIdsForCode, periodLabelById, subjects, targetPathwayIdsForSubject]);
+  const missingOfferingItems = useMemo(() => {
+    const byId = new Map(subjects.map((subject) => [String(subject.subject_id), subject]));
+    return form.subject_ids.flatMap((subjectId) => {
+      const subject = byId.get(subjectId);
+      if (!subject) return [];
+      const targetPathway = effectivePathwayForSubject(subject);
+      const targetPathwayIds = targetPathwayIdsForSubject(subject);
+      return form.academic_period_ids
+        .filter((periodId) => !existingSubjectOfferings.some(
+          (item) => item.subject.subject_id === subject.subject_id
+            && String(item.academic_period.academic_period_id) === periodId
+            && pathwayScopesOverlap(
+              item.pathway_ids ?? pathwayIdsForCode(item.pathway),
+              targetPathwayIds,
+            ),
+        ))
+        .map((periodId) => ({
+          subject_id: subject.subject_id,
+          academic_period_id: Number(periodId),
+          pathway: targetPathway,
+        }));
+    });
+  }, [effectivePathwayForSubject, existingSubjectOfferings, form.academic_period_ids, form.subject_ids, pathwayIdsForCode, subjects, targetPathwayIdsForSubject]);
+  const duplicateCatalogLabels = useMemo(() => {
+    const keys = new Map<string, string>();
+    const duplicates = new Set<string>();
+    for (const subject of subjects) {
+      const normalizedCode = subject.subject_codename?.replace(/\s+/g, "").toLocaleLowerCase();
+      const normalizedName = subject.subject_name.replace(/\s+/g, "").toLocaleLowerCase();
+      for (const key of [normalizedCode ? `code:${normalizedCode}` : "", `name:${normalizedName}`].filter(Boolean)) {
+        const previous = keys.get(key);
+        if (previous) duplicates.add(`${previous} / ${subject.subject_name}`);
+        else keys.set(key, subject.subject_name);
+      }
+    }
+    return [...duplicates];
+  }, [subjects]);
+
   useEffect(() => {
     if (!open) {
-      setAlreadyOfferedSubjectIds(new Set());
+      setExistingSubjectOfferings([]);
+      setEligibilityError(null);
       return;
     }
     setError(null);
@@ -190,7 +296,9 @@ export function OfferingModal({
       };
     }
 
-    const activeYear = options?.academic_years.find((year) => year.is_active) ?? options?.academic_years[0];
+    const activeYear = options?.academic_years.find(
+      (year) => year.academic_year_id === defaultAcademicYearId,
+    ) ?? options?.academic_years.find((year) => year.is_active) ?? options?.academic_years[0];
     const level = gradeLevels[0];
     const initialPeriods = (options?.academic_periods ?? []).filter(
       (period) => period.academic_year_id === activeYear?.academic_year_id
@@ -219,36 +327,40 @@ export function OfferingModal({
       status: options?.default_status ?? "active",
       grading_template_id: "",
       });
-  }, [catalogSubjects, gradeLevels, offering, open, options]);
+  }, [catalogSubjects, defaultAcademicYearId, gradeLevels, offering, open, options]);
 
-  // In create mode, fetch existing active offerings for the selected year+level so
-  // the SubjectPicker can gray out already-offered subjects.
+  // In create mode, fetch active offerings for the selected year and grade.
+  // Eligibility is then resolved per selected term and overlapping pathway.
   // The isMounted cleanup flag handles both unmount and stale responses from rapid
   // grade/year switches (each effect invocation owns its own isMounted closure).
   useEffect(() => {
     if (!open || offering) return;
     if (!selectedYearId || !selectedLevelId) {
-      setAlreadyOfferedSubjectIds(new Set());
+      setExistingSubjectOfferings([]);
       return;
     }
-    let isMounted = true;
+    const requestId = ++eligibilityRequestIdRef.current;
+    setIsLoadingEligibility(true);
+    setEligibilityError(null);
     getSubjectOfferings({
       academic_year_id: selectedYearId,
       academic_level_id: selectedLevelId,
       status: "active",
     })
       .then((res) => {
-        if (!isMounted) return;
-        const ids = new Set(res.subject_offerings.map((o) => String(o.subject.subject_id)));
-        setAlreadyOfferedSubjectIds(ids);
+        if (requestId !== eligibilityRequestIdRef.current) return;
+        setExistingSubjectOfferings(res.subject_offerings);
       })
-      .catch(() => {
-        // Fail-open: backend still rejects duplicates with HTTP 409 at submit time
-        if (!isMounted) return;
-        setAlreadyOfferedSubjectIds(new Set());
+      .catch((caught) => {
+        if (requestId !== eligibilityRequestIdRef.current) return;
+        setExistingSubjectOfferings([]);
+        setEligibilityError(caught instanceof Error ? caught.message : "Unable to check existing offerings.");
+      })
+      .finally(() => {
+        if (requestId === eligibilityRequestIdRef.current) setIsLoadingEligibility(false);
       });
     return () => {
-      isMounted = false;
+      eligibilityRequestIdRef.current += 1;
     };
   }, [open, offering, selectedYearId, selectedLevelId]);
 
@@ -335,22 +447,6 @@ export function OfferingModal({
         academic_period_id: nextIds[0] ?? current.academic_period_id,
       };
     });
-  };
-
-  const duplicateOfferingError = (err: unknown) => {
-    if (err instanceof ApiRequestError && err.status === 409) return true;
-    if (!(err instanceof Error)) return false;
-    const message = err.message.toLowerCase();
-    return message.includes("already exists") || message.includes("conflict");
-  };
-
-  const summaryMessage = (createdCount: number, skippedCount: number, errorCount = 0) => {
-    const parts = [
-      `${createdCount} subject offering${createdCount === 1 ? "" : "s"} created`,
-      ...(skippedCount ? [`${skippedCount} already existed`] : []),
-      ...(errorCount ? [`${errorCount} could not be created`] : []),
-    ];
-    return `${parts.join("; ")}.`;
   };
 
   const changes = useEditFormChanges({
@@ -451,47 +547,29 @@ export function OfferingModal({
         await onSaved({ message: `Updated offerings for ${offering.subject.subject_name}.`, ...savedMeta });
         onOpenChange(false);
       } else {
-        let createdCount = 0;
-        let skippedCount = 0;
-        const errors: string[] = [];
         const effectivePathway = requiresPathway ? form.pathway : "general";
-
-        for (const subjectId of selectedIds) {
-          for (const periodId of selectedTermIds) {
-            try {
-              await createSubjectOffering({
-                subject_id: Number(subjectId),
-                academic_year_id: Number(form.academic_year_id),
-                academic_level_id: Number(form.academic_level_id),
-                academic_period_id: Number(periodId),
-                pathway: effectivePathway,
-                minutes: parsedMinutes,
-                status: form.status,
-              });
-              createdCount += 1;
-            } catch (err) {
-              if (duplicateOfferingError(err)) {
-                skippedCount += 1;
-              } else {
-                errors.push(err instanceof Error ? err.message : "Unable to create one offering.");
-              }
-            }
-          }
+        if (!missingOfferingItems.length) {
+          failValidation("The selected subjects are already offered in all selected terms.");
+          return;
         }
+        const result = await createSubjectOfferingsBatch({
+          academic_year_id: Number(form.academic_year_id),
+          academic_level_id: Number(form.academic_level_id),
+          items: missingOfferingItems,
+          minutes: parsedMinutes,
+          status: form.status,
+        });
 
         const savedMeta = {
           gradeValue: String(selectedLevel?.grade_level ?? ""),
           pathway: effectivePathway,
           academicYearId: Number(form.academic_year_id),
         };
-
-        if (errors.length) {
-          await onSaved({ message: summaryMessage(createdCount, skippedCount, errors.length), partialFailure: true, ...savedMeta });
-          setError(`${summaryMessage(createdCount, skippedCount, errors.length)}. ${errors[0]}`);
-        } else {
-          await onSaved({ message: summaryMessage(createdCount, skippedCount, 0), ...savedMeta });
-          onOpenChange(false);
-        }
+        await onSaved({
+          message: `${result.created_count} subject offering${result.created_count === 1 ? "" : "s"} created.`,
+          ...savedMeta,
+        });
+        onOpenChange(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save subject offering.");
@@ -516,7 +594,7 @@ export function OfferingModal({
               <p className="text-sm">Current setup context</p>
               <p className="text-sm">{contextLabel}</p>
               <p className="text-xs">
-                This offering will be added to the current active academic year. Change active year or active term in System Settings.
+                This offering will be added to the selected academic year. Use the year selector or the advanced option below to change context.
               </p>
             </div>
             <AdminValidationAlert message={error && !["Select setup details, at least one term, and at least one subject.", "No valid academic terms are available for the selected academic year.", "Select a valid pathway for the selected grade level.", "Minutes must be a positive whole number."].includes(error) ? error : null} attempt={validationAttempt} />
@@ -678,7 +756,12 @@ export function OfferingModal({
                     })}
                   </div>
                   {!periods.length ? (
-                    <p className="text-sm font-semibold text-amber-700">No terms found for this academic year.</p>
+                    <Alert status="warning">
+                      <Alert.Title className="font-bold">Academic year setup incomplete</Alert.Title>
+                      <Alert.Description>
+                        No valid terms are configured for {selectedYear?.year_label ?? "the selected academic year"}. Configure its academic periods before adding offerings.
+                      </Alert.Description>
+                    </Alert>
                   ) : null}
                   {error === "No valid academic terms are available for the selected academic year." && <FormMessage>{error}</FormMessage>}
                   {error === "Select setup details, at least one term, and at least one subject." && !form.academic_period_ids.length && <FormMessage>Select at least one term.</FormMessage>}
@@ -775,14 +858,30 @@ export function OfferingModal({
                     <p className="text-xs text-muted-foreground">Catalog subjects are filtered by the selected grade level.</p>
                   </div>
                 </div>
-
-                <SubjectPicker
-                  subjects={subjects}
-                  selectedSubjectIds={form.subject_ids}
-                  onChange={handleSubjectSelectionChange}
-                  searchPlaceholder="Search subjects for this grade"
-                  alreadyOfferedSubjectIds={alreadyOfferedSubjectIds}
-                />
+                {duplicateCatalogLabels.length ? (
+                  <Alert status="warning" className="mb-3 py-3">
+                    <Alert.Title className="font-bold">Possible duplicate catalog subjects</Alert.Title>
+                    <Alert.Description className="text-sm">
+                      Review these separate catalog records before assigning offerings: {duplicateCatalogLabels.join(", ")}.
+                    </Alert.Description>
+                  </Alert>
+                ) : null}
+                {eligibilityError ? (
+                  <Alert status="error">
+                    <Alert.Title className="font-bold">Unable to check offering availability</Alert.Title>
+                    <Alert.Description>{eligibilityError}</Alert.Description>
+                  </Alert>
+                ) : isLoadingEligibility ? (
+                  <LoadingPanel label="Checking existing offerings..." className="w-full" />
+                ) : (
+                  <SubjectPicker
+                    subjects={subjects}
+                    selectedSubjectIds={form.subject_ids}
+                    onChange={handleSubjectSelectionChange}
+                    searchPlaceholder="Search subjects for this grade"
+                    availabilityBySubjectId={availabilityBySubjectId}
+                  />
+                )}
                 {error === "Select setup details, at least one term, and at least one subject." && !form.subject_ids.length && <FormMessage>Select at least one subject.</FormMessage>}
               </div>
             )}
@@ -792,7 +891,22 @@ export function OfferingModal({
         <Dialog.Footer>
           <NoChangesMessage message={changes.noChangesMessage} />
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={isSaving || !options || readOnly || (!!offering && !changes.hasChanges)} title={readOnly ? readOnlyReason : undefined}>
+          <Button
+            onClick={handleSubmit}
+            disabled={
+              isSaving
+              || !options
+              || readOnly
+              || (isCreateMode && (
+                isLoadingEligibility
+                || Boolean(eligibilityError)
+                || !periods.length
+                || !missingOfferingItems.length
+              ))
+              || (!!offering && !changes.hasChanges)
+            }
+            title={readOnly ? readOnlyReason : undefined}
+          >
             {offering ? "Save Offering" : "Add Offerings"}
           </Button>
         </Dialog.Footer>

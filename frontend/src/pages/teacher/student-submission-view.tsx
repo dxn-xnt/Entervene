@@ -127,7 +127,7 @@ export default function StudentSubmissionView({
             </div>
           </header>
 
-          <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+          <div className="border-t-2 border-border -mt-[1px] px-3 py-3 sm:px-4 sm:py-4 md:px-6">
             {/* Main Content Area */}
             <Card className="mx-auto w-full space-y-4">
               {/* Student Submission Banner Card */}

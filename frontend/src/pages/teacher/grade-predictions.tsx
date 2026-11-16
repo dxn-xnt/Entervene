@@ -173,7 +173,7 @@ export function AdminCurrentTermGradePredictions() {
           </Breadcrumb>
         </header>
 
-        <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+        <div className="-mt-[1px] border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           {loadError ? (
             <Alert status="error" className="font-semibold">{loadError}</Alert>
           ) : loading ? (
@@ -486,7 +486,7 @@ export function LegacyGradePredictions() {
               </Breadcrumb>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+            <div className="border-t-2 border-border -mt-[1px] px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {/* ── Main Content: Table on Left + Sections on Right ── */}
               <div className="flex flex-col lg:flex-row gap-5 items-start">
                 {/* Left Column: Filters + Table */}
@@ -686,7 +686,7 @@ function TeacherCurrentTermGradePredictions() {
           </Breadcrumb>
         </header>
 
-        <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+        <div className="-mt-[1px] border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <div className="flex flex-col items-start gap-5 lg:flex-row">
             <div className="flex min-w-0 flex-1 flex-col gap-4">
               <PredictionFilters

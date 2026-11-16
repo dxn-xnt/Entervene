@@ -3,7 +3,7 @@ import re
 from typing import Any
 from uuid import UUID
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.models.academic.AcademicYear import AcademicYear
 from app.services.academic.AcademicLifecycleService import resolve_active_academic_year
@@ -14,10 +14,23 @@ from app.services.academic.SubjectLoadAuthorizationService import (
 
 
 def _parse_start_year(year_label: str) -> int | None:
-    match = re.match(r"^(\d{4})", year_label.strip())
+    match = re.match(
+        r"^(?:AY\s*)?(\d{4})\s*[-\u2013\u2014]\s*(\d{4})(?:\b|$)",
+        year_label.strip(),
+        flags=re.IGNORECASE,
+    )
     if match:
-        return int(match.group(1))
+        start_year = int(match.group(1))
+        end_year = int(match.group(2))
+        if end_year == start_year + 1:
+            return start_year
     return None
+
+
+def _serialize_academic_year_preparation(db: Session) -> None:
+    """Serialize PostgreSQL's read-then-insert preparation transaction."""
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(text("LOCK TABLE academic_year IN SHARE ROW EXCLUSIVE MODE"))
 
 
 def ensure_future_academic_years(db: Session, years_ahead: int = 2) -> list[AcademicYear]:
@@ -26,6 +39,12 @@ def ensure_future_academic_years(db: Session, years_ahead: int = 2) -> list[Acad
     If missing, creates future AcademicYear records with standard dates and is_active=False.
     Repeated calls target the same active/calendar year range.
     """
+    # PostgreSQL callers can reach this function concurrently (for example, the
+    # settings page and academic-period form both prepare years). Serialize the
+    # read-then-insert section so both requests cannot create the same year.
+    # The database migration also adds uniqueness as the final safety net.
+    _serialize_academic_year_preparation(db)
+
     # 1. Determine base start year
     active_year = resolve_active_academic_year(db, required=False)
 

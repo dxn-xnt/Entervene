@@ -44,6 +44,7 @@ import BreakConfigDrawer, { type PeriodTemplateSlotItem } from "@/pages/admin/fo
 import AssignTeacherModal, { type TeacherModalTarget } from "@/pages/admin/forms/assign-teacher-modal";
 import {
   AlertTriangle,
+  ArrowRightLeft,
   CheckCircle2,
   Send,
   AlertCircle,
@@ -215,6 +216,14 @@ type GridBlockRef = {
   days: string[];
 };
 
+type PendingPeriodChange = {
+  kind: "swap" | "ambiguous";
+  source: SubjectLoadItem;
+  destination: PeriodTemplateSlotItem;
+  occupants: SubjectLoadItem[];
+  triggerId: string;
+};
+
 const GRID_DAY_ORDER = ["MON", "TUE", "WED", "THU", "FRI"];
 
 function normalizeDayKey(day: string): string {
@@ -230,6 +239,38 @@ function sortDayKeys(days: string[]): string[] {
   return [...new Set(days.map(normalizeDayKey))].sort(
     (a, b) => GRID_DAY_ORDER.indexOf(a) - GRID_DAY_ORDER.indexOf(b)
   );
+}
+
+function formatDayNames(days: string[]): string {
+  const labels: Record<string, string> = {
+    MON: "Monday",
+    TUE: "Tuesday",
+    WED: "Wednesday",
+    THU: "Thursday",
+    FRI: "Friday",
+  };
+  return sortDayKeys(days).map((day) => labels[day] ?? day).join(", ");
+}
+
+function sameDaySet(left: string[], right: string[]): boolean {
+  const normalizedLeft = sortDayKeys(left);
+  const normalizedRight = sortDayKeys(right);
+  return normalizedLeft.length === normalizedRight.length
+    && normalizedLeft.every((day, index) => day === normalizedRight[index]);
+}
+
+function scheduleTimesOverlap(
+  startA: string | null | undefined,
+  endA: string | null | undefined,
+  startB: string | null | undefined,
+  endB: string | null | undefined,
+): boolean {
+  if (!startA || !endA || !startB || !endB) return false;
+  const startAMinutes = timeStringToMinutes(startA);
+  const endAMinutes = timeStringToMinutes(endA);
+  const startBMinutes = timeStringToMinutes(startB);
+  const endBMinutes = timeStringToMinutes(endB);
+  return startAMinutes < endBMinutes && startBMinutes < endAMinutes;
 }
 
 function makeLoadKey(classId: number, subjectId: number): string {
@@ -450,6 +491,8 @@ export default function AdminSubjectLoadStudio() {
   const [discardTargetClass, setDiscardTargetClass] = useState<{ classId: number; sectionName: string } | null>(null);
   const [publishTargetClass, setPublishTargetClass] = useState<{ classId: number; sectionName: string; isRevisionUpdate?: boolean } | null>(null);
   const [teacherModalTarget, setTeacherModalTarget] = useState<TeacherModalTarget | null>(null);
+  const [pendingPeriodChange, setPendingPeriodChange] = useState<PendingPeriodChange | null>(null);
+  const [isResolvingPeriodChange, setIsResolvingPeriodChange] = useState(false);
   const lockedSectionIds = useMemo(() => getLockedSectionIds(studioData), [studioData]);
   const isSectionLocked = (classId: number) => lockedSectionIds.has(classId);
 
@@ -830,11 +873,54 @@ export default function AdminSubjectLoadStudio() {
     void runValidation(updated);
   };
 
+  const restorePeriodTriggerFocus = useCallback((triggerId: string) => {
+    window.setTimeout(() => document.getElementById(triggerId)?.focus(), 0);
+  }, []);
+
+  const closePeriodChangeDialog = useCallback((restoreFocus = true) => {
+    const triggerId = pendingPeriodChange?.triggerId;
+    setPendingPeriodChange(null);
+    if (restoreFocus && triggerId) restorePeriodTriggerFocus(triggerId);
+  }, [pendingPeriodChange, restorePeriodTriggerFocus]);
+
   const handlePeriodSlotChange = (slotKey: string, slotId: string) => {
     const item = loads.find((load) => load._key === slotKey);
     if (!item || isSectionLocked(item.class_id)) return;
     const selected = subjectPeriodSlots(item.class_id, item.subject_id).find((slot) => String(slot.slot_id) === slotId);
     if (!selected) return;
+
+    const isCurrentSlot = item.slot_id === selected.slot_id || (
+      item.start_time === selected.start_time && item.end_time === selected.end_time
+    );
+    if (isCurrentSlot) return;
+
+    const sourceDays = sortDayKeys(item.days_of_week || []);
+    const occupants = loads.filter((candidate) =>
+      candidate.class_id === item.class_id
+      && candidate._key !== slotKey
+      && sourceDays.some((day) => (candidate.days_of_week || []).map(normalizeDayKey).includes(day))
+      && scheduleTimesOverlap(
+        selected.start_time,
+        selected.end_time,
+        candidate.start_time,
+        candidate.end_time,
+      )
+    );
+
+    if (occupants.length > 0) {
+      const isExactSwap = occupants.length === 1
+        && occupants[0].subject_id !== item.subject_id
+        && sameDaySet(sourceDays, occupants[0].days_of_week || []);
+      setPendingPeriodChange({
+        kind: isExactSwap ? "swap" : "ambiguous",
+        source: item,
+        destination: selected,
+        occupants,
+        triggerId: `schedule-period-${slotKey}`,
+      });
+      return;
+    }
+
     const updated = loads.map((load) => load._key === slotKey ? {
       ...load,
       slot_id: selected.slot_id,
@@ -845,6 +931,56 @@ export default function AdminSubjectLoadStudio() {
     } : load);
     setLoads(updated);
     void runValidation(updated);
+  };
+
+  const handleConfirmPeriodSwap = async () => {
+    if (!pendingPeriodChange || pendingPeriodChange.kind !== "swap") return;
+    const sourceKey = pendingPeriodChange.source._key;
+    const targetKey = pendingPeriodChange.occupants[0]?._key;
+    if (!sourceKey || !targetKey) {
+      closePeriodChangeDialog();
+      return;
+    }
+
+    const source = loads.find((load) => load._key === sourceKey);
+    const target = loads.find((load) => load._key === targetKey);
+    if (!source?.start_time || !source.end_time || !target?.start_time || !target.end_time) {
+      closePeriodChangeDialog();
+      return;
+    }
+
+    setIsResolvingPeriodChange(true);
+    const sourceRef: GridBlockRef = {
+      classId: source.class_id,
+      loadKeys: [sourceKey],
+      startTime: source.start_time,
+      endTime: source.end_time,
+      days: sortDayKeys(source.days_of_week || []),
+    };
+    const targetRef: GridBlockRef = {
+      classId: target.class_id,
+      loadKeys: [targetKey],
+      startTime: target.start_time,
+      endTime: target.end_time,
+      days: sortDayKeys(target.days_of_week || []),
+    };
+
+    let updated = relocateLoads(loads, sourceRef, targetRef);
+    updated = relocateLoads(updated, targetRef, sourceRef);
+    updated = mergeAdjacentLoads(updated, source.class_id);
+    updated = withAuthoritativeJhsSlots(updated);
+
+    setLoads(updated);
+    await runValidation(updated);
+
+    const sourceName = studioData?.subjects.find((subject) => subject.subject_id === source.subject_id)?.subject_name ?? "First subject";
+    const targetName = studioData?.subjects.find((subject) => subject.subject_id === target.subject_id)?.subject_name ?? "Second subject";
+    toast.success({
+      title: "Periods swapped",
+      description: `${sourceName} and ${targetName} exchanged timetable periods. Save the draft to keep this change.`,
+    });
+    setIsResolvingPeriodChange(false);
+    closePeriodChangeDialog();
   };
 
   const handleToggleDay = (slotKey: string, dayKey: string) => {
@@ -1996,6 +2132,35 @@ export default function AdminSubjectLoadStudio() {
   // Master Schedule publish: strictly blocks if ANY subject school-wide is unassigned
   const isMasterPublishDisabled = isSaving || errorConflictsCount > 0 || unassignedTotal > 0;
 
+  const pendingSourceName = pendingPeriodChange
+    ? studioData?.subjects.find((subject) => subject.subject_id === pendingPeriodChange.source.subject_id)?.subject_name ?? "Selected subject"
+    : "Selected subject";
+  const pendingSectionName = pendingPeriodChange
+    ? studioData?.classes.find((cls) => cls.class_id === pendingPeriodChange.source.class_id)?.section_name ?? "this section"
+    : "this section";
+  const pendingCurrentSlot = pendingPeriodChange
+    ? classPeriodSlots(pendingPeriodChange.source.class_id).find((slot) =>
+        slot.slot_id === pendingPeriodChange.source.slot_id || (
+          slot.start_time === pendingPeriodChange.source.start_time
+          && slot.end_time === pendingPeriodChange.source.end_time
+        )
+      )
+    : undefined;
+  const pendingOccupantNames = pendingPeriodChange
+    ? Array.from(new Set(pendingPeriodChange.occupants.map((occupant) =>
+        studioData?.subjects.find((subject) => subject.subject_id === occupant.subject_id)?.subject_name ?? "Another subject"
+      )))
+    : [];
+  const pendingOccupantDetails = pendingPeriodChange
+    ? pendingPeriodChange.occupants.map((occupant) => ({
+        key: occupant._key ?? `${occupant.class_id}_${occupant.subject_id}`,
+        name: studioData?.subjects.find((subject) => subject.subject_id === occupant.subject_id)?.subject_name ?? "Another subject",
+        days: formatDayNames((pendingPeriodChange.source.days_of_week || []).filter((day) =>
+          (occupant.days_of_week || []).map(normalizeDayKey).includes(normalizeDayKey(day))
+        )),
+      }))
+    : [];
+
   return (
     <AppLayout>
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
@@ -3124,7 +3289,11 @@ export default function AdminSubjectLoadStudio() {
                                                             onValueChange={(value) => handlePeriodSlotChange(slotKey, value)}
                                                             disabled={sectionLocked}
                                                           >
-                                                            <Select.Trigger className="min-w-52 rounded shadow-none">
+                                                            <Select.Trigger
+                                                              id={`schedule-period-${slotKey}`}
+                                                              aria-label={`Schedule period for ${sub.subject_name}`}
+                                                              className="min-w-52 rounded shadow-none"
+                                                            >
                                                               <Select.Value placeholder="Select timetable period" />
                                                             </Select.Trigger>
                                                             <Select.Content className="rounded">
@@ -3315,6 +3484,105 @@ export default function AdminSubjectLoadStudio() {
           </div>
         </div>
       </div >
+
+      <Dialog
+        open={Boolean(pendingPeriodChange)}
+        onOpenChange={(open) => {
+          if (!open) closePeriodChangeDialog();
+        }}
+      >
+        <Dialog.Content size="md" className="w-[calc(100%-2rem)] max-w-2xl">
+          <Dialog.Header position="static">
+            <Dialog.Title className="font-sans text-xl font-bold">
+              {pendingPeriodChange?.kind === "ambiguous" ? "Resolve schedule change" : "Swap occupied periods?"}
+            </Dialog.Title>
+          </Dialog.Header>
+
+          {pendingPeriodChange && (
+            <section className="flex min-h-0 flex-col gap-4 overflow-y-auto p-5 text-sm">
+              {pendingPeriodChange.kind === "swap" ? (
+                <>
+                  <Dialog.Description className="text-sm text-muted-foreground">
+                    {pendingPeriodChange.destination.slot_name} is occupied by {pendingOccupantNames[0]} in {pendingSectionName} on {formatDayNames(pendingPeriodChange.source.days_of_week || [])}. Confirming exchanges both subjects&apos; periods without changing their teachers or meeting days.
+                  </Dialog.Description>
+
+                  <div className="grid gap-3">
+                    <div className="rounded border-2 border-black bg-card p-3 shadow-[2px_2px_0_#000]">
+                      <p className="font-bold">{pendingSourceName}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {pendingCurrentSlot?.slot_name ?? "Current period"} ({formatTime12h(pendingPeriodChange.source.start_time)}–{formatTime12h(pendingPeriodChange.source.end_time)})
+                        <span aria-hidden="true"> → </span>
+                        {pendingPeriodChange.destination.slot_name} ({formatTime12h(pendingPeriodChange.destination.start_time)}–{formatTime12h(pendingPeriodChange.destination.end_time)})
+                      </p>
+                    </div>
+                    <div className="rounded border-2 border-black bg-card p-3 shadow-[2px_2px_0_#000]">
+                      <p className="font-bold">{pendingOccupantNames[0]}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {pendingPeriodChange.destination.slot_name} ({formatTime12h(pendingPeriodChange.destination.start_time)}–{formatTime12h(pendingPeriodChange.destination.end_time)})
+                        <span aria-hidden="true"> → </span>
+                        {pendingCurrentSlot?.slot_name ?? "Current period"} ({formatTime12h(pendingPeriodChange.source.start_time)}–{formatTime12h(pendingPeriodChange.source.end_time)})
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Alert status="warning">
+                    <Alert.Title className="font-bold">This change needs day-level resolution</Alert.Title>
+                    <Alert.Description className="mt-1 text-sm text-yellow-950">
+                      {pendingPeriodChange.destination.slot_name} overlaps {pendingOccupantNames.join(", ")} on only part of the selected days or has more than one occupant. No schedule was changed.
+                    </Alert.Description>
+                  </Alert>
+                  <Dialog.Description className="text-sm text-muted-foreground">
+                    Open Timetable view for {pendingSectionName} to choose the exact day cells to move or swap. The List view will not split or select meetings automatically.
+                  </Dialog.Description>
+                  <ul className="grid gap-2" aria-label="Affected schedule meetings">
+                    {pendingOccupantDetails.map((occupant) => (
+                      <li key={occupant.key} className="rounded border-2 border-black bg-card px-3 py-2 shadow-[2px_2px_0_#000]">
+                        <span className="font-bold">{occupant.name}</span>
+                        <span className="text-muted-foreground"> — {occupant.days || "Overlapping meeting days"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </section>
+          )}
+
+          <Dialog.Footer position="static">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isResolvingPeriodChange}
+              onClick={() => closePeriodChangeDialog()}
+            >
+              Cancel
+            </Button>
+            {pendingPeriodChange?.kind === "swap" ? (
+              <Button
+                type="button"
+                disabled={isResolvingPeriodChange}
+                onClick={() => void handleConfirmPeriodSwap()}
+              >
+                <ArrowRightLeft className="size-4" aria-hidden="true" />
+                {isResolvingPeriodChange ? "Swapping..." : "Swap Periods"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!pendingPeriodChange) return;
+                  const classId = pendingPeriodChange.source.class_id;
+                  setSectionViewModes((previous) => ({ ...previous, [classId]: "grid" }));
+                  closePeriodChangeDialog(false);
+                }}
+              >
+                Open Timetable
+              </Button>
+            )}
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
 
       <BreakConfigDrawer
         open={isBreakDrawerOpen}

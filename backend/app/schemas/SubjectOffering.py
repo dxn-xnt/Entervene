@@ -53,6 +53,21 @@ class SubjectOfferingCreate(BaseModel):
     status: str = "active"
 
 
+class SubjectOfferingBatchItem(BaseModel):
+    subject_id: int
+    academic_period_id: int
+    pathway: str | None = None
+    pathway_ids: list[int] = Field(default_factory=list)
+
+
+class SubjectOfferingBatchCreate(BaseModel):
+    academic_year_id: int
+    academic_level_id: int
+    items: list[SubjectOfferingBatchItem] = Field(min_length=1)
+    minutes: PositiveMinutes | None = None
+    status: str = "active"
+
+
 class SubjectOfferingUpdate(BaseModel):
     subject_id: int | None = None
     academic_year_id: int | None = None
@@ -69,6 +84,7 @@ class SubjectOfferingCopyAcademicYearRequest(BaseModel):
     source_academic_year_id: int
     target_academic_year_id: int
     overwrite_existing: bool = False
+    preview_only: bool = False
 
 
 class SubjectOfferingCopySkippedItem(BaseModel):
@@ -84,6 +100,10 @@ class SubjectOfferingCopyAcademicYearResponse(BaseModel):
     updated_count: int
     skipped_count: int
     skipped: list[SubjectOfferingCopySkippedItem]
+    grading_assignment_created_count: int = 0
+    grading_assignment_updated_count: int = 0
+    grading_assignment_skipped_count: int = 0
+    preview_only: bool = False
 
 
 class SubjectOfferingListItem(BaseModel):
@@ -103,6 +123,11 @@ class SubjectOfferingListItem(BaseModel):
 
 class SubjectOfferingResponse(SubjectOfferingListItem):
     pass
+
+
+class SubjectOfferingBatchResponse(BaseModel):
+    created_count: int
+    subject_offerings: list[SubjectOfferingListItem]
 
 
 class SubjectOfferingListSummary(BaseModel):
