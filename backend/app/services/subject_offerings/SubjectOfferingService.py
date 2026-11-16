@@ -15,6 +15,7 @@ from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectYearGradingTemplate import SubjectYearGradingTemplate
 from app.services.subject_offerings.SubjectOfferingShared import (
     DEFAULT_OFFERING_STATUS,
     ensure_academic_year_is_configurable,
@@ -28,6 +29,7 @@ from app.services.subject_offerings.SubjectOfferingShared import (
 )
 from app.services.subject_offerings.SubjectOfferingTemplateService import (
     set_subject_year_template,
+    subject_year_template_is_locked,
 )
 
 
@@ -420,6 +422,9 @@ def copy_subject_offerings_between_academic_years(
     created_count = 0
     updated_count = 0
     skipped: list[dict] = []
+    grading_assignment_created_count = 0
+    grading_assignment_updated_count = 0
+    grading_assignment_skipped_count = 0
 
     for source_offering in source_offerings:
         source_period = source_offering.academic_period
@@ -510,8 +515,44 @@ def copy_subject_offerings_between_academic_years(
         existing_pathways.add(src_pw)
         created_count += 1
 
+    source_assignments = db.query(SubjectYearGradingTemplate).filter(
+        SubjectYearGradingTemplate.academic_year_id == source_year.academic_year_id
+    ).all()
+    target_assignments = {
+        row.subject_id: row for row in db.query(SubjectYearGradingTemplate).filter(
+            SubjectYearGradingTemplate.academic_year_id == target_year.academic_year_id
+        ).all()
+    }
+    for source_assignment in source_assignments:
+        target_assignment = target_assignments.get(source_assignment.subject_id)
+        if target_assignment is None:
+            db.add(SubjectYearGradingTemplate(
+                subject_id=source_assignment.subject_id,
+                academic_year_id=target_year.academic_year_id,
+                grading_template_id=source_assignment.grading_template_id,
+            ))
+            grading_assignment_created_count += 1
+        elif not payload.overwrite_existing:
+            grading_assignment_skipped_count += 1
+        elif subject_year_template_is_locked(db, source_assignment.subject_id, target_year.academic_year_id):
+            grading_assignment_skipped_count += 1
+            skipped.append({
+                "subject_id": source_assignment.subject_id,
+                "source_subject_offering_id": None,
+                "reason": "Target-year grading assignment is locked by recorded evidence.",
+            })
+        elif target_assignment.grading_template_id != source_assignment.grading_template_id:
+            target_assignment.grading_template_id = source_assignment.grading_template_id
+            grading_assignment_updated_count += 1
+        else:
+            grading_assignment_skipped_count += 1
+
     try:
-        db.commit()
+        if payload.preview_only:
+            db.flush()
+            db.rollback()
+        else:
+            db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Unable to copy subject offerings because they conflict with existing data.") from exc
@@ -523,4 +564,8 @@ def copy_subject_offerings_between_academic_years(
         "updated_count": updated_count,
         "skipped_count": len(skipped),
         "skipped": skipped,
+        "grading_assignment_created_count": grading_assignment_created_count,
+        "grading_assignment_updated_count": grading_assignment_updated_count,
+        "grading_assignment_skipped_count": grading_assignment_skipped_count,
+        "preview_only": payload.preview_only,
     }

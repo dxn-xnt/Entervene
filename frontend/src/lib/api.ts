@@ -372,6 +372,7 @@ export type SubjectOfferingCopyAcademicYearPayload = {
   source_academic_year_id: number;
   target_academic_year_id: number;
   overwrite_existing?: boolean;
+  preview_only?: boolean;
 };
 export type SubjectOfferingCopyAcademicYearResult = {
   source_academic_year_id: number;
@@ -384,6 +385,10 @@ export type SubjectOfferingCopyAcademicYearResult = {
     source_subject_offering_id: number | null;
     reason: string;
   }>;
+  grading_assignment_created_count: number;
+  grading_assignment_updated_count: number;
+  grading_assignment_skipped_count: number;
+  preview_only: boolean;
 };
 export type SubjectOfferingCreatePayload = {
   subject_id: number;
@@ -437,6 +442,11 @@ export type GradingTemplateSubject = {
 export type GradingTemplateListItem = {
   grading_template_id: number;
   template_name: string;
+  template_family_code?: string;
+  revision?: number;
+  supersedes_template_id?: number | null;
+  policy_reference?: string | null;
+  change_reason?: string | null;
   description: string | null;
   passing_threshold: number;
   assigned_subjects: GradingTemplateSubject[];
@@ -474,6 +484,15 @@ export type GradingTemplateCreatePayload = {
 export type GradingTemplateUpdatePayload = Partial<Omit<GradingTemplateCreatePayload, "passing_threshold">> & {
   updated_at: string;
   replacement_template_id?: number;
+};
+export type GradingTemplateRevisionPayload = {
+  components: GradingTemplateComponentPayload[];
+  policy_reference: string;
+  change_reason: string;
+  status?: "draft" | "active";
+  subject_id?: number;
+  academic_year_id?: number;
+  academic_period_id?: number;
 };
 
 function getCookie(name: string): string | null {
@@ -1584,6 +1603,22 @@ export async function updateGradingTemplate(
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
     throw new ApiRequestError(apiErrorMessage(data, "Unable to update grading template."), response.status, data);
+  }
+  return (await response.json()) as GradingTemplateResponse;
+}
+
+export async function createGradingTemplateRevision(
+  gradingTemplateId: string | number,
+  payload: GradingTemplateRevisionPayload,
+): Promise<GradingTemplateResponse> {
+  const response = await apiFetch(`/api/v1/grading-templates/${encodeURIComponent(String(gradingTemplateId))}/revisions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(apiErrorMessage(data, "Unable to create grading template revision."), response.status, data);
   }
   return (await response.json()) as GradingTemplateResponse;
 }

@@ -18,6 +18,7 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectOffering import SubjectOffering
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.DepedCluster import DepedCluster
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
@@ -622,7 +623,7 @@ def test_copy_skips_missing_target_period_sequence(client, db, offering_context)
     assert body["skipped"][0]["reason"] == "Matching target period not found for period_sequence 3."
 
 
-def test_copy_only_creates_subject_offerings(client, db, offering_context):
+def test_copy_creates_offerings_and_year_grading_assignments_only(client, db, offering_context):
     ctx = offering_context
     create_offering(
         db,
@@ -630,6 +631,12 @@ def test_copy_only_creates_subject_offerings(client, db, offering_context):
         academic_year_id=ctx["other_year"].academic_year_id,
         academic_period_id=ctx["other_year_term"].academic_period_id,
     )
+    db.commit()
+    db.add(SubjectYearGradingTemplate(
+        subject_id=ctx["biology"].subject_id,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        grading_template_id=ctx["applied_template"].grading_template_id,
+    ))
     db.commit()
     subject_count = db.query(Subject).count()
     academic_year_count = db.query(AcademicYear).count()
@@ -640,11 +647,46 @@ def test_copy_only_creates_subject_offerings(client, db, offering_context):
 
     assert response.status_code == 200
     assert response.json()["created_count"] == 1
+    assert response.json()["grading_assignment_created_count"] == 1
     assert db.query(SubjectOffering).count() == 2
     assert db.query(Subject).count() == subject_count
     assert db.query(AcademicYear).count() == academic_year_count
     assert db.query(AcademicPeriod).count() == academic_period_count
     assert db.query(AcademicLevel).count() == academic_level_count
+    copied_assignment = db.query(SubjectYearGradingTemplate).filter_by(
+        subject_id=ctx["biology"].subject_id,
+        academic_year_id=ctx["year"].academic_year_id,
+    ).one()
+    assert copied_assignment.grading_template_id == ctx["applied_template"].grading_template_id
+
+
+def test_copy_preview_rolls_back_all_changes(client, db, offering_context):
+    ctx = offering_context
+    create_offering(
+        db, ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+    )
+    db.add(SubjectYearGradingTemplate(
+        subject_id=ctx["biology"].subject_id,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        grading_template_id=ctx["applied_template"].grading_template_id,
+    ))
+    db.commit()
+    offering_count = db.query(SubjectOffering).count()
+    assignment_count = db.query(SubjectYearGradingTemplate).count()
+
+    response = client.post(
+        "/api/v1/subject-offerings/copy-academic-year",
+        json={**copy_academic_year_payload(ctx), "preview_only": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["preview_only"] is True
+    assert response.json()["created_count"] == 1
+    assert response.json()["grading_assignment_created_count"] == 1
+    assert db.query(SubjectOffering).count() == offering_count
+    assert db.query(SubjectYearGradingTemplate).count() == assignment_count
 
 
 def test_active_target_future_terms_remain_editable_after_copy(client, db, offering_context):
@@ -934,6 +976,70 @@ def test_grading_template_change_is_locked_when_year_has_recorded_grades(
     )
     assert response.status_code == 409
     assert "classwork, submissions, or grades" in response.json()["detail"]
+
+
+def test_finalized_period_prefers_immutable_weight_snapshot(db, offering_context):
+    ctx = offering_context
+    db.add(StudentPeriodGrade(
+        student_id=uuid.uuid4(), class_id=1, subject_id=ctx["biology"].subject_id,
+        academic_period_id=ctx["term_1"].academic_period_id,
+        applied_grading_template_id=ctx["template"].grading_template_id,
+        written_work_weight=20, performance_task_weight=50, examination_weight=30,
+        grading_policy_reference="DepEd Order No. 015, s. 2026",
+        final_period_grade=90, is_finalized=True,
+    ))
+    db.add(SubjectYearGradingTemplate(
+        subject_id=ctx["biology"].subject_id,
+        academic_year_id=ctx["year"].academic_year_id,
+        grading_template_id=ctx["applied_template"].grading_template_id,
+    ))
+    db.commit()
+
+    from app.services.student_record.StudentRecordService import resolve_subject_grading_weights
+    weights = resolve_subject_grading_weights(
+        db, ctx["biology"].subject_id,
+        academic_year_id=ctx["year"].academic_year_id,
+        academic_period_id=ctx["term_1"].academic_period_id,
+    )
+
+    assert weights.template_id == ctx["template"].grading_template_id
+    assert (weights.ww_weight, weights.pt_weight, weights.qa_weight) == (0.2, 0.5, 0.3)
+    assert weights.policy_reference == "DepEd Order No. 015, s. 2026"
+
+
+def test_period_override_precedes_year_assignment_and_blocks_evidence_changes(db, offering_context):
+    ctx = offering_context
+    from app.services.subject_offerings.SubjectOfferingTemplateService import (
+        get_subject_year_template, set_subject_period_template,
+    )
+    set_subject_period_template(
+        db, subject=ctx["biology"], academic_period_id=ctx["term_1"].academic_period_id,
+        grading_template_id=ctx["applied_template"].grading_template_id,
+        policy_reference="Division Memorandum 123",
+        change_reason="Confirmed term-boundary implementation.",
+    )
+    db.commit()
+    resolved = get_subject_year_template(
+        db, ctx["biology"], ctx["year"].academic_year_id,
+        ctx["term_1"].academic_period_id,
+    )
+    assert resolved.grading_template_id == ctx["applied_template"].grading_template_id
+
+    db.add(StudentPeriodGrade(
+        student_id=uuid.uuid4(), class_id=1, subject_id=ctx["biology"].subject_id,
+        academic_period_id=ctx["term_1"].academic_period_id,
+        final_period_grade=88, is_finalized=False,
+    ))
+    db.commit()
+    with pytest.raises(Exception) as caught:
+        set_subject_period_template(
+            db, subject=ctx["biology"], academic_period_id=ctx["term_1"].academic_period_id,
+            grading_template_id=ctx["template"].grading_template_id,
+            policy_reference="Replacement directive",
+            change_reason="Attempted change after evidence.",
+        )
+    assert getattr(caught.value, "status_code", None) == 409
+    assert caught.value.detail["code"] == "GRADING_POLICY_EVIDENCE_CONFLICT"
 
 
 def test_update_offering_works_and_revalidates_conflicts(client, db, offering_context):

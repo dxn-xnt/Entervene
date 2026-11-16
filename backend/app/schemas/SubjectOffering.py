@@ -84,6 +84,7 @@ class SubjectOfferingCopyAcademicYearRequest(BaseModel):
     source_academic_year_id: int
     target_academic_year_id: int
     overwrite_existing: bool = False
+    preview_only: bool = False
 
 
 class SubjectOfferingCopySkippedItem(BaseModel):
@@ -99,6 +100,10 @@ class SubjectOfferingCopyAcademicYearResponse(BaseModel):
     updated_count: int
     skipped_count: int
     skipped: list[SubjectOfferingCopySkippedItem]
+    grading_assignment_created_count: int = 0
+    grading_assignment_updated_count: int = 0
+    grading_assignment_skipped_count: int = 0
+    preview_only: bool = False
 
 
 class SubjectOfferingListItem(BaseModel):

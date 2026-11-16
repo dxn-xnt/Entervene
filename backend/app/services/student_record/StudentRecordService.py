@@ -552,6 +552,7 @@ def teacher_student_gradebook(
         subject_id=scope.subject.subject_id,
         academic_level_id=getattr(scope.class_, "academic_level_id", None),
         academic_year_id=scope.year.academic_year_id,
+        academic_period_id=scope.period.academic_period_id,
     )
 
     # Pre-fetch existing finalized period grades for all students in this scope
@@ -824,6 +825,7 @@ class GradingWeights:
     qa_weight: float
     template_id: int | None = None
     template_name: str | None = None
+    policy_reference: str | None = None
 
 
 # Fallback weights when no grading template is assigned (30% WW / 50% PT / 20% QA/Exams)
@@ -848,18 +850,61 @@ def resolve_subject_grading_weights(
     subject_id: int,
     academic_level_id: int | None = None,
     academic_year_id: int | None = None,
+    academic_period_id: int | None = None,
 ) -> GradingWeights:
     """Resolve canonical weights from the year assignment or catalog fallback."""
     subject = db.get(Subject, subject_id)
     if subject is None:
         raise HTTPException(status_code=404, detail="Subject not found.")
+    if academic_period_id is not None:
+        snapshots = db.query(
+            StudentPeriodGrade.applied_grading_template_id,
+            StudentPeriodGrade.written_work_weight,
+            StudentPeriodGrade.performance_task_weight,
+            StudentPeriodGrade.examination_weight,
+            StudentPeriodGrade.grading_policy_reference,
+        ).filter(
+            StudentPeriodGrade.subject_id == subject_id,
+            StudentPeriodGrade.academic_period_id == academic_period_id,
+            StudentPeriodGrade.is_finalized.is_(True),
+            StudentPeriodGrade.applied_grading_template_id.isnot(None),
+        ).distinct().all()
+        if len(snapshots) > 1:
+            raise HTTPException(status_code=409, detail={
+                "code": "INCONSISTENT_GRADING_POLICY_SNAPSHOTS",
+                "message": "Finalized grades in this period contain inconsistent grading-policy snapshots.",
+            })
+        if snapshots:
+            snapshot = snapshots[0]
+            if (
+                snapshot.written_work_weight is None
+                or snapshot.performance_task_weight is None
+                or snapshot.examination_weight is None
+            ):
+                raise HTTPException(status_code=422, detail="Finalized grading-policy snapshot is incomplete.")
+            snapshot_weights = (
+                float(snapshot.written_work_weight),
+                float(snapshot.performance_task_weight),
+                float(snapshot.examination_weight),
+            )
+            if any(weight <= 0 for weight in snapshot_weights) or abs(sum(snapshot_weights) - 100) > 0.001:
+                raise HTTPException(status_code=422, detail="Finalized grading-policy snapshot is invalid.")
+            template = db.get(GradingTemplate, snapshot.applied_grading_template_id)
+            return GradingWeights(
+                ww_weight=snapshot_weights[0] / 100,
+                pt_weight=snapshot_weights[1] / 100,
+                qa_weight=snapshot_weights[2] / 100,
+                template_id=snapshot.applied_grading_template_id,
+                template_name=template.template_name if template else None,
+                policy_reference=snapshot.grading_policy_reference,
+            )
     template = subject.grading_template
     if academic_year_id is not None:
         from app.services.subject_offerings.SubjectOfferingTemplateService import (
             get_subject_year_template,
         )
 
-        template = get_subject_year_template(db, subject, academic_year_id)
+        template = get_subject_year_template(db, subject, academic_year_id, academic_period_id)
     if template is None or template.status != "active":
         raise HTTPException(status_code=422, detail="Subject has no active grading template.")
     weights = {"WW": 0.0, "PT": 0.0, "QA": 0.0}
@@ -873,7 +918,7 @@ def resolve_subject_grading_weights(
     return GradingWeights(
         ww_weight=weights["WW"] / 100, pt_weight=weights["PT"] / 100,
         qa_weight=weights["QA"] / 100, template_id=template.grading_template_id,
-        template_name=template.template_name,
+        template_name=template.template_name, policy_reference=template.policy_reference,
     )
 
 
@@ -1337,6 +1382,7 @@ def send_student_grade_to_adviser(
         subject_id=scope.subject.subject_id,
         academic_level_id=getattr(scope.class_, "academic_level_id", None),
         academic_year_id=scope.year.academic_year_id,
+        academic_period_id=scope.period.academic_period_id,
     )
 
     asgn_ids = [a.classwork_assignment_id for a in assignments]
@@ -1429,10 +1475,12 @@ def send_student_grade_to_adviser(
 
     # Validate the target-year policy before any grade/log writes.
     policy_context = read_passing_threshold_context_or_422(
-        db, academic_year_id=scope.year.academic_year_id, subject_ids=[subject_id])
+        db, academic_year_id=scope.year.academic_year_id, subject_ids=[subject_id],
+        academic_period_id=payload.academic_period_id)
     require_subject_passing_threshold(
         db, academic_year_id=scope.year.academic_year_id,
-        subject_id=subject_id, context=policy_context)
+        subject_id=subject_id, context=policy_context,
+        academic_period_id=payload.academic_period_id)
 
     # 3. Idempotent Upsert into StudentPeriodGrade
     period_grade = (
@@ -1466,6 +1514,11 @@ def send_student_grade_to_adviser(
     period_grade.written_work_percent = _to_decimal(comp_res["ps_ww"], "written_work_percent") if comp_res["ps_ww"] is not None else None
     period_grade.performance_task_percent = _to_decimal(comp_res["ps_pt"], "performance_task_percent") if comp_res["ps_pt"] is not None else None
     period_grade.quarterly_assessment_percent = _to_decimal(comp_res["ps_qa"], "quarterly_assessment_percent") if comp_res["ps_qa"] is not None else None
+    period_grade.applied_grading_template_id = weights.template_id
+    period_grade.written_work_weight = Decimal(str(weights.ww_weight * 100)).quantize(Decimal("0.01"))
+    period_grade.performance_task_weight = Decimal(str(weights.pt_weight * 100)).quantize(Decimal("0.01"))
+    period_grade.examination_weight = Decimal(str(weights.qa_weight * 100)).quantize(Decimal("0.01"))
+    period_grade.grading_policy_reference = weights.policy_reference
     period_grade.initial_grade = _to_decimal(ig, "initial_grade") if ig is not None else None
     period_grade.transmuted_grade = _to_decimal(tg, "transmuted_grade") if tg is not None else None
     period_grade.final_period_grade = _to_decimal(final_grade_val, "final_period_grade")
@@ -1487,6 +1540,11 @@ def send_student_grade_to_adviser(
         written_work_percent=period_grade.written_work_percent,
         performance_task_percent=period_grade.performance_task_percent,
         quarterly_assessment_percent=period_grade.quarterly_assessment_percent,
+        applied_grading_template_id=period_grade.applied_grading_template_id,
+        written_work_weight=period_grade.written_work_weight,
+        performance_task_weight=period_grade.performance_task_weight,
+        examination_weight=period_grade.examination_weight,
+        grading_policy_reference=period_grade.grading_policy_reference,
         initial_grade=period_grade.initial_grade,
         transmuted_grade=period_grade.transmuted_grade,
         final_period_grade=period_grade.final_period_grade,
@@ -1573,6 +1631,7 @@ def bulk_send_grades_to_adviser(
         subject_id=scope.subject.subject_id,
         academic_level_id=getattr(scope.class_, "academic_level_id", None),
         academic_year_id=scope.year.academic_year_id,
+        academic_period_id=scope.period.academic_period_id,
     )
     requirements = _grade_send_requirements(db, scope, weights)
 
@@ -1718,10 +1777,12 @@ def bulk_send_grades_to_adviser(
         # the first write; skips never create policy or grade/log records.
         if policy_context is None:
             policy_context = read_passing_threshold_context_or_422(
-                db, academic_year_id=scope.year.academic_year_id, subject_ids=[subject_id])
+                db, academic_year_id=scope.year.academic_year_id, subject_ids=[subject_id],
+                academic_period_id=academic_period_id)
             require_subject_passing_threshold(
                 db, academic_year_id=scope.year.academic_year_id,
-                subject_id=subject_id, context=policy_context)
+                subject_id=subject_id, context=policy_context,
+                academic_period_id=academic_period_id)
         pg = pg_map.get(student.student_id)
         is_update = pg is not None
         if pg is None:
@@ -1741,6 +1802,11 @@ def bulk_send_grades_to_adviser(
         pg.written_work_percent = _to_decimal(comp_res["ps_ww"], "written_work_percent") if comp_res["ps_ww"] is not None else None
         pg.performance_task_percent = _to_decimal(comp_res["ps_pt"], "performance_task_percent") if comp_res["ps_pt"] is not None else None
         pg.quarterly_assessment_percent = _to_decimal(comp_res["ps_qa"], "quarterly_assessment_percent") if comp_res["ps_qa"] is not None else None
+        pg.applied_grading_template_id = weights.template_id
+        pg.written_work_weight = Decimal(str(weights.ww_weight * 100)).quantize(Decimal("0.01"))
+        pg.performance_task_weight = Decimal(str(weights.pt_weight * 100)).quantize(Decimal("0.01"))
+        pg.examination_weight = Decimal(str(weights.qa_weight * 100)).quantize(Decimal("0.01"))
+        pg.grading_policy_reference = weights.policy_reference
         pg.initial_grade = _to_decimal(ig, "initial_grade") if ig is not None else None
         pg.transmuted_grade = _to_decimal(tg, "transmuted_grade") if tg is not None else None
         pg.final_period_grade = _to_decimal(final_grade_val, "final_period_grade")
@@ -1762,6 +1828,11 @@ def bulk_send_grades_to_adviser(
             written_work_percent=pg.written_work_percent,
             performance_task_percent=pg.performance_task_percent,
             quarterly_assessment_percent=pg.quarterly_assessment_percent,
+            applied_grading_template_id=pg.applied_grading_template_id,
+            written_work_weight=pg.written_work_weight,
+            performance_task_weight=pg.performance_task_weight,
+            examination_weight=pg.examination_weight,
+            grading_policy_reference=pg.grading_policy_reference,
             initial_grade=pg.initial_grade,
             transmuted_grade=pg.transmuted_grade,
             final_period_grade=pg.final_period_grade,

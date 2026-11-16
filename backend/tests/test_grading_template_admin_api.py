@@ -337,6 +337,34 @@ def test_patch_grading_template_rejects_when_locked(client, db):
     assert "locked" in response.json()["detail"].lower()
 
 
+def test_create_revision_preserves_source_components(client, db):
+    core = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Core").one()
+    original = [Decimal(str(component.weight)) for component in core.components]
+
+    response = client.post(
+        f"/api/v1/grading-templates/{core.grading_template_id}/revisions",
+        json={
+            "policy_reference": "DepEd Order No. 015, s. 2026",
+            "change_reason": "Approved weights for a future academic scope.",
+            "status": "active",
+            "components": [
+                {"component_name": "Written Work", "weight": 25, "display_order": 1},
+                {"component_name": "Performance Tasks", "weight": 50, "display_order": 2},
+                {"component_name": "Exams", "weight": 25, "display_order": 3},
+            ],
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["revision"] == 2
+    assert body["supersedes_template_id"] == core.grading_template_id
+    assert body["template_family_code"] == core.template_family_code
+    assert [component["weight"] for component in body["components"]] == [25, 50, 25]
+    db.refresh(core)
+    assert [Decimal(str(component.weight)) for component in core.components] == original
+
+
 def test_non_admin_cannot_access_or_patch(client, db):
     core = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Core").one()
     url = f"/api/v1/grading-templates/{core.grading_template_id}"

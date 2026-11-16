@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.Subject import Subject
-from app.schemas.GradingTemplate import GradingTemplateCreate, GradingTemplateUpdate
+from app.schemas.GradingTemplate import GradingTemplateCreate, GradingTemplateRevisionCreate, GradingTemplateUpdate
 from app.services.grading_templates.GradingTemplateShared import (
     check_template_locked, normalize_optional_text, normalize_status,
     normalized_components, template_to_item,
@@ -102,6 +102,8 @@ def create_grading_template_record(db: Session, payload: GradingTemplateCreate) 
     _ensure_reassignment_unlocked(db, subjects)
     template = GradingTemplate(
         template_name=name,
+        template_family_code=f"template-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}",
+        revision=1,
         description=normalize_optional_text(payload.description),
         passing_threshold=payload.passing_threshold,
         status=status,
@@ -118,6 +120,58 @@ def create_grading_template_record(db: Session, payload: GradingTemplateCreate) 
         db.rollback()
         raise HTTPException(status_code=409, detail="Unable to create grading template because it conflicts with existing data.") from exc
     return template_to_item(get_template_or_404(db, template.grading_template_id), db)
+
+
+def create_grading_template_revision(
+    db: Session, grading_template_id: int, payload: GradingTemplateRevisionCreate, actor,
+) -> dict:
+    source = get_template_or_404(db, grading_template_id, for_update=True)
+    components = normalized_components(payload.components)
+    latest_revision = db.query(func.max(GradingTemplate.revision)).filter(
+        GradingTemplate.template_family_code == source.template_family_code
+    ).scalar() or source.revision
+    target = GradingTemplate(
+        template_name=source.template_name,
+        template_family_code=source.template_family_code,
+        revision=latest_revision + 1,
+        supersedes_template_id=source.grading_template_id,
+        policy_reference=normalize_optional_text(payload.policy_reference),
+        change_reason=normalize_optional_text(payload.change_reason),
+        created_by_user_id=actor,
+        description=source.description,
+        passing_threshold=source.passing_threshold,
+        status=normalize_status(payload.status),
+        updated_at=datetime.now(timezone.utc),
+        components=[GradingTemplateComponent(**component) for component in components],
+    )
+    db.add(target)
+    db.flush()
+    if payload.subject_id is not None:
+        subject = db.get(Subject, payload.subject_id)
+        if subject is None:
+            raise HTTPException(status_code=404, detail="Subject not found.")
+        from app.services.subject_offerings.SubjectOfferingTemplateService import (
+            set_subject_period_template, set_subject_year_template,
+        )
+        if payload.academic_period_id is not None:
+            set_subject_period_template(
+                db, subject=subject, academic_period_id=payload.academic_period_id,
+                grading_template_id=target.grading_template_id,
+                policy_reference=target.policy_reference, change_reason=target.change_reason or "Policy revision",
+            )
+        elif payload.academic_year_id is not None:
+            set_subject_year_template(
+                db, subject=subject, academic_year_id=payload.academic_year_id,
+                grading_template_id=target.grading_template_id,
+            )
+        else:
+            raise HTTPException(status_code=422, detail="Select an academic year or period for the subject assignment.")
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A newer revision was created concurrently. Reload and try again.") from exc
+    return template_to_item(get_template_or_404(db, target.grading_template_id), db)
 
 
 def update_grading_template_record(db: Session, grading_template_id: int, payload: GradingTemplateUpdate) -> dict:

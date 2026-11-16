@@ -8,6 +8,7 @@ from .AcademicLevel  import AcademicLevel
 from .Subject        import Subject
 from .SubjectOffering import SubjectOffering
 from .SubjectYearGradingTemplate import SubjectYearGradingTemplate
+from .SubjectPeriodGradingTemplate import SubjectPeriodGradingTemplate
 from .GradingTemplate import GradingTemplate
 from .GradingTemplateComponent import GradingTemplateComponent
 from .AcademicYearPassingPolicy import AcademicYearPassingPolicy, PassingPolicyAudit
