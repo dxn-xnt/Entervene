@@ -929,3 +929,69 @@ def test_bulk_manual_suggestions_creates_and_skips_duplicates_safely(suggestion_
     }
     unauthorized_res = c["client"].post("/api/v1/suggestions/manual/bulk", json=unauthorized_payload)
     assert unauthorized_res.status_code == 403
+
+
+def test_bulk_manual_suggestions_atomic_rollback_on_partial_failure(suggestion_api_context):
+    c = suggestion_api_context
+    _act_as(c, "owner", "teacher")
+    db = c["db"]
+
+    # Batch with valid student AND unauthorized student (out of class)
+    batch_url = "https://example.org/atomic-rollback-test"
+    mixed_payload = {
+        "student_ids": [str(c["student"].student_id), str(c["other_student"].student_id)],
+        "subject_id": c["subject"].subject_id,
+        "resource_type": "LINK",
+        "title": "Atomic Rollback Handbook",
+        "external_url": batch_url,
+        "priority": "HIGH",
+    }
+
+    res = c["client"].post("/api/v1/suggestions/manual/bulk", json=mixed_payload)
+    assert res.status_code == 403, f"Expected 403 Forbidden, got {res.status_code}: {res.text}"
+
+    # Verify zero suggestions were committed for valid student (atomic rollback)
+    created_in_db = db.query(StudentSuggestion).filter(
+        StudentSuggestion.external_url == batch_url,
+    ).all()
+    assert len(created_in_db) == 0, f"Expected 0 suggestions in DB due to atomic rollback, found {len(created_in_db)}"
+
+
+def test_single_and_bulk_suggestion_conflict_handling(suggestion_api_context):
+    c = suggestion_api_context
+    _act_as(c, "owner", "teacher")
+    db = c["db"]
+
+    url = "https://example.org/concurrent-conflict-test"
+    single_payload = {
+        "student_id": str(c["student"].student_id),
+        "subject_id": c["subject"].subject_id,
+        "resource_type": "LINK",
+        "title": "Conflict Handling Guide",
+        "external_url": url,
+        "priority": "NORMAL",
+    }
+
+    # 1. First single suggestion succeeds
+    res1 = c["client"].post("/api/v1/suggestions/manual", json=single_payload)
+    assert res1.status_code == 200, res1.text
+
+    # 2. Duplicate single suggestion returns clean 409 Conflict, not 500
+    res2 = c["client"].post("/api/v1/suggestions/manual", json=single_payload)
+    assert res2.status_code == 409, f"Expected 409 Conflict, got {res2.status_code}: {res2.text}"
+    assert "already actively suggested" in res2.json()["detail"].lower()
+
+    # 3. Bulk suggestion targeting the same student skips cleanly
+    bulk_payload = {
+        "student_ids": [str(c["student"].student_id)],
+        "subject_id": c["subject"].subject_id,
+        "resource_type": "LINK",
+        "title": "Conflict Handling Guide",
+        "external_url": url,
+        "priority": "NORMAL",
+    }
+    bulk_res = c["client"].post("/api/v1/suggestions/manual/bulk", json=bulk_payload)
+    assert bulk_res.status_code == 200, bulk_res.text
+    bulk_data = bulk_res.json()
+    assert bulk_data["created_count"] == 0
+    assert bulk_data["skipped_count"] == 1
