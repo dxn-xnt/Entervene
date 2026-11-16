@@ -4,11 +4,18 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { GradingTemplateManager } from "./subjects/components/grading-template-manager";
 
 const createTemplate = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const createTemplateRevision = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const updateTemplate = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const editThreshold = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 vi.mock("@/lib/api", async (loadOriginal) => {
   const original = await loadOriginal<typeof import("@/lib/api")>();
-  return { ...original, createGradingTemplate: createTemplate, updateGradingTemplate: updateTemplate, editGradingTemplateThreshold: editThreshold };
+  return {
+    ...original,
+    createGradingTemplate: createTemplate,
+    createGradingTemplateRevision: createTemplateRevision,
+    updateGradingTemplate: updateTemplate,
+    editGradingTemplateThreshold: editThreshold,
+  };
 });
 
 const templates = [{
@@ -37,7 +44,13 @@ const subject = (id: number, name: string, code: string, templateId: number, tem
   updated_at: null,
 });
 
-afterEach(() => { cleanup(); createTemplate.mockClear(); updateTemplate.mockClear(); editThreshold.mockClear(); });
+afterEach(() => {
+  cleanup();
+  createTemplate.mockClear();
+  createTemplateRevision.mockClear();
+  updateTemplate.mockClear();
+  editThreshold.mockClear();
+});
 
 describe("Subjects grading template manager", () => {
   it("renders stored values and opens the creation dialog", () => {
@@ -58,6 +71,59 @@ describe("Subjects grading template manager", () => {
       template_name: "Creative Studies", passing_threshold: 85, subject_ids: [],
     })));
     expect(reload).toHaveBeenCalled();
+  });
+
+  it("creates a new revision for a locked template without mutating the source", async () => {
+    const reload = vi.fn().mockResolvedValue(undefined);
+    const lockedTemplate = {
+      ...templates[0],
+      is_locked: true,
+      lock_reason: "This template is already assigned to an academic year.",
+      revision: 2,
+    };
+    render(<GradingTemplateManager templates={[lockedTemplate]} subjects={[]} onReload={reload} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Core" }));
+    fireEvent.click(screen.getByRole("button", { name: /Create New Revision/ }));
+    fireEvent.change(screen.getByLabelText("Official policy reference"), {
+      target: { value: "DepEd Order No. 015, s. 2026" },
+    });
+    fireEvent.change(screen.getByLabelText("Change reason"), {
+      target: { value: "Updated curriculum policy" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Revision" }));
+
+    await waitFor(() => expect(createTemplateRevision).toHaveBeenCalledWith(1, expect.objectContaining({
+      policy_reference: "DepEd Order No. 015, s. 2026",
+      change_reason: "Updated curriculum policy",
+      components: [
+        { component_name: "Written Work", weight: 20, display_order: 1 },
+        { component_name: "Performance Tasks", weight: 50, display_order: 2 },
+        { component_name: "Exams", weight: 30, display_order: 3 },
+      ],
+    })));
+    expect(updateTemplate).not.toHaveBeenCalled();
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it("disables revision creation until component weights total exactly 100 percent", () => {
+    const lockedTemplate = {
+      ...templates[0],
+      is_locked: true,
+      lock_reason: "This template is already assigned to an academic year.",
+    };
+    render(<GradingTemplateManager templates={[lockedTemplate]} subjects={[]} onReload={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Core" }));
+    fireEvent.click(screen.getByRole("button", { name: /Create New Revision/ }));
+    fireEvent.change(screen.getByDisplayValue("20"), { target: { value: "25" } });
+
+    expect(screen.getByText("Component weights must total exactly 100%. Current total: 105%.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Create Revision" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByDisplayValue("25"), { target: { value: "20" } });
+    expect(screen.queryByText(/Current total:/)).toBeNull();
+    expect((screen.getByRole("button", { name: "Create Revision" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("keeps large subject assignments compact until expanded", () => {

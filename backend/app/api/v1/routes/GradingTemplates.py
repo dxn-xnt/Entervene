@@ -9,6 +9,7 @@ from app.schemas.GradingTemplate import (
     GradingTemplateCreate,
     GradingTemplateListResponse,
     GradingTemplateResponse,
+    GradingTemplateRevisionCreate,
     GradingTemplateUpdate,
 )
 from app.schemas.PassingPolicyAdmin import TemplateThresholdEdit
@@ -20,6 +21,7 @@ from app.services.grading_templates.GradingTemplateQueryService import (
 )
 from app.services.grading_templates.GradingTemplateService import (
     create_grading_template_record,
+    create_grading_template_revision,
     update_grading_template_record,
 )
 
@@ -79,6 +81,19 @@ def update_grading_template(
     db: Session = Depends(get_db),
 ):
     return update_grading_template_record(db=db, grading_template_id=grading_template_id, payload=payload)
+
+
+@router.post("/{grading_template_id}/revisions", response_model=GradingTemplateResponse, status_code=201)
+def create_template_revision(
+    grading_template_id: int,
+    payload: GradingTemplateRevisionCreate,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return create_grading_template_revision(
+        db, grading_template_id, payload,
+        UUID(str(current_user.get("sub") or current_user.get("user_id"))),
+    )
 
 
 @router.patch("/{grading_template_id}/passing-threshold", response_model=GradingTemplateResponse)

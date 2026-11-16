@@ -13,6 +13,7 @@ import { Select } from "@/components/retroui/Select";
 import { useToast } from "@/components/retroui/Toast";
 import {
   createGradingTemplate,
+  createGradingTemplateRevision,
   editGradingTemplateThreshold,
   updateGradingTemplate,
   type GradingTemplateListItem,
@@ -47,6 +48,7 @@ type EditorState = {
 };
 const weight = (template: GradingTemplateListItem, name: string) =>
   template.components.find((item) => item.component_name === name)?.weight ?? 0;
+const normalizeWeight = (value: number) => Math.round(value * 100) / 100;
 const blank = (): EditorState => ({
   name: "",
   description: "",
@@ -80,6 +82,9 @@ export function GradingTemplateManager({
   const [thresholdReason, setThresholdReason] = useState("");
   const [thresholdYearId, setThresholdYearId] = useState("");
   const [thresholdSaving, setThresholdSaving] = useState(false);
+  const [creatingRevision, setCreatingRevision] = useState(false);
+  const [policyReference, setPolicyReference] = useState("");
+  const [revisionReason, setRevisionReason] = useState("");
   const handledCreateRequest = useRef(createRequest);
   const [templateSearch, setTemplateSearch] = useState("");
   const [templateGradeFilter, setTemplateGradeFilter] = useState("all");
@@ -216,6 +221,9 @@ export function GradingTemplateManager({
     setGrade("all");
     setError(null);
     setThresholdReason("");
+    setCreatingRevision(false);
+    setPolicyReference("");
+    setRevisionReason("");
     setThresholdYearId(
       String(
         (academicYears.find((year) => year.is_active) ?? academicYears[0])
@@ -279,25 +287,34 @@ export function GradingTemplateManager({
     initialValues: Number(editing?.passing_threshold), values: Number(form.threshold),
   });
   const save = async () => {
-    if (!changes.guardChanges()) return;
-    const threshold = Number(form.threshold),
-      ww = Number(form.ww),
-      pt = Number(form.pt),
-      exams = Number(form.exams);
+    if (!creatingRevision && !changes.guardChanges()) return;
+    const threshold = Number(form.threshold);
+    const rawWeights = [Number(form.ww), Number(form.pt), Number(form.exams)];
     if (!form.name.trim()) {
       setError("Template name is required.");
       setValidationAttempt((attempt) => attempt + 1);
       return;
     }
-    if (![threshold, ww, pt, exams].every(Number.isFinite)) {
+    if (!Number.isFinite(threshold) || !rawWeights.every(Number.isFinite)) {
       setError("Enter valid numeric grading values.");
       setValidationAttempt((attempt) => attempt + 1);
       return;
     }
-    if (ww + pt + exams !== 100) {
+    const [ww, pt, exams] = rawWeights.map(normalizeWeight);
+    if ([ww, pt, exams].some((value) => value <= 0 || value > 100)) {
+      setError("Each component weight must be greater than 0% and no more than 100%.");
+      setValidationAttempt((attempt) => attempt + 1);
+      return;
+    }
+    if (normalizeWeight(ww + pt + exams) !== 100) {
       setError(
         "Written Work, Performance Tasks, and Exams must total exactly 100%.",
       );
+      setValidationAttempt((attempt) => attempt + 1);
+      return;
+    }
+    if (creatingRevision && (!policyReference.trim() || revisionReason.trim().length < 5)) {
+      setError("Enter the official policy reference and a change reason of at least 5 characters.");
       setValidationAttempt((attempt) => attempt + 1);
       return;
     }
@@ -314,7 +331,14 @@ export function GradingTemplateManager({
     setSaving(true);
     setError(null);
     try {
-      if (editing)
+      if (editing && creatingRevision) {
+        await createGradingTemplateRevision(editing.grading_template_id, {
+          components,
+          policy_reference: policyReference.trim(),
+          change_reason: revisionReason.trim(),
+          status: "active",
+        });
+      } else if (editing)
         await updateGradingTemplate(editing.grading_template_id, {
           updated_at: editing.updated_at ?? "",
           subject_ids: [...form.subjectIds],
@@ -342,7 +366,9 @@ export function GradingTemplateManager({
       await onReload();
       setEditing(undefined);
       toast.success({
-        title: editing
+        title: creatingRevision
+          ? "New grading revision created"
+          : editing
           ? "Grading template updated"
           : "Grading template created",
       });
@@ -389,21 +415,35 @@ export function GradingTemplateManager({
       setThresholdSaving(false);
     }
   };
-  const total =
-    Number(form.ww || 0) + Number(form.pt || 0) + Number(form.exams || 0);
+  const parsedWeights = [form.ww, form.pt, form.exams].map((value) =>
+    value.trim() === "" ? Number.NaN : normalizeWeight(Number(value)),
+  );
+  const weightsAreFinite = parsedWeights.every(Number.isFinite);
+  const weightsInRange =
+    weightsAreFinite && parsedWeights.every((value) => value > 0 && value <= 100);
+  const total = weightsAreFinite
+    ? normalizeWeight(parsedWeights.reduce((sum, value) => sum + value, 0))
+    : 0;
+  const weightsValid =
+    weightsAreFinite &&
+    weightsInRange &&
+    total === 100;
   const weightError =
+    !weightsValid ||
     error === "Enter valid numeric grading values." ||
+    error === "Each component weight must be greater than 0% and no more than 100%." ||
     error ===
     "Written Work, Performance Tasks, and Exams must total exactly 100%.";
   const updateWeight = (key: "ww" | "pt" | "exams", value: string) => {
     const next = { ...form, [key]: value };
     setForm(next);
     if (
-      weightError &&
-      [next.ww, next.pt, next.exams].every((weight) =>
-        Number.isFinite(Number(weight)),
-      ) &&
-      Number(next.ww) + Number(next.pt) + Number(next.exams) === 100
+      error &&
+      [next.ww, next.pt, next.exams].every((weight) => {
+        const parsed = normalizeWeight(Number(weight));
+        return weight.trim() !== "" && Number.isFinite(parsed) && parsed > 0 && parsed <= 100;
+      }) &&
+      normalizeWeight(Number(next.ww) + Number(next.pt) + Number(next.exams)) === 100
     )
       setError(null);
   };
@@ -531,12 +571,21 @@ export function GradingTemplateManager({
                 </Badge>
               </div>
             ) : null}
+            {creatingRevision ? (
+              <Alert status="warning">
+                <Alert.Title>Creating a new immutable revision</Alert.Title>
+                <Alert.Description>
+                  Existing academic years and finalized grades will continue using revision {editing?.revision ?? 1}.
+                </Alert.Description>
+              </Alert>
+            ) : null}
             <AdminValidationAlert
               message={
                 error &&
                   ![
                     "Template name is required.",
                     "Enter valid numeric grading values.",
+                    "Each component weight must be greater than 0% and no more than 100%.",
                     "Written Work, Performance Tasks, and Exams must total exactly 100%.",
                     "Choose a replacement template for removed subjects.",
                     "Select a year and enter an audit reason.",
@@ -877,7 +926,7 @@ export function GradingTemplateManager({
               <textarea
                 className="min-h-14 w-full rounded! border-2 border-border bg-background p-2 disabled:bg-background disabled:opacity-100"
                 value={form.description}
-                disabled={Boolean(editing?.is_locked)}
+                disabled={Boolean(editing?.is_locked) || creatingRevision}
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
                 }
@@ -923,7 +972,7 @@ export function GradingTemplateManager({
                     </div>
                     <PercentInput
                       value={form[key as "ww" | "pt" | "exams"]}
-                      disabled={Boolean(editing?.is_locked)}
+                      disabled={Boolean(editing?.is_locked && !creatingRevision)}
                       invalid={weightError}
                       onChange={(value) =>
                         updateWeight(key as "ww" | "pt" | "exams", value)
@@ -932,21 +981,44 @@ export function GradingTemplateManager({
                   </div>
                 ))}
               </div>
-              {(error === "Enter valid numeric grading values." ||
-                error ===
-                "Written Work, Performance Tasks, and Exams must total exactly 100%.") && (
-                  <FormMessage>{error}</FormMessage>
-                )}
+              {!weightsValid ? (
+                <FormMessage>
+                  {weightsAreFinite
+                    ? weightsInRange
+                      ? `Component weights must total exactly 100%. Current total: ${total}%.`
+                      : "Each component weight must be greater than 0% and no more than 100%."
+                    : "Enter a numeric weight for every component."}
+                </FormMessage>
+              ) : null}
             </section>
+            {creatingRevision ? (
+              <section className="grid gap-3 rounded! border-2 border-black bg-white p-3 md:grid-cols-2">
+                <Field label="Official policy reference">
+                  <Input value={policyReference} onChange={(event) => setPolicyReference(event.target.value)} placeholder="e.g. DepEd Order No. 015, s. 2026" />
+                </Field>
+                <Field label="Change reason">
+                  <Input value={revisionReason} onChange={(event) => setRevisionReason(event.target.value)} placeholder="Explain why this revision is needed" />
+                </Field>
+              </section>
+            ) : null}
           </div>
           <Dialog.Footer className="mt-0 border-t-2 border-black bg-white">
             <NoChangesMessage message={changes.noChangesMessage} />
             <Button variant="outline" onClick={() => setEditing(undefined)}>
               Cancel
             </Button>
-            <Button onClick={() => void save()} disabled={saving || (!!editing && !changes.hasChanges)}>
-              {saving ? "Saving..." : "Save Template"}
-            </Button>
+            {editing?.is_locked && !creatingRevision ? (
+              <Button onClick={() => { setCreatingRevision(true); setError(null); }}>
+                <Plus className="mr-2 size-4" /> Create New Revision
+              </Button>
+            ) : (
+              <Button
+                onClick={() => void save()}
+                disabled={saving || !weightsValid || (!creatingRevision && !!editing && !changes.hasChanges)}
+              >
+                {saving ? "Saving..." : creatingRevision ? "Create Revision" : "Save Template"}
+              </Button>
+            )}
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
@@ -981,6 +1053,7 @@ function TemplateCard({
           <h3 className="min-w-0 break-words text-2xl font-bold leading-tight">
             {template.template_name}
           </h3>
+          <Badge size="sm" variant="outline">Rev {template.revision ?? 1}</Badge>
           <Badge size="sm" className="capitalize" variant="outline">
             {template.status}
           </Badge>
@@ -1125,6 +1198,7 @@ function PercentInput({
         type="number"
         min="0"
         max="100"
+        step="0.01"
         value={value}
         disabled={disabled}
         aria-invalid={invalid}

@@ -232,17 +232,20 @@ def calculate_subject_grade_projection(
                 subject_id,
                 scope.class_.academic_level_id,
                 academic_year_id=scope.year.academic_year_id,
+                academic_period_id=scope.period.academic_period_id,
             )
             policy_context = read_passing_threshold_context_or_422(
                 db,
                 academic_year_id=scope.year.academic_year_id,
                 subject_ids=[subject_id],
+                academic_period_id=scope.period.academic_period_id,
             )
             threshold = require_subject_passing_threshold(
                 db,
                 academic_year_id=scope.year.academic_year_id,
                 subject_id=subject_id,
                 context=policy_context,
+                academic_period_id=scope.period.academic_period_id,
             )
             threshold_policy = {
                 "academic_year_id": threshold.academic_year_id,

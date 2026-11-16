@@ -431,6 +431,7 @@ def _generate_class_record_sheet(
         subject_id,
         academic_level_id,
         academic_year_id=period_obj.academic_year_id if period_obj else None,
+        academic_period_id=academic_period_id,
     )
 
     db_components: list[GradingTemplateComponent] = []

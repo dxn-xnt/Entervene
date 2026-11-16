@@ -16,6 +16,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.AcademicYearPassingPolicy import AcademicYearPassingPolicy
 from app.models.academic.SubjectYearGradingTemplate import SubjectYearGradingTemplate
+from app.models.academic.SubjectPeriodGradingTemplate import SubjectPeriodGradingTemplate
 from app.services.grading.PassingThresholdResolver import (
     PassingThresholdConfigurationError,
     PassingThresholdContext, PassingThresholdResolution, SubjectThresholdConfig,
@@ -34,6 +35,7 @@ def _ids(values: Iterable[int]) -> tuple[int, ...]:
 
 def read_passing_threshold_context(
     db: Session, *, academic_year_id: int, subject_ids: Iterable[int] = (),
+    academic_period_id: int | None = None,
 ) -> PassingThresholdContext:
     """At most three SELECTs, independent of subject/learner count; no autoflush.
 
@@ -50,23 +52,37 @@ def read_passing_threshold_context(
             raise PassingThresholdConfigurationError("academic_year_missing")
         subjects, templates = {}, {}
         if ids:
-            effective_template_id = func.coalesce(
-                SubjectYearGradingTemplate.grading_template_id,
-                Subject.grading_template_id,
-            )
-            rows = db.execute(select(
+            if academic_period_id is None:
+                effective_template_id = func.coalesce(
+                    SubjectYearGradingTemplate.grading_template_id,
+                    Subject.grading_template_id,
+                )
+            else:
+                effective_template_id = func.coalesce(
+                    SubjectPeriodGradingTemplate.grading_template_id,
+                    SubjectYearGradingTemplate.grading_template_id,
+                    Subject.grading_template_id,
+                )
+            query = select(
                 Subject.subject_id, effective_template_id.label("grading_template_id"),
                 GradingTemplate.grading_template_id.label("linked_template_id"),
                 GradingTemplate.passing_threshold,
-            ).outerjoin(
+            )
+            if academic_period_id is not None:
+                query = query.outerjoin(
+                    SubjectPeriodGradingTemplate,
+                    (SubjectPeriodGradingTemplate.subject_id == Subject.subject_id)
+                    & (SubjectPeriodGradingTemplate.academic_period_id == academic_period_id),
+                )
+            query = query.outerjoin(
                 SubjectYearGradingTemplate,
                 (SubjectYearGradingTemplate.subject_id == Subject.subject_id)
                 & (SubjectYearGradingTemplate.academic_year_id == academic_year_id),
             ).outerjoin(
                 GradingTemplate,
                 effective_template_id == GradingTemplate.grading_template_id,
-            )
-                .where(Subject.subject_id.in_(ids))).all()
+            ).where(Subject.subject_id.in_(ids))
+            rows = db.execute(query).all()
             for row in rows:
                 subjects[row.subject_id] = SubjectThresholdConfig(row.subject_id, row.grading_template_id)
                 if row.linked_template_id is not None:
@@ -85,13 +101,15 @@ def read_passing_threshold_context(
 
 def read_passing_threshold_context_or_422(
     db: Session, *, academic_year_id: int, subject_ids: Iterable[int] = (),
+    academic_period_id: int | None = None,
 ) -> PassingThresholdContext:
     """Sanitized application boundary; the low-level reader retains typed errors."""
     from fastapi import HTTPException
 
     try:
         return read_passing_threshold_context(
-            db, academic_year_id=academic_year_id, subject_ids=subject_ids)
+            db, academic_year_id=academic_year_id, subject_ids=subject_ids,
+            academic_period_id=academic_period_id)
     except PassingThresholdConfigurationError as error:
         raise HTTPException(status_code=422,
                             detail={"code": error.code, "message": str(error)}) from None
@@ -100,6 +118,7 @@ def read_passing_threshold_context_or_422(
 def require_subject_passing_threshold(
     db: Session, *, academic_year_id: int, subject_id: int,
     context: PassingThresholdContext | None = None,
+    academic_period_id: int | None = None,
 ) -> PassingThresholdResolution:
     """Application adapter: explicit sanitized 422, never an empty-success fallback."""
     from fastapi import HTTPException
@@ -107,7 +126,8 @@ def require_subject_passing_threshold(
     try:
         if context is None:
             context = read_passing_threshold_context(
-                db, academic_year_id=academic_year_id, subject_ids=[subject_id])
+                db, academic_year_id=academic_year_id, subject_ids=[subject_id],
+                academic_period_id=academic_period_id)
         return resolve_passing_threshold(
             context, academic_year_id=academic_year_id, scope="subject", subject_id=subject_id)
     except PassingThresholdConfigurationError as error:
