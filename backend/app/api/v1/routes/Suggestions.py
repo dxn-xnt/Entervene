@@ -6,12 +6,20 @@ from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id, get_student_record, require_role
 from app.db.Session import get_db
-from app.schemas.Suggestion import RecommendationDraftRequest, ManualSuggestionCreate, SuggestionListResponse, SuggestionResponse
+from app.schemas.Suggestion import (
+    BulkSuggestionResponse,
+    ManualBulkSuggestionCreate,
+    ManualSuggestionCreate,
+    RecommendationDraftRequest,
+    SuggestionListResponse,
+    SuggestionResponse,
+)
 from app.services.suggestion.RecommendationService import generate_recommendation_drafts
 from app.services.suggestion.SuggestionService import (
     approve_teacher_suggestion,
     archive_teacher_suggestion,
     complete_student_suggestion,
+    create_bulk_manual_suggestion,
     create_manual_suggestion,
     dismiss_teacher_suggestion,
     get_student_suggestion,
@@ -32,6 +40,16 @@ def create_manual_study_suggestion(
     db: Session = Depends(get_db),
 ):
     return create_manual_suggestion(db, staff_id, body)
+
+
+@router.post("/manual/bulk", response_model=BulkSuggestionResponse)
+def create_bulk_manual_study_suggestions(
+    body: ManualBulkSuggestionCreate,
+    current_user: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return create_bulk_manual_suggestion(db, staff_id, body)
 
 
 @router.post("/recommendations/drafts", response_model=SuggestionListResponse)

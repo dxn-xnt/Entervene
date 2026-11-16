@@ -324,3 +324,26 @@ def test_api_export_sf9_endpoints():
     assert "application/vnd.openxmlformats-officedocument.wordprocessingml.document" in res5.headers["content-type"]
     assert len(res5.content) > 1000
 
+    # 6. ZIP batch export containing individual .xlsx workbooks
+    import zipfile
+    res6 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/export-sf9-batch?format=zip")
+    assert res6.status_code == 200
+    assert res6.headers["content-type"] == "application/zip"
+    zip_buf = io.BytesIO(res6.content)
+    with zipfile.ZipFile(zip_buf, "r") as zf:
+        namelist = zf.namelist()
+        assert len(namelist) == 2
+        assert any("Reyes" in name for name in namelist)
+        assert any("Santos" in name for name in namelist)
+        # Check first workbook
+        wb_sample = openpyxl.load_workbook(io.BytesIO(zf.read(namelist[0])))
+        assert len(wb_sample.sheetnames) == 1
+
+    # 7. ZIP export filtered by student_ids
+    res7 = client.get(f"/api/v1/classes/teacher/advisory/{ctx['class_id']}/export-sf9-batch?format=zip&student_ids={ctx['student1_id']}")
+    assert res7.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(res7.content), "r") as zf:
+        namelist = zf.namelist()
+        assert len(namelist) == 1
+        assert "Reyes" in namelist[0]
+

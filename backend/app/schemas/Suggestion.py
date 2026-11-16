@@ -22,6 +22,18 @@ class ManualSuggestionCreate(BaseModel):
     external_url: Optional[str] = None
 
 
+class ManualBulkSuggestionCreate(BaseModel):
+    student_ids: list[UUID] = Field(min_length=1)
+    subject_id: int
+    resource_type: SuggestionResourceType
+    title: str = Field(min_length=1, max_length=255)
+    description: Optional[str] = None
+    priority: SuggestionPriority = "NORMAL"
+    lesson_id: Optional[int] = None
+    classwork_assignment_id: Optional[int] = None
+    external_url: Optional[str] = None
+
+
 class SuggestionResourceSummary(BaseModel):
     resource_type: SuggestionResourceType
     title: str
@@ -78,4 +90,10 @@ class RecommendationDraftRequest(BaseModel):
 
 
 class SuggestionListResponse(BaseModel):
+    suggestions: list[SuggestionResponse] = Field(default_factory=list)
+
+
+class BulkSuggestionResponse(BaseModel):
+    created_count: int
+    skipped_count: int
     suggestions: list[SuggestionResponse] = Field(default_factory=list)

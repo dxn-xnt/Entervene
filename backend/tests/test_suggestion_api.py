@@ -866,3 +866,66 @@ def test_student_history_remains_readable_without_an_active_period(suggestion_ap
     assert listed.status_code == 200
     assert listed.json()["suggestions"][0]["student_suggestion_id"] == created["student_suggestion_id"]
     assert listed.json()["suggestions"][0]["is_historical"] is True
+
+
+def test_bulk_manual_suggestions_creates_and_skips_duplicates_safely(suggestion_api_context):
+    c = suggestion_api_context
+    _act_as(c, "owner", "teacher")
+    db = c["db"]
+
+    # Enroll a second student in the same class and subject taught by owner
+    stud2_id = uuid.uuid4()
+    stud2_user = uuid.uuid4()
+    db.add(UserAccount(user_id=stud2_user, email="peer@example.test", password_hash="x"))
+    db.add(Student(
+        student_id=stud2_id,
+        student_lrn="323456789012",
+        first_name="Peer",
+        last_name="Learner",
+        academic_level_id=c["student"].academic_level_id,
+        user_id=stud2_user,
+    ))
+    db.flush()
+    stud1_sc = db.query(StudentClass).filter_by(student_id=c["student"].student_id).one()
+    db.add(StudentClass(
+        student_id=stud2_id,
+        class_id=stud1_sc.class_id,
+        academic_year_id=stud1_sc.academic_year_id,
+        enrollment_status="enrolled",
+    ))
+    db.commit()
+
+    student_ids = [str(c["student"].student_id), str(stud2_id)]
+
+    payload = {
+        "student_ids": student_ids,
+        "subject_id": c["subject"].subject_id,
+        "resource_type": "LINK",
+        "title": "Grammar Handbook",
+        "external_url": "https://example.org/grammar-handbook",
+        "priority": "HIGH",
+    }
+
+    # 1. First bulk request: creates for both students
+    response = c["client"].post("/api/v1/suggestions/manual/bulk", json=payload)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["created_count"] == 2
+    assert data["skipped_count"] == 0
+    assert len(data["suggestions"]) == 2
+
+    # 2. Duplicate retry: idempotent, skips both without crashing or duplicating
+    retry_response = c["client"].post("/api/v1/suggestions/manual/bulk", json=payload)
+    assert retry_response.status_code == 200
+    retry_data = retry_response.json()
+    assert retry_data["created_count"] == 0
+    assert retry_data["skipped_count"] == 2
+    assert retry_data["suggestions"] == []
+
+    # 3. Scope authorization check: unauthorized student is rejected
+    unauthorized_payload = {
+        **payload,
+        "student_ids": [str(c["other_student"].student_id)],
+    }
+    unauthorized_res = c["client"].post("/api/v1/suggestions/manual/bulk", json=unauthorized_payload)
+    assert unauthorized_res.status_code == 403

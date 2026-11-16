@@ -1,5 +1,5 @@
-import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, ChevronDown, FileSpreadsheet, FileText, Loader2, Search, Users } from "lucide-react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { Award, BookOpen, Check, ChevronDown, FileSpreadsheet, FileText, History, Lightbulb, Loader2, Search, Users } from "lucide-react";
 import { TeacherEmptyAvatarGroup, TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -11,11 +11,19 @@ import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
+import { Checkbox } from "@/components/retroui/Checkbox";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Table } from "@/components/retroui/Table";
 import { OverviewCard } from "@/components/overview-cards";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
+import { StudentSuggestionHistoryModal } from "@/components/teacher/suggestions/student-suggestion-history-modal";
+import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
 import { SF9PreviewModal } from "@/pages/teacher/forms/sf9-preview-modal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   exportTeacherAdvisoryBatchSF9,
   getClassSchedule,
@@ -263,6 +271,11 @@ function StudentsTab({
   detail: TeacherAdvisoryClassDetailResponse;
 }) {
   const [search, setSearch] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
+  const [historyStudent, setHistoryStudent] = useState<TeacherAdvisoryStudentItem | null>(null);
+  const [isExportingSF9, setIsExportingSF9] = useState(false);
+
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return detail.students
@@ -273,6 +286,99 @@ function StudentsTab({
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
   }, [detail.students, search]);
   const groupedStudents = groupStudents(filteredStudents);
+
+  const allStudentIds = useMemo(() => detail.students.map((s) => s.student_id), [detail.students]);
+  const isAllSelected = detail.students.length > 0 && selectedStudentIds.size === detail.students.length;
+
+  const handleToggleSelect = useCallback((studentId: string) => {
+    setSelectedStudentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(studentId)) {
+        next.delete(studentId);
+      } else {
+        next.add(studentId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedStudentIds(new Set(allStudentIds));
+  }, [allStudentIds]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedStudentIds(new Set());
+  }, []);
+
+  const selectedStudents = useMemo(() => {
+    return detail.students.filter((s) => selectedStudentIds.has(s.student_id));
+  }, [detail.students, selectedStudentIds]);
+
+  const handleExportSF9All = async () => {
+    try {
+      setIsExportingSF9(true);
+      toast.info(`Generating official SF9 report card workbooks for all ${detail.students.length} students...`);
+      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(
+        detail.class_id,
+        undefined,
+        "zip",
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("SF9 report cards exported successfully.");
+    } catch (err) {
+      console.error("SF9 export failed:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to export advisory SF9 report cards.",
+      );
+    } finally {
+      setIsExportingSF9(false);
+    }
+  };
+
+  const handleExportSF9Selected = async () => {
+    if (selectedStudentIds.size === 0) {
+      toast.error("Please select at least one student to export.");
+      return;
+    }
+    try {
+      setIsExportingSF9(true);
+      const targetIds = Array.from(selectedStudentIds);
+      const label = `${targetIds.length} selected student${targetIds.length > 1 ? "s" : ""}`;
+      toast.info(`Generating official SF9 report card workbooks for ${label}...`);
+      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(
+        detail.class_id,
+        targetIds,
+        "zip",
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("SF9 report cards exported successfully.");
+    } catch (err) {
+      console.error("SF9 export failed:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to export advisory SF9 report cards.",
+      );
+    } finally {
+      setIsExportingSF9(false);
+    }
+  };
 
   return (
     <div className="grid gap-4">
@@ -291,62 +397,211 @@ function StudentsTab({
           count={String(detail.female_count ?? 0)}
         />
       </div>
-      <section>
-        <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <h3 className="text-xl font-bold">Students</h3>
-          <label className="relative w-full md:w-72">
-            <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
+      <section className="space-y-3">
+        {/* Header with Title and Primary Actions */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-xl font-bold">Students</h3>
+            <p className="text-xs text-muted-foreground">
+              Select students to suggest material or export official SF9 report cards in batch.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Unified Header Export SF9 Action with Explicit Options */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isExportingSF9 || detail.students.length === 0}
+                  className="gap-2"
+                  title="Export official SF9 report cards"
+                >
+                  {isExportingSF9 ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="size-4" />
+                  )}
+                  <span>Export SF9</span>
+                  <ChevronDown className="size-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60 border-2 border-black bg-white shadow-md p-1">
+                <DropdownMenuItem
+                  disabled={isExportingSF9 || detail.students.length === 0}
+                  onClick={() => void handleExportSF9All()}
+                  className="cursor-pointer gap-2 py-2"
+                >
+                  <Users className="size-4 text-muted-foreground shrink-0" />
+                  <div className="flex flex-col text-left">
+                    <span className="font-bold text-xs">Export All Students</span>
+                    <span className="text-[11px] text-muted-foreground font-normal">
+                      All {detail.students.length} enrolled students
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  disabled={isExportingSF9 || selectedStudentIds.size === 0}
+                  onClick={() => void handleExportSF9Selected()}
+                  className="cursor-pointer gap-2 py-2"
+                >
+                  <FileSpreadsheet className="size-4 text-muted-foreground shrink-0" />
+                  <div className="flex flex-col text-left">
+                    <span className="font-bold text-xs">Export Selected Students</span>
+                    <span className="text-[11px] text-muted-foreground font-normal">
+                      {selectedStudentIds.size === 0
+                        ? "Select at least 1 student"
+                        : `${selectedStudentIds.size} student${selectedStudentIds.size === 1 ? "" : "s"} selected`}
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Header Bulk Suggest Material Action */}
+            <Button
+              variant="default"
+              size="sm"
+              disabled={selectedStudentIds.size === 0}
+              onClick={() => setIsSuggestModalOpen(true)}
+              className="gap-2"
+              title={
+                selectedStudentIds.size === 0
+                  ? "Select one or more students below to suggest study material"
+                  : `Suggest material to ${selectedStudentIds.size} selected student${selectedStudentIds.size > 1 ? "s" : ""}`
+              }
+            >
+              <Lightbulb className="size-4" />
+              <span>Suggest Material</span>
+              {selectedStudentIds.size > 0 && (
+                <span className="rounded bg-primary-foreground/20 px-1.5 py-0.5 text-[11px] font-bold">
+                  {selectedStudentIds.size}
+                </span>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Toolbar with Selection and Search Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-card p-2 text-sm shadow-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={isAllSelected ? handleClearSelection : handleSelectAll}
+              className="h-8 text-xs font-bold gap-1.5"
+            >
+              <span
+                aria-hidden="true"
+                className={`size-3.5 rounded-xs border border-black flex items-center justify-center shrink-0 ${
+                  isAllSelected ? "bg-primary text-primary-foreground" : "bg-background"
+                }`}
+              >
+                {isAllSelected && <Check className="size-2.5 stroke-[3]" />}
+              </span>
+              <span>{isAllSelected ? "Deselect All" : `Select All (${detail.students.length})`}</span>
+            </Button>
+
+            {selectedStudentIds.size > 0 && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearSelection}
+                  className="h-8 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  Clear Selection
+                </Button>
+                <span className="text-xs font-semibold text-foreground/85">
+                  {selectedStudentIds.size} of {detail.students.length} selected
+                </span>
+              </>
+            )}
+          </div>
+
+          <label className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search students..."
-              className="h-10 w-full border-black pl-9 pr-3"
+              className="h-8 w-full border-border pl-8 pr-3 text-xs"
             />
           </label>
         </div>
+
         <div className="min-w-0">
-            {!detail.students.length ? (
-              <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
-            ) : !filteredStudents.length ? (
-              <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
-            ) : (
-              <div className="grid items-start gap-3">
-                {groupedStudents.map(([gender, students]) => (
-                  <details
-                    key={gender}
-                    open
-                    className="group overflow-hidden rounded border-2 border-border bg-background shadow-md transition-all hover:shadow-sm open:shadow-sm"
-                  >
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 bg-primary px-4 py-3 text-base font-bold text-foreground">
-                      <span>{gender.toUpperCase()}</span>
-                      <span className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          size="sm"
-                          className="rounded"
-                        >
-                          {students.length} student
-                          {students.length !== 1 ? "s" : ""}
-                        </Badge>
-                        <ChevronDown className="size-4" />
-                      </span>
-                    </summary>
-                    <div className="border-t-2 border-border">
-                      {students.map((student) => (
-                        <StudentRow
-                          key={student.student_id}
-                          student={student}
-                          classId={detail.class_id}
-                          subjectLoads={detail.subject_loads}
-                        />
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            )}
+          {!detail.students.length ? (
+            <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
+          ) : !filteredStudents.length ? (
+            <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
+          ) : (
+            <div className="grid items-start gap-3">
+              {groupedStudents.map(([gender, students]) => (
+                <details
+                  key={gender}
+                  open
+                  className="group overflow-hidden rounded border-2 border-border bg-background shadow-md transition-all hover:shadow-sm open:shadow-sm"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 bg-primary px-4 py-3 text-base font-bold text-foreground">
+                    <span>{gender.toUpperCase()}</span>
+                    <span className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        size="sm"
+                        className="rounded"
+                      >
+                        {students.length} student
+                        {students.length !== 1 ? "s" : ""}
+                      </Badge>
+                      <ChevronDown className="size-4" />
+                    </span>
+                  </summary>
+                  <div className="border-t-2 border-border">
+                    {students.map((student) => (
+                      <StudentRow
+                        key={student.student_id}
+                        student={student}
+                        isSelected={selectedStudentIds.has(student.student_id)}
+                        onToggleSelect={handleToggleSelect}
+                        onOpenHistory={setHistoryStudent}
+                      />
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
         </div>
       </section>
+
+      {/* Suggest Material Dialog */}
+      {isSuggestModalOpen && (
+        <SuggestionPanel
+          open={isSuggestModalOpen}
+          isOpen={isSuggestModalOpen}
+          onOpenChange={setIsSuggestModalOpen}
+          onClose={() => setIsSuggestModalOpen(false)}
+          classId={detail.class_id}
+          students={selectedStudents}
+          subjectLoads={detail.subject_loads}
+          onSuccess={() => {
+            setSelectedStudentIds(new Set());
+          }}
+        />
+      )}
+
+      {/* Suggestion History Modal */}
+      {historyStudent && (
+        <StudentSuggestionHistoryModal
+          key={historyStudent.student_id}
+          isOpen={Boolean(historyStudent)}
+          onClose={() => setHistoryStudent(null)}
+          classId={detail.class_id}
+          student={historyStudent}
+        />
+      )}
     </div>
   );
 }
@@ -832,37 +1087,54 @@ function StudentSF9Button({
 
 function StudentRow({
   student,
-  classId,
-  subjectLoads,
+  isSelected,
+  onToggleSelect,
+  onOpenHistory,
 }: {
   student: TeacherAdvisoryStudentItem;
-  classId: number;
-  subjectLoads: TeacherAdvisoryClassDetailResponse["subject_loads"];
+  isSelected: boolean;
+  onToggleSelect: (studentId: string) => void;
+  onOpenHistory: (student: TeacherAdvisoryStudentItem) => void;
 }) {
   return (
-    <div className="grid items-center gap-3 border-b border-border bg-background px-4 py-3 text-sm last:border-b-0 lg:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
-      <div className="flex min-h-12 min-w-0 items-center gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Avatar text={student.avatar_initial || student.full_name} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-semibold">
-              {student.full_name}
-            </span>
-            {student.student_lrn && (
-              <span className="block text-[10px] font-semibold text-black/55">
-                LRN {student.student_lrn}
-              </span>
-            )}
+    <div
+      className={`flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-sm transition-colors last:border-b-0 ${
+        isSelected ? "bg-primary/5" : "bg-background hover:bg-muted/40"
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <Checkbox
+          id={`select-student-${student.student_id}`}
+          checked={isSelected}
+          onCheckedChange={() => onToggleSelect(student.student_id)}
+          aria-label={`Select ${student.full_name}`}
+          className="size-4 shrink-0 border-border"
+        />
+        <Avatar text={student.avatar_initial || student.full_name} />
+        <div className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">
+            {student.full_name}
           </span>
+          {student.student_lrn && (
+            <span className="block text-[11px] font-medium text-muted-foreground">
+              LRN {student.student_lrn}
+            </span>
+          )}
         </div>
       </div>
-      <ManualSuggestionPanel
-        classId={classId}
-        student={student}
-        subjectLoads={subjectLoads}
-        displayMode="row"
-        additionalActions={<StudentSF9Button classId={classId} studentId={student.student_id} studentName={student.full_name} />}
-      />
+
+      <div className="flex items-center gap-2 shrink-0 ml-auto">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onOpenHistory(student)}
+          className="gap-1.5 h-8 text-xs font-bold"
+        >
+          <History className="size-3.5" />
+          <span>History</span>
+        </Button>
+      </div>
     </div>
   );
 }

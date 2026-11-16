@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import and_, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.ExternalUrl import validate_external_link_title, validate_external_url
@@ -23,6 +24,8 @@ from app.models.people.Student import Student
 from app.models.suggestion.StudentSuggestion import StudentSuggestion
 from app.models.suggestion.SuggestionClasswork import SuggestionClasswork
 from app.schemas.Suggestion import (
+    BulkSuggestionResponse,
+    ManualBulkSuggestionCreate,
     ManualSuggestionCreate,
     SuggestionClassworkResponse,
     SuggestionListResponse,
@@ -198,6 +201,52 @@ def _ensure_no_duplicate_classwork(db: Session, student_id: UUID, subject_id: in
         raise HTTPException(status_code=409, detail="This classwork is already actively suggested to the student")
 
 
+def _has_duplicate_lesson(db: Session, student_id: UUID, subject_id: int, lesson_id: int) -> bool:
+    return (
+        db.query(StudentSuggestion.student_suggestion_id)
+        .filter(
+            StudentSuggestion.student_id == student_id,
+            StudentSuggestion.subject_id == subject_id,
+            StudentSuggestion.resource_type == "LESSON",
+            StudentSuggestion.lesson_id == lesson_id,
+            StudentSuggestion.status == ACTIVE_STATUS,
+        )
+        .first()
+        is not None
+    )
+
+
+def _has_duplicate_classwork(db: Session, student_id: UUID, subject_id: int, assignment_id: int) -> bool:
+    return (
+        db.query(StudentSuggestion.student_suggestion_id)
+        .join(SuggestionClasswork, SuggestionClasswork.student_suggestion_id == StudentSuggestion.student_suggestion_id)
+        .filter(
+            StudentSuggestion.student_id == student_id,
+            StudentSuggestion.subject_id == subject_id,
+            StudentSuggestion.resource_type == "CLASSWORK",
+            StudentSuggestion.status == ACTIVE_STATUS,
+            SuggestionClasswork.classwork_assignment_id == assignment_id,
+        )
+        .first()
+        is not None
+    )
+
+
+def _has_duplicate_link(db: Session, student_id: UUID, subject_id: int, url: str) -> bool:
+    return (
+        db.query(StudentSuggestion.student_suggestion_id)
+        .filter(
+            StudentSuggestion.student_id == student_id,
+            StudentSuggestion.subject_id == subject_id,
+            StudentSuggestion.resource_type == "LINK",
+            StudentSuggestion.external_url == url,
+            StudentSuggestion.status == ACTIVE_STATUS,
+        )
+        .first()
+        is not None
+    )
+
+
 def _ensure_no_duplicate_link(db: Session, student_id: UUID, subject_id: int, url: str) -> None:
     duplicate = db.query(StudentSuggestion.student_suggestion_id).filter(
         StudentSuggestion.student_id == student_id,
@@ -208,6 +257,152 @@ def _ensure_no_duplicate_link(db: Session, student_id: UUID, subject_id: int, ur
     ).first()
     if duplicate:
         raise HTTPException(status_code=409, detail="This link is already actively suggested to the student")
+
+
+def create_bulk_manual_suggestion(
+    db: Session, staff_id: str, body: ManualBulkSuggestionCreate
+) -> BulkSuggestionResponse:
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Suggestion title is required")
+    if body.resource_type != "LINK" and body.external_url is not None:
+        raise HTTPException(status_code=400, detail="Only link suggestions may include external_url")
+
+    validated_url: Optional[str] = None
+    if body.resource_type == "LINK":
+        if body.lesson_id is not None or body.classwork_assignment_id is not None:
+            raise HTTPException(status_code=400, detail="Link suggestions cannot reference a lesson or classwork")
+        try:
+            validated_url = validate_external_url(body.external_url)
+            title = validate_external_link_title(title) or title
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from None
+
+    created_suggestions: list[StudentSuggestion] = []
+    skipped_count = 0
+    period_id = None
+
+    seen_ids = set()
+    unique_student_ids = []
+    for sid in body.student_ids:
+        if sid not in seen_ids:
+            seen_ids.add(sid)
+            unique_student_ids.append(sid)
+
+    # Sort student IDs deterministically to avoid deadlocks when acquiring row-level locks
+    sorted_student_ids = sorted(unique_student_ids, key=lambda s: str(s))
+
+    for student_id in sorted_student_ids:
+        # Acquire row-level lock on student in consistent order to serialize concurrent requests
+        student = (
+            db.query(Student)
+            .filter(Student.student_id == student_id)
+            .with_for_update()
+            .first()
+        )
+        if not student:
+            raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
+
+        period, scoped_class_ids = _ensure_teacher_student_scope(db, staff_id, student_id, body.subject_id)
+        if len(scoped_class_ids) != 1:
+            raise HTTPException(status_code=409, detail=f"Suggestion origin is ambiguous for student {student_id}")
+        period_id = period.academic_period_id
+
+        if body.resource_type == "LESSON":
+            lesson = _validate_lesson_resource(db, staff_id, body, scoped_class_ids)
+            if _has_duplicate_lesson(db, student_id, body.subject_id, lesson.lesson_id):
+                skipped_count += 1
+                continue
+            suggestion = StudentSuggestion(
+                suggestion_type="MANUAL",
+                resource_type="LESSON",
+                title=title,
+                description=(body.description or "").strip() or None,
+                priority=body.priority,
+                status=ACTIVE_STATUS,
+                student_id=student_id,
+                subject_id=body.subject_id,
+                created_by_staff_id=staff_id,
+                origin_class_id=scoped_class_ids[0],
+                origin_academic_period_id=period.academic_period_id,
+                lesson_id=lesson.lesson_id,
+                resource_links={
+                    "resource_type": "LESSON",
+                    "lesson_id": lesson.lesson_id,
+                    "title": lesson.title,
+                },
+            )
+        elif body.resource_type == "CLASSWORK":
+            assignment = _validate_classwork_resource(db, body, scoped_class_ids)
+            if _has_duplicate_classwork(db, student_id, body.subject_id, assignment.classwork_assignment_id):
+                skipped_count += 1
+                continue
+            suggestion = StudentSuggestion(
+                suggestion_type="MANUAL",
+                resource_type="CLASSWORK",
+                title=title,
+                description=(body.description or "").strip() or None,
+                priority=body.priority,
+                status=ACTIVE_STATUS,
+                student_id=student_id,
+                subject_id=body.subject_id,
+                created_by_staff_id=staff_id,
+                origin_class_id=scoped_class_ids[0],
+                origin_academic_period_id=period.academic_period_id,
+                resource_links={
+                    "resource_type": "CLASSWORK",
+                    "classwork_assignment_id": assignment.classwork_assignment_id,
+                    "classwork_id": assignment.classwork_id,
+                    "title": assignment.classwork.title,
+                },
+                classwork_link=SuggestionClasswork(
+                    classwork_assignment_id=assignment.classwork_assignment_id,
+                ),
+            )
+        else:
+            assert validated_url is not None
+            if _has_duplicate_link(db, student_id, body.subject_id, validated_url):
+                skipped_count += 1
+                continue
+            suggestion = StudentSuggestion(
+                suggestion_type="MANUAL",
+                resource_type="LINK",
+                title=title,
+                description=(body.description or "").strip() or None,
+                priority=body.priority,
+                status=ACTIVE_STATUS,
+                student_id=student_id,
+                subject_id=body.subject_id,
+                created_by_staff_id=staff_id,
+                origin_class_id=scoped_class_ids[0],
+                origin_academic_period_id=period.academic_period_id,
+                external_url=validated_url,
+            )
+
+        db.add(suggestion)
+        created_suggestions.append(suggestion)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A conflicting suggestion was created concurrently.")
+    except Exception:
+        db.rollback()
+        raise
+
+    for s in created_suggestions:
+        db.refresh(s)
+
+    responses = [
+        build_suggestion_response(db, s, current_period_id=period_id, can_manage=True)
+        for s in created_suggestions
+    ]
+    return BulkSuggestionResponse(
+        created_count=len(responses),
+        skipped_count=skipped_count,
+        suggestions=responses,
+    )
 
 
 def create_manual_suggestion(db: Session, staff_id: str, body: ManualSuggestionCreate) -> SuggestionResponse:

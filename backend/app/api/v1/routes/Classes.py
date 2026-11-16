@@ -397,11 +397,31 @@ def export_teacher_advisory_student_sf9(
 @router.get("/teacher/advisory/{class_id}/export-sf9-batch")
 def export_teacher_advisory_class_sf9_batch(
     class_id: int,
+    student_ids: str | None = Query(None, description="Comma-separated student UUIDs"),
+    format: str | None = Query(None, description="Output format: 'zip' for individual workbooks, 'xlsx' for combined workbook"),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    parsed_student_ids: list[UUID] | None = None
+    if student_ids:
+        try:
+            parsed_student_ids = [UUID(s.strip()) for s in student_ids.split(",") if s.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid student UUID format in student_ids")
+
+    if (format or "").strip().lower() == "zip":
+        from app.services.export.SF9ExportService import export_advisory_class_sf9_zip
+        zip_stream = export_advisory_class_sf9_zip(db=db, class_id=class_id, staff_id=staff_id, student_ids=parsed_student_ids)
+        filename = f"SF9_Advisory_Class_{class_id}.zip"
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        return StreamingResponse(
+            zip_stream,
+            media_type="application/zip",
+            headers=headers,
+        )
+
     from app.services.export.SF9ExportService import export_advisory_class_sf9
-    excel_stream = export_advisory_class_sf9(db=db, class_id=class_id, staff_id=staff_id)
+    excel_stream = export_advisory_class_sf9(db=db, class_id=class_id, staff_id=staff_id, student_ids=parsed_student_ids)
     filename = f"SF9_Advisory_Class_{class_id}.xlsx"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(
