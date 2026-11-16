@@ -37,7 +37,7 @@ export function PredictionSubjectSection({
   });
 
   return (
-    <Card className="flex flex-col bg-primary">
+    <Card className="flex flex-col bg-background">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-xl font-bold">{group.display_name}</h2>

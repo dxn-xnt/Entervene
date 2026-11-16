@@ -49,7 +49,12 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
     getOfficialSections(academicYearId).then((rows) => {
       if (!cancelled) setSections(rows);
     }).catch((cause: unknown) => {
-      if (!cancelled) setError(cause instanceof Error ? cause.message : "Unable to load official sections.");
+      if (!cancelled) {
+        toast.error({
+          title: "Unable to load official sections",
+          description: cause instanceof Error ? cause.message : undefined,
+        });
+      }
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [academicYearId]);

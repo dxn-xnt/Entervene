@@ -785,12 +785,12 @@ export default function TeacherAttendancePage() {
       },
       ...(!isReadOnly
         ? [
-            {
-              id: "scan" as const,
-              label: "QR Scanner",
-              icon: QrCode,
-            },
-          ]
+          {
+            id: "scan" as const,
+            label: "QR Scanner",
+            icon: QrCode,
+          },
+        ]
         : []),
       {
         id: "summary" as const,
@@ -810,13 +810,13 @@ export default function TeacherAttendancePage() {
       },
       ...(!isReadOnly
         ? [
-            {
-              id: "scan" as const,
-              label: "Scan QR",
-              name: "QR Scanner",
-              icon: QrCode,
-            },
-          ]
+          {
+            id: "scan" as const,
+            label: "Scan QR",
+            name: "QR Scanner",
+            icon: QrCode,
+          },
+        ]
         : []),
       {
         id: "summary" as const,
@@ -1153,8 +1153,8 @@ export default function TeacherAttendancePage() {
                                         {student.student_name}
                                       </span>
                                       {student.student_lrn && (
-                                        <span className="text-[11px] text-muted-foreground font-mono">
-                                          LRN: {student.student_lrn}
+                                        <span className="text-[11px] text-muted-foreground">
+                                          {student.student_lrn}
                                         </span>
                                       )}
                                     </div>
@@ -1220,10 +1220,10 @@ export default function TeacherAttendancePage() {
                               <>
                                 {males.length > 0 && (
                                   <>
-                                    <Table.Row className="hover:bg-accent border-y-2">
+                                    <Table.Row className="p-0! bg-muted/70 font-bold border-y-2">
                                       <Table.Cell
                                         colSpan={3}
-                                        className="p-1! text-sm font-semibold text-center bg-primary pr-10!"
+                                        className="p-2! text-sm font-bold text-foreground bg-muted/70 text-left"
                                       >
                                         Male
                                       </Table.Cell>
@@ -1233,10 +1233,10 @@ export default function TeacherAttendancePage() {
                                 )}
                                 {females.length > 0 && (
                                   <>
-                                    <Table.Row className="hover:bg-accent border-b-2 p-0!">
+                                    <Table.Row className="p-0! bg-muted/70 font-bold border-y-2">
                                       <Table.Cell
                                         colSpan={3}
-                                        className="p-1! text-sm font-semibold text-center bg-primary pr-10!"
+                                        className="p-2! text-sm font-bold text-foreground bg-muted/70 text-left"
                                       >
                                         Female
                                       </Table.Cell>

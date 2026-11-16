@@ -36,6 +36,10 @@ vi.mock("@/context/SettingsContext", () => ({ useSettings: () => ({ getSetting: 
 vi.mock("@/context/AcademicPeriodContext", () => ({ useAcademicPeriod: () => ({ selectedPeriodId: 1 }) }));
 vi.mock("@/components/retroui/use-toast", () => ({ useToast: () => ({ success: toastSuccess, error: toastError }) }));
 vi.mock("@/components/retroui/Toast", () => ({ useToast: () => ({ success: toastSuccess, error: toastError }) }));
+const mockToastError = vi.fn();
+const mockToastSuccess = vi.fn();
+vi.mock("@/components/retroui/use-toast", () => ({ useToast: () => ({ success: mockToastSuccess, error: mockToastError }) }));
+vi.mock("@/components/retroui/Toast", () => ({ useToast: () => ({ success: mockToastSuccess, error: mockToastError }) }));
 vi.mock("@/lib/api", () => ({
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => jhsSlots }),
   getSubjectLoadStudioData: getStudio,
@@ -183,7 +187,13 @@ describe("Subject Load Studio offering eligibility", () => {
     render(<AdminSubjectLoadStudio />);
 
     await waitFor(() => expect(screen.getByText("Unable to load class sections")).toBeTruthy());
-    expect(screen.getByText("Offering query unavailable")).toBeTruthy();
+    expect(mockToastError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Loading Failed",
+        description: "Offering query unavailable",
+      })
+    );
+    expect(screen.queryByText("Offering query unavailable")).toBeNull();
     expect(screen.queryByText("No eligible subject offerings")).toBeNull();
   });
 
