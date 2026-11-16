@@ -490,6 +490,8 @@ export type AdvisoryStudentGradeRow = {
   is_all_finalized: boolean;
   gwa: number | null;
   gwa_descriptor: string | null;
+  avatar?: string | null;
+  avatar_initial?: string;
 };
 
 export type AdvisoryPeriodOption = {

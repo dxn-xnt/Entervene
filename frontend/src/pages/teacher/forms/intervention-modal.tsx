@@ -81,12 +81,9 @@ function AcademicDiagnosisCard({
   diagnosis: DiagnosisSnapshot;
 }) {
   const weakest = diagnosis.weakest_supported_components ?? [];
-  const primaryComp = weakest[0];
   const focusName = weakest.length
     ? weakest.map(label).join(", ")
     : "Component unavailable";
-  const primaryCompInfo = primaryComp ? diagnosis.components?.[primaryComp] : null;
-  const focusPercent = primaryCompInfo?.percent;
   const scoredCompetencies = diagnosis.lowest_supported_competencies ?? [];
   const coverageItems = diagnosis.manual_assessment_coverage ?? [];
   const strongestEvidenceText = strongestEvidence(diagnosis);
@@ -134,17 +131,6 @@ function AcademicDiagnosisCard({
               ))}
             </div>
           )} */}
-        </div>
-      )}
-
-      {focusPercent != null && (
-        <div className="flex items-center justify-between">
-          <span className="text-base">
-            Weakest component: <span className="font-semibold">{primaryComp ? label(primaryComp) : focusName}</span>
-          </span>
-          <Badge variant={percentVariant(focusPercent)} size="sm">
-            {focusPercent.toFixed(0)}%
-          </Badge>
         </div>
       )}
 

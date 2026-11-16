@@ -9,7 +9,7 @@ type TeacherEmptyStateProps = {
   illustration?: ReactNode;
   title: string;
   description?: string;
-  action?: { label: string; onClick: () => void; icon?: ReactNode };
+  action?: { label: string; onClick: () => void; icon?: ReactNode; disabled?: boolean };
   className?: string;
   compact?: boolean;
 };
@@ -36,6 +36,6 @@ export function TeacherEmptyState({ icon, illustration, title, description, acti
       <EmptyTitle>{title}</EmptyTitle>
       {description && <EmptyDescription className="text-center">{description}</EmptyDescription>}
     </EmptyHeader>
-    {action && <EmptyContent><Button size="sm" onClick={action.onClick}>{action.icon}{action.label}</Button></EmptyContent>}
+    {action && <EmptyContent><Button type="button" size="sm" disabled={action.disabled} onClick={action.onClick}>{action.icon}{action.label}</Button></EmptyContent>}
   </Empty>;
 }

@@ -2190,11 +2190,7 @@ function StudentRow({
                 </Badge>
               )}
             </div>
-          ) : (
-            <span className="text-xs font-semibold text-black/40">
-              No active suggestions
-            </span>
-          )}
+          ) : null}
         </Table.Cell>
 
       </Table.Row>
