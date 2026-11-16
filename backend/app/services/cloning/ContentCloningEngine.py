@@ -216,13 +216,19 @@ def validate_clone_inputs(
     asset_root: Path,
 ) -> None:
     subject = db.get(Subject, destination.subject_id)
-    if subject is None or subject.grading_template is None:
+    if subject is None:
         raise _conflict("GRADING_TEMPLATE_MISSING", "The destination subject has no grading template.")
-    if subject.grading_template.status != "active":
+    from app.services.subject_offerings.SubjectOfferingTemplateService import get_subject_year_template
+    template = get_subject_year_template(
+        db, subject, destination.academic_year_id, destination.academic_period_id
+    )
+    if template is None:
+        raise _conflict("GRADING_TEMPLATE_MISSING", "The destination subject has no grading template.")
+    if template.status != "active":
         raise _conflict("GRADING_TEMPLATE_INACTIVE", "The destination grading template is unavailable.")
     configured_components = {
         classified
-        for component in subject.grading_template.components
+        for component in template.components
         if (classified := classify_template_component_name(component.component_name))
     }
     component_keys = {

@@ -232,6 +232,26 @@ def test_api_academic_years_admin_sees_all(client, api_world):
     ]
 
 
+def test_api_academic_years_get_is_read_only(client, db, api_world):
+    before = [
+        (year.academic_year_id, year.year_label, year.is_active)
+        for year in db.query(AcademicYear).order_by(AcademicYear.academic_year_id)
+    ]
+
+    response = client.get(
+        "/api/v1/settings/academic-years",
+        headers=_auth_header(api_world["token_admin"]),
+    )
+
+    assert response.status_code == 200
+    db.expire_all()
+    after = [
+        (year.academic_year_id, year.year_label, year.is_active)
+        for year in db.query(AcademicYear).order_by(AcademicYear.academic_year_id)
+    ]
+    assert after == before
+
+
 def test_api_academic_years_teacher_sees_active_and_authorized_historical_only(client, api_world):
     w = api_world
     res = client.get("/api/v1/settings/academic-years", headers=_auth_header(w["token_teacher"]))

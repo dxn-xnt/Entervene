@@ -136,14 +136,25 @@ def edit_template_threshold(db: Session, *, template_id: int, year_id: int,
     old = Decimal(str(template.passing_threshold))
     if old == value:
         raise _error(422, "POLICY_UNCHANGED", "Enter a different passing threshold.")
-    # Subject-to-template assignment is global, not per year. Until PR 2 snapshots
-    # exist, ANY finalized grade for an assigned subject must make edits ineligible.
-    finalized = db.query(StudentPeriodGrade.period_grade_id).join(
-        Subject, StudentPeriodGrade.subject_id == Subject.subject_id,
-    ).filter(Subject.grading_template_id == template_id,
-             StudentPeriodGrade.is_finalized.is_(True)).first()
+    from app.models.academic.SubjectYearGradingTemplate import SubjectYearGradingTemplate
+    from app.models.academic.SubjectPeriodGradingTemplate import SubjectPeriodGradingTemplate
+    subject_ids = {
+        row[0] for row in db.query(Subject.subject_id).filter(
+            Subject.grading_template_id == template_id
+        ).all()
+    }
+    subject_ids.update(row[0] for row in db.query(SubjectYearGradingTemplate.subject_id).filter(
+        SubjectYearGradingTemplate.grading_template_id == template_id
+    ).all())
+    subject_ids.update(row[0] for row in db.query(SubjectPeriodGradingTemplate.subject_id).filter(
+        SubjectPeriodGradingTemplate.grading_template_id == template_id
+    ).all())
+    finalized = subject_ids and db.query(StudentPeriodGrade.period_grade_id).filter(
+        StudentPeriodGrade.subject_id.in_(subject_ids),
+        StudentPeriodGrade.is_finalized.is_(True),
+    ).first()
     if finalized:
-        raise _error(409, "FINALIZED_GRADE_PROTECTED", "This template has finalized grades; its passing threshold cannot be changed.")
+        raise _error(409, "FINALIZED_GRADE_PROTECTED", "This template revision has finalized grades; create a new revision instead.")
     last_revision = db.query(func.max(PassingPolicyAudit.revision)).filter(
         PassingPolicyAudit.policy_scope == "template",
         PassingPolicyAudit.academic_year_id == year_id,
