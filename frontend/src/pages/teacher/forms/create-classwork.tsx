@@ -376,7 +376,8 @@ export default function CreateClassworkModal({
     return () => {
       isActive = false;
     };
-  }, [draft.subject_id, loads, remediationFocus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.subject_id, initialLessonId, loads, remediationFocus]);
 
   const handleCreateClasswork = async () => {
     const validationError = validateDetails();
@@ -421,6 +422,8 @@ export default function CreateClassworkModal({
       formData.append("subject_id", String(draft.subject_id));
       formData.append("is_published", String(draftOnly ? false : draft.is_published));
       formData.append("show_scores", String(draft.show_scores));
+      const autoAiSupported = !remediationDraft && !remediationTarget && (selectedType === "ASSIGNMENT" || selectedType === "ACTIVITY");
+      formData.append("auto_ai_feedback_enabled", String(autoAiSupported && draft.auto_ai_feedback_enabled));
       formData.append("class_ids", JSON.stringify(selectedClassIds));
       if (remediationTarget) {
         formData.append("intervention_id", String(remediationTarget.intervention_id));
@@ -946,6 +949,32 @@ export default function CreateClassworkModal({
                       }
                       disabled={isCreating}
                     />
+                  </div>
+                )}
+
+                {!remediationDraft && !remediationTarget && (selectedType === "ASSIGNMENT" || selectedType === "ACTIVITY") && (
+                  <div className="rounded-md border-2 border-black bg-white p-3 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <label className="text-sm font-bold text-gray-900 block">
+                          Automatic AI Feedback
+                        </label>
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          Automatically prepare AI-generated feedback after grading. Teachers can review and edit the feedback before posting it to students.
+                        </p>
+                      </div>
+                      <Switch
+                        aria-label="Automatic AI Feedback"
+                        checked={draft.auto_ai_feedback_enabled}
+                        onCheckedChange={(checked) =>
+                          setDraft((current) => ({
+                            ...current,
+                            auto_ai_feedback_enabled: checked,
+                          }))
+                        }
+                        disabled={isCreating}
+                      />
+                    </div>
                   </div>
                 )}
 

@@ -181,12 +181,12 @@ def quiz_attempt_context():
         academic_period_id=period.academic_period_id,
         assigned_by_staff_id=teacher.staff_id,
         is_published=True,
-        max_attempts=2,
+        max_attempts=1,
     )
     quiz = Quiz(classwork_id=classwork.classwork_id, total_items=2, status="READY")
     setting = QuizSetting(
         classwork_id=classwork.classwork_id,
-        max_attempts=2,
+        max_attempts=1,
         show_correct_answers=False,
     )
     db.add_all([assignment, quiz, setting])
@@ -728,6 +728,8 @@ def test_identification_accepted_keys_are_not_invented_as_a_display_answer(quiz_
 def test_started_retake_restores_own_answers_without_prior_evaluation_or_solutions(quiz_attempt_context):
     c = quiz_attempt_context
     assignment_id = c["assignment"].classwork_assignment_id
+    c["assignment"].max_attempts = 2
+    c["setting"].max_attempts = 2
     c["setting"].show_correct_answers = True
     c["setting"].summary_release_mode = "IMMEDIATE"
     c["mc_link"].question.explanation = "A variable is the authoritative solution."
@@ -760,7 +762,10 @@ def test_started_retake_restores_own_answers_without_prior_evaluation_or_solutio
     submitted_body = submitted.json()
     assert submitted_body["status"] == "graded"
     assert submitted_body["can_submit"] is True
-    assert submitted_body["questions"][0]["options"][0]["is_correct"] is True
+    # While retake is available, correctness markers, answer keys, and explanations remain hidden
+    assert submitted_body["questions"][0]["options"][0]["is_correct"] is None
+    assert submitted_body["questions"][0]["is_correct"] is None
+    assert submitted_body["questions"][0]["explanation"] is None
     submission = c["db"].query(StudentSubmission).one()
     submission.feedback = "The previous attempt feedback must not survive a retake."
     c["db"].commit()
@@ -784,6 +789,73 @@ def test_started_retake_restores_own_answers_without_prior_evaluation_or_solutio
     assert body["questions"][1]["explanation"] is None
     assert "Isaac Newton" not in restarted.text
     assert "authoritative solution" not in restarted.text
+
+
+def test_multi_attempt_withholds_answers_until_final_attempt(quiz_attempt_context):
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+    c["assignment"].max_attempts = 2
+    c["setting"].max_attempts = 2
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "Authoritative MC explanation."
+    c["short_link"].question.question_type = "IDENTIFICATION"
+    c["db"].add(QuestionOption(
+        question_id=c["short_link"].question_id,
+        option_text="Isaac Newton",
+        is_correct=True,
+        option_order=1,
+    ))
+    c["db"].commit()
+
+    # Attempt 1 submitted (1 of 2 max attempts)
+    sub1 = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={
+            "answers": [
+                {"quiz_question_id": c["mc_link"].quiz_question_id, "selected_option_id": c["correct"].option_id},
+                {"quiz_question_id": c["short_link"].quiz_question_id, "answer_text": "Isaac Newton"},
+            ]
+        },
+    )
+    assert sub1.status_code == 200
+    b1 = sub1.json()
+    assert b1["attempt_count"] == 1
+    assert b1["can_submit"] is True  # Retake permitted
+    # Correctness and solutions MUST be hidden while retake is available
+    assert b1["questions"][0]["options"][0]["is_correct"] is None
+    assert b1["questions"][0]["is_correct"] is None
+    assert b1["questions"][0]["explanation"] is None
+
+    # Student checks attempt endpoint between attempts
+    check = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert check.status_code == 200
+    cb = check.json()
+    assert cb["can_submit"] is True
+    assert cb["questions"][0]["options"][0]["is_correct"] is None
+    assert cb["questions"][0]["is_correct"] is None
+    assert cb["questions"][0]["explanation"] is None
+
+    # Student starts and submits Attempt 2 (final attempt: attempt_count becomes 2 == max_attempts)
+    c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start")
+    sub2 = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={
+            "answers": [
+                {"quiz_question_id": c["mc_link"].quiz_question_id, "selected_option_id": c["correct"].option_id},
+                {"quiz_question_id": c["short_link"].quiz_question_id, "answer_text": "Isaac Newton"},
+            ]
+        },
+    )
+    assert sub2.status_code == 200
+    b2 = sub2.json()
+    assert b2["attempt_count"] == 2
+    assert b2["can_submit"] is False  # No more retakes
+    # Now that the final attempt is completed and release mode is IMMEDIATE, solutions ARE released
+    assert b2["questions"][0]["options"][0]["is_correct"] is True
+    assert b2["questions"][0]["is_correct"] is True
+    assert b2["questions"][0]["explanation"] == "Authoritative MC explanation."
+
 
 
 def test_quiz_submit_allows_unanswered_items_for_timed_autosubmit(quiz_attempt_context):

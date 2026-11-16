@@ -8,6 +8,7 @@ from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.core.Dependencies import get_db, get_staff_id, get_student_record, require_role
 from app.core.FileUpload import delete_file, save_file
 from app.schemas.Submission import (
+    FeedbackDraftResponse,
     FeedbackEligibilityResponse,
     FeedbackPublicationRequest,
     FeedbackPublicationResponse,
@@ -18,7 +19,10 @@ from app.schemas.Submission import (
 )
 from app.services.ai.UsageGuard import actor
 from app.services.submission.SubmissionFeedbackService import (
+    discard_submission_feedback_draft,
     generate_submission_feedback_suggestion,
+    get_or_create_submission_feedback_draft,
+    get_submission_feedback_draft_status,
     get_submission_feedback_eligibility,
     publish_submission_feedback,
 )
@@ -167,6 +171,34 @@ def publish_feedback(
     db: Session = Depends(get_db),
 ):
     return publish_submission_feedback(db, staff_id, submission_id, body)
+
+
+@router.get("/{submission_id}/feedback/draft", response_model=FeedbackDraftResponse)
+def get_feedback_draft(
+    submission_id: int,
+    current_user: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    token = actor.set(str(staff_id))
+    try:
+        return get_submission_feedback_draft_status(db, staff_id, submission_id)
+    finally:
+        actor.reset(token)
+
+
+@router.post("/{submission_id}/feedback/draft/discard", response_model=FeedbackDraftResponse)
+def discard_feedback_draft(
+    submission_id: int,
+    current_user: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    token = actor.set(str(staff_id))
+    try:
+        return discard_submission_feedback_draft(db, staff_id, submission_id)
+    finally:
+        actor.reset(token)
 
 
 # Wildcard routes must stay at the bottom.

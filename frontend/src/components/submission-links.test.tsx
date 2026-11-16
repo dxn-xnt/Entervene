@@ -95,6 +95,9 @@ it("shows a teacher link-only submission beside the existing grade action", () =
     onFeedbackChange={() => {}}
     onPostGrade={() => {}}
     onOpenQuizGrading={() => {}}
+    onAiFeedbackPublished={() => {}}
+    onAiPublishingChange={() => {}}
+    onAiConflictReload={async () => {}}
   /></MemoryRouter>);
   expect(screen.getByText("Project")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Post Grade" })).toBeTruthy();

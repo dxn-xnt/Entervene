@@ -30,6 +30,7 @@ from app.models.people.Student import Student
 from app.models.auth.UserAccount import UserAccount
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
+from app.models.submissions.SubmissionFeedbackDraft import SubmissionFeedbackDraft
 from app.models.submissions.SubmissionLink import SubmissionLink
 from app.schemas.Submission import GradeRequest, SubmissionAttachmentResponse, SubmissionLinkInput, SubmissionLinkResponse, SubmissionResponse
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
@@ -234,12 +235,22 @@ def build_attachment_response(attachment) -> SubmissionAttachmentResponse:
     )
 
 
-def build_submission_response(submission, db: Session) -> SubmissionResponse:
+def build_submission_response(submission, db: Session, *, for_student: bool = False) -> SubmissionResponse:
     student = db.query(Student).filter(Student.student_id == submission.student_id).first()
     assignment = db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_assignment_id == submission.classwork_assignment_id
     ).first()
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first() if assignment else None
+    # Student responses cannot distinguish an AI-authored approved comment
+    # from a teacher-authored one. Withhold both for scored online classwork
+    # while scores are hidden; teacher grading responses stay unchanged.
+    hide_non_quiz_results = bool(
+        for_student
+        and classwork
+        and (classwork.classwork_type or "").strip().upper() in {"ASSIGNMENT", "ACTIVITY"}
+        and (classwork.activity_mode or "").strip().upper() == "ONLINE"
+        and not classwork.show_scores
+    )
     return SubmissionResponse(
         submission_id=submission.submission_id,
         student_id=str(submission.student_id),
@@ -248,9 +259,9 @@ def build_submission_response(submission, db: Session) -> SubmissionResponse:
         classwork_title=classwork.title if classwork else None,
         submitted_at=submission.submitted_at,
         status=submission.status,
-        grade=float(submission.grade) if submission.grade is not None else None,
-        feedback=submission.feedback,
-        feedback_fingerprint=feedback_fingerprint(submission.feedback),
+        grade=float(submission.grade) if submission.grade is not None and not hide_non_quiz_results else None,
+        feedback=None if hide_non_quiz_results else submission.feedback,
+        feedback_fingerprint=feedback_fingerprint(None if hide_non_quiz_results else submission.feedback),
         attempt_count=submission.attempt_count,
         graded_at=submission.graded_at,
         graded_by_staff_id=submission.graded_by_staff_id,
@@ -264,6 +275,7 @@ def build_submission_response(submission, db: Session) -> SubmissionResponse:
         ) for link in submission.links],
         total_points=float(classwork.total_points) if classwork and classwork.total_points is not None else None,
         created_at=submission.created_at,
+        feedback_focus_points=None if for_student else getattr(submission, "feedback_focus_points", None),
     )
 
 
@@ -275,7 +287,7 @@ def student_submissions(student: Student, db: Session) -> list[SubmissionRespons
         .order_by(StudentSubmission.created_at.desc())
         .all()
     )
-    return [build_submission_response(submission, db) for submission in submissions]
+    return [build_submission_response(submission, db, for_student=True) for submission in submissions]
 
 
 def assert_student_can_modify_submission(
@@ -468,7 +480,7 @@ async def submit_student_work(
         db.rollback()
         cleanup_saved_files(saved_paths)
         raise
-    return build_submission_response(submission, db)
+    return build_submission_response(submission, db, for_student=True)
 
 
 def _student_reading_scope(
@@ -534,7 +546,7 @@ def complete_reading_assignment(
                 existing.graded_by_staff_id = None
                 db.commit()
                 db.refresh(existing)
-            return build_submission_response(existing, db)
+            return build_submission_response(existing, db, for_student=True)
         existing.submitted_at = now
         existing.status = "submitted"
         existing.attempt_count = max(existing.attempt_count or 0, 1)
@@ -543,7 +555,7 @@ def complete_reading_assignment(
         existing.graded_by_staff_id = None
         db.commit()
         db.refresh(existing)
-        return build_submission_response(existing, db)
+        return build_submission_response(existing, db, for_student=True)
 
     submission = StudentSubmission(
         student_id=student.student_id,
@@ -555,7 +567,7 @@ def complete_reading_assignment(
     db.add(submission)
     db.commit()
     db.refresh(submission)
-    return build_submission_response(submission, db)
+    return build_submission_response(submission, db, for_student=True)
 
 
 def record_reading_focus(
@@ -582,7 +594,7 @@ def record_reading_focus(
         existing.reading_focused_seconds = (existing.reading_focused_seconds or 0) + focused_seconds
         db.commit()
         db.refresh(existing)
-        return build_submission_response(existing, db)
+        return build_submission_response(existing, db, for_student=True)
 
     submission = StudentSubmission(
         student_id=student.student_id,
@@ -594,7 +606,7 @@ def record_reading_focus(
     db.add(submission)
     db.commit()
     db.refresh(submission)
-    return build_submission_response(submission, db)
+    return build_submission_response(submission, db, for_student=True)
 
 
 def unsubmit_student_work(assignment_id: int, student: Student, db: Session) -> SubmissionResponse:
@@ -612,7 +624,7 @@ def unsubmit_student_work(assignment_id: int, student: Student, db: Session) -> 
     setattr(submission, "submitted_at", None)
     db.commit()
     db.refresh(submission)
-    return build_submission_response(submission, db)
+    return build_submission_response(submission, db, for_student=True)
 
 
 def remove_submission_attachment(
@@ -637,7 +649,7 @@ def remove_submission_attachment(
     db.delete(attachment)
     db.commit()
     db.refresh(submission)
-    return build_submission_response(submission, db)
+    return build_submission_response(submission, db, for_student=True)
 
 
 def clear_submission_files(
@@ -948,15 +960,49 @@ def grade_student_submission(
                 "message": "Saved teacher feedback changed elsewhere. Reload before saving the grade.",
             },
         )
+    from app.services.submission.SubmissionFeedbackService import (
+        validate_focus_points,
+        enqueue_automatic_feedback_draft,
+        dispatch_background_draft_processing,
+    )
+    if body.focus_points is None:
+        # Omitted: preserve existing focus points
+        validated_focus_points = submission.feedback_focus_points
+    elif len(body.focus_points) == 0:
+        # Explicit empty list: clear focus points
+        validated_focus_points = None
+    else:
+        validated_focus_points = validate_focus_points(body.focus_points)
+
     previous_grade = submission.grade
+    previous_focus_points = submission.feedback_focus_points
     submission.grade = Decimal(str(body.grade))
     submission.feedback = body.feedback
+    submission.feedback_focus_points = validated_focus_points
     submission.status = "graded"
     submission.graded_at = datetime.now(timezone.utc)
     submission.graded_by_staff_id = staff_id
+
+    # If grading changed or focus points changed, any prior unapproved AI draft becomes STALE
+    grade_changed = (previous_grade is not None and previous_grade != submission.grade)
+    focus_changed = (previous_focus_points != validated_focus_points)
+    if (grade_changed or focus_changed):
+        prior_draft = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
+        if prior_draft and prior_draft.status in {"READY", "UNDER_REVIEW", "PENDING", "QUEUED", "CLAIMED"}:
+            prior_draft.status = "STALE"
+
+    # Enqueue automatic feedback draft if enabled
+    enqueue_automatic_feedback_draft(
+        db,
+        submission.submission_id,
+        staff_id,
+        focus_points=validated_focus_points,
+    )
+
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
+    dispatch_background_draft_processing()
     if refresh_needed:
         refresh_after_committed_grade_change(
             db.get_bind(),
@@ -1016,7 +1062,7 @@ def get_submission_for_user(submission_id: int, current_user: dict, db: Session)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     authorize_submission_access(submission, current_user, db)
-    return build_submission_response(submission, db)
+    return build_submission_response(submission, db, for_student=current_user.get("role") == "student")
 
 
 def auth_payload_from_request(request: Request, access_cookie_name: str, token: Optional[str]) -> dict:

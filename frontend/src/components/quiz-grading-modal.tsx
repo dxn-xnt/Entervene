@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Save, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
@@ -17,6 +17,7 @@ interface QuizGradingModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  eligibilityRevision?: string | number;
 }
 
 type QuestionGradingStatus = "correct" | "incorrect" | "needs_grading" | "neutral";
@@ -35,6 +36,7 @@ export default function QuizGradingModal({
   isOpen,
   onClose,
   onSuccess,
+  eligibilityRevision,
 }: QuizGradingModalProps) {
   const toast = useToast();
   const [detail, setDetail] = useState<TeacherQuizSubmissionDetail | null>(null);
@@ -43,6 +45,10 @@ export default function QuizGradingModal({
   const [error, setError] = useState("");
   const [scores, setScores] = useState<Record<number, string>>({});
   const [feedback, setFeedback] = useState("");
+  // An AI-generated draft under review must be posted (or discarded) through
+  // the fingerprint-protected publication path, never through Save Grade.
+  const [aiReviewing, setAiReviewing] = useState(false);
+  const [aiPublishing, setAiPublishing] = useState(false);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [viewMode, setViewMode] = useState<"single" | "all">("single");
 
@@ -115,7 +121,7 @@ export default function QuizGradingModal({
 
   const handleSaveGrade = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!detail) return;
+    if (!detail || aiReviewing || aiPublishing) return;
     setSaving(true);
     setError("");
 
@@ -551,35 +557,50 @@ export default function QuizGradingModal({
                 </div>
               )}
 
-              {/* Overall Feedback Box */}
-              <Card className="block w-full p-0 border-none px-1">
-                <label className="text-sm font-semibold text-foreground block mb-1">
-                  Teacher Feedback
-                  <span className="text-xs font-normal text-gray-500 ml-1 pb-1">(Optional)</span>
+              {/* Overall Feedback Box — single Teacher Feedback editor with inline AI controls */}
+              <Card className="block w-full space-y-2 p-0 border-none px-1">
+                <label htmlFor={`quiz-teacher-feedback-${submissionId}`} className="text-sm font-semibold text-foreground flex items-center justify-between mb-1">
+                  <span className="flex items-center gap-2">
+                    Teacher Feedback
+                    <span className="text-xs font-normal text-gray-500 pb-1">(Optional)</span>
+                  </span>
+                  {aiReviewing && (
+                    <Badge size="sm" variant="outline" className="gap-1 bg-white font-bold">
+                      <Sparkles aria-hidden="true" className="size-3" />
+                      AI-generated
+                    </Badge>
+                  )}
                 </label>
                 <textarea
+                  id={`quiz-teacher-feedback-${submissionId}`}
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
-                  rows={2}
+                  rows={aiReviewing ? 4 : 2}
+                  disabled={aiPublishing}
                   placeholder="Add feedback on this attempt..."
-                  className="w-full rounded! border-2 border-black px-3 py-2 text-sm focus:outline-none"
+                  className={`w-full rounded! border-2 border-black px-3 py-2 text-sm focus:outline-none disabled:opacity-50 ${aiReviewing ? "italic text-black font-sans" : ""}`}
+                />
+                <QuizFeedbackAssistant
+                  key={submissionId}
+                  submissionId={submissionId}
+                  eligibilityRevision={eligibilityRevision}
+                  fullyGraded={!detail.needs_grading && detail.status.toLowerCase() === "graded"}
+                  existingFeedback={detail.feedback ?? ""}
+                  feedbackDraft={feedback}
+                  onFeedbackDraftChange={setFeedback}
+                  disabled={saving}
+                  onReviewChange={setAiReviewing}
+                  onPublishingChange={setAiPublishing}
+                  onPublished={(savedFeedback, savedFeedbackFingerprint) => {
+                    setFeedback(savedFeedback);
+                    setDetail((current) => current ? {
+                      ...current,
+                      feedback: savedFeedback,
+                      feedback_fingerprint: savedFeedbackFingerprint,
+                    } : current);
+                  }}
                 />
               </Card>
-
-              <QuizFeedbackAssistant
-                key={submissionId}
-                submissionId={submissionId}
-                fullyGraded={!detail.needs_grading && detail.status.toLowerCase() === "graded"}
-                existingFeedback={feedback}
-                onPublished={(savedFeedback, savedFeedbackFingerprint) => {
-                  setFeedback(savedFeedback);
-                  setDetail((current) => current ? {
-                    ...current,
-                    feedback: savedFeedback,
-                    feedback_fingerprint: savedFeedbackFingerprint,
-                  } : current);
-                }}
-              />
             </div>
 
             {/* Dialog Footer */}
@@ -589,7 +610,7 @@ export default function QuizGradingModal({
                 size="header"
                 variant="outline"
                 onClick={onClose}
-                disabled={saving}
+                disabled={saving || aiPublishing}
               >
                 Cancel
               </Button>
@@ -597,7 +618,7 @@ export default function QuizGradingModal({
                 type="submit"
                 size="header"
                 variant="default"
-                disabled={saving}
+                disabled={saving || aiReviewing || aiPublishing}
               >
                 <Save size={16} />
                 {saving ? "Saving Grade..." : `Save Grade (${calculateTotal()} pts)`}

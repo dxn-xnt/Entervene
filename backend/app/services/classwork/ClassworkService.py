@@ -293,6 +293,7 @@ async def create_classwork_wizard_record(
     total_points: Optional[float],
     is_published: bool,
     show_scores: bool = True,
+    auto_ai_feedback_enabled: bool = False,
     class_ids: str,
     academic_period_id: Optional[int] = None,
     lesson_ids: Optional[str],
@@ -466,6 +467,7 @@ async def create_classwork_wizard_record(
             subject_id=subject_id,
             is_published=is_published,
             show_scores=show_scores,
+            auto_ai_feedback_enabled=auto_ai_feedback_enabled,
             created_by_staff_id=staff_id,
         )
         db.add(classwork)
@@ -928,6 +930,9 @@ def update_classwork_record(
             _replace_reference_links(db, classwork, replacement_links)
         db.commit()
         db.refresh(classwork)
+
+        from app.services.submission.SubmissionFeedbackService import sync_and_dispatch_classwork_draft_jobs
+        sync_and_dispatch_classwork_draft_jobs(db, classwork_id, staff_id)
 
         targeted = [a for a in classwork.assignments if a.is_published and a.recipient_student_id]
         assigned_class_ids = [a.class_id for a in classwork.assignments if a.is_published and not a.recipient_student_id]

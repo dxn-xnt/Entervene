@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -30,6 +31,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.PredictionOutcome import PredictionOutcome
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
+from app.models.classwork.ActivityRubricLevel import ActivityRubricLevel
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
@@ -42,8 +44,13 @@ from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.submissions.SubmissionAttachment import SubmissionAttachment
+from app.models.submissions.SubmissionFeedbackDraft import SubmissionFeedbackDraft
+from app.models.submissions.SubmissionLink import SubmissionLink
+from app.schemas.Submission import GradeRequest
 from app.services.ai.UsageGuard import actor
 from app.services.submission import SubmissionFeedbackService as feedback_service
+from app.services.submission import SubmissionService as submission_service
 
 
 @pytest.fixture
@@ -511,7 +518,7 @@ def test_student_role_is_rejected_before_provider_invocation(feedback_context, m
 
 def test_unsupported_non_quiz_is_rejected(feedback_context, monkeypatch):
     captured = _capture_provider(monkeypatch)
-    feedback_context["classwork"].classwork_type = "ASSIGNMENT"
+    feedback_context["classwork"].classwork_type = "READING"
     feedback_context["db"].commit()
 
     response = feedback_context["client"].post(_endpoint(feedback_context))
@@ -1476,3 +1483,1129 @@ def test_published_feedback_is_visible_through_existing_student_apis(feedback_co
     assert submission_response.json()["feedback"] == approved
     assert attempt_response.status_code == 200, attempt_response.text
     assert attempt_response.json()["feedback"] == approved
+
+
+_SCORE_SUGGESTION = (
+    "The overall score shows that some points were earned, with room to strengthen future work. "
+    "Review your work alongside your teacher's guidance to identify useful next steps."
+)
+
+
+def _set_scored_classwork(context, *, kind="ASSIGNMENT", mode="ONLINE", score=Decimal("21.00")):
+    context["classwork"].classwork_type = kind
+    context["classwork"].activity_mode = mode
+    context["classwork"].show_scores = True
+    context["submission"].grade = score
+    context["db"].commit()
+
+
+@pytest.mark.parametrize("kind", ["ASSIGNMENT", "ACTIVITY"])
+def test_scored_online_classwork_generates_private_score_evidence(feedback_context, monkeypatch, kind):
+    _set_scored_classwork(feedback_context, kind=kind)
+    db = feedback_context["db"]
+    submission = feedback_context["submission"]
+    db.add_all([
+        ActivityRubricLevel(
+            classwork_id=feedback_context["classwork"].classwork_id,
+            level_name="Private rubric level",
+            description="Sensitive teacher-authored rubric description",
+            points=Decimal("25.00"),
+            display_order=0,
+        ),
+        SubmissionAttachment(
+            submission_id=submission.submission_id,
+            file_name="private-student-work.pdf",
+            file_path="private/upload/location.pdf",
+            file_size=8,
+        ),
+        SubmissionLink(
+            submission_id=submission.submission_id,
+            url="https://private.example.test/learner-work",
+            title="Private project title",
+            position=1,
+        ),
+    ])
+    db.commit()
+    before = _snapshot(feedback_context)
+    captured = _capture_provider(monkeypatch, feedback=_SCORE_SUGGESTION)
+
+    eligibility = feedback_context["client"].get(_eligibility_endpoint(feedback_context))
+    generated = feedback_context["client"].post(_endpoint(feedback_context))
+
+    assert eligibility.status_code == 200 and eligibility.json()["eligible"] is True
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["detail_level"] == "GENERAL"
+    assert generated.json()["evidence_item_count"] == 1
+    assert captured["calls"] == 1 and captured["actor"] == feedback_context["teacher"].staff_id
+    assert _provider_evidence(captured) == {
+        "classwork_type": kind,
+        "awarded_points": "21.00",
+        "maximum_points": "25.00",
+        "credit_classification": "partial_credit",
+        "grading_status": "graded",
+    }
+    provider_messages = captured["prompt"] + captured["system_prompt"]
+    for private in (
+        feedback_context["student"].first_name,
+        feedback_context["student"].student_lrn,
+        str(feedback_context["student"].student_id),
+        feedback_context["classwork"].instructions,
+        feedback_context["submission"].feedback,
+        "private-student-work.pdf",
+        "private/upload/location.pdf",
+        "https://private.example.test/learner-work",
+        "Private project title",
+        "Private rubric level",
+        "Sensitive teacher-authored rubric description",
+        feedback_context["answers"][-1].answer_text,
+    ):
+        assert private not in provider_messages
+    assert _snapshot(feedback_context) == before
+
+
+def test_scored_zero_is_valid_and_feedback_publication_changes_only_comment(feedback_context, monkeypatch):
+    _set_scored_classwork(feedback_context, score=Decimal("0.00"))
+    before = _snapshot(feedback_context)
+    suggestion = "The overall score shows no credit for this work."
+    tokens, captured = _suggestion_tokens(feedback_context, monkeypatch, feedback=suggestion)
+    assert _provider_evidence(captured)["credit_classification"] == "no_credit"
+    assert _snapshot(feedback_context) == before
+
+    approved = "Please meet with me so we can review your work together."
+    published = feedback_context["client"].put(
+        f"/api/v1/submissions/{feedback_context['submission'].submission_id}/feedback",
+        json=_publication_body(tokens, approved),
+    )
+    assert published.status_code == 200, published.text
+    after = _snapshot(feedback_context)
+    assert after == {**before, "feedback": approved}
+
+
+@pytest.mark.parametrize("change,code", [
+    ("missing_score", "FEEDBACK_CLASSWORK_NOT_FULLY_GRADED"),
+    ("ungraded", "FEEDBACK_CLASSWORK_NOT_FULLY_GRADED"),
+    ("missing_submission", "FEEDBACK_CLASSWORK_NOT_FULLY_GRADED"),
+    ("missing_graded_at", "FEEDBACK_CLASSWORK_NOT_FULLY_GRADED"),
+    ("missing_maximum", "FEEDBACK_INVALID_GRADING_EVIDENCE"),
+    ("zero_maximum", "FEEDBACK_INVALID_GRADING_EVIDENCE"),
+    ("negative_score", "FEEDBACK_INVALID_GRADING_EVIDENCE"),
+    ("score_above_maximum", "FEEDBACK_INVALID_GRADING_EVIDENCE"),
+    ("unpublished_classwork", "FEEDBACK_CLASSWORK_NOT_PUBLISHED"),
+    ("unpublished_assignment", "FEEDBACK_CLASSWORK_NOT_PUBLISHED"),
+    ("manual_activity", "FEEDBACK_UNSUPPORTED_SUBMISSION"),
+    ("reading", "FEEDBACK_UNSUPPORTED_SUBMISSION"),
+])
+def test_scored_classwork_ineligible_before_provider(feedback_context, monkeypatch, change, code):
+    _set_scored_classwork(feedback_context)
+    classwork = feedback_context["classwork"]
+    submission = feedback_context["submission"]
+    assignment = feedback_context["assignment"]
+    if change == "missing_score":
+        submission.grade = None
+    elif change == "ungraded":
+        submission.status = "submitted"
+    elif change == "missing_submission":
+        submission.submitted_at = None
+    elif change == "missing_graded_at":
+        submission.graded_at = None
+    elif change == "missing_maximum":
+        classwork.total_points = None
+    elif change == "zero_maximum":
+        classwork.total_points = Decimal("0.00")
+    elif change == "negative_score":
+        submission.grade = Decimal("-1.00")
+    elif change == "score_above_maximum":
+        submission.grade = Decimal("26.00")
+    elif change == "unpublished_classwork":
+        classwork.is_published = False
+    elif change == "unpublished_assignment":
+        assignment.is_published = False
+    elif change == "hidden_scores":
+        classwork.show_scores = False
+    elif change == "manual_activity":
+        classwork.classwork_type = "ACTIVITY"
+        classwork.activity_mode = "MANUAL"
+    elif change == "reading":
+        classwork.classwork_type = "READING"
+    feedback_context["db"].commit()
+    captured = _capture_provider(monkeypatch, feedback=_SCORE_SUGGESTION)
+
+    eligibility = feedback_context["client"].get(_eligibility_endpoint(feedback_context))
+    generated = feedback_context["client"].post(_endpoint(feedback_context))
+
+    assert eligibility.status_code == 200, eligibility.text
+    assert eligibility.json()["eligible"] is False
+    assert eligibility.json()["code"] == code
+    assert generated.status_code in {409, 422}, generated.text
+    assert generated.json()["detail"]["code"] == code
+    assert captured["calls"] == 0
+
+
+@pytest.mark.parametrize("mutation,code", [
+    ("score", "FEEDBACK_EVIDENCE_STALE"),
+    ("maximum", "FEEDBACK_EVIDENCE_STALE"),
+    ("type", "FEEDBACK_EVIDENCE_STALE"),
+    ("feedback", "FEEDBACK_COMMENT_STALE"),
+    ("hidden_scores", "FEEDBACK_EVIDENCE_STALE"),
+    ("unpublished", "FEEDBACK_CLASSWORK_NOT_PUBLISHED"),
+])
+def test_scored_classwork_publication_rechecks_evidence_and_release(feedback_context, monkeypatch, mutation, code):
+    _set_scored_classwork(feedback_context)
+    tokens, _ = _suggestion_tokens(feedback_context, monkeypatch, feedback=_SCORE_SUGGESTION)
+    classwork = feedback_context["classwork"]
+    submission = feedback_context["submission"]
+    if mutation == "score":
+        submission.grade = Decimal("20.00")
+    elif mutation == "maximum":
+        classwork.total_points = Decimal("30.00")
+    elif mutation == "type":
+        classwork.classwork_type = "ACTIVITY"
+    elif mutation == "feedback":
+        submission.feedback = "New teacher-authored comment."
+    elif mutation == "hidden_scores":
+        classwork.show_scores = False
+    elif mutation == "unpublished":
+        classwork.is_published = False
+    feedback_context["db"].commit()
+    before = _snapshot(feedback_context)
+
+    response = feedback_context["client"].put(
+        f"/api/v1/submissions/{submission.submission_id}/feedback",
+        json=_publication_body(tokens, _SCORE_SUGGESTION),
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == code
+    assert _snapshot(feedback_context) == before
+
+
+@pytest.mark.parametrize("bad_output", [
+    "not json",
+    json.dumps({"feedback": "I reviewed your uploaded document and found a missing section."}),
+    json.dumps({"feedback": "You misunderstood the fractions lesson and failed the rubric criterion."}),
+    json.dumps({"feedback": "A" * 1201}),
+])
+def test_scored_classwork_rejects_ungrounded_or_invalid_provider_output(feedback_context, monkeypatch, bad_output):
+    _set_scored_classwork(feedback_context)
+    before = _snapshot(feedback_context)
+
+    async def fake_generate(*_args, **_kwargs):
+        return bad_output
+
+    monkeypatch.setattr(feedback_service.Provider, "generate_text", fake_generate)
+    response = feedback_context["client"].post(_endpoint(feedback_context))
+    assert response.status_code == 502, response.text
+    assert _snapshot(feedback_context) == before
+
+
+def test_scored_classwork_keeps_teacher_scope_and_competing_publications(feedback_context, monkeypatch):
+    _set_scored_classwork(feedback_context)
+    captured = _capture_provider(monkeypatch, feedback=_SCORE_SUGGESTION)
+    feedback_context["identity"]["sub"] = feedback_context["accounts"]["other_teacher"].user_id
+    unauthorized = feedback_context["client"].post(_endpoint(feedback_context))
+    assert unauthorized.status_code in {403, 404}
+    assert captured["calls"] == 0
+    feedback_context["identity"]["sub"] = feedback_context["accounts"]["teacher"].user_id
+
+    tokens, _ = _suggestion_tokens(feedback_context, monkeypatch, feedback=_SCORE_SUGGESTION)
+    endpoint = f"/api/v1/submissions/{feedback_context['submission'].submission_id}/feedback"
+    first = feedback_context["client"].put(endpoint, json=_publication_body(tokens, "First approved teacher feedback."))
+    second = feedback_context["client"].put(endpoint, json=_publication_body(tokens, "Second approved teacher feedback."))
+    assert first.status_code == 200, first.text
+    assert second.status_code == 409, second.text
+    assert second.json()["detail"]["code"] == "FEEDBACK_COMMENT_STALE"
+    assert feedback_context["db"].get(StudentSubmission, feedback_context["submission"].submission_id).feedback == "First approved teacher feedback."
+
+
+def test_scored_classwork_preserves_shared_targeted_assignment_exclusion(feedback_context):
+    _set_scored_classwork(feedback_context)
+    # Directly exercise the same exclusion called by both dispatch branches;
+    # a real targeted assignment also needs intervention rows and a complete
+    # recipient tuple, which this privacy fixture intentionally does not seed.
+    feedback_context["assignment"].source_intervention_id = 123
+    with pytest.raises(HTTPException) as exc:
+        with feedback_context["db"].no_autoflush:
+            feedback_service._assert_ordinary_assignment(feedback_context["db"], feedback_context["assignment"])
+    assert exc.value.status_code == 422
+    assert exc.value.detail["code"] == "FEEDBACK_UNSUPPORTED_ASSIGNMENT"
+
+
+def test_scored_classwork_preserves_provider_usage_rejection(feedback_context, monkeypatch):
+    _set_scored_classwork(feedback_context)
+    before = _snapshot(feedback_context)
+
+    async def quota_rejected(*_args, **_kwargs):
+        raise HTTPException(status_code=429, detail="AI usage limit reached")
+
+    monkeypatch.setattr(feedback_service.Provider, "generate_text", quota_rejected)
+    response = feedback_context["client"].post(_endpoint(feedback_context))
+    assert response.status_code == 429, response.text
+    assert _snapshot(feedback_context) == before
+
+
+def test_scored_classwork_approved_feedback_uses_existing_student_read(feedback_context, monkeypatch):
+    _set_scored_classwork(feedback_context)
+    tokens, _ = _suggestion_tokens(feedback_context, monkeypatch, feedback=_SCORE_SUGGESTION)
+    approved = "Your teacher-approved feedback is ready for review."
+    endpoint = f"/api/v1/submissions/{feedback_context['submission'].submission_id}"
+    published = feedback_context["client"].put(
+        endpoint + "/feedback", json=_publication_body(tokens, approved),
+    )
+    assert published.status_code == 200, published.text
+
+    feedback_context["identity"].update(
+        sub=feedback_context["accounts"]["student"].user_id,
+        role="student",
+    )
+    student_read = feedback_context["client"].get(endpoint)
+    assert student_read.status_code == 200, student_read.text
+    assert student_read.json()["feedback"] == approved
+
+
+@pytest.mark.parametrize("kind,mode", [("ASSIGNMENT", "ONLINE"), ("ACTIVITY", "ONLINE")])
+def test_scored_classwork_student_reads_withhold_existing_feedback_when_scores_hidden(
+    feedback_context, kind, mode,
+):
+    _set_scored_classwork(feedback_context, kind=kind, mode=mode)
+    db = feedback_context["db"]
+    submission_id = feedback_context["submission"].submission_id
+    feedback_context["classwork"].show_scores = False
+    db.commit()
+
+    teacher_read = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/detail")
+    assert teacher_read.status_code == 200, teacher_read.text
+    assert teacher_read.json()["feedback"] == "Existing teacher comment."
+    assert teacher_read.json()["grade"] == 21.0
+
+    feedback_context["identity"].update(
+        sub=feedback_context["accounts"]["student"].user_id,
+        role="student",
+    )
+    student_read = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}")
+    student_list = feedback_context["client"].get("/api/v1/submissions/my-submissions")
+    assert student_read.status_code == 200, student_read.text
+    assert student_list.status_code == 200, student_list.text
+    for result in (student_read.json(), student_list.json()[0]):
+        assert result["grade"] is None
+        assert result["feedback"] is None
+        assert result["feedback_fingerprint"] == feedback_service.feedback_fingerprint(None)
+        assert result["attachments"] == []
+
+    feedback_context["classwork"].show_scores = True
+    db.commit()
+    released = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}")
+    assert released.status_code == 200, released.text
+    assert released.json()["grade"] == 21.0
+    assert released.json()["feedback"] == "Existing teacher comment."
+
+
+def test_quiz_student_feedback_response_is_unchanged_when_scores_hidden(feedback_context):
+    feedback_context["classwork"].show_scores = False
+    feedback_context["db"].commit()
+    feedback_context["identity"].update(
+        sub=feedback_context["accounts"]["student"].user_id,
+        role="student",
+    )
+    result = feedback_context["client"].get(
+        f"/api/v1/submissions/{feedback_context['submission'].submission_id}",
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["feedback"] == "Existing teacher comment."
+
+
+def test_auto_ai_feedback_draft_toggle_off(feedback_context, monkeypatch):
+    captured = _capture_provider(monkeypatch)
+    submission_id = feedback_context["submission"].submission_id
+    feedback_context["classwork"].auto_ai_feedback_enabled = False
+    feedback_context["db"].commit()
+
+    resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["status"] == "NONE"
+    assert data["auto_ai_feedback_enabled"] is False
+    assert data["draft_feedback"] is None
+    assert captured["calls"] == 0
+
+
+def test_auto_ai_feedback_draft_get_is_strictly_read_only(feedback_context, monkeypatch):
+    """GET /draft must be strictly read-only: never invoke provider, never mutate DB."""
+    captured = _capture_provider(monkeypatch, feedback="Auto generated helpful feedback.")
+    submission_id = feedback_context["submission"].submission_id
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    feedback_context["db"].commit()
+
+    # Repeated GET requests must never trigger generation or DB mutation
+    for _ in range(5):
+        resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["status"] == "NONE"
+        assert captured["calls"] == 0
+
+    # Ensure no draft was created by GET requests
+    draft = feedback_context["db"].query(feedback_service.SubmissionFeedbackDraft).filter_by(submission_id=submission_id).first()
+    assert draft is None
+
+
+def test_auto_ai_feedback_draft_toggle_on_generates_and_persists(feedback_context, monkeypatch):
+    """Grading finalized enqueues draft; background worker generates draft without opening page."""
+    captured = _capture_provider(monkeypatch, feedback="Auto generated helpful feedback.")
+    submission_id = feedback_context["submission"].submission_id
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    # Grading finalized: enqueue draft job
+    draft = feedback_service.enqueue_automatic_feedback_draft(db, submission_id, "T-FEEDBACK")
+    assert draft is not None
+    assert draft.status == "QUEUED"
+    db.commit()
+
+    # GET before worker runs returns PENDING, zero provider calls
+    resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "PENDING"
+    assert captured["calls"] == 0
+
+    # Background worker processes the queue
+    processed = asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
+    assert processed == 1
+    assert captured["calls"] == 1
+
+    # GET after worker runs returns READY with generated draft
+    resp2 = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert resp2.status_code == 200, resp2.text
+    data2 = resp2.json()
+    assert data2["status"] == "READY"
+    assert data2["auto_ai_feedback_enabled"] is True
+    assert data2["draft_feedback"] == "Auto generated helpful feedback."
+    assert data2["evidence_fingerprint"] is not None
+
+    # Subsequent GET returns cached draft without re-invoking provider
+    resp3 = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert resp3.status_code == 200, resp3.text
+    assert resp3.json()["draft_feedback"] == "Auto generated helpful feedback."
+    assert captured["calls"] == 1
+
+
+def test_auto_ai_feedback_draft_discard(feedback_context, monkeypatch):
+    captured = _capture_provider(monkeypatch, feedback="Draft feedback to discard.")
+    submission_id = feedback_context["submission"].submission_id
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    # Enqueue and process draft
+    feedback_service.enqueue_automatic_feedback_draft(db, submission_id, "T-FEEDBACK")
+    db.commit()
+    asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
+
+    # Draft is READY
+    resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "READY"
+
+    # Teacher explicitly discards draft
+    discard_resp = feedback_context["client"].post(f"/api/v1/submissions/{submission_id}/feedback/draft/discard")
+    assert discard_resp.status_code == 200, discard_resp.text
+    assert discard_resp.json()["status"] == "DISCARDED"
+
+    # Subsequent GET returns DISCARDED status, does not regenerate
+    get_resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert get_resp.status_code == 200, get_resp.text
+    assert get_resp.json()["status"] == "DISCARDED"
+    assert captured["calls"] == 1
+
+
+def test_auto_ai_feedback_draft_publication_marks_approved(feedback_context, monkeypatch):
+    _capture_provider(monkeypatch, feedback="Approved feedback wording.")
+    submission_id = feedback_context["submission"].submission_id
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    # Enqueue and process draft
+    feedback_service.enqueue_automatic_feedback_draft(db, submission_id, "T-FEEDBACK")
+    db.commit()
+    asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
+
+    draft_resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert draft_resp.status_code == 200, draft_resp.text
+    draft_data = draft_resp.json()
+    assert draft_data["status"] == "READY"
+
+    # Publish feedback
+    pub_resp = feedback_context["client"].put(
+        f"/api/v1/submissions/{submission_id}/feedback",
+        json={
+            "feedback": "Approved wording with edits.",
+            "expected_evidence_fingerprint": draft_data["evidence_fingerprint"],
+            "expected_feedback_fingerprint": draft_data["feedback_fingerprint"],
+        },
+    )
+    assert pub_resp.status_code == 200, pub_resp.text
+
+    # Draft status in database is now APPROVED
+    draft_after = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert draft_after.status_code == 200, draft_after.text
+    assert draft_after.json()["status"] == "APPROVED"
+
+
+def test_auto_ai_feedback_delayed_release_quiz(feedback_context, monkeypatch):
+    """Quiz with scheduled release does not generate early; generates when release arrives."""
+    captured = _capture_provider(monkeypatch, feedback="Delayed release feedback.")
+    submission_id = feedback_context["submission"].submission_id
+    db = feedback_context["db"]
+    classwork = feedback_context["classwork"]
+    classwork.auto_ai_feedback_enabled = True
+
+    # Set quiz summary release to scheduled in the future
+    future_time = datetime.now(timezone.utc) + timedelta(days=2)
+    setting = db.query(QuizSetting).filter_by(classwork_id=classwork.classwork_id).first()
+    setting.summary_release_mode = "SCHEDULED"
+    setting.summary_release_at = future_time
+    db.commit()
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(db, submission_id, "T-FEEDBACK")
+    assert draft is not None
+    assert draft.status == "QUEUED"
+    assert draft.scheduled_for is not None
+    db.commit()
+
+    # Worker runs now: should not process because scheduled_for is in the future
+    processed = asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
+    assert processed == 0
+    assert captured["calls"] == 0
+
+    # Simulate arrival of scheduled release time
+    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=10)
+    setting.summary_release_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+    db.commit()
+
+    # Worker runs again: should now claim and process
+    processed = asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
+    assert processed == 1
+    assert captured["calls"] == 1
+
+    resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "READY"
+
+
+def test_auto_ai_feedback_hidden_scores_release_triggers_generation(feedback_context, monkeypatch):
+    """Enabling previously hidden scores triggers generation for graded submissions."""
+    captured = _capture_provider(monkeypatch, feedback="Unhidden scores feedback.")
+    submission_id = feedback_context["submission"].submission_id
+    db = feedback_context["db"]
+    classwork = feedback_context["classwork"]
+    classwork.auto_ai_feedback_enabled = True
+
+    # Hide scores and answers initially
+    classwork.show_scores = False
+    setting = db.query(QuizSetting).filter_by(classwork_id=classwork.classwork_id).first()
+    setting.show_correct_answers = False
+    db.commit()
+
+    # Enqueue when scores hidden: cannot schedule
+    draft = feedback_service.enqueue_automatic_feedback_draft(db, submission_id, "T-FEEDBACK")
+    db.commit()
+
+    # Worker cannot generate while scores/answers hidden
+    if draft:
+        asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
+    assert captured["calls"] == 0
+
+    # Teacher enables scores and answers
+    classwork.show_scores = True
+    setting.show_correct_answers = True
+    db.commit()
+
+    # Sync classwork draft jobs triggers enqueuing
+    enqueued = feedback_service.sync_and_dispatch_classwork_draft_jobs(db, classwork.classwork_id, "T-FEEDBACK")
+    assert enqueued >= 1
+
+    # Worker runs and completes generation
+    processed = asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
+    assert processed >= 1
+    assert captured["calls"] == 1
+
+    resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "READY"
+
+
+def test_auto_ai_feedback_concurrent_workers_claim_once(feedback_context, monkeypatch):
+    """Two concurrent workers claim a job atomically: exactly one succeeds."""
+    captured = _capture_provider(monkeypatch, feedback="Atomic claim feedback.")
+    submission_id = feedback_context["submission"].submission_id
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(db, submission_id, "T-FEEDBACK")
+    assert draft is not None
+    db.commit()
+
+    # First claim succeeds
+    success1 = asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    assert success1 is True
+    assert captured["calls"] == 1
+
+    # Second claim on the same draft immediately fails (already claimed/completed)
+    success2 = asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    assert success2 is False
+    assert captured["calls"] == 1  # No duplicate provider invocation!
+
+
+def test_auto_ai_feedback_stale_detection_on_regrade(feedback_context, monkeypatch):
+    """Optimistic concurrency detects grade modification during generation, rejecting stale feedback."""
+    captured = _capture_provider(monkeypatch, feedback="Stale feedback to reject.")
+    submission_id = feedback_context["submission"].submission_id
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(db, submission_id, "T-FEEDBACK")
+    db.commit()
+
+    # Intercept Provider.generate_text to mutate submission grade before generation returns
+    orig_generate = feedback_service.Provider.generate_text
+    async def regrade_during_generate(*args, **kwargs):
+        # Teacher regrades submission concurrently
+        sub = db.get(StudentSubmission, submission_id)
+        sub.grade = Decimal("24.00")
+        db.commit()
+        return await orig_generate(*args, **kwargs)
+
+    monkeypatch.setattr(feedback_service.Provider, "generate_text", regrade_during_generate)
+
+    # Process job: optimistic check should detect fingerprint mismatch and set STALE
+    success = asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    assert success is False
+
+    refreshed_draft = db.get(feedback_service.SubmissionFeedbackDraft, draft.draft_id)
+    assert refreshed_draft.status == "STALE"
+
+
+def test_auto_ai_feedback_bounded_retries_on_provider_failure(feedback_context, monkeypatch):
+    """Provider failure retries up to max_retries then marks draft FAILED without throwing unhandled error."""
+    submission_id = feedback_context["submission"].submission_id
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(db, submission_id, "T-FEEDBACK")
+    db.commit()
+
+    # Make Provider fail
+    async def failing_generate(*args, **kwargs):
+        raise RuntimeError("Provider connection timeout")
+
+    monkeypatch.setattr(feedback_service.Provider, "generate_text", failing_generate)
+
+    # Attempt 1 -> retry_count becomes 1, status QUEUED
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.retry_count == 1
+    assert draft.status == "QUEUED"
+
+    # Attempt 2 -> retry_count becomes 2, status QUEUED
+    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db.commit()
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.retry_count == 2
+    assert draft.status == "QUEUED"
+
+    # Attempt 3 -> retry_count becomes 3 (max_retries), status FAILED
+    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db.commit()
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.retry_count == 3
+    assert draft.status == "FAILED"
+    assert "Provider connection timeout" in draft.error_message
+
+
+def test_scored_classwork_eligible_with_hidden_scores(feedback_context, monkeypatch):
+    """Verifies that non-quiz classwork with show_scores=False can generate and approve private drafts."""
+    _set_scored_classwork(feedback_context)
+    classwork = feedback_context["classwork"]
+    classwork.show_scores = False
+    classwork.auto_ai_feedback_enabled = True
+    feedback_context["db"].commit()
+
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", True)
+    expected_feedback = "The student demonstrated thorough analysis and clear structure."
+    captured = _capture_provider(monkeypatch, feedback=expected_feedback)
+    submission_id = feedback_context["submission"].submission_id
+
+    # 1. Enqueue automatic draft with focus points
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        feedback_context["db"],
+        submission_id,
+        "T-FEEDBACK",
+        focus_points=["STRUCTURE", "ANALYSIS"],
+    )
+    assert draft is not None
+    assert draft.status == "QUEUED"
+    assert draft.scheduled_for is not None
+    feedback_context["db"].commit()
+
+    # 2. Worker processes it successfully
+    success = asyncio.run(feedback_service.process_feedback_draft_job(feedback_context["db"], draft.draft_id))
+    assert success is True
+    feedback_context["db"].refresh(draft)
+    assert draft.status == "READY"
+    assert draft.draft_feedback == expected_feedback
+    assert draft.detail_level == "CONTEXTUAL"
+    assert captured["calls"] == 1
+
+    # 3. Teacher can retrieve the draft
+    draft_resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
+    assert draft_resp.status_code == 200, draft_resp.text
+    data = draft_resp.json()
+    assert data["status"] == "READY"
+    assert data["draft_feedback"] == expected_feedback
+    assert data["is_template"] is False
+    assert set(data["focus_points"]) == {"ANALYSIS", "STRUCTURE"}
+
+    # 4. Teacher can approve/publish feedback privately while show_scores is False
+    pub_body = {
+        "feedback": expected_feedback,
+        "expected_evidence_fingerprint": data["evidence_fingerprint"],
+        "expected_feedback_fingerprint": data["feedback_fingerprint"],
+    }
+    pub_resp = feedback_context["client"].put(
+        f"/api/v1/submissions/{submission_id}/feedback",
+        json=pub_body,
+    )
+    assert pub_resp.status_code == 200, pub_resp.text
+    assert pub_resp.json()["feedback"] == expected_feedback
+    feedback_context["db"].refresh(draft)
+    assert draft.status == "APPROVED"
+
+
+def test_student_cannot_see_feedback_when_scores_hidden(feedback_context, monkeypatch):
+    """Verifies student responses withhold approved feedback and grades when show_scores=False."""
+    from app.services.submission.SubmissionService import build_submission_response
+
+    _set_scored_classwork(feedback_context)
+    classwork = feedback_context["classwork"]
+    classwork.show_scores = False
+    submission = feedback_context["submission"]
+    submission.feedback = "Private teacher note for student."
+    feedback_context["db"].commit()
+
+    # Student serialization withholds grade and feedback
+    student_resp = build_submission_response(submission, feedback_context["db"], for_student=True)
+    assert student_resp.feedback is None
+    assert student_resp.grade is None
+
+    # Teacher serialization retains grade and feedback
+    teacher_resp = build_submission_response(submission, feedback_context["db"], for_student=False)
+    assert teacher_resp.feedback == "Private teacher note for student."
+    assert teacher_resp.grade == 21.0
+
+    # Once teacher releases scores, student receives both
+    classwork.show_scores = True
+    feedback_context["db"].commit()
+    student_released = build_submission_response(submission, feedback_context["db"], for_student=True)
+    assert student_released.feedback == "Private teacher note for student."
+    assert student_released.grade == 21.0
+
+
+def test_valid_zero_grade_eligible_for_feedback(feedback_context, monkeypatch):
+    """Verifies that a valid zero grade on scored work remains eligible for feedback."""
+    _set_scored_classwork(feedback_context)
+    classwork = feedback_context["classwork"]
+    classwork.auto_ai_feedback_enabled = True
+    submission = feedback_context["submission"]
+    submission.grade = Decimal("0.00")
+    feedback_context["db"].commit()
+
+    captured = _capture_provider(monkeypatch)
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        feedback_context["db"],
+        submission.submission_id,
+        "T-FEEDBACK",
+    )
+    assert draft is not None
+    assert draft.status == "QUEUED"
+    assert draft.scheduled_for is not None
+    feedback_context["db"].commit()
+
+    success = asyncio.run(feedback_service.process_feedback_draft_job(feedback_context["db"], draft.draft_id))
+    assert success is True
+    feedback_context["db"].refresh(draft)
+    assert draft.status == "READY"
+    assert draft.draft_feedback == (
+        "The overall score shows no credit for this work. "
+        "Review your work with your teacher to identify a helpful starting point."
+    )
+    assert draft.detail_level == "TEMPLATE"
+    assert captured["calls"] == 0
+
+
+def test_reactivate_unscheduled_feedback_drafts(feedback_context):
+    """Verifies that reactivate_unscheduled_feedback_drafts safely activates queued drafts held without schedule."""
+    _set_scored_classwork(feedback_context)
+    classwork = feedback_context["classwork"]
+    classwork.show_scores = False
+    classwork.auto_ai_feedback_enabled = True
+    submission = feedback_context["submission"]
+    feedback_context["db"].commit()
+
+    # Insert a queued draft that had scheduled_for = None (e.g. from prior restriction)
+    blocked_draft = feedback_service.SubmissionFeedbackDraft(
+        submission_id=submission.submission_id,
+        status="QUEUED",
+        staff_id="T-FEEDBACK",
+        scheduled_for=None,
+        retry_count=0,
+    )
+    feedback_context["db"].add(blocked_draft)
+    feedback_context["db"].commit()
+
+    # Call reactivation
+    count = feedback_service.reactivate_unscheduled_feedback_drafts(feedback_context["db"], limit=10)
+    assert count == 1
+    feedback_context["db"].refresh(blocked_draft)
+    assert blocked_draft.scheduled_for is not None
+
+
+# ==============================================================================
+# PHASE 2 TESTS: TEACHER-GROUNDED CONTEXTUAL FEEDBACK & FOCUS POINTS
+# ==============================================================================
+
+
+def test_focus_points_validation_and_limits():
+    """Verifies that focus points are allowlisted, limited to 2 per category, and canonicalized."""
+    # Valid selection within limits
+    valid = feedback_service.validate_focus_points(["STRUCTURE", "CLARITY"])
+    assert valid == ["CLARITY", "STRUCTURE"]
+
+    # Deduplication and case-insensitivity
+    deduped = feedback_service.validate_focus_points(["structure", "STRUCTURE"])
+    assert deduped == ["STRUCTURE"]
+
+    # Empty / None
+    assert feedback_service.validate_focus_points(None) is None
+    assert feedback_service.validate_focus_points([]) is None
+
+    # Unsupported focus point code
+    with pytest.raises(HTTPException) as exc_unsupported:
+        feedback_service.validate_focus_points(["INVALID_CODE"])
+    assert exc_unsupported.value.status_code == 400
+    assert exc_unsupported.value.detail["code"] == "FEEDBACK_INVALID_FOCUS_POINTS"
+
+    # More than 2 strengths
+    with pytest.raises(HTTPException) as exc_strengths:
+        feedback_service.validate_focus_points(["STRUCTURE", "EVIDENCE", "ANALYSIS"])
+    assert exc_strengths.value.status_code == 400
+    assert "At most 2 strengths" in exc_strengths.value.detail["message"]
+
+    # More than 2 improvements
+    with pytest.raises(HTTPException) as exc_improvements:
+        feedback_service.validate_focus_points(["DEEPEN_ANALYSIS", "CITATIONS", "CLARITY"])
+    assert exc_improvements.value.status_code == 400
+    assert "At most 2 improvement areas" in exc_improvements.value.detail["message"]
+
+
+def test_grade_save_with_focus_points_persists_and_restores(feedback_context):
+    """Saving a grade with focus points stores them transactionally and returns them to authorized teachers."""
+    from app.services.submission.SubmissionService import grade_student_submission, build_submission_response
+    from app.schemas.Submission import GradeRequest
+
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+
+    req = GradeRequest(
+        grade=24.0,
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+        focus_points=["STRUCTURE", "CONCLUSION"],
+    )
+    grade_student_submission(submission.submission_id, req, "T-FEEDBACK", db)
+    db.refresh(submission)
+
+    assert submission.feedback_focus_points == ["CONCLUSION", "STRUCTURE"]
+    assert float(submission.grade) == 24.0
+
+    # Teacher response includes focus points
+    teacher_resp = build_submission_response(submission, db, for_student=False)
+    assert teacher_resp.feedback_focus_points == ["CONCLUSION", "STRUCTURE"]
+
+    # Student response withholds focus points
+    student_resp = build_submission_response(submission, db, for_student=True)
+    assert student_resp.feedback_focus_points is None
+
+
+def test_grade_save_changing_focus_points_invalidates_unapproved_draft(feedback_context, monkeypatch):
+    """Changing focus points alone (with identical grade) marks existing draft STALE."""
+    from app.services.submission.SubmissionService import grade_student_submission
+    from app.schemas.Submission import GradeRequest
+
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", True)
+    _capture_provider(monkeypatch, feedback="Draft 1 constructive feedback.")
+
+    # 1. Post initial grade with focus point STRUCTURE
+    req1 = GradeRequest(
+        grade=20.0,
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+        focus_points=["STRUCTURE"],
+    )
+    grade_student_submission(submission.submission_id, req1, "T-FEEDBACK", db)
+    db.commit()
+
+    draft = db.query(feedback_service.SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
+    assert draft is not None
+    # Process draft to READY
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.status == "READY"
+    assert draft.detail_level == "CONTEXTUAL"
+
+    # 2. Re-save grade with identical score (20.0) but changed focus points (EVIDENCE)
+    req2 = GradeRequest(
+        grade=20.0,
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+        focus_points=["EVIDENCE"],
+    )
+    grade_student_submission(submission.submission_id, req2, "T-FEEDBACK", db)
+    db.commit()
+
+    db.refresh(draft)
+    # The draft is invalidated and re-enqueued as QUEUED
+    assert draft.status == "QUEUED"
+    assert draft.focus_points == ["EVIDENCE"]
+
+
+def test_contextual_ai_feedback_prompt_minimization_and_pii_exclusion(feedback_context, monkeypatch):
+    """Contextual prompt contains only server-mapped pedagogical meanings and excludes student PII, files, and free text."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", True)
+    captured = _capture_provider(monkeypatch, feedback="Thorough analysis shown in your calculations.")
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        db,
+        submission.submission_id,
+        "T-FEEDBACK",
+        focus_points=["ANALYSIS", "CALCULATIONS"],
+    )
+    db.commit()
+
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.status == "READY"
+    assert draft.detail_level == "CONTEXTUAL"
+    assert captured["calls"] == 1
+
+    prompt = captured["prompt"]
+    # Check that canonical human labels are present
+    assert "Thorough Analysis" in prompt
+    assert "Accurate Calculations" in prompt
+    assert "awarded_points" in prompt
+
+    # Verify PII and file text are excluded from the prompt
+    assert str(submission.student_id) not in prompt
+    assert "student_id" not in prompt
+    assert "submission_id" not in prompt
+    assert feedback_context["classwork"].title not in prompt
+    assert "essay" not in prompt.lower()
+    assert ".pdf" not in prompt.lower()
+
+
+def test_contextual_ai_feedback_fallback_when_feature_gate_disabled(feedback_context, monkeypatch):
+    """When institutional contextual_ai_feedback_authorized is False, falls back to deterministic template without calling AI."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    # Feature gate defaults/forced to False
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", False)
+    captured = _capture_provider(monkeypatch)
+
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        db,
+        submission.submission_id,
+        "T-FEEDBACK",
+        focus_points=["STRUCTURE", "CLARITY"],
+    )
+    db.commit()
+
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+
+    assert draft.status == "READY"
+    assert draft.detail_level == "POLICY_FALLBACK"
+    # Zero calls to external provider!
+    assert captured["calls"] == 0
+    assert "The overall score shows" in draft.draft_feedback
+
+    response = feedback_service.get_submission_feedback_draft_status(db, "T-FEEDBACK", submission.submission_id)
+    assert response.is_template is True
+    assert response.is_policy_fallback is True
+    assert response.focus_points == ["STRUCTURE", "CLARITY"]
+
+
+def test_contextual_ai_feedback_bounded_validation_rejects_hallucinations(feedback_context, monkeypatch):
+    """AI output claiming direct document inspection, links, or sensitive inferences is rejected."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    feedback_context["classwork"].auto_ai_feedback_enabled = True
+    db.commit()
+
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", True)
+
+    # 1. Hallucinated file inspection rejection
+    _capture_provider(monkeypatch, feedback="I read your essay on page 3 and observed good evidence.")
+    draft = feedback_service.enqueue_automatic_feedback_draft(
+        db,
+        submission.submission_id,
+        "T-FEEDBACK",
+        focus_points=["EVIDENCE"],
+    )
+    db.commit()
+
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.retry_count == 1
+    assert "FEEDBACK_AI_OUTPUT_UNSAFE" in (draft.error_message or "")
+
+    # 2. Hallucinated external URL rejection
+    _capture_provider(monkeypatch, feedback="Check this link https://example.com/guide for additional help.")
+    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db.commit()
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.retry_count == 2
+    assert "FEEDBACK_AI_OUTPUT_UNSAFE" in (draft.error_message or "")
+
+    # 3. Sensitive effort / personal inferences rejection
+    _capture_provider(monkeypatch, feedback="The student was careless and rushed through their calculations.")
+    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db.commit()
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.retry_count == 3
+    assert "FEEDBACK_AI_OUTPUT_UNSAFE" in (draft.error_message or "")
+
+    # 4. Clean, bounded output succeeds
+    _capture_provider(monkeypatch, feedback="Clear structure is evident throughout this work. Keep refining your evidence.")
+    draft.retry_count = 0
+    draft.status = "QUEUED"
+    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db.commit()
+
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft.draft_id))
+    db.refresh(draft)
+    assert draft.status == "READY"
+    assert draft.draft_feedback == "Clear structure is evident throughout this work. Keep refining your evidence."
+
+
+def test_grade_save_focus_points_omitted_vs_cleared_semantics(feedback_context):
+    """Omitted focus points preserve previous selections; empty list clears them."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    staff_id = feedback_context["teacher"].staff_id
+    cw = feedback_context["classwork"]
+    cw.auto_ai_feedback_enabled = True
+    db.commit()
+
+    # Step 1: Save grade with explicit focus points
+    req1 = GradeRequest(
+        grade=20.0,
+        focus_points=["STRUCTURE", "CALCULATIONS"],
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    res1 = submission_service.grade_student_submission(submission.submission_id, req1, staff_id, db)
+    db.refresh(submission)
+    assert submission.feedback_focus_points == ["CALCULATIONS", "STRUCTURE"]
+    assert res1.feedback_focus_points == ["CALCULATIONS", "STRUCTURE"]
+
+    # Step 2: Save grade with focus_points=None (omitted) -> must PRESERVE existing
+    req2 = GradeRequest(
+        grade=22.0,
+        focus_points=None,
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    res2 = submission_service.grade_student_submission(submission.submission_id, req2, staff_id, db)
+    db.refresh(submission)
+    assert submission.feedback_focus_points == ["CALCULATIONS", "STRUCTURE"], "Omitted focus_points must not erase saved selections"
+    assert res2.feedback_focus_points == ["CALCULATIONS", "STRUCTURE"]
+
+    # Step 3: Save grade with focus_points=[] (explicit clear) -> must CLEAR to None
+    req3 = GradeRequest(
+        grade=22.0,
+        focus_points=[],
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    res3 = submission_service.grade_student_submission(submission.submission_id, req3, staff_id, db)
+    db.refresh(submission)
+    assert submission.feedback_focus_points is None, "Empty list focus_points must clear saved selections"
+    assert res3.feedback_focus_points is None
+
+
+def test_changing_only_focus_points_invalidates_prior_draft(feedback_context, monkeypatch):
+    """Changing focus points while score stays the same marks prior unapproved draft STALE and enqueues new job."""
+    _set_scored_classwork(feedback_context)
+    submission = feedback_context["submission"]
+    db = feedback_context["db"]
+    staff_id = feedback_context["teacher"].staff_id
+    cw = feedback_context["classwork"]
+    cw.auto_ai_feedback_enabled = True
+    db.commit()
+
+    monkeypatch.setattr(feedback_service.settings, "contextual_ai_feedback_authorized", False)
+
+    # Initial grade with STRUCTURE
+    req1 = GradeRequest(
+        grade=20.0,
+        focus_points=["STRUCTURE"],
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    submission_service.grade_student_submission(submission.submission_id, req1, staff_id, db)
+    draft1 = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
+    assert draft1 is not None
+    # Process draft1 to READY
+    asyncio.run(feedback_service.process_feedback_draft_job(db, draft1.draft_id))
+    db.refresh(draft1)
+    assert draft1.status == "READY"
+    assert draft1.focus_points == ["STRUCTURE"]
+
+    # Teacher changes ONLY focus points to ANALYSIS (same grade 20.0)
+    req2 = GradeRequest(
+        grade=20.0,
+        focus_points=["ANALYSIS"],
+        feedback=submission.feedback,
+        expected_feedback_fingerprint=feedback_service.feedback_fingerprint(submission.feedback),
+    )
+    submission_service.grade_student_submission(submission.submission_id, req2, staff_id, db)
+    db.refresh(draft1)
+    # Draft1 is updated to new enqueue with new focus points or marked STALE
+    draft2 = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
+    assert draft2.focus_points == ["ANALYSIS"]
+    assert draft2.status in {"QUEUED", "PENDING"}

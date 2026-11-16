@@ -367,3 +367,37 @@ it("submits a link-only assignment through the existing multipart endpoint", asy
   });
   expect(await screen.findByText("Submitted Links")).toBeTruthy();
 });
+
+it("keeps an online assignment's approved feedback hidden with its score", async () => {
+  vi.mocked(apiModule.apiFetch).mockImplementation(async (path: string) => {
+    if (path.includes("/api/v1/classwork-assignments/assignment/16")) {
+      return { ok: true, json: async () => ({
+        ...mockReadingDetail,
+        title: "Hidden Score Assignment",
+        classwork_type: "ASSIGNMENT",
+        activity_mode: "ONLINE",
+        is_graded: true,
+        show_scores: false,
+        submission_status: "graded",
+      }) } as Response;
+    }
+    if (path.includes("/api/v1/submissions/my-submissions")) {
+      return { ok: true, json: async () => [{
+        submission_id: 21,
+        classwork_assignment_id: 16,
+        status: "graded",
+        grade: null,
+        feedback: "Previously posted score-based feedback.",
+        attempt_count: 1,
+        attachments: [],
+        links: [],
+      }] } as Response;
+    }
+    return { ok: true, json: async () => ({}) } as Response;
+  });
+
+  mount("/student/classworks/16");
+  expect(await screen.findByRole("heading", { name: "Hidden Score Assignment" })).toBeTruthy();
+  expect(screen.getByText("Score hidden")).toBeTruthy();
+  expect(screen.queryByText("Previously posted score-based feedback.")).toBeNull();
+});
