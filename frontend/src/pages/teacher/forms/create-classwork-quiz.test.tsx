@@ -101,7 +101,7 @@ it("uses a single unified quiz results switch to set both show_scores and show_c
 
   expect(screen.queryByText("Show correct answers after submission")).toBeNull();
   expect(screen.queryByText("Show scores to students")).toBeNull();
-  fireEvent.click(screen.getByRole("switch", { name: "Show quiz results (scores and correct answers)" }));
+  fireEvent.click(screen.getByRole("switch", { name: "Show quiz results to students" }));
   fireEvent.click(screen.getByRole("button", { name: "Sapphire Active Section" }));
   const lessonButton = (await screen.findByText("Variables")).closest("button")!;
   fireEvent.click(lessonButton);

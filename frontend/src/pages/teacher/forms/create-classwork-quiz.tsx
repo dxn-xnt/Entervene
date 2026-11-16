@@ -11,7 +11,7 @@ import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { FormMessage } from "@/components/retroui/FormMessage";
-import { Switch } from "@/components/retroui/Switch";
+import { ClassworkSettingRow } from "@/components/classwork-setting-row";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import Field from "@/components/admin/classes/fields/Field";
 import { Card } from "@/components/retroui/Card";
@@ -1883,9 +1883,10 @@ export default function CreateClassworkQuizModal({
                                     </Field>
                                 </div>
 
-                                <div className="flex items-center gap-2 mt-2">
-                                    <Switch
-                                        aria-label="Show quiz results (scores and correct answers)"
+                                <div className="flex flex-col gap-3 mt-2">
+                                    <ClassworkSettingRow
+                                        label="Show quiz results to students"
+                                        tooltip="Controls student access to quiz scores and correct answers. When enabled, results unlock according to the configured release schedule (immediately, after due date, or scheduled time) and max attempt policies. Enabling this does not necessarily release correct answers immediately. When disabled, quiz results remain hidden."
                                         checked={draft.show_scores}
                                         onCheckedChange={(checked) => {
                                             setDraft((current) => ({
@@ -1899,36 +1900,22 @@ export default function CreateClassworkQuizModal({
                                         }}
                                         disabled={isCreating}
                                     />
-                                    <label className="text-sm font-medium text-gray-700">
-                                        Show quiz results (scores and correct answers)
-                                    </label>
-                                </div>
 
-                                {!remediationDraft && !remediationTarget && (
-                                    <div className="mt-4 rounded-md border-2 border-black bg-white p-3 shadow-sm">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-900 block">
-                                                    Automatic AI Feedback
-                                                </label>
-                                                <p className="text-xs text-gray-600 mt-0.5">
-                                                    Automatically prepare AI-generated feedback after grading. Teachers can review and edit the feedback before posting it to students.
-                                                </p>
-                                            </div>
-                                            <Switch
-                                                aria-label="Automatic AI Feedback"
-                                                checked={draft.auto_ai_feedback_enabled}
-                                                onCheckedChange={(checked) =>
-                                                    setDraft((current) => ({
-                                                        ...current,
-                                                        auto_ai_feedback_enabled: checked,
-                                                    }))
-                                                }
-                                                disabled={isCreating}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
+                                    {!remediationDraft && !remediationTarget && (
+                                        <ClassworkSettingRow
+                                            label="Automatic AI Feedback"
+                                            tooltip="Automatically prepares an AI feedback draft after grading when quiz result-release and attempt restrictions permit. Teachers review and approve feedback before it is posted. Correct-answer visibility remains subject to the quiz release settings."
+                                            checked={draft.auto_ai_feedback_enabled}
+                                            onCheckedChange={(checked) =>
+                                                setDraft((current) => ({
+                                                    ...current,
+                                                    auto_ai_feedback_enabled: checked,
+                                                }))
+                                            }
+                                            disabled={isCreating}
+                                        />
+                                    )}
+                                </div>
 
                                 <div className="grid gap-4 sm:grid-cols-2 mt-4">
                                     <Field label="Locked Until">

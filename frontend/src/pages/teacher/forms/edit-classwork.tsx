@@ -13,7 +13,7 @@ import { Button as RetroButton } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
-import { Switch } from "@/components/retroui/Switch";
+import { ClassworkSettingRow } from "@/components/classwork-setting-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/Toast";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -203,7 +203,7 @@ export default function EditClassworkModal({
         setInitialQuizResults(loaded);
         setQuizResultsDraft(loaded);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       isActive = false;
     };
@@ -492,7 +492,7 @@ export default function EditClassworkModal({
       isQuiz &&
       quizResultsDraft.loaded &&
       JSON.stringify(quizResultsComparable(quizResultsDraft)) !==
-        JSON.stringify(quizResultsComparable(initialQuizResults));
+      JSON.stringify(quizResultsComparable(initialQuizResults));
     if (quizResultsChanged) {
       if (
         quizResultsDraft.summary_release_mode === "SCHEDULED" &&
@@ -644,7 +644,7 @@ export default function EditClassworkModal({
               summary_release_mode: quizResultsDraft.summary_release_mode,
               summary_release_at:
                 quizResultsDraft.summary_release_mode === "SCHEDULED" &&
-                quizResultsDraft.summary_release_at
+                  quizResultsDraft.summary_release_at
                   ? new Date(quizResultsDraft.summary_release_at).toISOString()
                   : null,
               confirm_answer_reveal: quizRevealConfirmed,
@@ -1245,22 +1245,18 @@ export default function EditClassworkModal({
                 <div className="flex flex-col gap-3">
                   {isQuizType(editDraft.classwork_type) ? (
                     <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 w-full justify-between">
-                        <label className="text-sm font-medium text-foreground">
-                          Show quiz results (scores and correct answers)
-                        </label>
-                        <Switch
-                          aria-label="Show quiz results (scores and correct answers)"
-                          checked={quizResultsDraft.show_quiz_results === true}
-                          onCheckedChange={(checked) =>
-                            setQuizResultsDraft((current) => ({
-                              ...current,
-                              show_quiz_results: checked,
-                            }))
-                          }
-                          disabled={isSavingEdit || !quizResultsDraft.loaded}
-                        />
-                      </div>
+                      <ClassworkSettingRow
+                        label="Show quiz results to students"
+                        tooltip="Controls student access to quiz scores and correct answers. When enabled, results unlock according to the configured release schedule (immediately, after due date, or scheduled time) and max attempt policies. Enabling this does not necessarily release correct answers immediately. When disabled, quiz results remain hidden."
+                        checked={quizResultsDraft.show_quiz_results === true}
+                        onCheckedChange={(checked) =>
+                          setQuizResultsDraft((current) => ({
+                            ...current,
+                            show_quiz_results: checked,
+                          }))
+                        }
+                        disabled={isSavingEdit || !quizResultsDraft.loaded}
+                      />
                       {quizResultsDraft.show_quiz_results === null && (
                         <p className="text-xs font-semibold text-amber-700">
                           Current setting is mixed (scores {quizResultsDraft.legacy_show_scores ? "visible" : "hidden"}, correct answers {quizResultsDraft.legacy_show_correct_answers ? "visible" : "hidden"}). Use the switch above to unify them; leaving it untouched preserves the current split.
@@ -1268,66 +1264,52 @@ export default function EditClassworkModal({
                       )}
                     </div>
                   ) : !isReadingType(editDraft.classwork_type) ? (
-                    <div className="flex items-center gap-2 w-full justify-between">
-                      <label className="text-sm font-medium text-foreground">
-                        Show scores to students
-                      </label>
-                      <Switch
-                        checked={editDraft.show_scores}
-                        onCheckedChange={(checked) =>
-                          setEditDraft((current) => ({
-                            ...current,
-                            show_scores: checked,
-                          }))
-                        }
-                        disabled={isSavingEdit}
-                      />
-                    </div>
+                    <ClassworkSettingRow
+                      label="Show scores to students"
+                      tooltip="When enabled, students can view their score and teacher-published feedback on their submission view once graded. When disabled, approved feedback and scores remain hidden from students."
+                      checked={editDraft.show_scores}
+                      onCheckedChange={(checked) =>
+                        setEditDraft((current) => ({
+                          ...current,
+                          show_scores: checked,
+                        }))
+                      }
+                      disabled={isSavingEdit}
+                    />
                   ) : null}
 
                   {autoAiSupported && (
-                    <div className="rounded-md border-2 border-black bg-white p-3 shadow-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <label className="text-sm font-bold text-gray-900 block">
-                            Automatic AI Feedback
-                          </label>
-                          <p className="text-xs text-gray-600 mt-0.5">
-                            Automatically prepare AI-generated feedback after grading. Teachers can review and edit the feedback before posting it to students.
-                          </p>
-                        </div>
-                        <Switch
-                          aria-label="Automatic AI Feedback"
-                          checked={editDraft.auto_ai_feedback_enabled}
-                          onCheckedChange={(checked) =>
-                            setEditDraft((current) => ({
-                              ...current,
-                              auto_ai_feedback_enabled: checked,
-                            }))
-                          }
-                          disabled={isSavingEdit}
-                        />
-                      </div>
-                    </div>
+                    <ClassworkSettingRow
+                      label="Automatic AI Feedback"
+                      tooltip={
+                        isQuizType(editDraft.classwork_type)
+                          ? "Automatically prepares an AI feedback draft after grading when quiz result-release and attempt restrictions permit. Teachers review and approve feedback before it is posted. Correct-answer visibility remains subject to the quiz release settings."
+                          : "Automatically prepares a feedback draft after grading. When contextual AI is authorized and feedback focus points are selected, AI can use those evaluation points. Otherwise, a score-based template is prepared. Submitted files and links are not read by AI. Teachers must review and approve feedback before students can see it."
+                      }
+                      checked={editDraft.auto_ai_feedback_enabled}
+                      onCheckedChange={(checked) =>
+                        setEditDraft((current) => ({
+                          ...current,
+                          auto_ai_feedback_enabled: checked,
+                        }))
+                      }
+                      disabled={isSavingEdit}
+                    />
                   )}
 
                   {editDraft.due_date &&
                     !isReadingType(editDraft.classwork_type) && (
-                      <div className="flex items-center gap-2 w-full justify-between">
-                        <label className="text-sm font-medium text-foreground">
-                          Allow late submissions
-                        </label>
-                        <Switch
-                          checked={editDraft.allow_late_submissions}
-                          onCheckedChange={(checked) =>
-                            setEditDraft((current) => ({
-                              ...current,
-                              allow_late_submissions: checked,
-                            }))
-                          }
-                          disabled={isSavingEdit}
-                        />
-                      </div>
+                      <ClassworkSettingRow
+                        label="Allow late submissions"
+                        checked={editDraft.allow_late_submissions}
+                        onCheckedChange={(checked) =>
+                          setEditDraft((current) => ({
+                            ...current,
+                            allow_late_submissions: checked,
+                          }))
+                        }
+                        disabled={isSavingEdit}
+                      />
                     )}
                 </div>
 

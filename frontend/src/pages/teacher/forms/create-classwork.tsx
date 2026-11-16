@@ -13,7 +13,7 @@ import { Input } from "@/components/retroui/Input";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
-import { Switch } from "@/components/retroui/Switch";
+import { ClassworkSettingRow } from "@/components/classwork-setting-row";
 import { apiFetch } from "@/lib/api";
 import {
   emptyClassworkDraft,
@@ -935,65 +935,47 @@ export default function CreateClassworkModal({
 
               <div className="flex flex-col gap-3">
                 {!isReadingType(selectedType) && (
-                  <div className="flex items-center gap-2 w-full justify-between">
-                    <label className="text-sm font-medium text-foreground">
-                      Show scores to students
-                    </label>
-                    <Switch
-                      checked={draft.show_scores}
-                      onCheckedChange={(checked) =>
-                        setDraft((current) => ({
-                          ...current,
-                          show_scores: checked,
-                        }))
-                      }
-                      disabled={isCreating}
-                    />
-                  </div>
+                  <ClassworkSettingRow
+                    label="Show scores to students"
+                    tooltip="When enabled, students can view their score and teacher-published feedback on their submission view once graded. When disabled, approved feedback and scores remain hidden from students."
+                    checked={draft.show_scores}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        show_scores: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
                 )}
 
                 {!remediationDraft && !remediationTarget && (selectedType === "ASSIGNMENT" || selectedType === "ACTIVITY") && (
-                  <div className="rounded-md border-2 border-black bg-white p-3 shadow-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <label className="text-sm font-bold text-gray-900 block">
-                          Automatic AI Feedback
-                        </label>
-                        <p className="text-xs text-gray-600 mt-0.5">
-                          Automatically prepare AI-generated feedback after grading. Teachers can review and edit the feedback before posting it to students.
-                        </p>
-                      </div>
-                      <Switch
-                        aria-label="Automatic AI Feedback"
-                        checked={draft.auto_ai_feedback_enabled}
-                        onCheckedChange={(checked) =>
-                          setDraft((current) => ({
-                            ...current,
-                            auto_ai_feedback_enabled: checked,
-                          }))
-                        }
-                        disabled={isCreating}
-                      />
-                    </div>
-                  </div>
+                  <ClassworkSettingRow
+                    label="Automatic AI Feedback"
+                    tooltip="Automatically prepares a feedback draft after grading. When contextual AI is authorized and feedback focus points are selected, AI can use those evaluation points. Otherwise, a score-based template is prepared. Submitted files and links are not read by AI. Teachers must review and approve feedback before students can see it."
+                    checked={draft.auto_ai_feedback_enabled}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        auto_ai_feedback_enabled: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
                 )}
 
                 {draft.due_date && !isReadingType(selectedType) && (
-                  <div className="flex items-center gap-2 w-full justify-between">
-                    <label className="text-sm font-medium text-foreground">
-                      Allow late submissions
-                    </label>
-                    <Switch
-                      checked={draft.allow_late_submissions}
-                      onCheckedChange={(checked) =>
-                        setDraft((current) => ({
-                          ...current,
-                          allow_late_submissions: checked,
-                        }))
-                      }
-                      disabled={isCreating}
-                    />
-                  </div>
+                  <ClassworkSettingRow
+                    label="Allow late submissions"
+                    checked={draft.allow_late_submissions}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        allow_late_submissions: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
                 )}
               </div>
 
