@@ -661,6 +661,12 @@ export default function ClassworkView({
           setFeedbackDraft(feedback);
         }}
         onAiPublishingChange={setIsPostingAiFeedback}
+        onFeedbackDeleted={() => {
+          setSelectedSubmissionDetail((current) => current
+            ? { ...current, feedback: null, feedback_fingerprint: "" }
+            : current);
+          setFeedbackDraft("");
+        }}
         onAiConflictReload={async (submissionId) => {
           const response = await apiFetch(`/api/v1/submissions/${submissionId}/detail`);
           if (!response.ok) throw new Error("Unable to reload saved feedback.");

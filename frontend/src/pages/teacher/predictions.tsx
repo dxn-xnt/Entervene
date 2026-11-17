@@ -5,6 +5,8 @@ import { OverviewCard } from "@/components/overview-cards";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
 import { Loader } from "@/components/retroui/Loader";
+import { Button } from "@/components/teacher/button";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
@@ -15,9 +17,10 @@ import {
   useTeacherCandidateShortcut,
 } from "@/components/predictions/use-teacher-candidate-shortcut";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
-import type {
-  DashboardFilters,
-  RiskSummary,
+import {
+  exportStudentRiskSummaryCSV,
+  type DashboardFilters,
+  type RiskSummary,
 } from "@/lib/prediction-api";
 import {
   buildCurrentTermDashboard,
@@ -36,7 +39,7 @@ import { PredictionSubjectSection } from "@/components/predictions/prediction-su
 import { AdminPredictionGradeCard } from "@/components/predictions/admin-prediction-grade-card";
 import { getTeacherRiskDisplaySummary } from "@/components/predictions/teacher-risk-display";
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
-import { SearchX, Sparkles } from "lucide-react";
+import { Download, Loader2, SearchX, Sparkles } from "lucide-react";
 
 const TEACHER_RISK_CARDS = [
   {
@@ -73,6 +76,37 @@ function AdminCurrentTermDashboard() {
   const [subjectId, setSubjectId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    if (!selectedPeriodId) return;
+    try {
+      setIsExporting(true);
+      toast.info("Preparing student risk summary CSV export...");
+      const { blob, filename } = await exportStudentRiskSummaryCSV({
+        academicPeriodId: selectedPeriodId,
+        gradeLevel,
+        classId,
+        subjectId,
+        riskLevel,
+        search,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Student risk summary CSV downloaded successfully.");
+    } catch (err) {
+      console.error("Export risk summary CSV error:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to export risk summary CSV.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedPeriodId) {
@@ -189,9 +223,26 @@ function AdminCurrentTermDashboard() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-          <SidebarTrigger className="shrink-0 md:hidden" />
-          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
+        <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+          <div className="flex items-center gap-2">
+            <SidebarTrigger className="shrink-0 md:hidden" />
+            <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCsv}
+            disabled={isExporting || !selectedPeriodId}
+            className="gap-1.5"
+            data-testid="export-risk-summary-csv-button"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            <span>Export CSV</span>
+          </Button>
         </header>
 
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
@@ -308,6 +359,37 @@ function TeacherCurrentTermDashboard() {
   const [subjectId, setSubjectId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    if (!selectedPeriodId) return;
+    try {
+      setIsExporting(true);
+      toast.info("Preparing student risk summary CSV export...");
+      const { blob, filename } = await exportStudentRiskSummaryCSV({
+        academicPeriodId: selectedPeriodId,
+        gradeLevel,
+        classId,
+        subjectId,
+        riskLevel,
+        search,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Student risk summary CSV downloaded successfully.");
+    } catch (err) {
+      console.error("Export risk summary CSV error:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to export risk summary CSV.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
   const candidateId = useTeacherCandidateShortcut(selected);
   const activeInterventionId = useTeacherActiveInterventionShortcut(selected);
@@ -383,9 +465,26 @@ function TeacherCurrentTermDashboard() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-          <SidebarTrigger className="shrink-0 md:hidden" />
-          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
+        <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+          <div className="flex items-center gap-2">
+            <SidebarTrigger className="shrink-0 md:hidden" />
+            <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCsv}
+            disabled={isExporting || !selectedPeriodId}
+            className="gap-1.5"
+            data-testid="export-risk-summary-csv-button"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            <span>Export CSV</span>
+          </Button>
         </header>
 
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">

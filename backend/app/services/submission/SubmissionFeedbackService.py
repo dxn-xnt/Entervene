@@ -41,6 +41,7 @@ from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionFeedbackDraft import SubmissionFeedbackDraft
 from app.schemas.Submission import (
+    FeedbackDeletionResponse,
     FeedbackDraftResponse,
     FeedbackEligibilityResponse,
     FeedbackPublicationRequest,
@@ -1051,6 +1052,62 @@ def publish_submission_feedback(
             feedback=approved_feedback,
             evidence_fingerprint=evidence_fingerprint,
             feedback_fingerprint=saved_feedback_fingerprint,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+
+def delete_submission_feedback(
+    db: Session,
+    staff_id: str,
+    submission_id: int,
+    expected_feedback_fingerprint: str | None = None,
+) -> FeedbackDeletionResponse:
+    """Atomically remove published submission feedback without altering grade or scoring."""
+    try:
+        submission, assignment, classwork = _assert_authorized_scope(
+            db,
+            staff_id,
+            submission_id,
+            lock_for_update=True,
+        )
+
+        current_feedback_fingerprint = feedback_fingerprint(submission.feedback)
+
+        # Concurrency protection if expected fingerprint provided
+        if expected_feedback_fingerprint is not None:
+            if not hmac.compare_digest(
+                expected_feedback_fingerprint,
+                current_feedback_fingerprint,
+            ):
+                raise _error(
+                    409,
+                    "FEEDBACK_COMMENT_STALE",
+                    "Existing feedback changed; reload before deleting",
+                )
+
+        # Clear only the published feedback comment; preserve grade, scores, and rubrics
+        submission.feedback = None
+        db.flush([submission])
+
+        new_feedback_fingerprint = feedback_fingerprint(None)
+
+        # Synchronize draft record: if an approved draft exists, mark it DISCARDED
+        draft = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission_id).first()
+        if draft is not None:
+            if draft.status == "APPROVED":
+                draft.status = "DISCARDED"
+            draft.feedback_fingerprint = new_feedback_fingerprint
+            draft.claim_token = None
+            draft.locked_until = None
+
+        db.commit()
+        return FeedbackDeletionResponse(
+            submission_id=submission_id,
+            message="Feedback deleted successfully",
+            feedback=None,
+            feedback_fingerprint=new_feedback_fingerprint,
         )
     except Exception:
         db.rollback()

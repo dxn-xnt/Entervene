@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, FileText, Sparkles } from "lucide-react";
+import { Eye, FileText, Sparkles, Trash2 } from "lucide-react";
 import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionLinkList from "@/components/submission-link-list";
 import { API_URL } from "@/lib/api";
@@ -11,6 +11,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Alert } from "@/components/retroui/Alert";
+import { useToast } from "@/components/retroui/Toast";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { deleteSubmissionFeedback } from "@/lib/submission-feedback-api";
 import { useNavigate } from "react-router-dom";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import FeedbackFocusSelector from "@/components/feedback-focus-selector";
@@ -48,6 +51,7 @@ export type StudentSubmissionViewProps = {
   isReadOnly?: boolean;
   focusPointsDraft?: string[];
   onFocusPointsChange?: (codes: string[]) => void;
+  onFeedbackDeleted?: () => void;
 };
 
 export default function StudentSubmissionView({
@@ -71,8 +75,10 @@ export default function StudentSubmissionView({
   isReadOnly = false,
   focusPointsDraft = [],
   onFocusPointsChange,
+  onFeedbackDeleted,
 }: StudentSubmissionViewProps) {
   const navigate = useNavigate();
+  const toast = useToast();
   const classworkKind = selected.classwork_type?.toUpperCase();
   const supportsAiFeedback =
     classworkKind === "ASSIGNMENT"
@@ -90,6 +96,30 @@ export default function StudentSubmissionView({
   const [isReviewTemplate, setIsReviewTemplate] = useState(false);
   const [isReviewPolicyFallback, setIsReviewPolicyFallback] = useState(false);
   const [isAiPublishing, setIsAiPublishing] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeletingFeedback, setIsDeletingFeedback] = useState(false);
+  const [deleteFeedbackError, setDeleteFeedbackError] = useState("");
+
+  const handleDeleteFeedback = async () => {
+    if (!selectedSubmissionDetail) return;
+    setIsDeletingFeedback(true);
+    setDeleteFeedbackError("");
+    try {
+      await deleteSubmissionFeedback(
+        selectedSubmissionDetail.submission_id,
+        selectedSubmissionDetail.feedback_fingerprint || undefined,
+      );
+      onFeedbackChange("");
+      onFeedbackDeleted?.();
+      setIsDeleteDialogOpen(false);
+      toast.success({ title: "Feedback deleted successfully" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete feedback.";
+      setDeleteFeedbackError(message);
+    } finally {
+      setIsDeletingFeedback(false);
+    }
+  };
 
   return (
     <main className="flex flex-1 flex-col overflow-x-hidden">
@@ -325,9 +355,28 @@ export default function StudentSubmissionView({
                 {/* Feedback Comment Box — single Teacher Feedback editor with inline AI controls */}
                 <div className="space-y-1.5 pt-2">
                   <div className="flex items-center justify-between">
-                    <label htmlFor="teacher-submission-feedback" className="block text-xl font-bold">
-                      Feedback &amp; Comments
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="teacher-submission-feedback" className="block text-xl font-bold">
+                        Feedback &amp; Comments
+                      </label>
+                      {!isReadOnly && selectedSubmissionDetail?.feedback && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setDeleteFeedbackError("");
+                            setIsDeleteDialogOpen(true);
+                          }}
+                          disabled={isPostingGrade || isAiPublishing || isDeletingFeedback}
+                          className="h-7 gap-1 border-destructive text-destructive hover:bg-destructive/10 text-xs font-bold"
+                          data-testid="delete-feedback-button"
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete Feedback
+                        </Button>
+                      )}
+                    </div>
                     {isAiReviewing && (
                       <div className="flex items-center gap-1.5">
                         <Badge
@@ -381,6 +430,11 @@ export default function StudentSubmissionView({
                       autoAiFeedbackEnabled={selected.auto_ai_feedback_enabled}
                     />
                   ) : null}
+                  {deleteFeedbackError && (
+                    <Alert status="error" onClose={() => setDeleteFeedbackError("")} className="mt-2">
+                      <Alert.Description>{deleteFeedbackError}</Alert.Description>
+                    </Alert>
+                  )}
                 </div>
 
                 {gradeError && (
@@ -394,6 +448,19 @@ export default function StudentSubmissionView({
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Published Feedback"
+        confirmationTitle="Are you sure you want to remove this feedback?"
+        description="This will delete the published comment for this submission and remove it from the student view. The student's score and grade will remain unchanged."
+        confirmLabel={isDeletingFeedback ? "Deleting..." : "Delete Feedback"}
+        cancelLabel="Keep Feedback"
+        confirmVariant="destructive"
+        isLoading={isDeletingFeedback}
+        onConfirm={handleDeleteFeedback}
+      />
     </main>
   );
 }
