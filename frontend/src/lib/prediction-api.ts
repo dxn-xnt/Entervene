@@ -130,6 +130,18 @@ export interface DevelopmentAcademicComponent {
 export interface DevelopmentCurrentTermListResponse {
   items: DevelopmentCurrentTermListItem[];
   total: number;
+  prediction_policy?: CurrentTermPredictionPolicy;
+}
+
+export interface CurrentTermInterventionBand {
+  level: DevelopmentInterventionLevel;
+  label: string;
+  minimum: number | null;
+  maximum_exclusive: number | null;
+}
+
+export interface CurrentTermPredictionPolicy {
+  intervention_bands: CurrentTermInterventionBand[];
 }
 
 export interface AdminCurrentTermScopeItem {

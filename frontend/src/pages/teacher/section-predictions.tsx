@@ -253,7 +253,7 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
             </div>
             <div className="pt-4">
               <Button asChild variant="secondary" className="border-2 border-black font-bold">
-                <Link to={predictionBasePath}>Return to Current-Term Predictions</Link>
+                <Link to={predictionBasePath}>Return to AI Predictions</Link>
               </Button>
             </div>
           </div>
@@ -266,7 +266,7 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
           <div role="alert" className="border-2 border-amber-600 bg-amber-50 p-6 font-semibold flex flex-col items-start gap-4">
             <p className="text-amber-950 font-bold">No authorized subjects were found for this section in the selected term.</p>
             <Button asChild variant="outline" className="border-2 border-black font-bold">
-              <Link to={predictionBasePath}>Return to Current-Term Predictions</Link>
+              <Link to={predictionBasePath}>Return to AI Predictions</Link>
             </Button>
           </div>
         </div>
@@ -282,7 +282,7 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
           <div role="alert" className="border-2 border-red-600 bg-red-50 p-6 font-semibold flex flex-col items-start gap-4">
             <p className="text-red-950 font-bold">Invalid subject or section identifier in the address.</p>
             <Button asChild variant="outline" className="border-2 border-black font-bold">
-              <Link to={predictionBasePath}>Return to Current-Term Predictions</Link>
+              <Link to={predictionBasePath}>Return to AI Predictions</Link>
             </Button>
           </div>
         </div>
@@ -314,7 +314,7 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
             <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
               <Breadcrumb.Item>
                 <Breadcrumb.Link asChild>
-                  <Link to={predictionBasePath}>Current-Term Predictions</Link>
+                  <Link to={predictionBasePath}>AI Predictions</Link>
                 </Breadcrumb.Link>
               </Breadcrumb.Item>
               <Breadcrumb.Separator />
@@ -413,7 +413,7 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
                       This subject is not assigned to this section or you do not have permission to access it in the selected term.
                     </p>
                     <Button asChild variant="outline" className="border-2 border-black font-bold">
-                      <Link to={predictionBasePath}>Return to Current-Term Predictions</Link>
+                      <Link to={predictionBasePath}>Return to AI Predictions</Link>
                     </Button>
                   </div>
                 ) : rows.length === 0 ? (

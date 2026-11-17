@@ -24,6 +24,15 @@ const emptyFilters: DashboardFilters = {
   terms: [],
 };
 
+const predictionPolicy = {
+  intervention_bands: [
+    { level: "HIGH_RISK" as const, label: "High Risk", minimum: null, maximum_exclusive: 75 },
+    { level: "MODERATE_RISK" as const, label: "Moderate Risk", minimum: 75, maximum_exclusive: 85 },
+    { level: "NEEDS_MONITORING" as const, label: "Needs Monitoring", minimum: 85, maximum_exclusive: 90 },
+    { level: "LOW_RISK" as const, label: "Low Risk", minimum: 90, maximum_exclusive: null },
+  ],
+};
+
 function prediction(predictionId: number, classId: number, subjectId: number): DevelopmentCurrentTermListItem {
   return {
     prediction_id: predictionId,
@@ -99,8 +108,8 @@ describe("loadAuthorizedCurrentTermPredictions", () => {
       ],
     });
     mocks.fetchCurrentTermPredictions
-      .mockResolvedValueOnce({ items: [prediction(1, 10, 100)], total: 1 })
-      .mockResolvedValueOnce({ items: [prediction(2, 20, 200)], total: 1 });
+      .mockResolvedValueOnce({ items: [prediction(1, 10, 100)], total: 1, prediction_policy: predictionPolicy })
+      .mockResolvedValueOnce({ items: [prediction(2, 20, 200)], total: 1, prediction_policy: predictionPolicy });
 
     const result = await loadAuthorizedCurrentTermPredictions(21, {}, "admin");
 
@@ -118,6 +127,7 @@ describe("loadAuthorizedCurrentTermPredictions", () => {
     expect(result.filters).toBe(filters);
     expect(result.rows.map((row) => [row.prediction_id, row.grade_level])).toEqual([[1, 7], [2, 9]]);
     expect(result.assignedScopes).toHaveLength(2);
+    expect(result.assignedScopes[0].prediction_policy).toEqual(predictionPolicy);
     expect(mocks.fetchTeacherAcademicScope).not.toHaveBeenCalled();
   });
 
@@ -183,7 +193,11 @@ describe("loadAuthorizedCurrentTermPredictions", () => {
         subjects: [{ subject_id: 100, subject_name: "English 7", subject_codename: "ENG7" }],
       });
     });
-    mocks.fetchCurrentTermPredictions.mockResolvedValue({ items: [prediction(1, 10, 100)], total: 1 });
+    mocks.fetchCurrentTermPredictions.mockResolvedValue({
+      items: [prediction(1, 10, 100)],
+      total: 1,
+      prediction_policy: predictionPolicy,
+    });
 
     const result = await loadAuthorizedCurrentTermPredictions(21);
 
@@ -198,6 +212,7 @@ describe("loadAuthorizedCurrentTermPredictions", () => {
       academic_period_id: 21,
     }, "teacher");
     expect(result.rows[0].grade_level).toBe(7);
+    expect(result.assignedScopes[0].prediction_policy).toEqual(predictionPolicy);
     expect(mocks.fetchAdminCurrentTermScope).not.toHaveBeenCalled();
   });
 });

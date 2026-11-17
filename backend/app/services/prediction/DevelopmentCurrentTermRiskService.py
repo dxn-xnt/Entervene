@@ -15,6 +15,33 @@ INTERVENTION_BASIS = "RULE_BASED_FROM_PROJECTED_FINAL_TERM_GRADE"
 MODEL_SCOPE_NOTE = "This is a grade-projection regression model, not a validated failure classifier."
 SUPPORTING_CONTEXT_ROLE = "SUPPORTING_CONTEXT_ONLY"
 
+CURRENT_TERM_INTERVENTION_BANDS = (
+    {"level": "HIGH_RISK", "label": "High Risk", "minimum": None, "maximum_exclusive": 75.0},
+    {"level": "MODERATE_RISK", "label": "Moderate Risk", "minimum": 75.0, "maximum_exclusive": 85.0},
+    {"level": "NEEDS_MONITORING", "label": "Needs Monitoring", "minimum": 85.0, "maximum_exclusive": 90.0},
+    {"level": "LOW_RISK", "label": "Low Risk", "minimum": 90.0, "maximum_exclusive": None},
+)
+INTERVENTION_REASON_BY_LEVEL = {
+    "HIGH_RISK": "PROJECTED_GRADE_BELOW_75",
+    "MODERATE_RISK": "PROJECTED_GRADE_75_TO_BELOW_85",
+    "NEEDS_MONITORING": "PROJECTED_GRADE_85_TO_BELOW_90",
+    "LOW_RISK": "PROJECTED_GRADE_90_OR_ABOVE",
+}
+
+
+def current_term_intervention_policy() -> list[dict[str, Any]]:
+    """Return the grade bands used by the current-term intervention mapper."""
+    return [dict(band) for band in CURRENT_TERM_INTERVENTION_BANDS]
+
+
+def _intervention_level_for_grade(grade: float) -> str:
+    for band in CURRENT_TERM_INTERVENTION_BANDS:
+        minimum = band["minimum"]
+        maximum = band["maximum_exclusive"]
+        if (minimum is None or grade >= minimum) and (maximum is None or grade < maximum):
+            return str(band["level"])
+    raise ValueError("Projected grade is outside the configured intervention bands.")
+
 SUPPORTING_SIGNAL_FIELDS = (
     "behavioral_engagement_score",
     "attendance_rate",
@@ -76,14 +103,8 @@ def assess_development_current_term_intervention(
         result["upstream_reason_codes"].append("INVALID_PROJECTED_FINAL_TERM_GRADE")
         return result
 
-    if grade < 75:
-        level, reason = "HIGH_RISK", "PROJECTED_GRADE_BELOW_75"
-    elif grade < 85:
-        level, reason = "MODERATE_RISK", "PROJECTED_GRADE_75_TO_BELOW_85"
-    elif grade < 90:
-        level, reason = "NEEDS_MONITORING", "PROJECTED_GRADE_85_TO_BELOW_90"
-    else:
-        level, reason = "LOW_RISK", "PROJECTED_GRADE_90_OR_ABOVE"
+    level = _intervention_level_for_grade(grade)
+    reason = INTERVENTION_REASON_BY_LEVEL[level]
 
     result.update(
         projected_final_term_grade=grade,

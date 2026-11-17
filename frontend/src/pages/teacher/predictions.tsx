@@ -23,8 +23,10 @@ import {
   buildCurrentTermDashboard,
   buildCurrentTermSubjectSummaries,
   buildAdminPredictionHierarchy,
+  buildAdminDependentFilters,
   adminUniqueStudentRiskSummary,
   currentTermRiskSummary,
+  currentTermRiskRangeDescriptions,
   loadAuthorizedCurrentTermPredictions,
   currentTermPredictionErrorMessage,
   type AuthorizedCurrentTermRow,
@@ -40,17 +42,17 @@ const TEACHER_RISK_CARDS = [
   {
     key: "MODERATE_RISK" as const,
     label: "Moderate Risk",
-    activeClass: "bg-amber-200 ring-2 ring-black",
+    activeClass: "bg-[#ff9233] ring-2 ring-black",
   },
   {
     key: "HIGH_RISK" as const,
     label: "High Risk",
-    activeClass: "bg-red-200 ring-2 ring-black",
+    activeClass: "bg-[#ff3333] ring-2 ring-black",
   },
   {
     key: "ON_TRACK" as const,
     label: "On Track",
-    activeClass: "bg-emerald-200 ring-2 ring-black",
+    activeClass: "bg-[#00e65f] ring-2 ring-black",
   },
 ];
 
@@ -78,6 +80,11 @@ function AdminCurrentTermDashboard() {
         setRows([]);
         setAssignedScopes([]);
         setFilters(null);
+        setGradeLevel(undefined);
+        setClassId(undefined);
+        setSubjectId(undefined);
+        setRiskLevel(undefined);
+        setSearch("");
         setLoadError(null);
         setLoading(false);
       });
@@ -87,6 +94,14 @@ function AdminCurrentTermDashboard() {
     let cancelled = false;
     Promise.resolve().then(() => {
       if (!cancelled) {
+        setRows([]);
+        setAssignedScopes([]);
+        setFilters(null);
+        setGradeLevel(undefined);
+        setClassId(undefined);
+        setSubjectId(undefined);
+        setRiskLevel(undefined);
+        setSearch("");
         setLoading(true);
         setLoadError(null);
       }
@@ -124,6 +139,10 @@ function AdminCurrentTermDashboard() {
     setRiskLevel(undefined);
     setSearch("");
   };
+  const dependentFilters = buildAdminDependentFilters(filters, assignedScopes, {
+    gradeLevel,
+    classId,
+  });
   const scopedRows = rows.filter(
     (row) =>
       (gradeLevel === undefined || row.grade_level === gradeLevel) &&
@@ -141,6 +160,7 @@ function AdminCurrentTermDashboard() {
     !normalizedSearch || (row.student_name || row.student_id).toLowerCase().includes(normalizedSearch)
   );
   const displaySummary = adminUniqueStudentRiskSummary(searchedRows);
+  const riskDescriptions = currentTermRiskRangeDescriptions(scopedAssignedScopes);
   const filterRiskSummary: RiskSummary = {
     HIGH_RISK: displaySummary.HIGH_RISK,
     MODERATE_RISK: displaySummary.MODERATE_RISK,
@@ -171,7 +191,7 @@ function AdminCurrentTermDashboard() {
       <div className="flex flex-1 flex-col">
         <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <SidebarTrigger className="shrink-0 md:hidden" />
-          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Current-Term Predictions</h1>
+          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
         </header>
 
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
@@ -188,9 +208,10 @@ function AdminCurrentTermDashboard() {
                 <OverviewCard
                   title={card.label}
                   count={String(displaySummary[card.key])}
+                  statDescription={riskDescriptions[card.key]}
                   className={cn(
                     "w-full border-2 border-black shadow-[4px_4px_0px_#000]",
-                    riskLevel === card.key && "translate-x-1 translate-y-1 bg-yellow-100 shadow-none",
+                    riskLevel === card.key && `translate-x-1 translate-y-1 shadow-none ${card.activeClass}`,
                   )}
                 />
               </button>
@@ -199,7 +220,7 @@ function AdminCurrentTermDashboard() {
 
           <div className="flex flex-col gap-4">
             <PredictionFilters
-              filters={filters}
+              filters={dependentFilters}
               gradeLevel={gradeLevel}
               classId={classId}
               subjectId={subjectId}
@@ -209,8 +230,15 @@ function AdminCurrentTermDashboard() {
               hidePeriodFilter
               simplifiedTeacherRisk
               riskSummary={filterRiskSummary}
-              onGradeChange={setGradeLevel}
-              onClassChange={setClassId}
+              onGradeChange={(value) => {
+                setGradeLevel(value);
+                setClassId(undefined);
+                setSubjectId(undefined);
+              }}
+              onClassChange={(value) => {
+                setClassId(value);
+                setSubjectId(undefined);
+              }}
               onSubjectChange={setSubjectId}
               onRiskChange={setRiskLevel}
               onSearchChange={setSearch}
@@ -339,6 +367,11 @@ function TeacherCurrentTermDashboard() {
   });
   const summary = currentTermRiskSummary(scopedRows);
   const displaySummary = getTeacherRiskDisplaySummary(summary);
+  const scopedAssignedScopes = assignedScopes.filter((scope) =>
+    (gradeLevel === undefined || scope.grade_level === gradeLevel)
+    && (classId === undefined || scope.class_id === classId)
+    && (subjectId === undefined || scope.subject_id === subjectId));
+  const riskDescriptions = currentTermRiskRangeDescriptions(scopedAssignedScopes);
   const subjectSummaries = buildCurrentTermSubjectSummaries(rows, assignedScopes);
   const filtered =
     gradeLevel !== undefined ||
@@ -352,18 +385,30 @@ function TeacherCurrentTermDashboard() {
       <div className="flex flex-1 flex-col">
         <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <SidebarTrigger className="shrink-0 md:hidden" />
-          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Current-Term Predictions</h1>
+          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
         </header>
 
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
+          <div aria-label="Prediction risk summary" className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
             {TEACHER_RISK_CARDS.map((card) => (
-              <OverviewCard
+              <button
                 key={card.key}
-                title={card.label}
-                count={String(displaySummary[card.key])}
-                className="w-full border-2 border-black shadow-[4px_4px_0px_#000]"
-              />
+                type="button"
+                onClick={() => setRiskLevel((current) => current === card.key ? undefined : card.key)}
+                aria-label={`Filter by ${card.label}`}
+                aria-pressed={riskLevel === card.key}
+                className="cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+              >
+                <OverviewCard
+                  title={card.label}
+                  count={String(displaySummary[card.key])}
+                  statDescription={riskDescriptions[card.key]}
+                  className={cn(
+                    "w-full border-2 border-black shadow-[4px_4px_0px_#000]",
+                    riskLevel === card.key && `translate-x-1 translate-y-1 shadow-none ${card.activeClass}`,
+                  )}
+                />
+              </button>
             ))}
           </div>
 

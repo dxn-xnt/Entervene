@@ -27,8 +27,7 @@ export function GradeCard({
   highRisk = 0,
   moderateRisk = 0,
   monitoring = 0,
-  lowRisk: _lowRisk = 0,
-  insufficientData: _insufficientData = 0,
+  lowRisk = 0,
   role,
   emptyLabel = "No At-Risk Students",
 }: GradeCardProps) {
@@ -49,12 +48,18 @@ export function GradeCard({
       count: highRisk,
       percentage: totalStudents > 0 ? (highRisk / totalStudents) * 100 : 0,
     },
+    {
+      key: "on_track",
+      label: "On Track",
+      count: lowRisk,
+      percentage: totalStudents > 0 ? (lowRisk / totalStudents) * 100 : 0,
+    },
   ];
 
   const targetUrl = `/${activeRole}/predictions/${grade}/${classId !== undefined ? classId : encodeURIComponent(name)}`;
 
   return (
-    <RetroCard className="group relative flex min-w-[320px] max-w-full flex-col justify-between p-3 shadow-none transition-transform bg-primary hover:-translate-y-1 hover:shadow-none">
+    <RetroCard className="group relative flex min-w-[200px] max-w-full flex-col justify-between p-3 shadow-none transition-transform hover:-translate-y-1 hover:shadow-none">
       <Link
         to={targetUrl}
         className="min-w-0 flex-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 rounded"
@@ -75,20 +80,20 @@ export function GradeCard({
             </div>
           </div>
           {totalStudents > 0 ? (
-            <div className="mt-1 flex w-full flex-row gap-2">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3">
               {riskList.map((risk) => (
                 <Card
                   key={risk.key}
-                  className="p-2 px-3 shadow-none gap-2 w-full flex flex-row items-center justify-center bg-white"
+                  className="flex min-w-0 flex-row items-center gap-2 bg-white p-2 shadow-none sm:flex-col sm:justify-center"
                 >
                   <Progress
                     variant="circular"
                     value={risk.percentage}
-                    className="size-20 shrink-0"
+                    className="size-14 shrink-0"
                   />
-                  <div className="flex flex-col items-center justify-center text-center gap-1">
-                    <span className="font-head text-3xl font-black text-foreground leading-none">{risk.count}</span>
-                    <span className="text-sm font-medium text-foreground leading-tight whitespace-nowrap text-center">{risk.label}</span>
+                  <div className="flex min-w-0 flex-col items-center justify-center">
+                    <span className="font-head text-xl font-black text-foreground">{risk.count}</span>
+                    <span className="text-xs font-semibold whitespace-nowrap">{risk.label}</span>
                   </div>
                 </Card>
               ))}

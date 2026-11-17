@@ -177,7 +177,7 @@ The historic provisional formula is comparable only at 75% because earlier snaps
 
 ## 15. Backend and Frontend Integration
 
-The main router mounts stable `/api/v1/current-term-predictions`, isolated `/api/v1/development/current-term-predictions`, and GET-only historical `/api/v1/predictions`. Authorized Admin/Teacher users read the selected current-term version's latest revision. Active React prediction pages load the environment-appropriate current-term contract and are labeled “Current-Term Predictions”; they do not call the historical dashboard. The “Intervention Level” is a deterministic grade band, not model confidence. [`backend/app/main.py`; `backend/app/api/v1/routes/CurrentTermPredictions.py`; `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py`; `frontend/src/lib/prediction-api.ts`; `frontend/src/pages/teacher/predictions.tsx`.]
+The main router mounts stable `/api/v1/current-term-predictions`, isolated `/api/v1/development/current-term-predictions`, and GET-only historical `/api/v1/predictions`. Authorized Admin/Teacher users read the selected current-term version's latest revision. Active React prediction pages load the environment-appropriate current-term contract and use “AI Predictions” as the user-facing label; they do not call the historical dashboard. The “Intervention Level” is a deterministic grade band, not model confidence. [`backend/app/main.py`; `backend/app/api/v1/routes/CurrentTermPredictions.py`; `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py`; `frontend/src/lib/prediction-api.ts`; `frontend/src/pages/teacher/predictions.tsx`.]
 
 ## 16. Prediction Persistence and Recalculation
 
