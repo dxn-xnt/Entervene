@@ -383,7 +383,7 @@ def test_blocked_results_are_not_persisted(current_period_context, monkeypatch, 
     assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
 
 
-def test_model_version_is_required_and_development_only(current_period_context):
+def test_model_version_is_required_and_rejects_partially_approved_production(current_period_context):
     ctx = current_period_context
     _set_weights(ctx)
     _make_ready(ctx)
@@ -393,9 +393,30 @@ def test_model_version_is_required_and_development_only(current_period_context):
     version = ctx["db"].get(AIModelVersion, model_version_id)
     version.lifecycle_status = "PRODUCTION"
     ctx["db"].commit()
-    with pytest.raises(ValueError, match="inactive development V3 contract"):
+    with pytest.raises(ValueError, match="approved current-term lifecycle contract"):
         _run(ctx, model_version_id)
     assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
+
+
+def test_fully_approved_production_model_uses_same_persistence_contract(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    version = ctx["db"].get(AIModelVersion, model_version_id)
+    version.lifecycle_status = "PRODUCTION"
+    version.is_active = True
+    version.production_validated = True
+    version.independent_three_term_validation = True
+    ctx["db"].commit()
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features, model_name=version.model_name: 84.6)
+
+    result = _run(ctx, model_version_id)
+
+    assert result["persisted"] is True
+    assert result["lifecycle_status"] == "PRODUCTION"
+    assert result["source_period_id"] == result["target_period_id"] == ctx["period"].academic_period_id
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 1
 
 
 def test_missing_active_subject_load_cannot_be_persisted(current_period_context, monkeypatch):

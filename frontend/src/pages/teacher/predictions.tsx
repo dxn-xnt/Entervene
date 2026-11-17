@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { OverviewCard } from "@/components/overview-cards";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
 import { Loader } from "@/components/retroui/Loader";
-import { Tabs } from "@/components/retroui/Tabs";
 import { useAuth } from "@/context/AuthContext";
-import DevelopmentCurrentTermPanel from "@/components/predictions/development-current-term-panel";
 import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
@@ -16,20 +14,10 @@ import {
   useTeacherActiveInterventionShortcut,
   useTeacherCandidateShortcut,
 } from "@/components/predictions/use-teacher-candidate-shortcut";
-import { PredictionGradeSection } from "@/components/predictions/prediction-grade-section";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import type {
-  DashboardAtRiskResponse,
   DashboardFilters,
-  DashboardGradeGroupSummary,
-  DashboardQueryParams,
   RiskSummary,
-} from "@/lib/prediction-api";
-import {
-  fetchDashboardAtRisk,
-  fetchDashboardFilters,
-  fetchDashboardGradeSummaries,
-  developmentPredictionsAvailable,
 } from "@/lib/prediction-api";
 import {
   buildCurrentTermDashboard,
@@ -47,43 +35,6 @@ import { AdminPredictionGradeCard } from "@/components/predictions/admin-predict
 import { getTeacherRiskDisplaySummary } from "@/components/predictions/teacher-risk-display";
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import { SearchX, Sparkles } from "lucide-react";
-
-const EMPTY_SUMMARY: RiskSummary = {
-  HIGH_RISK: 0,
-  MODERATE_RISK: 0,
-  NEEDS_MONITORING: 0,
-  LOW_RISK: 0,
-  INSUFFICIENT_DATA: 0,
-  total: 0,
-};
-
-const RISK_CARDS = [
-  {
-    key: "HIGH_RISK" as const,
-    label: "High Risk",
-    activeClass: "bg-red-200 ring-2 ring-black",
-  },
-  {
-    key: "MODERATE_RISK" as const,
-    label: "Moderate Risk",
-    activeClass: "bg-amber-200 ring-2 ring-black",
-  },
-  {
-    key: "NEEDS_MONITORING" as const,
-    label: "Needs Monitoring",
-    activeClass: "bg-yellow-200 ring-2 ring-black",
-  },
-  {
-    key: "LOW_RISK" as const,
-    label: "Low Risk",
-    activeClass: "bg-emerald-200 ring-2 ring-black",
-  },
-  {
-    key: "INSUFFICIENT_DATA" as const,
-    label: "Insufficient Data",
-    activeClass: "bg-gray-200 ring-2 ring-black",
-  },
-];
 
 const TEACHER_RISK_CARDS = [
   {
@@ -106,304 +57,6 @@ const TEACHER_RISK_CARDS = [
 export default function PredictionsDashboard() {
   const { role } = useAuth();
   return role === "teacher" ? <TeacherCurrentTermDashboard /> : <AdminCurrentTermDashboard />;
-}
-
-export function LegacyPredictionsDashboard() {
-  const { role } = useAuth();
-  const canUseDevelopment = developmentPredictionsAvailable(role);
-  const [view, setView] = useState<"legacy" | "development">("legacy");
-  const { selectedPeriodId } = useAcademicPeriod();
-  // ── State ──
-  const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
-  const [filters, setFilters] = useState<DashboardFilters | null>(null);
-  const [gradeSummaries, setGradeSummaries] = useState<DashboardGradeGroupSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Filter values
-  const [gradeLevel, setGradeLevel] = useState<number | undefined>();
-  const [classId, setClassId] = useState<number | undefined>();
-  const [subjectId, setSubjectId] = useState<number | undefined>();
-  const [riskLevel, setRiskLevel] = useState<string | undefined>();
-  const [search, setSearch] = useState("");
-
-  // Sorting & pagination
-  const [sortBy, setSortBy] = useState<string | undefined>("student_name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [offset, setOffset] = useState(0);
-  const limit = 5;
-
-  // Detail sheet
-  const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  useEffect(() => {
-    setSelectedPrediction(null);
-    setSheetOpen(false);
-  }, [selectedPeriodId]);
-
-  // ── Fetch filters once ──
-  useEffect(() => {
-    fetchDashboardFilters().then(setFilters).catch(console.error);
-  }, []);
-
-  // The sidebar's selected term is the single source of truth.  Previously this
-  // page defaulted to all terms while section drill-downs defaulted to the
-  // sidebar term, so a card could describe a different set of predictions.
-  useEffect(() => {
-    fetchDashboardGradeSummaries({ academic_period_id: selectedPeriodId ?? undefined })
-      .then(setGradeSummaries)
-      .catch(console.error);
-  }, [selectedPeriodId]);
-
-  // ── Fetch data on filter/sort/page change ──
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: DashboardQueryParams = {
-        grade_level: gradeLevel,
-        class_id: classId,
-        subject_id: subjectId,
-        academic_period_id: selectedPeriodId ?? undefined,
-        risk_level: riskLevel,
-        search: search.trim() || undefined,
-        sort_by: sortBy,
-        sort_order: sortOrder,
-        limit,
-        offset,
-      };
-      const result = await fetchDashboardAtRisk(params);
-      setData(result);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [gradeLevel, classId, subjectId, selectedPeriodId, riskLevel, search, sortBy, sortOrder, offset]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // Debounce search
-  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    if (searchTimer) clearTimeout(searchTimer);
-    setSearchTimer(
-      setTimeout(() => {
-        setOffset(0);
-      }, 400),
-    );
-  };
-
-  // ── Handlers ──
-  const handleSort = (column: string) => {
-    if (sortBy === column) {
-      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(column);
-      setSortOrder("desc");
-    }
-    setOffset(0);
-  };
-
-  const handleClearAll = () => {
-    setGradeLevel(undefined);
-    setClassId(undefined);
-    setSubjectId(undefined);
-    setRiskLevel(undefined);
-    setSearch("");
-    setOffset(0);
-  };
-
-  const handleRowClick = (predictionId: number) => {
-    setSelectedPrediction(predictionId);
-    setSheetOpen(true);
-  };
-
-  // ── Dynamic Enrolled Cohort Summary ──
-  const totalEnrolledStudents = gradeSummaries.reduce((acc, g) => acc + g.total_students, 0);
-  const totalAtRisk = gradeSummaries.reduce((acc, g) => acc + g.at_risk_count, 0);
-  const totalHighRisk = gradeSummaries.reduce(
-    (acc, g) => acc + g.sections.reduce((sAcc, s) => sAcc + s.high_risk_count, 0),
-    0
-  );
-  const totalModerateRisk = gradeSummaries.reduce(
-    (acc, g) => acc + g.sections.reduce((sAcc, s) => sAcc + s.moderate_risk_count, 0),
-    0
-  );
-
-  const isFilterActive = Boolean(
-    gradeLevel !== undefined ||
-    classId !== undefined ||
-    subjectId !== undefined ||
-    riskLevel !== undefined ||
-    search.trim() !== ""
-  );
-
-  const enrolledSummary: RiskSummary = {
-    HIGH_RISK: totalHighRisk,
-    MODERATE_RISK: 0,
-    NEEDS_MONITORING: totalModerateRisk,
-    LOW_RISK: 0,
-    INSUFFICIENT_DATA: Math.max(0, totalEnrolledStudents - totalAtRisk),
-    total: totalEnrolledStudents,
-  };
-
-  const summary = (data?.risk_summary && data.risk_summary.total > 0)
-    ? data.risk_summary
-    : (enrolledSummary.total > 0 ? enrolledSummary : EMPTY_SUMMARY);
-
-  return (
-    <AppLayout>
-      <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col">
-            <div data-page-tabs-sticky-region={canUseDevelopment ? "" : undefined}>
-            {/* ── Header ── */}
-            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
-              <SidebarTrigger className="shrink-0 md:hidden" />
-              <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
-            </header>
-
-            {canUseDevelopment && (
-              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-                <Tabs
-                  tabs={[{ id: "legacy", label: "AI Predictions" }, { id: "development", label: "Current-Term Development" }]}
-                  activeTab={view}
-                  onTabChange={setView}
-                />
-              </div>
-            )}
-            </div>
-
-            {canUseDevelopment && view === "development" ? (
-              <DevelopmentCurrentTermPanel
-                periodId={selectedPeriodId}
-                termName={filters?.terms.find((item) => item.academic_period_id === selectedPeriodId)?.term_label || "Current Term"}
-                role={role === "admin" ? "admin" : "teacher"}
-              />
-            ) : (
-
-              <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-                {/* ── Risk Summary Cards ── */}
-                <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
-                  {RISK_CARDS.map((card) => {
-                    const count = summary[card.key];
-                    return (
-                      <OverviewCard
-                        key={card.key}
-                        title={card.label}
-                        count={String(count)}
-                        className="w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                      />
-                    );
-                  })}
-                </div>
-
-                {/* ── Main Content Area ── */}
-                <div className="flex flex-col lg:flex-row gap-5">
-                  <div className="flex-1 flex flex-col gap-4 min-w-0">
-                    <PredictionFilters
-                      filters={filters}
-                      gradeLevel={gradeLevel}
-                      classId={classId}
-                      subjectId={subjectId}
-                      academicPeriodId={selectedPeriodId ?? undefined}
-                      riskLevel={riskLevel}
-                      search={search}
-                      onGradeChange={(v) => {
-                        setGradeLevel(v);
-                        setOffset(0);
-                      }}
-                      onClassChange={(v) => {
-                        setClassId(v);
-                        setOffset(0);
-                      }}
-                      onSubjectChange={(v) => {
-                        setSubjectId(v);
-                        setOffset(0);
-                      }}
-                      hidePeriodFilter
-                      onRiskChange={(v) => {
-                        setRiskLevel(v);
-                        setOffset(0);
-                      }}
-                      onSearchChange={handleSearchChange}
-                      onClearAll={handleClearAll}
-                      showClearButton={isFilterActive && (data?.items.length ?? 0) > 0}
-                    />
-
-                    {isFilterActive ? (
-                      /* ── Filtered Predictions View ── */
-                      <div className="flex flex-col gap-3">
-                        <div className="py-2">
-                          <div>
-                            <h2 className="font-sans text-xl font-bold text-black">Filtered student predictions</h2>
-                            <p className="text-xs text-gray-600 font-semibold">
-                              Showing matching predictions for active criteria ({data?.total ?? 0} results)
-                            </p>
-                          </div>
-                        </div>
-
-                        {loading && !data ? (
-                          <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-500">
-                            <Loader size="md" />
-                            <span className="text-sm font-semibold">Loading predictions...</span>
-                          </div>
-                        ) : (
-                          <PredictionTable
-                            items={data?.items ?? []}
-                            total={data?.total ?? 0}
-                            limit={data?.limit ?? limit}
-                            offset={data?.offset ?? 0}
-                            sortBy={sortBy}
-                            sortOrder={sortOrder}
-                            onSort={handleSort}
-                            onPageChange={setOffset}
-                            onRowClick={handleRowClick}
-                            onClearFilters={handleClearAll}
-                          />
-                        )}
-                      </div>
-                    ) : (
-                      /* ── Default Grade Cohort Overview ── */
-                      <div className="flex flex-col gap-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1">
-                          <div>
-                            <h2 className="text-xl font-black tracking-tight text-black">Grade Cohort Summaries</h2>
-                          </div>
-                        </div>
-
-                        {gradeSummaries.length > 0 ? (
-                          <div className={cn("grid grid-cols-1 gap-4", role !== "admin" && "md:grid-cols-2")}>
-                            {gradeSummaries.map((group) => (
-                              <PredictionGradeSection key={group.grade_level} group={group} />
-                            ))}
-                          </div>
-                        ) : (
-                          <Card className="p-6 bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rounded-none text-center text-sm font-semibold text-gray-600">
-                            No grade overview summaries found for this scope.
-                          </Card>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Detail Sheet ── */}
-      {(!canUseDevelopment || view === "legacy") && <PredictionDetailSheet
-        predictionId={selectedPrediction}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-      />}
-    </AppLayout>
-  );
 }
 
 function AdminCurrentTermDashboard() {
@@ -512,7 +165,7 @@ function AdminCurrentTermDashboard() {
       <div className="flex flex-1 flex-col">
         <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <SidebarTrigger className="shrink-0 md:hidden" />
-          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
+          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Current-Term Predictions</h1>
         </header>
 
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
@@ -687,7 +340,7 @@ function TeacherCurrentTermDashboard() {
       <div className="flex flex-1 flex-col">
         <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <SidebarTrigger className="shrink-0 md:hidden" />
-          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
+          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Current-Term Predictions</h1>
         </header>
 
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">

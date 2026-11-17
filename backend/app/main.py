@@ -108,7 +108,7 @@ app.add_middleware(
 
 app.include_router(auth_router,        prefix="/api/v1/auth",                 tags=["Auth"])
 app.include_router(users_router,       prefix="/api/v1",                      tags=["Users"])
-app.include_router(predictions_router, prefix="/api/v1/predictions",           tags=["Predictions"])
+app.include_router(predictions_router, prefix="/api/v1/predictions",           tags=["Historical Predictions (Read Only)"])
 app.include_router(development_current_term_router, prefix="/api/v1/development", tags=["Development Predictions"])
 app.include_router(current_term_router, prefix="/api/v1/current-term-predictions", tags=["Current-Term Predictions"])
 app.include_router(teacher_interventions_router, prefix="/api/v1/teacher/interventions", tags=["Teacher Interventions"])

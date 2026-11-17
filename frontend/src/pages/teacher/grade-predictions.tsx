@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, Link } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Text } from "@/components/retroui/Text";
@@ -13,21 +13,12 @@ import {
 } from "@/components/predictions/use-teacher-candidate-shortcut";
 import { useAuth } from "@/context/AuthContext";
 import type {
-  DashboardAtRiskResponse,
   DashboardFilters,
-  DashboardGradeGroupSummary,
-  DashboardQueryParams,
-} from "@/lib/prediction-api";
-import {
-  fetchDashboardAtRisk,
-  fetchDashboardFilters,
-  fetchDashboardGradeSummaries,
 } from "@/lib/prediction-api";
 import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { AdminBreadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Card } from "@/components/retroui/Card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { BrainCircuit, School, TrendingUp } from "lucide-react";
+import { School, TrendingUp } from "lucide-react";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
   buildCurrentTermDashboard,
@@ -162,7 +153,7 @@ export function AdminCurrentTermGradePredictions() {
             <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
               <Breadcrumb.Item>
                 <Breadcrumb.Link asChild>
-                  <Link to="/admin/predictions">AI Predictions</Link>
+                  <Link to="/admin/predictions">Current-Term Predictions</Link>
                 </Breadcrumb.Link>
               </Breadcrumb.Item>
               <Breadcrumb.Separator />
@@ -350,258 +341,6 @@ export function AdminCurrentTermGradePredictions() {
   );
 }
 
-export function LegacyGradePredictions() {
-  const { role } = useAuth();
-  const baseRole = role === "admin" ? "admin" : "teacher";
-  const { grade } = useParams<{ grade: string }>();
-  const navigate = useNavigate();
-  const { selectedPeriodId } = useAcademicPeriod();
-
-  const numericGrade = grade ? Number(grade) : undefined;
-
-  // ── State ──
-  const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
-  const [filters, setFilters] = useState<DashboardFilters | null>(null);
-  const [gradeSummaries, setGradeSummaries] = useState<DashboardGradeGroupSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Filter values
-  const [classId, setClassId] = useState<number | undefined>();
-  const [subjectId, setSubjectId] = useState<number | undefined>();
-  const [riskLevel, setRiskLevel] = useState<string | undefined>();
-  const [search, setSearch] = useState("");
-
-  // Sorting & pagination
-  const [sortBy, setSortBy] = useState<string | undefined>("student_name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [offset, setOffset] = useState(0);
-  const limit = 10;
-
-  // Detail sheet
-  const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  // ── Fetch filters and grade summaries ──
-  useEffect(() => {
-    fetchDashboardFilters().then(setFilters).catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    fetchDashboardGradeSummaries({ academic_period_id: selectedPeriodId ?? undefined })
-      .then(setGradeSummaries)
-      .catch(console.error);
-  }, [selectedPeriodId]);
-
-  // ── Fetch data on filter/sort/page change ──
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: DashboardQueryParams = {
-        grade_level: numericGrade,
-        class_id: classId,
-        subject_id: subjectId,
-        academic_period_id: selectedPeriodId ?? undefined,
-        risk_level: riskLevel,
-        search: search.trim() || undefined,
-        sort_by: sortBy,
-        sort_order: sortOrder,
-        limit,
-        offset,
-      };
-      const result = await fetchDashboardAtRisk(params);
-      setData(result);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [numericGrade, classId, subjectId, selectedPeriodId, riskLevel, search, sortBy, sortOrder, offset]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // Debounce search
-  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    if (searchTimer) clearTimeout(searchTimer);
-    setSearchTimer(
-      setTimeout(() => {
-        setOffset(0);
-      }, 400),
-    );
-  };
-
-  // ── Handlers ──
-  const handleSort = (column: string) => {
-    if (sortBy === column) {
-      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(column);
-      setSortOrder("desc");
-    }
-    setOffset(0);
-  };
-
-  const handleClearAll = () => {
-    setClassId(undefined);
-    setSubjectId(undefined);
-    setRiskLevel(undefined);
-    setSearch("");
-    setOffset(0);
-  };
-
-  const handleRowClick = (predictionId: number) => {
-    setSelectedPrediction(predictionId);
-    setSheetOpen(true);
-  };
-
-  const currentGradeGroup = gradeSummaries.find((g) => g.grade_level === numericGrade);
-
-  return (
-    <AppLayout>
-      <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col">
-            {/* ── Header ── */}
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Link asChild>
-                      <Link to={`/${baseRole}/predictions`}>AI Predictions</Link>
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page>
-                        Grade {grade}
-                      </Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </>
-                </Breadcrumb.List>
-              </Breadcrumb>
-            </header>
-
-            <div className="border-t-2 border-border -mt-[1px] px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              {/* ── Main Content: Table on Left + Sections on Right ── */}
-              <div className="flex flex-col lg:flex-row gap-5 items-start">
-                {/* Left Column: Filters + Table */}
-                <div className="flex-1 flex flex-col gap-4 min-w-0 w-full">
-                  <PredictionFilters
-                    filters={filters}
-                    gradeLevel={numericGrade}
-                    classId={classId}
-                    subjectId={subjectId}
-                    academicPeriodId={selectedPeriodId ?? undefined}
-                    riskLevel={riskLevel}
-                    search={search}
-                    hideGradeFilter
-                    onClassChange={(v) => {
-                      setClassId(v);
-                      setOffset(0);
-                    }}
-                    onSubjectChange={(v) => {
-                      setSubjectId(v);
-                      setOffset(0);
-                    }}
-                    hidePeriodFilter
-                    showClearButton={false}
-                    onRiskChange={(v) => {
-                      setRiskLevel(v);
-                      setOffset(0);
-                    }}
-                    onSearchChange={handleSearchChange}
-                    onClearAll={handleClearAll}
-                  />
-
-                  {loading && !data ? (
-                    <div className="flex items-center justify-center py-20 text-gray-400 font-semibold">
-                      Loading Grade {grade} predictions...
-                    </div>
-                  ) : (data?.items.length ?? 0) === 0 ? (
-                    <Empty className="flex-none px-4 py-8 shadow-md transition-shadow hover:shadow-none">
-                      <EmptyHeader>
-                        <EmptyMedia>
-                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><BrainCircuit className="size-5" /></div>
-                        </EmptyMedia>
-                        <EmptyTitle>{search.trim() || classId || subjectId || riskLevel ? "No predictions match these filters" : `No at-risk predictions yet for Grade ${grade}`}</EmptyTitle>
-                        <EmptyDescription>{search.trim() || classId || subjectId || riskLevel ? "Try another student, class, subject, or risk level." : "Risk assessments will appear when predictions are available for this grade."}</EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  ) : (
-                    <PredictionTable
-                      items={data?.items ?? []}
-                      total={data?.total ?? 0}
-                      limit={data?.limit ?? limit}
-                      offset={data?.offset ?? 0}
-                      sortBy={sortBy}
-                      sortOrder={sortOrder}
-                      onSort={handleSort}
-                      onPageChange={setOffset}
-                      onRowClick={handleRowClick}
-                    />
-                  )}
-                </div>
-
-                {/* Right Column: Sections Overview */}
-                <div className="w-full lg:w-72 xl:w-80 shrink-0 flex flex-col gap-3">
-                  <Card className="flex flex-col gap-3 border-2 border-black bg-white p-4 shadow-none hover:shadow-none">
-                    <div className="flex items-center justify-between gap-3">
-                      <Text as="h4" className="min-w-0 truncate font-head text-base font-bold">Grade {grade} Sections</Text>
-                      <Badge size="sm" variant="surface" className="font-bold">
-                        {currentGradeGroup?.sections.length ?? 0}
-                      </Badge>
-                    </div>
-
-                    <div className="flex flex-col gap-3">
-                      {currentGradeGroup && currentGradeGroup.sections.length > 0 ? (
-                        currentGradeGroup.sections.map((sec) => (
-                          <div
-                            key={sec.class_id}
-                            onClick={() => navigate(`/${baseRole}/predictions/${grade}/${sec.class_id}`)}
-                            className="flex cursor-pointer items-center justify-between gap-3 rounded border-2 border-black bg-yellow-50 p-3 transition-colors hover:bg-yellow-100"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold text-black" title={sec.section_name}>{sec.section_name}</p>
-                              <p className="truncate text-xs font-medium text-gray-600">
-                                {sec.total_students} {sec.total_students === 1 ? "student" : "students"}
-                              </p>
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <span className={`text-xs font-black px-2 py-0.5 border border-black rounded ${sec.at_risk_count > 0 ? "bg-red-200 text-red-900" : "bg-emerald-100 text-emerald-900"}`}>
-                                {sec.at_risk_count} at risk
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-gray-500 italic py-2">
-                          No sections enrolled or assigned for Grade {grade}.
-                        </p>
-                      )}
-                    </div>
-                  </Card>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Detail Sheet ── */}
-      <PredictionDetailSheet
-        predictionId={selectedPrediction}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-      />
-    </AppLayout>
-  );
-}
-
 function TeacherCurrentTermGradePredictions() {
   const { grade } = useParams<{ grade: string }>();
   const { selectedPeriodId } = useAcademicPeriod();
@@ -675,7 +414,7 @@ function TeacherCurrentTermGradePredictions() {
             <Breadcrumb.List>
               <Breadcrumb.Item>
                 <Breadcrumb.Link asChild>
-                  <Link to="/teacher/predictions">AI Predictions</Link>
+                  <Link to="/teacher/predictions">Current-Term Predictions</Link>
                 </Breadcrumb.Link>
               </Breadcrumb.Item>
               <Breadcrumb.Separator />

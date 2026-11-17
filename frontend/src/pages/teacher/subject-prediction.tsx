@@ -243,7 +243,7 @@ export default function SubjectPrediction() {
             <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
               <Breadcrumb.Item>
                 <Breadcrumb.Link asChild>
-                  <Link to={predictionBasePath}>AI Predictions</Link>
+                  <Link to={predictionBasePath}>Current-Term Predictions</Link>
                 </Breadcrumb.Link>
               </Breadcrumb.Item>
               <Breadcrumb.Separator />
@@ -302,7 +302,7 @@ export default function SubjectPrediction() {
                       This subject is unavailable in the selected term or you do not have permission to access it.
                     </p>
                     <Button asChild variant="outline" className="border-2 border-black font-bold">
-                      <Link to={predictionBasePath}>Return to AI Predictions</Link>
+                      <Link to={predictionBasePath}>Return to Current-Term Predictions</Link>
                     </Button>
                   </div>
                 ) : rows.length === 0 ? (

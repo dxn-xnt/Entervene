@@ -175,11 +175,42 @@ def test_individual_grade_edit_refreshes_only_on_numeric_change(current_period_c
     assert len(calls) == 1
 
 
-def test_production_configuration_never_starts_refresh(monkeypatch):
+def test_production_configuration_fails_closed_without_approved_model(current_period_context, monkeypatch):
+    ctx = current_period_context
     monkeypatch.setattr(settings, "app_environment", "production")
     monkeypatch.setattr(settings, "development_prediction_api_enabled", True)
     monkeypatch.setattr(settings, "development_current_term_model_name", CORRECTED_MODEL_NAME)
-    monkeypatch.setattr(refresh_service, "Session", lambda _bind: pytest.fail("Registry lookup should not run"))
+    calls = []
+    monkeypatch.setattr(refresh_service, "generate_and_persist_current_term", lambda *_args, **_kwargs: calls.append(True))
     refresh_service.refresh_after_committed_grade_change(
-        object(), student_ids=[uuid4()], class_id=1, subject_id=1, period_id=1,
+        ctx["db"].get_bind(), student_ids=[ctx["student"].student_id],
+        class_id=ctx["class"].class_id, subject_id=ctx["subject"].subject_id,
+        period_id=ctx["period"].academic_period_id,
     )
+    assert calls == []
+
+
+def test_production_configuration_refreshes_with_one_fully_approved_model(current_period_context, monkeypatch):
+    ctx = current_period_context
+    model = _register_corrected(ctx)
+    model.lifecycle_status = "PRODUCTION"
+    model.is_active = True
+    model.production_validated = True
+    model.independent_three_term_validation = True
+    ctx["db"].commit()
+    monkeypatch.setattr(settings, "app_environment", "production")
+    calls = []
+    monkeypatch.setattr(
+        refresh_service,
+        "generate_and_persist_current_term",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    refresh_service.refresh_after_committed_grade_change(
+        ctx["db"].get_bind(), student_ids=[ctx["student"].student_id],
+        class_id=ctx["class"].class_id, subject_id=ctx["subject"].subject_id,
+        period_id=ctx["period"].academic_period_id,
+    )
+
+    assert len(calls) == 1
+    assert calls[0][1]["model_version_id"] == model.model_version_id
