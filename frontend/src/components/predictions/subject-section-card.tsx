@@ -65,20 +65,20 @@ export function SubjectSectionCard({
             </div>
           </div>
           {displaySummary.assessedTotal > 0 ? (
-            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="mt-1 flex w-full flex-row gap-2">
               {riskList.map((risk) => (
                 <Card
                   key={risk.key}
-                  className="flex min-w-0 flex-row items-center gap-2 bg-white p-2 shadow-none sm:flex-col sm:justify-center"
+                  className="p-2 px-3 shadow-none gap-2 w-full flex flex-row items-center justify-center bg-white"
                 >
                   <Progress
                     variant="circular"
                     value={risk.percentage}
-                    className="size-14 shrink-0"
+                    className="size-20 shrink-0"
                   />
-                  <div className="flex flex-col items-center justify-center min-w-0">
-                    <span className="font-head text-xl font-black text-foreground">{risk.count}</span>
-                    <span className="text-xs font-semibold whitespace-nowrap">{risk.label}</span>
+                  <div className="flex flex-col items-center justify-center text-center gap-1">
+                    <span className="font-head text-3xl font-black text-foreground leading-none">{risk.count}</span>
+                    <span className="text-sm font-medium text-foreground leading-tight whitespace-nowrap text-center">{risk.label}</span>
                   </div>
                 </Card>
               ))}
@@ -100,7 +100,7 @@ export function SubjectSectionCard({
   );
 
   return (
-    <RetroCard className={`group relative flex flex-col justify-between shadow-none p-3 transition-transform min-w-[200px] max-w-full ${navigationEnabled ? "hover:-translate-y-1" : ""}`}>
+    <RetroCard className={`group relative flex flex-col justify-between shadow-none p-3 transition-transform min-w-[320px] max-w-full bg-primary ${navigationEnabled ? "hover:-translate-y-1" : ""}`}>
       {navigationEnabled ? (
         <Link
           to={targetUrl}

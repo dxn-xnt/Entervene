@@ -55,6 +55,7 @@ class ClassworkCreate(BaseModel):
     subject_id: int
     is_published: Optional[bool] = False
     show_scores: Optional[bool] = True
+    auto_ai_feedback_enabled: Optional[bool] = False
     lesson_ids: Optional[list[int]] = None
     rubric_levels: Optional[list[ActivityRubricLevelInput]] = None
     reference_links: list[ClassworkReferenceLinkInput] = Field(default_factory=list)
@@ -77,6 +78,7 @@ class ClassworkUpdate(BaseModel):
     total_points: Optional[float] = None
     is_published: Optional[bool] = None
     show_scores: Optional[bool] = None
+    auto_ai_feedback_enabled: Optional[bool] = None
     lesson_ids: Optional[list[int]] = None
     rubric_levels: Optional[list[ActivityRubricLevelInput]] = None
     confirm_rubric_change: bool = False
@@ -151,6 +153,7 @@ class ClassworkResponse(BaseModel):
     total_points: Optional[float]
     is_published: bool
     show_scores: bool
+    auto_ai_feedback_enabled: bool = False
     is_locked: bool
     is_archived: bool
     subject_id: int

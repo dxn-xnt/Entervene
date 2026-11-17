@@ -25,6 +25,7 @@ class Classwork(Base):
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False)
     show_scores: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    auto_ai_feedback_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     subject_id: Mapped[int] = mapped_column(Integer, ForeignKey("subject.subject_id"), nullable=False)
     created_by_staff_id: Mapped[str] = mapped_column(String(20), ForeignKey("academic_staff.staff_id"), nullable=False)

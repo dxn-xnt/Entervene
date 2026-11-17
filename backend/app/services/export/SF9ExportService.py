@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import re
+import zipfile
 from calendar import month_abbr
 from datetime import date
 from typing import Any, cast
@@ -730,8 +731,9 @@ def export_advisory_class_sf9(
     db: Session,
     class_id: int,
     staff_id: str,
+    student_ids: list[uuid.UUID] | None = None,
 ) -> io.BytesIO:
-    """Generate official SF9 report card workbook for the entire advisory class roster."""
+    """Generate official SF9 report card workbook for the advisory class roster (or selected students)."""
     class_obj = _require_advisory_class(db, class_id, staff_id)
 
     academic_year = db.get(AcademicYear, class_obj.academic_year_id)
@@ -766,8 +768,8 @@ def export_advisory_class_sf9(
             seen.add(s.subject_id)
             subjects.append(s)
 
-    # Query all enrolled students
-    student_rows = (
+    # Query enrolled students
+    student_query = (
         db.query(Student)
         .join(StudentClass, Student.student_id == StudentClass.student_id)
         .filter(
@@ -775,9 +777,11 @@ def export_advisory_class_sf9(
             StudentClass.academic_year_id == class_obj.academic_year_id,
             func.lower(func.coalesce(StudentClass.enrollment_status, "enrolled")) == "enrolled",
         )
-        .order_by(Student.gender.desc(), Student.last_name.asc(), Student.first_name.asc())
-        .all()
     )
+    if student_ids:
+        student_query = student_query.filter(Student.student_id.in_(student_ids))
+
+    student_rows = student_query.order_by(Student.gender.desc(), Student.last_name.asc(), Student.first_name.asc()).all()
 
     if not student_rows:
         raise HTTPException(status_code=400, detail="No enrolled students found in this advisory class.")
@@ -812,6 +816,50 @@ def export_advisory_class_sf9(
     wb.save(output)
     output.seek(0)
     return output
+
+
+def export_advisory_class_sf9_zip(
+    db: Session,
+    class_id: int,
+    staff_id: str,
+    student_ids: list[uuid.UUID] | None = None,
+) -> io.BytesIO:
+    """Generate a ZIP archive containing individual official SF9 Excel workbooks."""
+    class_obj = _require_advisory_class(db, class_id, staff_id)
+    student_query = (
+        db.query(Student)
+        .join(StudentClass, Student.student_id == StudentClass.student_id)
+        .filter(
+            StudentClass.class_id == class_obj.class_id,
+            StudentClass.academic_year_id == class_obj.academic_year_id,
+            func.lower(func.coalesce(StudentClass.enrollment_status, "enrolled")) == "enrolled",
+        )
+    )
+    if student_ids:
+        student_query = student_query.filter(Student.student_id.in_(student_ids))
+
+    student_rows = student_query.order_by(Student.gender.desc(), Student.last_name.asc(), Student.first_name.asc()).all()
+    if not student_rows:
+        raise HTTPException(status_code=400, detail="No enrolled students found for SF9 export.")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+        used_names: set[str] = set()
+        for idx, student in enumerate(student_rows):
+            excel_stream = export_student_sf9(db, class_id, student.student_id, staff_id)
+            clean_last = re.sub(r"[^\w\s-]", "", student.last_name or "").strip()
+            clean_first = re.sub(r"[^\w\s-]", "", student.first_name or "").strip()
+            base_name = f"SF9_{clean_last}_{clean_first}".strip("_") or f"SF9_Student_{idx + 1}"
+            file_name = f"{base_name}.xlsx"
+            count = 1
+            while file_name.lower() in used_names:
+                file_name = f"{base_name}_{count}.xlsx"
+                count += 1
+            used_names.add(file_name.lower())
+            zip_file.writestr(file_name, excel_stream.getvalue())
+
+    zip_buffer.seek(0)
+    return zip_buffer
 
 
 def gather_student_sf9_data(
@@ -1032,11 +1080,12 @@ def gather_advisory_class_sf9_batch_data(
     db: Session,
     class_id: int,
     staff_id: str,
+    student_ids: list[uuid.UUID] | None = None,
 ) -> list[dict[str, Any]]:
-    """Compile structured JSON data for all enrolled students in the advisory class."""
+    """Compile structured JSON data for enrolled students in the advisory class."""
     class_obj = _require_advisory_class(db, class_id, staff_id)
 
-    student_rows = (
+    query = (
         db.query(Student)
         .join(StudentClass, Student.student_id == StudentClass.student_id)
         .filter(
@@ -1044,9 +1093,22 @@ def gather_advisory_class_sf9_batch_data(
             StudentClass.academic_year_id == class_obj.academic_year_id,
             func.lower(func.coalesce(StudentClass.enrollment_status, "enrolled")) == "enrolled",
         )
+    )
+
+    if student_ids:
+        query = query.filter(Student.student_id.in_(student_ids))
+
+    student_rows = (
+        query
         .order_by(Student.gender.desc(), Student.last_name.asc(), Student.first_name.asc())
         .all()
     )
+
+    if student_ids:
+        found_ids = {s.student_id for s in student_rows}
+        for sid in student_ids:
+            if sid not in found_ids:
+                raise HTTPException(status_code=404, detail=f"Student {sid} not found in this advisory class")
 
     batch_data = []
     for s in student_rows:

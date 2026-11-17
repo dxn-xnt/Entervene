@@ -1,22 +1,25 @@
-"""Teacher-requested, non-persistent AI feedback suggestions for graded quizzes."""
+"""Teacher-requested, non-persistent AI feedback suggestions for graded work."""
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from decimal import Decimal
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal, InvalidOperation
 import hashlib
 import hmac
 import json
 import re
 import unicodedata
+import uuid
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.Config import settings
+from app.db.Session import SessionLocal
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
@@ -36,7 +39,9 @@ from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.submissions.SubmissionFeedbackDraft import SubmissionFeedbackDraft
 from app.schemas.Submission import (
+    FeedbackDraftResponse,
     FeedbackEligibilityResponse,
     FeedbackPublicationRequest,
     FeedbackPublicationResponse,
@@ -46,7 +51,7 @@ from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAut
 from app.services.ai import Provider
 from app.services.ai.UsageGuard import ai_configured
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
-from app.services.classwork.ClassworkShared import is_quiz_type
+from app.services.classwork.ClassworkShared import aware_utc, is_quiz_type, is_reading_type
 from app.services.quiz.QuizAttemptService import (
     COMPLETED_ATTEMPT_STATUSES,
     _attempt_feedback_visibility,
@@ -69,7 +74,90 @@ _ELIGIBILITY_STATE_CODES = frozenset({
     "FEEDBACK_INSUFFICIENT_EVIDENCE",
     "FEEDBACK_INVALID_GRADING_EVIDENCE",
     "FEEDBACK_PERIOD_GRADE_FINALIZED",
+    "FEEDBACK_CLASSWORK_NOT_FULLY_GRADED",
+    "FEEDBACK_CLASSWORK_NOT_PUBLISHED",
+    "FEEDBACK_SCORES_HIDDEN",
 })
+
+_SCORE_FEEDBACK_SENTENCES = {
+    "full_credit": (
+        "The overall score shows full credit for this work.",
+        "Keep using the approaches that helped you complete this work.",
+    ),
+    "partial_credit": (
+        "The overall score shows that some points were earned, with room to strengthen future work.",
+        "Review your work alongside your teacher's guidance to identify useful next steps.",
+    ),
+    "no_credit": (
+        "The overall score shows no credit for this work.",
+        "Review your work with your teacher to identify a helpful starting point.",
+    ),
+}
+_SHARED_SCORE_FEEDBACK_SENTENCES = (
+    "Ask your teacher for specific guidance about this work.",
+    "Use your teacher's feedback to guide your next attempt.",
+)
+
+ALLOWLISTED_STRENGTHS: dict[str, str] = {
+    "STRUCTURE": "Clear Structure",
+    "EVIDENCE": "Strong Evidence",
+    "ANALYSIS": "Thorough Analysis",
+    "CALCULATIONS": "Accurate Calculations",
+    "CREATIVITY": "Creative Approach",
+}
+
+ALLOWLISTED_IMPROVEMENTS: dict[str, str] = {
+    "DEEPEN_ANALYSIS": "Deepen Analysis",
+    "CITATIONS": "Add Citations",
+    "CLARITY": "Improve Clarity",
+    "REVIEW_CALCULATIONS": "Review Calculations",
+    "CONCLUSION": "Strengthen Conclusion",
+}
+
+ALL_FOCUS_POINT_CODES: frozenset[str] = frozenset(ALLOWLISTED_STRENGTHS) | frozenset(ALLOWLISTED_IMPROVEMENTS)
+
+
+def validate_focus_points(focus_points: list[str] | None) -> list[str] | None:
+    if not focus_points:
+        return None
+    if not isinstance(focus_points, (list, tuple)):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "FEEDBACK_INVALID_FOCUS_POINTS", "message": "Focus points must be a list"},
+        )
+    cleaned_points: list[str] = []
+    seen = set()
+    for pt in focus_points:
+        if not isinstance(pt, str):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "FEEDBACK_INVALID_FOCUS_POINTS", "message": "Focus point code must be a string"},
+            )
+        code = pt.strip().upper()
+        if code not in ALL_FOCUS_POINT_CODES:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "FEEDBACK_INVALID_FOCUS_POINTS", "message": f"Unsupported focus point code: {pt}"},
+            )
+        if code not in seen:
+            seen.add(code)
+            cleaned_points.append(code)
+
+    strengths = [c for c in cleaned_points if c in ALLOWLISTED_STRENGTHS]
+    improvements = [c for c in cleaned_points if c in ALLOWLISTED_IMPROVEMENTS]
+
+    if len(strengths) > 2:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "FEEDBACK_INVALID_FOCUS_POINTS", "message": "At most 2 strengths can be selected"},
+        )
+    if len(improvements) > 2:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "FEEDBACK_INVALID_FOCUS_POINTS", "message": "At most 2 improvement areas can be selected"},
+        )
+
+    return sorted(cleaned_points)
 
 
 class GeneratedFeedback(BaseModel):
@@ -116,6 +204,7 @@ class _FeedbackContext:
     questions: tuple[_QuestionEvidence, ...]
     answer_release_authorized: bool
     retake_available: bool
+    focus_points: tuple[str, ...] = ()
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -139,6 +228,7 @@ def _evidence_fingerprint(context: _FeedbackContext) -> str:
         "grade": _decimal_text(context.grade),
         "submitted_at": context.submitted_at.isoformat() if context.submitted_at else None,
         "graded_at": context.graded_at.isoformat() if context.graded_at else None,
+        "focus_points": sorted(context.focus_points or ()),
         "assignment": {
             "assignment_id": context.assignment.classwork_assignment_id,
             "class_id": context.assignment.class_id,
@@ -183,6 +273,17 @@ def _evidence_fingerprint(context: _FeedbackContext) -> str:
             for item in context.questions
         ],
     }
+    if not is_quiz_type(context.classwork.classwork_type):
+        # Keep quiz fingerprints unchanged. Non-quiz release and mode settings
+        # are authoritative and must invalidate an outstanding suggestion.
+        payload["non_quiz_policy"] = {
+            "classwork_type": context.classwork.classwork_type,
+            "activity_mode": context.classwork.activity_mode,
+            "is_graded": context.classwork.is_graded,
+            "is_published": context.classwork.is_published,
+            "assignment_published": context.assignment.is_published,
+            "show_scores": context.classwork.show_scores,
+        }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -306,6 +407,10 @@ def _assert_authorized_scope(
 def _assert_ordinary_quiz(db: Session, assignment: ClassworkAssignment, classwork: Classwork) -> None:
     if not is_quiz_type(classwork.classwork_type):
         raise _error(422, "FEEDBACK_UNSUPPORTED_SUBMISSION", "AI feedback suggestions currently support graded quizzes only")
+    _assert_ordinary_assignment(db, assignment)
+
+
+def _assert_ordinary_assignment(db: Session, assignment: ClassworkAssignment) -> None:
     if (
         assignment.recipient_student_id is not None
         or assignment.source_intervention_id is not None
@@ -318,6 +423,67 @@ def _assert_ordinary_quiz(db: Session, assignment: ClassworkAssignment, classwor
     ).first()
     if linked_remediation is not None:
         raise _error(422, "FEEDBACK_UNSUPPORTED_ASSIGNMENT", "Intervention and remediation assignments are not supported")
+
+
+def _score_classification(awarded: Decimal, maximum: Decimal) -> str:
+    if awarded == maximum:
+        return "full_credit"
+    if awarded == 0:
+        return "no_credit"
+    return "partial_credit"
+
+
+def _load_scored_classwork_context(
+    db: Session,
+    submission: StudentSubmission,
+    assignment: ClassworkAssignment,
+    classwork: Classwork,
+) -> _FeedbackContext:
+    classwork_type = (classwork.classwork_type or "").strip().upper()
+    if classwork_type not in {"ASSIGNMENT", "ACTIVITY"} or (
+        (classwork.activity_mode or "").strip().upper() != "ONLINE"
+    ):
+        raise _error(422, "FEEDBACK_UNSUPPORTED_SUBMISSION", "AI feedback is unavailable for this classwork type")
+    _assert_ordinary_assignment(db, assignment)
+    if not classwork.is_published or not assignment.is_published:
+        raise _error(409, "FEEDBACK_CLASSWORK_NOT_PUBLISHED", "Publish this classwork before generating AI feedback")
+    if not classwork.is_graded or submission.status != "graded" or submission.grade is None or (
+        submission.submitted_at is None or submission.graded_at is None
+    ):
+        raise _error(409, "FEEDBACK_CLASSWORK_NOT_FULLY_GRADED", "Complete grading for this submitted work before generating AI feedback")
+    try:
+        awarded = Decimal(str(submission.grade))
+        maximum = Decimal(str(classwork.total_points))
+    except (InvalidOperation, ValueError, TypeError):
+        raise _error(409, "FEEDBACK_INVALID_GRADING_EVIDENCE", "Classwork scoring evidence is invalid") from None
+    if not awarded.is_finite() or not maximum.is_finite() or maximum <= 0 or awarded < 0 or awarded > maximum:
+        raise _error(409, "FEEDBACK_INVALID_GRADING_EVIDENCE", "Classwork scoring evidence is invalid")
+    draft_record = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
+    raw_focus_points = (
+        getattr(submission, "feedback_focus_points", None)
+        or (draft_record.focus_points if draft_record else None)
+        or ()
+    )
+    return _FeedbackContext(
+        submission_id=submission.submission_id,
+        attempt_count=submission.attempt_count,
+        feedback=submission.feedback,
+        status=submission.status,
+        grade=awarded,
+        submitted_at=submission.submitted_at,
+        graded_at=submission.graded_at,
+        assignment=assignment,
+        classwork=classwork,
+        subject_name="",
+        lesson_titles=(),
+        setting=None,
+        questions=(),
+        # The legacy response field means feedback release is authorized for
+        # non-quizzes; there are no quiz answer keys to release here.
+        answer_release_authorized=True,
+        retake_available=False,
+        focus_points=tuple(raw_focus_points),
+    )
 
 
 def _load_feedback_context(
@@ -334,6 +500,8 @@ def _load_feedback_context(
             submission_id,
             lock_for_update=lock_for_publication,
         )
+        if not is_quiz_type(classwork.classwork_type):
+            return _load_scored_classwork_context(db, submission, assignment, classwork)
         _assert_ordinary_quiz(db, assignment, classwork)
 
         if submission.status not in COMPLETED_ATTEMPT_STATUSES or submission.status != "graded":
@@ -461,6 +629,8 @@ def _base_prompt_evidence(context: _FeedbackContext) -> dict:
 
 
 def _build_prompt(context: _FeedbackContext) -> tuple[str, int]:
+    if not is_quiz_type(context.classwork.classwork_type):
+        return _build_scored_classwork_prompt(context), 1
     evidence = _base_prompt_evidence(context)
     included = 0
     if context.answer_release_authorized:
@@ -518,6 +688,68 @@ When detail_level is GENERAL, provide only high-level formative guidance. Do not
 When detail_level is DETAILED, you may mention question numbers, question types, and full, partial, or no credit. Give only general next steps. Do not state or imply any answer content, topic, reasoning, solution, or cause of a score."""
 
 
+_SCORE_SYSTEM_PROMPT = """Draft a short, supportive teacher feedback suggestion for scored classwork. You have not seen the student's work, instructions, rubric, teacher comments, or lesson content. Do not claim to have inspected work, identify specific mistakes or topics, infer effort or behavior, or invent observations. Return ONLY a JSON object with one string field named feedback. Choose one or two distinct sentences verbatim from the approved sentences in the user message. Do not add, modify, or paraphrase any sentence."""
+
+_CONTEXTUAL_SYSTEM_PROMPT = """You are an academic feedback assistant creating a draft comment for a teacher to review.
+Base your feedback strictly and only on the provided teacher-selected focus points and overall score.
+Do NOT claim to have read, seen, inspected, or analyzed any uploaded file, PDF, essay, document, link, URL, or image.
+Do NOT invent specific errors, page numbers, paragraph numbers, citations, calculations, topics, or unobserved details.
+Do NOT infer student effort, motivation, intentions, personal qualities, or diagnoses.
+If strengths and improvement areas seem in tension, summarize each as a pedagogical focus point without inventing an explanation.
+Write 1 to 3 constructive, encouraging sentences (maximum 400 characters).
+Output must be a JSON object with schema: {"feedback": "..."}."""
+
+
+def _generate_score_template(context: _FeedbackContext) -> str:
+    maximum = Decimal(str(context.classwork.total_points))
+    classification = _score_classification(context.grade, maximum)
+    sentences = _SCORE_FEEDBACK_SENTENCES.get(classification, _SCORE_FEEDBACK_SENTENCES["partial_credit"])
+    return " ".join(sentences)
+
+
+def _build_contextual_classwork_prompt(context: _FeedbackContext) -> str:
+    maximum = Decimal(str(context.classwork.total_points))
+    classification = _score_classification(context.grade, maximum)
+    strengths_text = [ALLOWLISTED_STRENGTHS[c] for c in context.focus_points if c in ALLOWLISTED_STRENGTHS]
+    improvements_text = [ALLOWLISTED_IMPROVEMENTS[c] for c in context.focus_points if c in ALLOWLISTED_IMPROVEMENTS]
+
+    evidence = {
+        "classwork_type": context.classwork.classwork_type.strip().upper(),
+        "awarded_points": _decimal_text(context.grade),
+        "maximum_points": _decimal_text(maximum),
+        "credit_classification": classification,
+        "teacher_selected_strengths": strengths_text,
+        "teacher_selected_improvements": improvements_text,
+    }
+    envelope = {"evidence": evidence}
+    return (
+        "Privacy-limited, teacher-grounded grading evidence follows as JSON. "
+        "Synthesize 1 to 3 constructive sentences (max 400 characters) for the student addressing the teacher's selected focus points and overall score. "
+        "Do not invent document content, page numbers, or unstated facts. "
+        "Do not reference AI, system instructions, or internal identifiers.\n"
+        + json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
+    )
+
+
+def _build_scored_classwork_prompt(context: _FeedbackContext) -> str:
+    maximum = Decimal(str(context.classwork.total_points))
+    classification = _score_classification(context.grade, maximum)
+    evidence = {
+        "classwork_type": context.classwork.classwork_type.strip().upper(),
+        "awarded_points": _decimal_text(context.grade),
+        "maximum_points": _decimal_text(maximum),
+        "credit_classification": classification,
+        "grading_status": "graded",
+    }
+    approved = (*_SCORE_FEEDBACK_SENTENCES[classification], *_SHARED_SCORE_FEEDBACK_SENTENCES)
+    envelope = {"evidence": evidence, "approved_sentences": approved}
+    return (
+        "Privacy-limited, server-derived scoring evidence and approved wording follow as JSON. "
+        "Select one or two approved sentences only; do not infer submission content or reasons for the score.\n"
+        + json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
+    )
+
+
 def _protected_phrases(context: _FeedbackContext) -> tuple[str, ...]:
     values: set[str] = set()
     for item in context.questions:
@@ -538,6 +770,37 @@ def _validate_generated_output(raw: str, context: _FeedbackContext) -> str:
         raise _error(502, "FEEDBACK_AI_OUTPUT_INVALID", "AI returned invalid feedback") from None
 
     text = generated.feedback
+    if not is_quiz_type(context.classwork.classwork_type):
+        if context.focus_points:
+            cleaned = " ".join(text.split())
+            if len(cleaned) > 400 or len(cleaned.split()) > 80:
+                raise _error(502, "FEEDBACK_AI_OUTPUT_UNSAFE", "AI feedback exceeded allowable length")
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", cleaned) if s.strip()]
+            if not 1 <= len(sentences) <= 3:
+                raise _error(502, "FEEDBACK_AI_OUTPUT_UNSAFE", "AI feedback sentence count outside bounds")
+
+            raw_lower = unicodedata.normalize("NFKC", cleaned).casefold()
+            unsafe_claims = (
+                r"\b(?:dyslex\w*|adhd|autis\w*|learning disabil\w*|intellectual disabil\w*|low iq)\b",
+                r"\b(?:lazy|unmotivated|lacks? motivation|does not try|lack(?:s|ing)? effort|careless|rushed)\b",
+                r"\b(?:student_id|submission_id|account_id|user_id|system prompt|ignore previous|as an ai)\b",
+                r"\b(?:i (?:read|reviewed|inspected|examined|looked at|saw|checked|analyzed) (?:your|the)? (?:essay|document|file|pdf|paper|submission|image|photo|link|url|code|work))\b",
+                r"\b(?:in (?:your|the)? (?:pdf|attached file|attachment|upload|document|essay|photo|link))\b",
+                r"\b(?:on page \d+|in paragraph \d+|in section \d+|at line \d+|on slide \d+)\b",
+                r"\b(?:https?://|www\.)\S+",
+            )
+            if any(re.search(pat, raw_lower, re.IGNORECASE) for pat in unsafe_claims):
+                raise _error(502, "FEEDBACK_AI_OUTPUT_UNSAFE", "AI feedback contained unsupported claims or sensitive inferences")
+            return cleaned
+
+        classification = _score_classification(context.grade, Decimal(str(context.classwork.total_points)))
+        approved = set((*_SCORE_FEEDBACK_SENTENCES[classification], *_SHARED_SCORE_FEEDBACK_SENTENCES))
+        sentences = re.split(r"(?<=\.)\s+", " ".join(text.split()))
+        if not 1 <= len(sentences) <= 2 or len(sentences) != len(set(sentences)) or any(
+            sentence not in approved for sentence in sentences
+        ):
+            raise _error(502, "FEEDBACK_AI_OUTPUT_UNSAFE", "AI feedback was not supported by the available score evidence")
+        return " ".join(sentences)
     normalized = _normalized(text)
     raw_lower = unicodedata.normalize("NFKC", text).casefold()
     unsafe_claims = (
@@ -699,7 +962,7 @@ async def generate_submission_feedback_suggestion(
 
     raw = await Provider.generate_text(
         prompt,
-        _SYSTEM_PROMPT,
+        _SYSTEM_PROMPT if is_quiz_type(context.classwork.classwork_type) else _SCORE_SYSTEM_PROMPT,
         json_output=True,
         max_tokens=600,
         output_schema=GeneratedFeedback.model_json_schema(),
@@ -717,10 +980,10 @@ async def generate_submission_feedback_suggestion(
     return FeedbackSuggestionResponse(
         submission_id=context.submission_id,
         feedback=feedback,
-        detail_level="DETAILED" if context.answer_release_authorized else "GENERAL",
+        detail_level=("DETAILED" if context.answer_release_authorized else "GENERAL") if is_quiz_type(context.classwork.classwork_type) else "GENERAL",
         answer_release_authorized=context.answer_release_authorized,
         attempt_count=context.attempt_count,
-        evidence_item_count=len(context.questions),
+        evidence_item_count=len(context.questions) if is_quiz_type(context.classwork.classwork_type) else 1,
         included_item_count=included_items,
         evidence_fingerprint=evidence_fingerprint,
         feedback_fingerprint=current_feedback_fingerprint,
@@ -754,7 +1017,9 @@ def publish_submission_feedback(
             raise _error(
                 409,
                 "FEEDBACK_EVIDENCE_STALE",
-                "Quiz evidence changed; generate and review a new suggestion",
+                "Quiz evidence changed; generate and review a new suggestion"
+                if is_quiz_type(context.classwork.classwork_type)
+                else "Grading evidence changed; generate and review a new suggestion",
             )
         if not hmac.compare_digest(
             payload.expected_feedback_fingerprint,
@@ -773,6 +1038,13 @@ def publish_submission_feedback(
         submission.feedback = approved_feedback
         db.flush([submission])
         saved_feedback_fingerprint = feedback_fingerprint(approved_feedback)
+
+        # Mark draft as APPROVED if one exists
+        draft = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission_id).first()
+        if draft is not None:
+            draft.status = "APPROVED"
+            draft.feedback_fingerprint = saved_feedback_fingerprint
+
         db.commit()
         return FeedbackPublicationResponse(
             submission_id=submission_id,
@@ -783,3 +1055,628 @@ def publish_submission_feedback(
     except Exception:
         db.rollback()
         raise
+
+
+# Event loop holder for background execution across sync/async boundaries
+_main_event_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_main_event_loop(loop: asyncio.AbstractEventLoop | None) -> None:
+    global _main_event_loop
+    _main_event_loop = loop
+
+
+def get_main_event_loop() -> asyncio.AbstractEventLoop | None:
+    return _main_event_loop
+
+
+def _build_draft_response(
+    draft: SubmissionFeedbackDraft,
+    auto_ai_feedback_enabled: bool = True,
+    status_override: str | None = None,
+) -> FeedbackDraftResponse:
+    status = status_override or draft.status
+    if status in {"QUEUED", "CLAIMED"}:
+        status = "PENDING"
+    return FeedbackDraftResponse(
+        submission_id=draft.submission_id,
+        status=status,  # type: ignore[arg-type]
+        draft_feedback=draft.draft_feedback,
+        evidence_fingerprint=draft.evidence_fingerprint,
+        feedback_fingerprint=draft.feedback_fingerprint,
+        detail_level=draft.detail_level,
+        auto_ai_feedback_enabled=auto_ai_feedback_enabled,
+        error_message=draft.error_message,
+        created_at=draft.created_at,
+        updated_at=draft.updated_at,
+        focus_points=getattr(draft, "focus_points", None),
+        is_template=(draft.detail_level in {"TEMPLATE", "POLICY_FALLBACK"}),
+        is_policy_fallback=(draft.detail_level == "POLICY_FALLBACK"),
+    )
+
+
+def get_submission_feedback_draft_status(
+    db: Session,
+    staff_id: str,
+    submission_id: int,
+) -> FeedbackDraftResponse:
+    """Strictly read-only retrieval of the current draft state.
+
+    Never invokes an AI provider, never mutates database state, and never enqueues jobs.
+    """
+    submission, assignment, classwork = _assert_authorized_scope(
+        db,
+        staff_id,
+        submission_id,
+    )
+    auto_enabled = bool(getattr(classwork, "auto_ai_feedback_enabled", False))
+    draft = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission_id).first()
+
+    if not auto_enabled:
+        if draft:
+            return _build_draft_response(draft, auto_ai_feedback_enabled=False)
+        return FeedbackDraftResponse(
+            submission_id=submission_id,
+            status="NONE",
+            auto_ai_feedback_enabled=False,
+        )
+
+    if draft:
+        if draft.status in {"QUEUED", "CLAIMED"}:
+            return _build_draft_response(draft, auto_ai_feedback_enabled=True, status_override="PENDING")
+        if draft.status in {"READY", "UNDER_REVIEW"}:
+            try:
+                context = _load_feedback_context(db, staff_id, submission_id)
+                current_fp = _evidence_fingerprint(context)
+                if current_fp != draft.evidence_fingerprint:
+                    return _build_draft_response(draft, auto_ai_feedback_enabled=True, status_override="STALE")
+            except Exception:
+                return _build_draft_response(draft, auto_ai_feedback_enabled=True, status_override="STALE")
+        return _build_draft_response(draft, auto_ai_feedback_enabled=True)
+
+    # No draft exists yet; check eligibility in a read-only way
+    try:
+        context = _load_feedback_context(db, staff_id, submission_id)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        code = detail.get("code") or (exc.detail if isinstance(exc.detail, str) else "NOT_ELIGIBLE")
+        message = detail.get("message") if isinstance(detail, dict) else (exc.detail if isinstance(exc.detail, str) else "Not eligible for AI feedback")
+        return FeedbackDraftResponse(
+            submission_id=submission_id,
+            status="NOT_ELIGIBLE",
+            auto_ai_feedback_enabled=True,
+            error_message=f"{code}: {message}",
+        )
+
+    return FeedbackDraftResponse(
+        submission_id=submission_id,
+        status="NONE",
+        auto_ai_feedback_enabled=True,
+    )
+
+
+# Alias for backwards compatibility
+get_or_create_submission_feedback_draft = get_submission_feedback_draft_status
+
+
+def discard_submission_feedback_draft(
+    db: Session,
+    staff_id: str,
+    submission_id: int,
+) -> FeedbackDraftResponse:
+    submission, assignment, classwork = _assert_authorized_scope(
+        db,
+        staff_id,
+        submission_id,
+    )
+    auto_enabled = bool(getattr(classwork, "auto_ai_feedback_enabled", False))
+    draft = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission_id).first()
+    if draft is None:
+        draft = SubmissionFeedbackDraft(
+            submission_id=submission_id,
+            status="DISCARDED",
+            staff_id=staff_id,
+        )
+        db.add(draft)
+    else:
+        draft.status = "DISCARDED"
+        draft.claim_token = None
+        draft.locked_until = None
+    db.commit()
+    db.refresh(draft)
+    return _build_draft_response(draft, auto_ai_feedback_enabled=auto_enabled)
+
+
+def _determine_scheduled_release_time(
+    db: Session,
+    assignment: ClassworkAssignment,
+    classwork: Classwork,
+    submission: StudentSubmission,
+) -> datetime | None:
+    now = datetime.now(timezone.utc)
+    if not is_quiz_type(classwork.classwork_type):
+        return now
+
+    setting = db.query(QuizSetting).filter_by(classwork_id=classwork.classwork_id).first()
+    if not setting or not setting.show_correct_answers or not getattr(setting, "show_scores", True):
+        return None
+
+    retake_available = _can_submit(db, assignment, classwork, submission)
+    due_date = aware_utc(assignment.due_date)
+    mode = (setting.summary_release_mode or "IMMEDIATE").strip().upper()
+
+    if retake_available:
+        if due_date and due_date > now:
+            sched = due_date
+            if mode == "SCHEDULED" and setting.summary_release_at and aware_utc(setting.summary_release_at) > sched:
+                sched = aware_utc(setting.summary_release_at)
+            return sched
+        return None
+
+    if mode == "IMMEDIATE":
+        return now
+    elif mode == "SCHEDULED":
+        return aware_utc(setting.summary_release_at) if setting.summary_release_at else None
+    elif mode == "AFTER_DUE_DATE":
+        return due_date
+    return None
+
+
+def enqueue_automatic_feedback_draft(
+    db: Session,
+    submission_id: int,
+    staff_id: str | None = None,
+    focus_points: list[str] | None = None,
+) -> SubmissionFeedbackDraft | None:
+    """Enqueues a feedback draft generation job in the current database transaction."""
+    submission = db.query(StudentSubmission).filter_by(submission_id=submission_id).first()
+    if not submission or submission.status != "graded" or submission.grade is None:
+        return None
+
+    assignment = db.query(ClassworkAssignment).filter_by(
+        classwork_assignment_id=submission.classwork_assignment_id,
+    ).first()
+    if not assignment:
+        return None
+
+    classwork = db.query(Classwork).filter_by(classwork_id=assignment.classwork_id).first()
+    if not classwork or not getattr(classwork, "auto_ai_feedback_enabled", False):
+        return None
+
+    # Exclude reading and remediation
+    if (classwork.classwork_type or "").upper() == "READING" or not classwork.is_graded:
+        return None
+    if assignment.recipient_student_id is not None:
+        return None
+
+    # Resolve staff_id
+    resolved_staff_id = staff_id or submission.graded_by_staff_id or classwork.created_by_staff_id
+    if not resolved_staff_id:
+        load = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == assignment.class_id,
+            SubjectLoad.subject_id == classwork.subject_id,
+            SubjectLoad.is_active_version.is_(True),
+        ).first()
+        if load:
+            resolved_staff_id = load.staff_id
+
+    scheduled_for = _determine_scheduled_release_time(db, assignment, classwork, submission)
+
+    draft = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission_id).first()
+    if draft:
+        if draft.status in {"APPROVED", "DISCARDED"}:
+            return draft
+        if draft.status == "READY":
+            try:
+                context = _load_feedback_context(db, resolved_staff_id, submission_id)
+                if _evidence_fingerprint(context) == draft.evidence_fingerprint:
+                    return draft
+            except Exception:
+                pass
+        draft.status = "QUEUED"
+        draft.staff_id = resolved_staff_id
+        draft.scheduled_for = scheduled_for
+        draft.focus_points = focus_points
+        draft.retry_count = 0
+        draft.claim_token = None
+        draft.claimed_at = None
+        draft.locked_until = None
+        draft.error_message = None
+    else:
+        draft = SubmissionFeedbackDraft(
+            submission_id=submission_id,
+            status="QUEUED",
+            staff_id=resolved_staff_id,
+            scheduled_for=scheduled_for,
+            focus_points=focus_points,
+            retry_count=0,
+        )
+        db.add(draft)
+
+    db.flush([draft])
+    return draft
+
+
+async def process_feedback_draft_job(db: Session, draft_id: int) -> bool:
+    """Atomically claims and processes a single feedback draft job.
+
+    Guarantees concurrency safety using lease-based atomic conditional update.
+    """
+    now = datetime.now(timezone.utc)
+    claim_token = uuid.uuid4().hex
+    lease_until = now + timedelta(seconds=60)
+
+    # 1. Atomic claim conditional update
+    claimed = (
+        db.query(SubmissionFeedbackDraft)
+        .filter(
+            SubmissionFeedbackDraft.draft_id == draft_id,
+            (
+                SubmissionFeedbackDraft.status.in_(["QUEUED", "PENDING"])
+                | (
+                    (SubmissionFeedbackDraft.status == "CLAIMED")
+                    & (SubmissionFeedbackDraft.locked_until < now)
+                )
+            ),
+            SubmissionFeedbackDraft.scheduled_for.isnot(None),
+            SubmissionFeedbackDraft.scheduled_for <= now,
+        )
+        .update(
+            {
+                SubmissionFeedbackDraft.status: "CLAIMED",
+                SubmissionFeedbackDraft.claim_token: claim_token,
+                SubmissionFeedbackDraft.claimed_at: now,
+                SubmissionFeedbackDraft.locked_until: lease_until,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+
+    if not claimed:
+        return False
+
+    draft = db.get(SubmissionFeedbackDraft, draft_id)
+    if draft is None or draft.claim_token != claim_token:
+        return False
+
+    # 2. Scope & toggle verification
+    submission = db.get(StudentSubmission, draft.submission_id)
+    if not submission:
+        db.delete(draft)
+        db.commit()
+        return False
+
+    assignment = db.get(ClassworkAssignment, submission.classwork_assignment_id)
+    classwork = db.get(Classwork, assignment.classwork_id) if assignment else None
+    if not classwork or not getattr(classwork, "auto_ai_feedback_enabled", False):
+        draft.status = "NOT_ELIGIBLE"
+        draft.claim_token = None
+        draft.locked_until = None
+        db.commit()
+        return False
+
+    staff_id = draft.staff_id or submission.graded_by_staff_id or classwork.created_by_staff_id
+    if not staff_id:
+        load = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == assignment.class_id,
+            SubjectLoad.subject_id == classwork.subject_id,
+            SubjectLoad.is_active_version.is_(True),
+        ).first()
+        staff_id = load.staff_id if load else None
+
+    if not staff_id:
+        draft.status = "FAILED"
+        draft.error_message = "No authorized staff to generate feedback"
+        draft.claim_token = None
+        draft.locked_until = None
+        db.commit()
+        return False
+
+    # 3. Load feedback context & verify release eligibility
+    try:
+        context = _load_feedback_context(db, staff_id, draft.submission_id)
+        if is_quiz_type(classwork.classwork_type):
+            _assert_answer_release_authorized(context)
+        if is_quiz_type(classwork.classwork_type) or (context.focus_points and getattr(settings, "contextual_ai_feedback_authorized", False)):
+            _assert_ai_available()
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        code = detail.get("code") or (exc.detail if isinstance(exc.detail, str) else "NOT_ELIGIBLE")
+        message = detail.get("message") if isinstance(detail, dict) else (exc.detail if isinstance(exc.detail, str) else str(exc.detail))
+
+        # Check if delayed release can be scheduled
+        new_sched = _determine_scheduled_release_time(db, assignment, classwork, submission)
+        if new_sched and new_sched > now:
+            draft.status = "QUEUED"
+            draft.scheduled_for = new_sched
+            draft.claim_token = None
+            draft.locked_until = None
+            draft.error_message = f"Scheduled for {new_sched.isoformat()}"
+        else:
+            draft.status = "NOT_ELIGIBLE"
+            draft.error_message = f"{code}: {message}"
+            draft.claim_token = None
+            draft.locked_until = None
+        db.commit()
+        return False
+    except Exception as exc:
+        draft.retry_count += 1
+        draft.error_message = str(exc)
+        draft.claim_token = None
+        draft.locked_until = None
+        if draft.retry_count < draft.max_retries:
+            delay = (2 ** draft.retry_count) * 5
+            draft.scheduled_for = datetime.now(timezone.utc) + timedelta(seconds=delay)
+            draft.status = "QUEUED"
+        else:
+            draft.status = "FAILED"
+        db.commit()
+        return False
+
+    # 4. Generate feedback (deterministic template vs contextual AI)
+    evidence_fp = _evidence_fingerprint(context)
+    requires_provider = False
+    feedback: str = ""
+    detail_level = "GENERAL"
+
+    if is_quiz_type(context.classwork.classwork_type):
+        prompt, _ = _build_prompt(context)
+        detail_level = "DETAILED" if context.answer_release_authorized else "GENERAL"
+        system_prompt = _SYSTEM_PROMPT
+        requires_provider = True
+    else:
+        if context.focus_points:
+            # Focus points selected: check institutional authorization policy feature gate
+            if not getattr(settings, "contextual_ai_feedback_authorized", False):
+                # Fallback to local score-based template due to institutional authorization policy
+                feedback = _generate_score_template(context)
+                detail_level = "POLICY_FALLBACK"
+                requires_provider = False
+            else:
+                prompt = _build_contextual_classwork_prompt(context)
+                detail_level = "CONTEXTUAL"
+                system_prompt = _CONTEXTUAL_SYSTEM_PROMPT
+                requires_provider = True
+        else:
+            # No focus points selected: deterministic score template locally, zero AI calls
+            feedback = _generate_score_template(context)
+            detail_level = "TEMPLATE"
+            requires_provider = False
+
+    if requires_provider:
+        try:
+            raw = await Provider.generate_text(
+                prompt,
+                system_prompt,
+                json_output=True,
+                max_tokens=600,
+                output_schema=GeneratedFeedback.model_json_schema(),
+            )
+            feedback = _validate_generated_output(raw, context)
+        except Exception as exc:
+            current_draft = db.get(SubmissionFeedbackDraft, draft_id)
+            if current_draft and current_draft.claim_token == claim_token:
+                current_draft.retry_count += 1
+                current_draft.error_message = str(exc)
+                current_draft.claim_token = None
+                current_draft.locked_until = None
+                if current_draft.retry_count < current_draft.max_retries:
+                    delay = (2 ** current_draft.retry_count) * 5
+                    current_draft.scheduled_for = datetime.now(timezone.utc) + timedelta(seconds=delay)
+                    current_draft.status = "QUEUED"
+                else:
+                    current_draft.status = "FAILED"
+                db.commit()
+            return False
+
+    # 5. Optimistic concurrency / stale-state check
+    fresh_context = _load_feedback_context(db, staff_id, draft.submission_id)
+    fresh_fp = _evidence_fingerprint(fresh_context)
+    if fresh_fp != evidence_fp:
+        db.query(SubmissionFeedbackDraft).filter(
+            SubmissionFeedbackDraft.draft_id == draft_id,
+            SubmissionFeedbackDraft.claim_token == claim_token,
+        ).update(
+            {
+                SubmissionFeedbackDraft.status: "STALE",
+                SubmissionFeedbackDraft.claim_token: None,
+                SubmissionFeedbackDraft.locked_until: None,
+                SubmissionFeedbackDraft.error_message: "Grading evidence changed during generation",
+            },
+            synchronize_session=False,
+        )
+        db.commit()
+        return False
+
+    # 6. Save as READY only if this worker still holds the claim token
+    rows_updated = (
+        db.query(SubmissionFeedbackDraft)
+        .filter(
+            SubmissionFeedbackDraft.draft_id == draft_id,
+            SubmissionFeedbackDraft.claim_token == claim_token,
+        )
+        .update(
+            {
+                SubmissionFeedbackDraft.draft_feedback: feedback,
+                SubmissionFeedbackDraft.evidence_fingerprint: evidence_fp,
+                SubmissionFeedbackDraft.feedback_fingerprint: feedback_fingerprint(context.feedback),
+                SubmissionFeedbackDraft.detail_level: detail_level,
+                SubmissionFeedbackDraft.focus_points: list(context.focus_points) if context.focus_points else None,
+                SubmissionFeedbackDraft.attempt_count: context.attempt_count,
+                SubmissionFeedbackDraft.status: "READY",
+                SubmissionFeedbackDraft.claim_token: None,
+                SubmissionFeedbackDraft.locked_until: None,
+                SubmissionFeedbackDraft.error_message: None,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    if rows_updated == 0:
+        # Lease expired during generation; newer worker claimed this job
+        return False
+    return True
+
+
+def reactivate_unscheduled_feedback_drafts(
+    db: Session,
+    limit: int = 10,
+) -> int:
+    """Safely reactivate queued feedback draft jobs that were held without a schedule.
+
+    Under the private grading policy, eligible non-quiz drafts become scheduled
+    immediately upon grading even if student score visibility is disabled.
+    """
+    unscheduled = (
+        db.query(SubmissionFeedbackDraft)
+        .filter(
+            SubmissionFeedbackDraft.status == "QUEUED",
+            SubmissionFeedbackDraft.scheduled_for.is_(None),
+        )
+        .order_by(SubmissionFeedbackDraft.draft_id.asc())
+        .limit(limit)
+        .all()
+    )
+    reactivated = 0
+    for draft in unscheduled:
+        sub = db.get(StudentSubmission, draft.submission_id)
+        if not sub:
+            continue
+        asgn = db.get(ClassworkAssignment, sub.classwork_assignment_id)
+        cw = db.get(Classwork, asgn.classwork_id) if asgn else None
+        if cw and asgn:
+            sched = _determine_scheduled_release_time(db, asgn, cw, sub)
+            if sched is not None:
+                draft.scheduled_for = sched
+                reactivated += 1
+    if reactivated > 0:
+        db.commit()
+    return reactivated
+
+
+async def process_pending_feedback_draft_jobs(
+    db: Session | None = None,
+    limit: int = 10,
+) -> int:
+    """Processes ready queued feedback draft jobs up to limit."""
+    owns_db = False
+    if db is None:
+        db = SessionLocal()
+        owns_db = True
+
+    try:
+        reactivate_unscheduled_feedback_drafts(db, limit=limit)
+        now = datetime.now(timezone.utc)
+        ready_draft_ids = (
+            db.query(SubmissionFeedbackDraft.draft_id)
+            .filter(
+                (SubmissionFeedbackDraft.status.in_(["QUEUED", "PENDING"]))
+                | (
+                    (SubmissionFeedbackDraft.status == "CLAIMED")
+                    & (SubmissionFeedbackDraft.locked_until < now)
+                ),
+                SubmissionFeedbackDraft.scheduled_for.isnot(None),
+                SubmissionFeedbackDraft.scheduled_for <= now,
+            )
+            .order_by(
+                SubmissionFeedbackDraft.scheduled_for.asc(),
+                SubmissionFeedbackDraft.draft_id.asc(),
+            )
+            .limit(limit)
+            .all()
+        )
+
+        processed_count = 0
+        for (draft_id,) in ready_draft_ids:
+            success = await process_feedback_draft_job(db, draft_id)
+            if success:
+                processed_count += 1
+        return processed_count
+    finally:
+        if owns_db:
+            db.close()
+
+
+def dispatch_background_draft_processing() -> None:
+    """Schedules background draft worker execution safely without blocking callers."""
+    loop = get_main_event_loop()
+    if loop is not None and loop.is_running():
+        try:
+            asyncio.run_coroutine_threadsafe(process_pending_feedback_draft_jobs(), loop)
+            return
+        except Exception:
+            pass
+
+    try:
+        current_loop = asyncio.get_running_loop()
+        current_loop.create_task(process_pending_feedback_draft_jobs())
+    except RuntimeError:
+        # No active event loop in thread; caller can drain explicitly if needed
+        pass
+
+
+def sync_and_dispatch_classwork_draft_jobs(
+    db: Session,
+    classwork_id: int,
+    staff_id: str | None = None,
+) -> int:
+    """Re-evaluates and enqueues draft jobs when classwork score/answer release settings change."""
+    classwork = db.get(Classwork, classwork_id)
+    if not classwork or not getattr(classwork, "auto_ai_feedback_enabled", False):
+        return 0
+
+    assignments = db.query(ClassworkAssignment).filter_by(classwork_id=classwork_id).all()
+    assignment_ids = [a.classwork_assignment_id for a in assignments]
+    if not assignment_ids:
+        return 0
+
+    graded_submissions = (
+        db.query(StudentSubmission)
+        .filter(
+            StudentSubmission.classwork_assignment_id.in_(assignment_ids),
+            StudentSubmission.status == "graded",
+            StudentSubmission.grade.isnot(None),
+        )
+        .all()
+    )
+
+    enqueued_count = 0
+    for submission in graded_submissions:
+        draft = enqueue_automatic_feedback_draft(db, submission.submission_id, staff_id)
+        if draft is not None:
+            enqueued_count += 1
+
+    if enqueued_count > 0:
+        db.commit()
+        dispatch_background_draft_processing()
+
+    return enqueued_count
+
+
+async def run_feedback_draft_worker_loop(poll_interval_seconds: float = 30.0) -> None:
+    """Periodic worker loop run during FastAPI lifespan to drain scheduled or recoverable draft jobs."""
+    while True:
+        try:
+            await process_pending_feedback_draft_jobs()
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            pass
+        await asyncio.sleep(poll_interval_seconds)
+
+
+async def trigger_automatic_feedback_generation(
+    db: Session,
+    staff_id: str,
+    submission_id: int,
+) -> FeedbackDraftResponse | None:
+    """Backwards-compatible helper: enqueues and immediately processes draft for the submission."""
+    draft = enqueue_automatic_feedback_draft(db, submission_id, staff_id)
+    if draft is not None:
+        db.commit()
+        await process_feedback_draft_job(db, draft.draft_id)
+        draft = db.get(SubmissionFeedbackDraft, draft.draft_id)
+        if draft:
+            return _build_draft_response(draft, auto_ai_feedback_enabled=True)
+    return None

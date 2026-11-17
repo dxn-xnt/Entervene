@@ -144,7 +144,12 @@ export default function ClassworkView({
   const [gradeError, setGradeError] = useState("");
   const [gradeDraft, setGradeDraft] = useState("");
   const [feedbackDraft, setFeedbackDraft] = useState("");
+  const [focusPointsDraft, setFocusPointsDraft] = useState<string[]>([]);
   const [isPostingGrade, setIsPostingGrade] = useState(false);
+  const [isPostingAiFeedback, setIsPostingAiFeedback] = useState(false);
+  const [settingsRevision, setSettingsRevision] = useState(0);
+  const selectedSubmissionDetailRef = useRef<TeacherSubmissionDetail | null>(null);
+  selectedSubmissionDetailRef.current = selectedSubmissionDetail;
 
   useEffect(() => {
     if (contextState === "historical") {
@@ -319,6 +324,7 @@ export default function ClassworkView({
         : "",
     );
     setFeedbackDraft("");
+    setFocusPointsDraft([]);
 
     if (!student.submission_id) return;
 
@@ -338,6 +344,7 @@ export default function ClassworkView({
           : "",
       );
       setFeedbackDraft(detail.feedback ?? "");
+      setFocusPointsDraft(detail.feedback_focus_points ?? []);
     } catch (err) {
       setSubmissionDetailError(
         err instanceof Error
@@ -355,13 +362,18 @@ export default function ClassworkView({
     setSubmissionDetailError("");
   };
 
+  const handleFeedbackChange = useCallback((value: string) => {
+    setFeedbackDraft(value);
+    setGradeError("");
+  }, []);
+
   const handleSelectSection = (id: number | "all") => {
     setSelectedAssignmentId(id);
     closeStudentSubmission();
   };
 
   const postGrade = async () => {
-    if (blocksLiveActions || !selectedSubmissionDetail || !selected) return;
+    if (blocksLiveActions || isPostingAiFeedback || !selectedSubmissionDetail || !selected) return;
     const grade = Number(gradeDraft);
     if (!Number.isFinite(grade) || grade < 0) {
       setGradeError("Enter a valid score.");
@@ -376,6 +388,11 @@ export default function ClassworkView({
       return;
     }
 
+    const isAutoAi = Boolean(selected?.auto_ai_feedback_enabled);
+    const feedbackToSend = isAutoAi
+      ? (selectedSubmissionDetail.feedback ?? null)
+      : (feedbackDraft.trim() || null);
+
     setIsPostingGrade(true);
     setSubmissionDetailError("");
     setGradeError("");
@@ -387,8 +404,9 @@ export default function ClassworkView({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             grade,
-            feedback: feedbackDraft.trim() || null,
+            feedback: feedbackToSend,
             expected_feedback_fingerprint: selectedSubmissionDetail.feedback_fingerprint,
+            focus_points: focusPointsDraft,
           }),
         },
       );
@@ -405,6 +423,11 @@ export default function ClassworkView({
       }
       const updated = (await response.json()) as TeacherSubmissionDetail;
       setSelectedSubmissionDetail(updated);
+      setGradeDraft(updated.grade != null ? String(updated.grade) : "");
+      if (!isAutoAi || !feedbackDraft.trim()) {
+        setFeedbackDraft(updated.feedback ?? "");
+      }
+      setFocusPointsDraft(updated.feedback_focus_points ?? focusPointsDraft);
       setSelectedStudent((current) =>
         current
           ? { ...current, status: updated.status, grade: updated.grade ?? null }
@@ -517,7 +540,7 @@ export default function ClassworkView({
       const dueDate =
         tracking?.due_date ||
         selected?.assignments?.[0]?.due_date ||
-        (selected as any)?.due_date;
+        selected?.due_date;
       if (
         student.submitted_at &&
         dueDate &&
@@ -545,7 +568,7 @@ export default function ClassworkView({
 
   const needsGrading = Boolean(
     selected &&
-    (selected as any).is_graded !== false &&
+    selected.is_graded !== false &&
     !isReading,
   );
 
@@ -617,20 +640,39 @@ export default function ClassworkView({
         gradeDraft={gradeDraft}
         feedbackDraft={feedbackDraft}
         gradeError={gradeError}
-        isPostingGrade={isPostingGrade}
+        isPostingGrade={isPostingGrade || isPostingAiFeedback}
         isReadOnly={blocksLiveActions}
+        focusPointsDraft={focusPointsDraft}
+        onFocusPointsChange={setFocusPointsDraft}
         onClose={closeStudentSubmission}
         onGradeChange={(value) => {
           setGradeDraft(value);
           setGradeError("");
         }}
-        onFeedbackChange={(value) => {
-          setFeedbackDraft(value);
-          setGradeError("");
-        }}
+        onFeedbackChange={handleFeedbackChange}
         onPostGrade={postGrade}
         onOpenQuizGrading={(submissionId) => {
           if (!blocksLiveActions) setSelectedGradingSubmissionId(submissionId);
+        }}
+        onAiFeedbackPublished={(feedback, fingerprint) => {
+          setSelectedSubmissionDetail((current) => current
+            ? { ...current, feedback, feedback_fingerprint: fingerprint }
+            : current);
+          setFeedbackDraft(feedback);
+        }}
+        onAiPublishingChange={setIsPostingAiFeedback}
+        onAiConflictReload={async (submissionId) => {
+          const response = await apiFetch(`/api/v1/submissions/${submissionId}/detail`);
+          if (!response.ok) throw new Error("Unable to reload saved feedback.");
+          const fresh = (await response.json()) as TeacherSubmissionDetail;
+          const current = selectedSubmissionDetailRef.current;
+          if (current?.submission_id !== submissionId) return;
+          setSelectedSubmissionDetail(fresh);
+          setGradeDraft(fresh.grade != null ? String(fresh.grade) : "");
+          // The rejected AI review draft lived in the single Teacher Feedback
+          // editor; replace it with the authoritative saved comment.
+          setFeedbackDraft(fresh.feedback ?? "");
+          setFocusPointsDraft(fresh.feedback_focus_points ?? []);
         }}
       />
     );
@@ -1363,6 +1405,7 @@ export default function ClassworkView({
         onClose={() => setShowEditModal(false)}
         onSuccess={(updated) => {
           setSelected(updated);
+          setSettingsRevision((current) => current + 1);
           onUpdated?.(updated);
         }}
       />
@@ -1370,6 +1413,7 @@ export default function ClassworkView({
       {selectedGradingSubmissionId && !blocksLiveActions && (
         <QuizGradingModal
           submissionId={selectedGradingSubmissionId}
+          eligibilityRevision={settingsRevision}
           isOpen={Boolean(selectedGradingSubmissionId)}
           onClose={() => setSelectedGradingSubmissionId(null)}
           onSuccess={() => {

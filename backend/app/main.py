@@ -64,7 +64,23 @@ async def lifespan(_app):
     validate_heartbeat_settings()
     check_telemetry_logging()
     await run_in_threadpool(reconcile_expired_holds)
-    yield
+
+    import asyncio
+    from app.services.submission.SubmissionFeedbackService import (
+        set_main_event_loop,
+        run_feedback_draft_worker_loop,
+    )
+    set_main_event_loop(asyncio.get_running_loop())
+    draft_worker_task = asyncio.create_task(run_feedback_draft_worker_loop())
+    try:
+        yield
+    finally:
+        draft_worker_task.cancel()
+        try:
+            await draft_worker_task
+        except asyncio.CancelledError:
+            pass
+        set_main_event_loop(None)
 
 
 app = FastAPI(

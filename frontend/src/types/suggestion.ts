@@ -40,6 +40,11 @@ export type SuggestionResponse = {
   subject_id: number;
   lesson_id?: number | null;
   created_by_staff_id?: string | null;
+  origin_class_id?: number | null;
+  origin_academic_period_id?: number | null;
+  origin_period_label?: string;
+  is_historical?: boolean;
+  can_manage?: boolean;
   resource: SuggestionResourceSummary;
   classwork_link?: SuggestionClassworkResponse | null;
   source_metrics?: Record<string, unknown> | null;
@@ -59,6 +64,24 @@ export type ManualSuggestionCreate = {
   lesson_id?: number | null;
   classwork_assignment_id?: number | null;
   external_url?: string | null;
+};
+
+export type ManualBulkSuggestionCreate = {
+  student_ids: string[];
+  subject_id: number;
+  resource_type: SuggestionResourceType;
+  title: string;
+  description?: string | null;
+  priority: SuggestionPriority;
+  lesson_id?: number | null;
+  classwork_assignment_id?: number | null;
+  external_url?: string | null;
+};
+
+export type BulkSuggestionResponse = {
+  created_count: number;
+  skipped_count: number;
+  suggestions: SuggestionResponse[];
 };
 
 export type RecommendationDraftRequest = {

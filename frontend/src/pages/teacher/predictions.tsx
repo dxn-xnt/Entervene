@@ -155,10 +155,16 @@ function AdminCurrentTermDashboard() {
     riskLevel,
     includeEmptySections: !normalizedSearch && riskLevel === undefined,
   });
-  const hasHierarchyMatches = gradeHierarchy.some((group) =>
+  const visibleGradeHierarchy = gradeHierarchy.filter((group) => group.sections.length > 0);
+  const hasHierarchyMatches = visibleGradeHierarchy.some((group) =>
     group.sections.some((section) => section.students.length > 0)
   );
-  const hasPredictionResultFilters = riskLevel !== undefined || search.trim() !== "";
+  const hasPredictionResultFilters =
+    riskLevel !== undefined ||
+    search.trim() !== "" ||
+    gradeLevel !== undefined ||
+    classId !== undefined ||
+    subjectId !== undefined;
 
   return (
     <AppLayout>
@@ -230,7 +236,7 @@ function AdminCurrentTermDashboard() {
                 title="No current-term projections available"
                 description="No valid classes or published subject loads are available for predictions in the selected term."
               />
-            ) : hasPredictionResultFilters && !hasHierarchyMatches ? (
+            ) : hasPredictionResultFilters && (!hasHierarchyMatches || visibleGradeHierarchy.length === 0) ? (
               <EmptyStateCard
                 icon={<SearchX />}
                 title="No predictions match these filters"
@@ -238,9 +244,15 @@ function AdminCurrentTermDashboard() {
                 actionLabel="Clear filters"
                 onAction={clearFilters}
               />
+            ) : visibleGradeHierarchy.length === 0 ? (
+              <EmptyStateCard
+                icon={<SearchX />}
+                title="No sections available"
+                description="No sections are assigned for this term."
+              />
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {gradeHierarchy.map((group) => (
+                {visibleGradeHierarchy.map((group) => (
                   <AdminPredictionGradeCard
                     key={group.grade_level}
                     group={group}

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     groq_model: str = "openai/gpt-oss-20b"
     gemini_api_key: str | None = None
     ai_enabled: bool = True
+    contextual_ai_feedback_authorized: bool = False
     ai_school_per_minute: int = Field(default=12, ge=1, le=60)
     ai_staff_per_day: int = Field(default=30, ge=1, le=500)
     ai_school_per_day: int = Field(default=500, ge=1, le=10000)

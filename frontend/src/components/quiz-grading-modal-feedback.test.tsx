@@ -31,15 +31,30 @@ vi.mock("@/components/retroui/Dialog", async () => {
   };
 });
 vi.mock("@/components/quiz-feedback-assistant", () => ({
-  default: ({ onPublished }: {
+  default: ({
+    onPublished,
+    onReviewChange,
+  }: {
     onPublished: (feedback: string, feedbackFingerprint: string) => void;
+    onReviewChange?: (reviewing: boolean) => void;
   }) => (
-    <button
-      type="button"
-      onClick={() => onPublished("Authoritative approved feedback.", "c".repeat(64))}
-    >
-      Simulate AI post
-    </button>
+    <div>
+      <button
+        type="button"
+        onClick={() => onReviewChange?.(true)}
+      >
+        Simulate AI review
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onReviewChange?.(false);
+          onPublished("Authoritative approved feedback.", "c".repeat(64));
+        }}
+      >
+        Simulate AI post
+      </button>
+    </div>
   ),
 }));
 
@@ -103,7 +118,10 @@ describe("QuizGradingModal feedback integration", () => {
 
     const feedbackEditor = await screen.findByPlaceholderText("Add feedback on this attempt...") as HTMLTextAreaElement;
     expect(feedbackEditor.value).toBe("Original teacher feedback.");
+    fireEvent.click(screen.getByRole("button", { name: "Simulate AI review" }));
+    expect((screen.getByRole("button", { name: /Save Grade/ }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Simulate AI post" }));
+    expect((screen.getByRole("button", { name: /Save Grade/ }) as HTMLButtonElement).disabled).toBe(false);
     expect(feedbackEditor.value).toBe("Authoritative approved feedback.");
 
     fireEvent.click(screen.getByRole("button", { name: /Save Grade/ }));

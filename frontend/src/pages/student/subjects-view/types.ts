@@ -58,6 +58,7 @@ export interface ClassworkDetail {
   description?: string | null;
   instructions?: string | null;
   classwork_type?: string | null;
+  activity_mode?: string | null;
   classwork_category?: string | null;
   is_graded?: boolean;
   total_points?: number | null;

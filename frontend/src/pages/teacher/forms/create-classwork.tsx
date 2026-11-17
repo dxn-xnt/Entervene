@@ -13,7 +13,7 @@ import { Input } from "@/components/retroui/Input";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
-import { Switch } from "@/components/retroui/Switch";
+import { ClassworkSettingRow } from "@/components/classwork-setting-row";
 import { apiFetch } from "@/lib/api";
 import {
   emptyClassworkDraft,
@@ -275,6 +275,7 @@ export default function CreateClassworkModal({
     const validationError = validateDetails();
     if (validationError) {
       setValidationError(validationError);
+      toast.error({ title: validationError });
       return;
     }
     setValidationError("");
@@ -376,21 +377,27 @@ export default function CreateClassworkModal({
     return () => {
       isActive = false;
     };
-  }, [draft.subject_id, loads, remediationFocus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.subject_id, initialLessonId, loads, remediationFocus]);
 
   const handleCreateClasswork = async () => {
     const validationError = validateDetails();
     if (validationError) {
       setValidationError(validationError);
+      toast.error({ title: validationError });
       setCreateStep("details");
       return;
     }
     if (selectedClassIds.length === 0) {
-      setValidationError("Select at least one section to assign this classwork.");
+      const msg = "Select at least one section to assign this classwork.";
+      setValidationError(msg);
+      toast.error({ title: msg });
       return;
     }
     if (selectedLessonIds.length === 0) {
-      setValidationError("Select the lesson where this classwork should appear.");
+      const msg = "Select the lesson where this classwork should appear.";
+      setValidationError(msg);
+      toast.error({ title: msg });
       return;
     }
     setValidationError("");
@@ -421,6 +428,8 @@ export default function CreateClassworkModal({
       formData.append("subject_id", String(draft.subject_id));
       formData.append("is_published", String(draftOnly ? false : draft.is_published));
       formData.append("show_scores", String(draft.show_scores));
+      const autoAiSupported = !remediationDraft && !remediationTarget && (selectedType === "ASSIGNMENT" || selectedType === "ACTIVITY");
+      formData.append("auto_ai_feedback_enabled", String(autoAiSupported && draft.auto_ai_feedback_enabled));
       formData.append("class_ids", JSON.stringify(selectedClassIds));
       if (remediationTarget) {
         formData.append("intervention_id", String(remediationTarget.intervention_id));
@@ -523,9 +532,6 @@ export default function CreateClassworkModal({
         </Dialog.Header>
 
         <section className="flex flex-col gap-4 p-5 pr-3">
-          {validationError && validationError !== "Topic title is required." && (
-            <FormMessage>{validationError}</FormMessage>
-          )}
           {createStep === "details" && (
             <div className="grid gap-3">
               {remediationDraft && remediationTarget && (
@@ -932,39 +938,47 @@ export default function CreateClassworkModal({
 
               <div className="flex flex-col gap-3">
                 {!isReadingType(selectedType) && (
-                  <div className="flex items-center gap-2 w-full justify-between">
-                    <label className="text-sm font-medium text-foreground">
-                      Show scores to students
-                    </label>
-                    <Switch
-                      checked={draft.show_scores}
-                      onCheckedChange={(checked) =>
-                        setDraft((current) => ({
-                          ...current,
-                          show_scores: checked,
-                        }))
-                      }
-                      disabled={isCreating}
-                    />
-                  </div>
+                  <ClassworkSettingRow
+                    label="Show scores to students"
+                    tooltip="When enabled, students can view their score and teacher-published feedback on their submission view once graded. When disabled, approved feedback and scores remain hidden from students."
+                    checked={draft.show_scores}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        show_scores: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
+                )}
+
+                {!remediationDraft && !remediationTarget && (selectedType === "ASSIGNMENT" || selectedType === "ACTIVITY") && (
+                  <ClassworkSettingRow
+                    label="Automatic AI Feedback"
+                    tooltip="Automatically prepares a feedback draft after grading. When contextual AI is authorized and feedback focus points are selected, AI can use those evaluation points. Otherwise, a score-based template is prepared. Submitted files and links are not read by AI. Teachers must review and approve feedback before students can see it."
+                    checked={draft.auto_ai_feedback_enabled}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        auto_ai_feedback_enabled: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
                 )}
 
                 {draft.due_date && !isReadingType(selectedType) && (
-                  <div className="flex items-center gap-2 w-full justify-between">
-                    <label className="text-sm font-medium text-foreground">
-                      Allow late submissions
-                    </label>
-                    <Switch
-                      checked={draft.allow_late_submissions}
-                      onCheckedChange={(checked) =>
-                        setDraft((current) => ({
-                          ...current,
-                          allow_late_submissions: checked,
-                        }))
-                      }
-                      disabled={isCreating}
-                    />
-                  </div>
+                  <ClassworkSettingRow
+                    label="Allow late submissions"
+                    checked={draft.allow_late_submissions}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        allow_late_submissions: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
                 )}
               </div>
 

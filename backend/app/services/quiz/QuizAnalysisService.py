@@ -18,6 +18,7 @@ from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.submissions.SubmissionFeedbackDraft import SubmissionFeedbackDraft
 from app.schemas.Quiz import (
     QuizAnalysisResponse,
     QuizOptionDistributionOut,
@@ -553,9 +554,23 @@ def grade_teacher_quiz_submission(
     submission.graded_at = datetime.now(timezone.utc)
     submission.graded_by_staff_id = staff_id
 
+    # If grading changed, any prior unapproved AI draft becomes STALE
+    if previous_grade is not None and previous_grade != submission.grade:
+        prior_draft = db.query(SubmissionFeedbackDraft).filter_by(submission_id=submission.submission_id).first()
+        if prior_draft and prior_draft.status in {"READY", "UNDER_REVIEW"}:
+            prior_draft.status = "STALE"
+
+    # Enqueue automatic feedback draft if enabled
+    from app.services.submission.SubmissionFeedbackService import (
+        enqueue_automatic_feedback_draft,
+        dispatch_background_draft_processing,
+    )
+    enqueue_automatic_feedback_draft(db, submission.submission_id, staff_id)
+
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
+    dispatch_background_draft_processing()
     if refresh_needed:
         refresh_after_committed_grade_change(
             db.get_bind(),

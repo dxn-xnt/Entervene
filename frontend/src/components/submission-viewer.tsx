@@ -34,6 +34,7 @@ interface SubmissionViewerProps {
   onDeleteSubmission?: (submissionId: number) => Promise<void | boolean>;
   isDeleting?: boolean;
   showScores?: boolean;
+  hideFeedbackWithScores?: boolean;
   hideGrade?: boolean;
 }
 
@@ -68,6 +69,7 @@ export default function SubmissionViewer({
   onDeleteSubmission,
   isDeleting = false,
   showScores = true,
+  hideFeedbackWithScores = false,
   hideGrade = false,
 }: SubmissionViewerProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -120,7 +122,7 @@ export default function SubmissionViewer({
         </div>
 
         {/* Feedback */}
-        {submission.feedback && (
+        {submission.feedback && (showScores || !hideFeedbackWithScores) && (
           <div className="bg-gray-50 border border-gray-200 rounded p-3">
             <p className="text-sm font-medium text-gray-700 mb-1">Feedback</p>
             <p className="text-sm text-gray-600">{submission.feedback}</p>

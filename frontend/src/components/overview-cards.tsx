@@ -9,6 +9,7 @@ type OverviewCardProps = {
   count: string;
   stat?: string;
   statDescription?: string;
+  hideDescription?: boolean;
   trend?: "up" | "down";
   progressValue?: number;
   descriptionAtBottom?: boolean;
@@ -74,12 +75,15 @@ export function OverviewCard({
   count,
   stat,
   statDescription,
+  hideDescription,
   trend,
   progressValue,
   descriptionAtBottom = false,
   className,
 }: OverviewCardProps) {
-  const description = statDescription ?? descriptionFor(title);
+  const description = hideDescription
+    ? undefined
+    : (statDescription ?? descriptionFor(title));
 
   const isPositive = trend === "up" || (stat && stat.includes("▲"));
   const isNegative = trend === "down" || (stat && stat.includes("▼"));

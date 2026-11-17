@@ -13,7 +13,7 @@ import { Button as RetroButton } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
-import { Switch } from "@/components/retroui/Switch";
+import { ClassworkSettingRow } from "@/components/classwork-setting-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/Toast";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -39,6 +39,34 @@ import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 import { ReferenceLinkEditor } from "@/components/classwork-reference-links";
 import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
+import { toDateTimeLocal } from "@/lib/classwork-utils";
+
+type QuizReleaseMode = "IMMEDIATE" | "SCHEDULED" | "AFTER_DUE_DATE" | "NEVER";
+
+type QuizResultsDraft = {
+  loaded: boolean;
+  /** null means the quiz currently has mixed legacy visibility (scores != answers). */
+  show_quiz_results: boolean | null;
+  legacy_show_scores: boolean;
+  legacy_show_correct_answers: boolean;
+  summary_release_mode: QuizReleaseMode;
+  summary_release_at: string;
+};
+
+const defaultQuizResultsDraft = (showScores = true): QuizResultsDraft => ({
+  loaded: false,
+  show_quiz_results: showScores,
+  legacy_show_scores: showScores,
+  legacy_show_correct_answers: showScores,
+  summary_release_mode: "IMMEDIATE",
+  summary_release_at: "",
+});
+
+const quizResultsComparable = (draft: QuizResultsDraft) => ({
+  show_quiz_results: draft.show_quiz_results,
+  summary_release_mode: draft.summary_release_mode,
+  summary_release_at: draft.summary_release_mode === "SCHEDULED" ? draft.summary_release_at : "",
+});
 
 const editReferenceLinks = (classwork: TeacherClasswork): ReferenceLinkDraft[] =>
   (classwork.reference_links ?? []).map((link) => ({ url: link.url, title: link.title ?? "" }));
@@ -81,6 +109,13 @@ export default function EditClassworkModal({
       ? classwork.rubric_levels.map((level) => ({ ...level }))
       : defaultActivityRubric.map((level) => ({ ...level })),
   );
+  const [initialQuizResults, setInitialQuizResults] = useState<QuizResultsDraft>(() =>
+    defaultQuizResultsDraft(classwork.show_scores ?? true),
+  );
+  const [quizResultsDraft, setQuizResultsDraft] = useState<QuizResultsDraft>(() =>
+    defaultQuizResultsDraft(classwork.show_scores ?? true),
+  );
+  const [quizRevealConfirmation, setQuizRevealConfirmation] = useState(false);
   const toast = useToast();
   const targetedAssignment = useMemo(
     () => currentClasswork.assignments?.find(
@@ -88,6 +123,14 @@ export default function EditClassworkModal({
     ) ?? null,
     [currentClasswork.assignments],
   );
+
+  const autoAiSupported = useMemo(() => {
+    if (targetedAssignment) return false;
+    const type = editDraft.classwork_type?.toUpperCase();
+    if (type === "QUIZ" || type === "ASSIGNMENT") return true;
+    if (type === "ACTIVITY" && (currentClasswork.activity_mode || "ONLINE").toUpperCase() === "ONLINE") return true;
+    return false;
+  }, [targetedAssignment, editDraft.classwork_type, currentClasswork.activity_mode]);
 
   const setFormError = (msg: string) => {
     toast.error({ title: msg });
@@ -121,12 +164,50 @@ export default function EditClassworkModal({
     setEditMaterials([]);
     setReferenceLinks(editReferenceLinks(classwork));
     setRubricConfirmation(null);
+    setQuizRevealConfirmation(false);
     setRubricLevels(
       classwork.rubric_levels?.length
         ? classwork.rubric_levels.map((level) => ({ ...level }))
         : defaultActivityRubric.map((level) => ({ ...level })),
     );
+    const fallbackQuizResults = defaultQuizResultsDraft(classwork.show_scores ?? true);
+    setInitialQuizResults(fallbackQuizResults);
+    setQuizResultsDraft(fallbackQuizResults);
   }, [classwork, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !isQuizType(classwork.classwork_type)) return;
+    let isActive = true;
+    const showScores = classwork.show_scores ?? true;
+    apiFetch(`/api/v1/quizzes/classwork/${classwork.classwork_id}`)
+      .then(async (res) => {
+        if (!res.ok || !isActive) return;
+        const body = (await res.json()) as {
+          settings?: {
+            show_correct_answers?: boolean;
+            summary_release_mode?: QuizReleaseMode;
+            summary_release_at?: string | null;
+          };
+        };
+        if (!isActive || !body.settings) return;
+        const showCorrectAnswers = Boolean(body.settings.show_correct_answers);
+        const mode = (body.settings.summary_release_mode || "IMMEDIATE") as QuizReleaseMode;
+        const loaded: QuizResultsDraft = {
+          loaded: true,
+          show_quiz_results: showScores === showCorrectAnswers ? showScores : null,
+          legacy_show_scores: showScores,
+          legacy_show_correct_answers: showCorrectAnswers,
+          summary_release_mode: mode,
+          summary_release_at: mode === "SCHEDULED" ? toDateTimeLocal(body.settings.summary_release_at) : "",
+        };
+        setInitialQuizResults(loaded);
+        setQuizResultsDraft(loaded);
+      })
+      .catch(() => { });
+    return () => {
+      isActive = false;
+    };
+  }, [classwork.classwork_id, classwork.classwork_type, classwork.show_scores, isOpen]);
   useEffect(() => {
     if (draftOnly) {
       setEditDraft((current) => ({ ...current, is_published: false }));
@@ -209,6 +290,7 @@ export default function EditClassworkModal({
     return () => {
       isActive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, currentClasswork.subject_id, loads]);
 
   const selectedSubjectLoads = useMemo<TeacherClassLoad[]>(() => {
@@ -335,13 +417,15 @@ export default function EditClassworkModal({
       instructions: draft.instructions.trim(),
       total_points: hasRubric ? activityRubricMaximum(levels) : isReadingType(draft.classwork_type) ? null : optionalNumber(draft.total_points),
       max_attempts: isQuizType(draft.classwork_type) ? Number(draft.max_attempts) : null,
+      show_scores: isQuizType(draft.classwork_type) ? null : draft.show_scores,
       rubric: hasRubric ? levels : null,
     };
   };
   const changes = useEditFormChanges({
-    resetKey: `${isOpen}:${classwork.classwork_id}`,
+    resetKey: `${isOpen}:${classwork.classwork_id}:${initialQuizResults.loaded}`,
     initialValues: {
       draft: draftValues(classworkToEditDraft(classwork), classwork.rubric_levels?.length ? classwork.rubric_levels : defaultActivityRubric),
+      quizResults: isQuizType(classwork.classwork_type) ? quizResultsComparable(initialQuizResults) : null,
       classes: unorderedValues([...new Set(classwork.assignments?.map(item => item.class_id) ?? [])]),
       lessons: unorderedValues(classwork.linked_lessons?.map(item => item.lesson_id) ?? []),
       files: [],
@@ -349,17 +433,22 @@ export default function EditClassworkModal({
     },
     values: {
       draft: draftValues(editDraft, rubricLevels),
+      quizResults: isQuizType(editDraft.classwork_type) ? quizResultsComparable(quizResultsDraft) : null,
       classes: unorderedValues([...new Set(selectedClassIds)]),
       lessons: unorderedValues(selectedLessonIds),
       files: editMaterials.map(file => [file.name, file.size, file.lastModified, file.type]),
       referenceLinks,
     },
   });
-  const saveClassworkEdit = async (rubricConfirmed = false) => {
+  const saveClassworkEdit = async (
+    options: { rubricConfirmed?: boolean; quizRevealConfirmed?: boolean } = {},
+  ) => {
+    const { rubricConfirmed = false, quizRevealConfirmed = false } = options;
     if (!currentClasswork || !editDraft) return;
     if (!changes.guardChanges()) return;
 
     const isReading = isReadingType(editDraft.classwork_type);
+    const isQuiz = isQuizType(editDraft.classwork_type);
     const hasRubric =
       editDraft.classwork_type === "ACTIVITY" ||
       editDraft.classwork_type === "ASSIGNMENT";
@@ -393,11 +482,49 @@ export default function EditClassworkModal({
     }
     const attempts = Number(editDraft.max_attempts);
     if (
-      isQuizType(editDraft.classwork_type) &&
+      isQuiz &&
       (!Number.isInteger(attempts) || attempts <= 0)
     ) {
       setFormError("Allowed attempts must be a positive whole number.");
       return;
+    }
+    const quizResultsChanged =
+      isQuiz &&
+      quizResultsDraft.loaded &&
+      JSON.stringify(quizResultsComparable(quizResultsDraft)) !==
+      JSON.stringify(quizResultsComparable(initialQuizResults));
+    if (quizResultsChanged) {
+      if (
+        quizResultsDraft.summary_release_mode === "SCHEDULED" &&
+        !quizResultsDraft.summary_release_at
+      ) {
+        setFormError("Select a quiz results release date and time.");
+        return;
+      }
+      if (
+        quizResultsDraft.summary_release_mode === "AFTER_DUE_DATE" &&
+        !editDraft.due_date
+      ) {
+        setFormError("Set a quiz due date before releasing results after the due date.");
+        return;
+      }
+      const releaseChanged =
+        quizResultsDraft.summary_release_mode !== initialQuizResults.summary_release_mode ||
+        (quizResultsDraft.summary_release_mode === "SCHEDULED" &&
+          quizResultsDraft.summary_release_at !== initialQuizResults.summary_release_at);
+      const visibilityTurnedOn =
+        quizResultsDraft.show_quiz_results === true &&
+        initialQuizResults.show_quiz_results !== true;
+      const answersWillBeEnabled =
+        quizResultsDraft.show_quiz_results === true ||
+        (quizResultsDraft.show_quiz_results === null && initialQuizResults.legacy_show_correct_answers);
+      const couldRevealAnswers =
+        visibilityTurnedOn ||
+        (releaseChanged && quizResultsDraft.summary_release_mode !== "NEVER" && answersWillBeEnabled);
+      if (couldRevealAnswers && !quizRevealConfirmed) {
+        setQuizRevealConfirmation(true);
+        return;
+      }
     }
     if (selectedClassIds.length === 0) {
       setFormError("Select at least one section to assign.");
@@ -437,7 +564,8 @@ export default function EditClassworkModal({
             confirm_rubric_change:
               rubricChanged && Boolean(currentClasswork.has_submissions),
             is_published: publishValue,
-            show_scores: editDraft.show_scores,
+            show_scores: isQuiz ? undefined : editDraft.show_scores,
+            auto_ai_feedback_enabled: autoAiSupported ? editDraft.auto_ai_feedback_enabled : false,
             lesson_ids: selectedLessonIds,
             reference_links: JSON.stringify(referenceLinks) === JSON.stringify(editReferenceLinks(currentClasswork))
               ? undefined
@@ -478,7 +606,7 @@ export default function EditClassworkModal({
                 ? new Date(editDraft.lock_date).toISOString()
                 : null,
               allow_late_submissions: editDraft.allow_late_submissions,
-              max_attempts: isQuizType(editDraft.classwork_type)
+              max_attempts: isQuiz
                 ? attempts
                 : null,
               is_published: publishValue,
@@ -503,6 +631,48 @@ export default function EditClassworkModal({
               : "Unable to update assignment settings.",
           );
         }
+      }
+
+      if (quizResultsChanged) {
+        const quizResultsResponse = await apiFetch(
+          `/api/v1/quizzes/classwork/${currentClasswork.classwork_id}/results-settings`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              show_quiz_results: quizResultsDraft.show_quiz_results,
+              summary_release_mode: quizResultsDraft.summary_release_mode,
+              summary_release_at:
+                quizResultsDraft.summary_release_mode === "SCHEDULED" &&
+                  quizResultsDraft.summary_release_at
+                  ? new Date(quizResultsDraft.summary_release_at).toISOString()
+                  : null,
+              confirm_answer_reveal: quizRevealConfirmed,
+            }),
+          },
+        );
+        if (!quizResultsResponse.ok) {
+          const body = await quizResultsResponse.json().catch(() => ({}));
+          const detail = body.detail;
+          if (detail && typeof detail === "object" && detail.code === "QUIZ_RESULTS_REVEAL_CONFIRMATION_REQUIRED") {
+            setQuizRevealConfirmation(true);
+            return;
+          }
+          const message =
+            typeof detail === "string"
+              ? detail
+              : detail && typeof detail === "object" && typeof detail.message === "string"
+                ? detail.message
+                : "Unable to update quiz results visibility.";
+          throw new Error(message);
+        }
+        const savedResults = (await quizResultsResponse.json()) as {
+          show_scores: boolean;
+          show_correct_answers: boolean;
+          summary_release_mode: QuizReleaseMode;
+          summary_release_at?: string | null;
+        };
+        updated = { ...updated, show_scores: savedResults.show_scores };
       }
 
       // If there are pending materials to upload, upload them
@@ -1014,42 +1184,132 @@ export default function EditClassworkModal({
                   )}
                 </div>
 
-                <div className="flex flex-col gap-3">
-                  {!isReadingType(editDraft.classwork_type) && (
-                    <div className="flex items-center gap-2 w-full justify-between">
-                      <label className="text-sm font-medium text-foreground">
-                        Show scores to students
-                      </label>
-                      <Switch
-                        checked={editDraft.show_scores}
-                        onCheckedChange={(checked) =>
-                          setEditDraft((current) => ({
+                {isQuizType(editDraft.classwork_type) && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Quiz Summary Availability">
+                      <Select
+                        value={quizResultsDraft.summary_release_mode}
+                        onValueChange={(val) =>
+                          setQuizResultsDraft((current) => ({
                             ...current,
-                            show_scores: checked,
+                            summary_release_mode: val as QuizReleaseMode,
+                            summary_release_at: val === "SCHEDULED" ? current.summary_release_at : "",
                           }))
                         }
-                        disabled={isSavingEdit}
+                        disabled={isSavingEdit || !quizResultsDraft.loaded}
+                      >
+                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                          <Select.Value placeholder="Select Release Mode" />
+                        </Select.Trigger>
+                        <Select.Content className="border-2 border-black rounded bg-white">
+                          <Select.Group>
+                            <Select.Item value="IMMEDIATE">Immediately after submission</Select.Item>
+                            <Select.Item value="SCHEDULED">At a specific date &amp; time</Select.Item>
+                            <Select.Item value="AFTER_DUE_DATE">After the quiz due date</Select.Item>
+                            <Select.Item value="NEVER">Never</Select.Item>
+                          </Select.Group>
+                        </Select.Content>
+                      </Select>
+                    </Field>
+
+                    {quizResultsDraft.summary_release_mode === "SCHEDULED" ? (
+                      <Field label="Release Date & Time" isRequired>
+                        <Input
+                          type="datetime-local"
+                          aria-label="Release Date & Time"
+                          value={quizResultsDraft.summary_release_at}
+                          onChange={(event) =>
+                            setQuizResultsDraft((current) => ({
+                              ...current,
+                              summary_release_at: event.target.value,
+                            }))
+                          }
+                          disabled={isSavingEdit || !quizResultsDraft.loaded}
+                          className="w-full bg-white border-2 border-black rounded shadow-md"
+                        />
+                      </Field>
+                    ) : (
+                      <div className="flex flex-col justify-end">
+                        <div className="rounded border-2 border-dashed border-gray-300 bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
+                          {quizResultsDraft.summary_release_mode === "AFTER_DUE_DATE"
+                            ? "Summary unlocks automatically after the due date."
+                            : quizResultsDraft.summary_release_mode === "NEVER"
+                              ? "Students cannot view the quiz answer summary."
+                              : "Students can view the summary right after submitting."}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3">
+                  {isQuizType(editDraft.classwork_type) ? (
+                    <div className="space-y-1.5">
+                      <ClassworkSettingRow
+                        label="Show quiz results to students"
+                        tooltip="Controls student access to quiz scores and correct answers. When enabled, results unlock according to the configured release schedule (immediately, after due date, or scheduled time) and max attempt policies. Enabling this does not necessarily release correct answers immediately. When disabled, quiz results remain hidden."
+                        checked={quizResultsDraft.show_quiz_results === true}
+                        onCheckedChange={(checked) =>
+                          setQuizResultsDraft((current) => ({
+                            ...current,
+                            show_quiz_results: checked,
+                          }))
+                        }
+                        disabled={isSavingEdit || !quizResultsDraft.loaded}
                       />
+                      {quizResultsDraft.show_quiz_results === null && (
+                        <p className="text-xs font-semibold text-amber-700">
+                          Current setting is mixed (scores {quizResultsDraft.legacy_show_scores ? "visible" : "hidden"}, correct answers {quizResultsDraft.legacy_show_correct_answers ? "visible" : "hidden"}). Use the switch above to unify them; leaving it untouched preserves the current split.
+                        </p>
+                      )}
                     </div>
+                  ) : !isReadingType(editDraft.classwork_type) ? (
+                    <ClassworkSettingRow
+                      label="Show scores to students"
+                      tooltip="When enabled, students can view their score and teacher-published feedback on their submission view once graded. When disabled, approved feedback and scores remain hidden from students."
+                      checked={editDraft.show_scores}
+                      onCheckedChange={(checked) =>
+                        setEditDraft((current) => ({
+                          ...current,
+                          show_scores: checked,
+                        }))
+                      }
+                      disabled={isSavingEdit}
+                    />
+                  ) : null}
+
+                  {autoAiSupported && (
+                    <ClassworkSettingRow
+                      label="Automatic AI Feedback"
+                      tooltip={
+                        isQuizType(editDraft.classwork_type)
+                          ? "Automatically prepares an AI feedback draft after grading when quiz result-release and attempt restrictions permit. Teachers review and approve feedback before it is posted. Correct-answer visibility remains subject to the quiz release settings."
+                          : "Automatically prepares a feedback draft after grading. When contextual AI is authorized and feedback focus points are selected, AI can use those evaluation points. Otherwise, a score-based template is prepared. Submitted files and links are not read by AI. Teachers must review and approve feedback before students can see it."
+                      }
+                      checked={editDraft.auto_ai_feedback_enabled}
+                      onCheckedChange={(checked) =>
+                        setEditDraft((current) => ({
+                          ...current,
+                          auto_ai_feedback_enabled: checked,
+                        }))
+                      }
+                      disabled={isSavingEdit}
+                    />
                   )}
 
                   {editDraft.due_date &&
                     !isReadingType(editDraft.classwork_type) && (
-                      <div className="flex items-center gap-2 w-full justify-between">
-                        <label className="text-sm font-medium text-foreground">
-                          Allow late submissions
-                        </label>
-                        <Switch
-                          checked={editDraft.allow_late_submissions}
-                          onCheckedChange={(checked) =>
-                            setEditDraft((current) => ({
-                              ...current,
-                              allow_late_submissions: checked,
-                            }))
-                          }
-                          disabled={isSavingEdit}
-                        />
-                      </div>
+                      <ClassworkSettingRow
+                        label="Allow late submissions"
+                        checked={editDraft.allow_late_submissions}
+                        onCheckedChange={(checked) =>
+                          setEditDraft((current) => ({
+                            ...current,
+                            allow_late_submissions: checked,
+                          }))
+                        }
+                        disabled={isSavingEdit}
+                      />
                     )}
                 </div>
 
@@ -1214,11 +1474,48 @@ export default function EditClassworkModal({
               <RetroButton
                 onClick={() => {
                   setRubricConfirmation(null);
-                  void saveClassworkEdit(true);
+                  void saveClassworkEdit({ rubricConfirmed: true });
                 }}
                 disabled={isSavingEdit}
               >
                 Save Changes
+              </RetroButton>
+            </Dialog.Footer>
+          </Dialog.Content>
+        )}
+      </Dialog>
+      <Dialog
+        open={quizRevealConfirmation}
+        onOpenChange={(open) => {
+          if (!open && !isSavingEdit) setQuizRevealConfirmation(false);
+        }}
+      >
+        {quizRevealConfirmation && (
+          <Dialog.Content className="max-w-md">
+            <Dialog.Header>
+              <Text as="h5" className="font-sans text-xl font-bold">
+                Reveal Quiz Results?
+              </Text>
+            </Dialog.Header>
+            <div className="px-5 py-5 text-sm text-foreground">
+              This setting enables both student scores and correct answers according to the selected release schedule. Confirm if you want students to see these quiz results.
+            </div>
+            <Dialog.Footer className="mt-0">
+              <RetroButton
+                variant="outline"
+                onClick={() => setQuizRevealConfirmation(false)}
+                disabled={isSavingEdit}
+              >
+                Cancel
+              </RetroButton>
+              <RetroButton
+                onClick={() => {
+                  setQuizRevealConfirmation(false);
+                  void saveClassworkEdit({ quizRevealConfirmed: true });
+                }}
+                disabled={isSavingEdit}
+              >
+                Confirm &amp; Save
               </RetroButton>
             </Dialog.Footer>
           </Dialog.Content>
