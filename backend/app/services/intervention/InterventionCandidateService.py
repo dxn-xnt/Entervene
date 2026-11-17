@@ -15,7 +15,7 @@ from app.models.intervention.Intervention import Intervention
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.intervention.InterventionDiagnosisService import build_candidate_diagnosis
 from app.services.intervention.InterventionNotificationService import stage_intervention_notification
-from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
+from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME, MODEL_NAMES
 
 
 OPEN_STATUSES = ("CANDIDATE", "ACTIVE")
@@ -45,14 +45,28 @@ def sync_intervention_for_persisted_prediction(
     ):
         raise ValueError("Intervention prediction scope mismatch.")
     version = db.get(AIModelVersion, prediction.model_version_id)
+    valid_development = (
+        version is not None
+        and version.lifecycle_status == "DEVELOPMENT"
+        and not version.is_active
+        and not version.production_validated
+        and not version.independent_three_term_validation
+    )
+    valid_production = (
+        version is not None
+        and version.lifecycle_status == "PRODUCTION"
+        and version.is_active
+        and version.production_validated
+        and version.independent_three_term_validation
+    )
     if (
         version is None
-        or version.model_name != CORRECTED_MODEL_NAME
+        or version.model_name not in MODEL_NAMES
         or version.model_purpose != ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value
-        or version.lifecycle_status != "DEVELOPMENT"
-        or version.is_active
+        or (valid_development and version.model_name != CORRECTED_MODEL_NAME)
+        or not (valid_development or valid_production)
     ):
-        raise ValueError("Intervention source must use the inactive corrected development model.")
+        raise ValueError("Intervention source must use an approved current-term model lifecycle.")
     snapshot = prediction.evidence_snapshot if isinstance(prediction.evidence_snapshot, dict) else {}
     readiness = snapshot.get("readiness")
     if not isinstance(readiness, dict) or readiness.get("status") != "READY":

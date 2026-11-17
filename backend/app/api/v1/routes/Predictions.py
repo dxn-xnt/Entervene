@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, tuple_
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import get_current_user, get_optional_staff_id, get_staff_id, require_role
+from app.core.Dependencies import get_current_user, get_optional_staff_id, require_role
 from app.db.Session import get_db
 from app.models.academic.StudentCLass import StudentClass
 from app.models.ai.AIPrediction import AIPrediction
@@ -17,44 +17,19 @@ from app.schemas.Prediction import (
     DashboardFilterOptionsResponse,
     DashboardGradeGroupSummary,
     ModelPerformanceSummaryResponse,
-    PredictionBuildFeaturesRequest,
-    PredictionBuiltFeaturesResponse,
     PredictionDetailResponse,
     PredictionFeatureListResponse,
-    PredictionFromRecordsPersistRequest,
-    PredictionFromRecordsPreviewRequest,
-    PredictionFromRecordsResponse,
-    PredictionOutcomeEvaluateRequest,
-    PredictionOutcomeResponse,
-    PredictionPersistRequest,
-    PredictionPersistResponse,
     PredictionListResponse,
-    PredictionPreviewRequest,
-    PredictionPreviewResponse,
     PredictionSummaryResponse,
     PredictionTeacherReviewListResponse,
-    TeacherRiskReviewRequest,
-    TeacherRiskReviewResponse,
 )
 from app.services.prediction.ModelPerformanceService import get_model_performance_summary
-from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME, score_student_prediction
-from app.services.prediction.PredictionFeatureBuilderService import (
-    build_prediction_features_from_records,
-    insufficient_prediction_response,
-)
-from app.services.prediction.PredictionSuggestionService import (
-    assign_intervention_from_prediction,
-    get_suggestions_for_prediction,
-)
-from app.services.prediction.PredictionOutcomeService import evaluate_prediction_outcome
-from app.services.prediction.PredictionPersistenceService import score_and_persist_prediction
-from app.services.prediction.PredictionGenerationTransaction import run_prediction_generation_transaction
+from app.services.prediction.PredictionSuggestionService import get_suggestions_for_prediction
 from app.services.prediction.TeacherAssignmentResolver import get_teacher_assigned_triplets
 from app.services.prediction.PredictionReadService import (
     get_prediction_detail,
     get_teacher_reviews_for_prediction,
 )
-from app.services.prediction.TeacherRiskReviewService import review_prediction_risk
 from app.services.prediction.DashboardPredictionService import (
     get_dashboard_at_risk_predictions,
     get_dashboard_grade_summaries,
@@ -95,34 +70,6 @@ def _service_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status_code, detail=str(exc))
 
 
-def _records_request_payload(payload: PredictionBuildFeaturesRequest) -> dict[str, Any]:
-    return {
-        "student_id": payload.student_id,
-        "class_id": payload.class_id,
-        "subject_id": payload.subject_id,
-        "source_period_id": payload.source_period_id,
-        "target_period_id": payload.target_period_id,
-    }
-
-
-def _assert_teacher_can_use_prediction_scope(
-    db: Session,
-    current_user: dict[str, Any],
-    staff_id: str | None,
-    scope: dict[str, Any],
-) -> None:
-    """Enforce record-level access before reading or generating prediction evidence."""
-    if current_user.get("role") == "admin":
-        return
-    if not staff_id:
-        raise HTTPException(status_code=403, detail="Access denied. Teacher profile is required for prediction evidence.")
-    assigned = get_teacher_assigned_triplets(db, staff_id, academic_period_id=int(scope["source_period_id"]))
-    triplet = (int(scope["class_id"]), int(scope["subject_id"]), int(scope["source_period_id"]))
-    if triplet not in assigned:
-        raise HTTPException(status_code=403, detail="Access denied. You are not assigned to this class, subject, and source period.")
-    _assert_student_is_actively_enrolled(db, UUID(str(scope["student_id"])), int(scope["class_id"]))
-
-
 def _assert_student_is_actively_enrolled(db: Session, student_id: UUID, class_id: int) -> None:
     enrollment = db.query(StudentClass.student_class_id).filter(
         StudentClass.student_id == student_id,
@@ -157,18 +104,6 @@ def _authorize_stored_prediction(
         raise HTTPException(status_code=403, detail="Access denied. You are not assigned to this prediction scope.")
     _assert_student_is_actively_enrolled(db, prediction.student_id, prediction.class_id)
     return prediction
-
-
-def _with_readiness(scoring_result: dict[str, Any], built: dict[str, Any]) -> dict[str, Any]:
-    return {
-        **scoring_result,
-        "ready": built["ready"],
-        "readiness_level": built["readiness_level"],
-        "prediction_mode": built["prediction_mode"],
-        "features": built["features"],
-        "evidence_summary": built["evidence_summary"],
-        "warnings": [*built.get("warnings", []), *scoring_result.get("warnings", [])],
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -295,130 +230,6 @@ def dashboard_filters(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/preview", response_model=PredictionPreviewResponse)
-def preview_prediction(
-    payload: PredictionPreviewRequest,
-    current_user: dict = Depends(require_role("admin")),
-    db: Session = Depends(get_db),
-):
-    try:
-        return score_student_prediction(
-            db,
-            payload.features,
-            model_name=payload.model_name or DEFAULT_MODEL_NAME,
-        )
-    except (ValueError, LookupError, FileNotFoundError) as exc:
-        raise _service_error(exc) from exc
-
-
-@router.post("/build-features", response_model=PredictionBuiltFeaturesResponse)
-def build_prediction_features(
-    payload: PredictionBuildFeaturesRequest,
-    current_user: dict = Depends(require_role("admin", "teacher")),
-    staff_id: str | None = Depends(get_optional_staff_id),
-    db: Session = Depends(get_db),
-):
-    try:
-        record_scope = _records_request_payload(payload)
-        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, record_scope)
-        return build_prediction_features_from_records(db, **record_scope)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/from-records/preview", response_model=PredictionFromRecordsResponse)
-def preview_prediction_from_records(
-    payload: PredictionFromRecordsPreviewRequest,
-    current_user: dict = Depends(require_role("admin", "teacher")),
-    staff_id: str | None = Depends(get_optional_staff_id),
-    db: Session = Depends(get_db),
-):
-    try:
-        record_scope = _records_request_payload(payload)
-        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, record_scope)
-        built = build_prediction_features_from_records(
-            db, **record_scope, model_name=payload.model_name or DEFAULT_MODEL_NAME
-        )
-        if not built["ready"]:
-            return insufficient_prediction_response(built)
-        scoring_result = score_student_prediction(
-            db,
-            built["features"],
-            model_name=payload.model_name or DEFAULT_MODEL_NAME,
-        )
-        return _with_readiness(scoring_result, built)
-    except (ValueError, LookupError, FileNotFoundError) as exc:
-        raise _service_error(exc) from exc
-
-
-@router.post("/from-records", response_model=PredictionFromRecordsResponse)
-def create_prediction_from_records(
-    payload: PredictionFromRecordsPersistRequest,
-    current_user: dict = Depends(require_role("admin", "teacher")),
-    staff_id: str | None = Depends(get_optional_staff_id),
-    db: Session = Depends(get_db),
-):
-    try:
-        record_scope = _records_request_payload(payload)
-        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, record_scope)
-
-        def generate(generation_db: Session):
-            built = build_prediction_features_from_records(
-                generation_db, **record_scope, model_name=payload.model_name or DEFAULT_MODEL_NAME
-            )
-            if not built["ready"]:
-                return insufficient_prediction_response(built)
-            result = score_and_persist_prediction(
-                generation_db,
-                {**record_scope, "features": built["features"]},
-                model_name=payload.model_name or DEFAULT_MODEL_NAME,
-                replace_existing=payload.replace_existing,
-                commit=False,
-                evidence_context=built,
-                generation_request_id=payload.generation_request_id,
-            )
-            return _with_readiness(result, built)
-
-        return run_prediction_generation_transaction(
-            record_scope,
-            payload.model_name or DEFAULT_MODEL_NAME,
-            generate,
-            bind=db.get_bind(),
-        )
-    except (ValueError, LookupError, FileNotFoundError) as exc:
-        raise _service_error(exc) from exc
-
-
-@router.post("", response_model=PredictionPersistResponse)
-def create_prediction(
-    payload: PredictionPersistRequest,
-    current_user: dict = Depends(require_role("admin", "teacher")),
-    staff_id: str | None = Depends(get_optional_staff_id),
-    db: Session = Depends(get_db),
-):
-    try:
-        request_data = payload.model_dump()
-        model_name = request_data.pop("model_name") or DEFAULT_MODEL_NAME
-        replace_existing = bool(request_data.pop("replace_existing", False))
-        generation_request_id = request_data.pop("generation_request_id", None)
-        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, request_data)
-        return run_prediction_generation_transaction(
-            request_data,
-            model_name,
-            lambda generation_db: score_and_persist_prediction(
-                generation_db,
-                request_data,
-                model_name=model_name,
-                replace_existing=replace_existing,
-                commit=False,
-                generation_request_id=generation_request_id,
-            ),
-            bind=db.get_bind(),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
 @router.get("/latest", response_model=PredictionSummaryResponse)
 def get_latest_prediction(
     student_id: UUID,
@@ -527,25 +338,6 @@ def get_model_performance(
     )
 
 
-@router.post("/{prediction_id}/outcome/evaluate", response_model=PredictionOutcomeResponse)
-def evaluate_outcome(
-    prediction_id: int,
-    payload: PredictionOutcomeEvaluateRequest,
-    current_user: dict = Depends(require_role("admin", "teacher")),
-    staff_id: str | None = Depends(get_optional_staff_id),
-    db: Session = Depends(get_db),
-):
-    try:
-        _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
-        return evaluate_prediction_outcome(
-            db,
-            prediction_id=prediction_id,
-            actual_period_grade=payload.actual_period_grade,
-        )
-    except (LookupError, ValueError) as exc:
-        raise _service_error(exc) from exc
-
-
 @router.get("/{prediction_id}/detail", response_model=PredictionDetailResponse)
 def read_prediction_detail(
     prediction_id: int,
@@ -563,27 +355,6 @@ def read_prediction_detail(
             is_admin=is_admin,
         )
     except (LookupError, PermissionError) as exc:
-        raise _service_error(exc) from exc
-
-
-@router.post("/{prediction_id}/teacher-review", response_model=TeacherRiskReviewResponse)
-def create_teacher_risk_review(
-    prediction_id: int,
-    payload: TeacherRiskReviewRequest,
-    current_user: dict = Depends(require_role("teacher")),
-    staff_id: str = Depends(get_staff_id),
-    db: Session = Depends(get_db),
-):
-    try:
-        _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
-        return review_prediction_risk(
-            db,
-            prediction_id=prediction_id,
-            staff_id=staff_id,
-            decision=payload.decision,
-            teacher_notes=payload.teacher_notes,
-        )
-    except (LookupError, ValueError) as exc:
         raise _service_error(exc) from exc
 
 
@@ -639,28 +410,8 @@ def list_prediction_features(
 
 
 # ---------------------------------------------------------------------------
-# Intervention Linking Endpoints
+# Historical linked-record endpoints (read-only)
 # ---------------------------------------------------------------------------
-
-
-@router.post("/{prediction_id}/assign-intervention")
-def assign_prediction_intervention(
-    prediction_id: int,
-    payload: dict[str, Any],
-    current_user: dict = Depends(require_role("teacher")),
-    staff_id: str | None = Depends(get_staff_id),
-    db: Session = Depends(get_db),
-):
-    _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
-    suggestion = assign_intervention_from_prediction(
-        db, prediction_id, staff_id=staff_id, payload=payload
-    )
-    return {
-        "message": "Intervention assigned successfully",
-        "student_suggestion_id": suggestion.student_suggestion_id,
-        "prediction_id": suggestion.prediction_id,
-        "status": suggestion.status,
-    }
 
 
 @router.get("/{prediction_id}/suggestions")

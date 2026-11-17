@@ -10,6 +10,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.ai.AIModelVersion import AIModelVersion
+from app.api.v1.routes.Predictions import router as historical_predictions_router
 from tests.test_current_period_live_feature_builder import current_period_context
 from tests.test_development_current_term_api import (
     _add_load,
@@ -25,6 +26,15 @@ from tests.test_development_current_term_prediction_persistence import _register
 
 PATH = "/api/v1/current-term-predictions"
 SCOPE_PATH = f"{PATH}/scope"
+
+
+def test_historical_prediction_router_is_read_only():
+    methods = {
+        method
+        for route in historical_predictions_router.routes
+        for method in (route.methods or set())
+    }
+    assert methods == {"GET"}
 
 
 def _approve_model(ctx) -> AIModelVersion:

@@ -91,7 +91,7 @@ const filters = {
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.clearAllMocks(); academicContext.selectedPeriodId = 3; auth.role = "teacher"; });
 
 describe("shared prediction page access", () => {
-  it("uses one AI Predictions experience and renders V3 semantics for teachers", async () => {
+  it("uses one current-term prediction experience and renders V3 semantics for teachers", async () => {
     auth.role = "teacher";
     currentTerm.load.mockResolvedValue({ rows: [row], filters, assignedScopes: [] });
     render(
@@ -100,7 +100,7 @@ describe("shared prediction page access", () => {
       </MemoryRouter>
     );
     await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
-    expect(screen.getByRole("heading", { name: "AI Predictions" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Current-Term Predictions" })).toBeTruthy();
     expect(screen.queryByText("Current-Term Development")).toBeNull();
     expect(screen.getAllByText("Moderate Risk").length).toBeGreaterThan(0);
     expect(screen.getAllByText("High Risk").length).toBeGreaterThan(0);
@@ -255,7 +255,7 @@ describe("shared prediction page access", () => {
 
     await waitFor(() => expect(screen.queryByText(/Loading Grade 9 sections/i)).toBeNull());
     expect(currentTerm.load).toHaveBeenCalledWith(3, { gradeLevel: 9 }, "admin");
-    expect(screen.getByRole("link", { name: "AI Predictions" }).getAttribute("href")).toBe("/admin/predictions");
+    expect(screen.getByRole("link", { name: "Current-Term Predictions" }).getAttribute("href")).toBe("/admin/predictions");
     expect(screen.getByRole("combobox", { name: "Section" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "All Subjects" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "Mathematics" })).toBeTruthy();
@@ -296,7 +296,7 @@ describe("shared prediction page access", () => {
 
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Section" }).textContent).toContain("Archimedes"));
     expect(currentTerm.load).toHaveBeenCalledWith(3, { gradeLevel: 9 }, "admin");
-    expect(screen.getByRole("link", { name: "AI Predictions" }).getAttribute("href")).toBe("/admin/predictions");
+    expect(screen.getByRole("link", { name: "Current-Term Predictions" }).getAttribute("href")).toBe("/admin/predictions");
     expect(screen.getByRole("combobox", { name: "Section" }).textContent).toContain("Archimedes");
     expect(screen.getByRole("button", { name: "All Subjects" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Mathematics" })).toBeTruthy();
@@ -486,7 +486,7 @@ describe("shared prediction page access", () => {
     expect(teacherOnly.health).not.toHaveBeenCalled();
     expect(teacherOnly.candidates).not.toHaveBeenCalled();
     expect(teacherOnly.active).not.toHaveBeenCalled();
-    expect(screen.getByRole("link", { name: "AI Predictions" }).getAttribute("href")).toBe("/admin/predictions");
+    expect(screen.getByRole("link", { name: "Current-Term Predictions" }).getAttribute("href")).toBe("/admin/predictions");
     expect(screen.getByText("Alex Rivera")).toBeTruthy();
     fireEvent.click(screen.getByText("Alex Rivera"));
     expect(screen.getByText("Prediction detail for Alex Rivera")).toBeTruthy();
@@ -514,7 +514,7 @@ describe("shared prediction page access", () => {
     expect(teacherOnly.health).not.toHaveBeenCalled();
     expect(teacherOnly.candidates).not.toHaveBeenCalled();
     expect(teacherOnly.active).not.toHaveBeenCalled();
-    expect(screen.getByRole("link", { name: "AI Predictions" }).getAttribute("href")).toBe("/admin/predictions");
+    expect(screen.getByRole("link", { name: "Current-Term Predictions" }).getAttribute("href")).toBe("/admin/predictions");
     expect(screen.getByRole("link", { name: "Grade 9" }).getAttribute("href"))
       .toBe("/admin/predictions/9");
     expect(screen.getByRole("link", { name: "Archimedes" }).getAttribute("href"))

@@ -500,7 +500,7 @@ describe("TeacherCurrentTermSectionPredictions (Section Detail & Navigation)", (
     });
   });
 
-  it("renders breadcrumb AI Predictions > Mathematics 9 > Demo Archimedes on subject route", async () => {
+  it("renders the current-term prediction breadcrumb on the subject route", async () => {
     render(
       <MemoryRouter initialEntries={["/teacher/predictions/subject/1/section/1"]}>
         <Routes>
