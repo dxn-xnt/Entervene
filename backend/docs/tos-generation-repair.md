@@ -480,7 +480,6 @@ Content repairs and provider retries add calls beyond these planned counts.
   `settings.gemini_model` in a separate commit.
 
 - PostgreSQL concurrency tests have not yet been run.
-- `create-classwork-quiz.test.tsx` is flaky under parallel workers (not our TOS work).
 - Duplicate options on multiple choice are the main remaining first-pass loss
   identified in the latest sample (Grammar 3/5, `duplicate_options=4`).
 - Usable `recovered_from_400` recovery is untested live; the latest run accepted

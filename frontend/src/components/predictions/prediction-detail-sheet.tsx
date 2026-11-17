@@ -779,7 +779,7 @@ function CurrentTermTeacherDetail({
   const attendance = prediction.participation_context.attendance;
   const submissions = prediction.participation_context.submissions;
   const term = prediction.term_context;
-  const risk = getTeacherRiskDisplay(prediction.intervention_level).label;
+  const riskDisplay = getTeacherRiskDisplay(prediction.intervention_level);
 
   return (
     <div className="flex flex-col gap-4 px-5 text-sm">
@@ -874,10 +874,9 @@ function CurrentTermTeacherDetail({
             <p className="text-xs text-gray-600">Risk Level</p>
             <Badge
               size="sm"
-              variant="surface"
-              className="mt-2 font-bold"
+              className={`mt-2 ${getRiskBadgeMeta(riskDisplay.level).bg}`}
             >
-              {risk}
+              {riskDisplay.label}
             </Badge>
           </Card>
         </div>

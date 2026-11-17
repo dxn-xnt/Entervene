@@ -99,6 +99,14 @@ def test_stable_get_is_get_only_and_selects_latest_approved_revision(current_per
     assert response.json()["items"][0]["prediction_id"] == latest.prediction_id
     assert response.json()["items"][0]["revision"] == 2
     assert response.json()["items"][0]["lifecycle_status"] == "PRODUCTION"
+    assert response.json()["prediction_policy"] == {
+        "intervention_bands": [
+            {"level": "HIGH_RISK", "label": "High Risk", "minimum": None, "maximum_exclusive": 75.0},
+            {"level": "MODERATE_RISK", "label": "Moderate Risk", "minimum": 75.0, "maximum_exclusive": 85.0},
+            {"level": "NEEDS_MONITORING", "label": "Needs Monitoring", "minimum": 85.0, "maximum_exclusive": 90.0},
+            {"level": "LOW_RISK", "label": "Low Risk", "minimum": 90.0, "maximum_exclusive": None},
+        ],
+    }
     assert client.post(PATH, json={}).status_code == 405
 
 

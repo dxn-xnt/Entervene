@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { DashboardFilters } from "@/lib/prediction-api";
 import {
   buildCurrentTermDashboard,
+  buildAdminDependentFilters,
   buildAdminPredictionHierarchy,
   buildCurrentTermGradeSummaries,
   buildCurrentTermSubjectSummaries,
@@ -112,7 +114,7 @@ describe("Admin grade-centered prediction hierarchy", () => {
     const hierarchy = buildAdminPredictionHierarchy(rows, [], { includeEmptySections: true });
     const gradeNine = hierarchy.find((group) => group.grade_level === 9)!;
 
-    expect(hierarchy.map((group) => group.grade_level)).toEqual([7, 8, 9, 10, 11, 12]);
+    expect(hierarchy.map((group) => group.grade_level)).toEqual([9]);
     expect(gradeNine.sections).toHaveLength(1);
     expect(gradeNine.sections[0].unique_student_count).toBe(2);
     expect(gradeNine.sections[0].prediction_count).toBe(3);
@@ -188,6 +190,55 @@ describe("Admin grade-centered prediction hierarchy", () => {
       low_risk_count: 0,
       predictions: [],
     }]);
+  });
+
+  it("derives grade groups dynamically instead of assuming a fixed grade range", () => {
+    const hierarchy = buildAdminPredictionHierarchy([], [{
+      subject_id: 30,
+      subject_name: "Research",
+      grade_level: 13,
+      class_id: 31,
+      section_name: "Innovators",
+    }], { includeEmptySections: true });
+
+    expect(hierarchy.map((group) => group.grade_level)).toEqual([13]);
+  });
+});
+
+describe("Admin dependent academic-scope filters", () => {
+  const filters: DashboardFilters = {
+    grades: [
+      { grade_level: 9, level_name: "Grade 9" },
+      { grade_level: 10, level_name: "Grade 10" },
+      { grade_level: 11, level_name: "Grade 11" },
+    ],
+    classes: [
+      { class_id: 7, section_name: "Newton", grade_level: 9 },
+      { class_id: 8, section_name: "Einstein", grade_level: 9 },
+      { class_id: 9, section_name: "Curie", grade_level: 10 },
+    ],
+    subjects: [
+      { subject_id: 5, subject_name: "Mathematics", subject_codename: "MATH" },
+      { subject_id: 6, subject_name: "Science", subject_codename: "SCI" },
+      { subject_id: 7, subject_name: "English", subject_codename: "ENG" },
+    ],
+    terms: [],
+  };
+  const scopes = [
+    { subject_id: 5, subject_name: "Mathematics", grade_level: 9, class_id: 7, section_name: "Newton" },
+    { subject_id: 6, subject_name: "Science", grade_level: 9, class_id: 8, section_name: "Einstein" },
+    { subject_id: 7, subject_name: "English", grade_level: 10, class_id: 9, section_name: "Curie" },
+  ];
+
+  it("limits sections by grade and subjects by the selected section", () => {
+    const gradeFilters = buildAdminDependentFilters(filters, scopes, { gradeLevel: 9 });
+    expect(gradeFilters?.grades.map((item) => item.grade_level)).toEqual([9, 10]);
+    expect(gradeFilters?.classes.map((item) => item.class_id)).toEqual([7, 8]);
+    expect(gradeFilters?.subjects.map((item) => item.subject_id)).toEqual([5, 6]);
+
+    const sectionFilters = buildAdminDependentFilters(filters, scopes, { gradeLevel: 9, classId: 7 });
+    expect(sectionFilters?.classes.map((item) => item.class_id)).toEqual([7, 8]);
+    expect(sectionFilters?.subjects.map((item) => item.subject_id)).toEqual([5]);
   });
 });
 
