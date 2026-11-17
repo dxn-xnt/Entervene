@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, tuple_
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,7 @@ from app.schemas.Prediction import (
 from app.services.prediction.ModelPerformanceService import get_model_performance_summary
 from app.services.prediction.PredictionSuggestionService import get_suggestions_for_prediction
 from app.services.prediction.TeacherAssignmentResolver import get_teacher_assigned_triplets
+from app.services.prediction.RiskSummaryExportService import export_student_risk_summary_csv
 from app.services.prediction.PredictionReadService import (
     get_prediction_detail,
     get_teacher_reviews_for_prediction,
@@ -223,6 +224,40 @@ def dashboard_filters(
         class_id=class_id,
         academic_period_id=academic_period_id,
     )
+
+
+@router.get("/export-csv")
+def export_predictions_csv(
+    academic_period_id: int | None = Query(None, description="Academic period ID filter"),
+    class_id: int | None = Query(None, description="Class / Section ID filter"),
+    subject_id: int | None = Query(None, description="Subject ID filter"),
+    grade_level: int | None = Query(None, ge=1, le=12, description="Grade level filter (7-12)"),
+    risk_level: str | None = Query(None, description="Risk level filter"),
+    search: str | None = Query(None, description="Search term for student name or LRN"),
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    """Export student risk summary predictions as an RFC-4180 CSV file with formula protection."""
+    content, filename = export_student_risk_summary_csv(
+        db,
+        academic_period_id=academic_period_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        grade_level=grade_level,
+        risk_level=risk_level,
+        search=search,
+        current_user=current_user,
+        staff_id=staff_id,
+    )
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
 
 
 # ---------------------------------------------------------------------------

@@ -121,3 +121,39 @@ export async function getStudentAttendanceSummary(
   return res.json();
 }
 
+export async function exportClassAttendanceCSV(
+  classId: number,
+  options?: {
+    subjectId?: number;
+    academicPeriodId?: number;
+    academicYearId?: number;
+    startDate?: string;
+    endDate?: string;
+  },
+): Promise<{ blob: Blob; filename: string }> {
+  const params = new URLSearchParams();
+  if (options?.subjectId) params.append("subject_id", String(options.subjectId));
+  if (options?.academicPeriodId) params.append("academic_period_id", String(options.academicPeriodId));
+  if (options?.academicYearId) params.append("academic_year_id", String(options.academicYearId));
+  if (options?.startDate) params.append("start_date", options.startDate);
+  if (options?.endDate) params.append("end_date", options.endDate);
+
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  const res = await apiFetch(`/api/v1/attendance/class/${classId}/export-csv${queryString}`);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.detail || "Failed to export class attendance CSV");
+  }
+
+  const contentDisposition = res.headers.get("content-disposition");
+  let filename = `attendance_class_${classId}.csv`;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) filename = match[1];
+  }
+
+  const blob = await res.blob();
+  return { blob, filename };
+}
+
+

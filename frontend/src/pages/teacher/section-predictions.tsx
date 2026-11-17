@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useSearchParams, Navigate } from "react-router-dom";
-import { BookOpen, TrendingUp } from "lucide-react";
+import { BookOpen, TrendingUp, Download, Loader2 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
@@ -19,6 +19,8 @@ import {
 } from "@/components/predictions/use-teacher-candidate-shortcut";
 import { useAuth } from "@/context/AuthContext";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { toast } from "sonner";
+import { exportStudentRiskSummaryCSV } from "@/lib/prediction-api";
 import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
@@ -69,6 +71,36 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
   const candidateId = useTeacherCandidateShortcut(selected, isTeacher);
   const activeInterventionId = useTeacherActiveInterventionShortcut(selected, isTeacher);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    if (!selectedPeriodId) return;
+    try {
+      setIsExporting(true);
+      toast.info("Preparing section risk summary CSV export...");
+      const { blob, filename } = await exportStudentRiskSummaryCSV({
+        academicPeriodId: selectedPeriodId,
+        classId: resolvedClassId,
+        subjectId: targetSubjectId,
+        riskLevel,
+        search,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Section risk summary CSV downloaded successfully.");
+    } catch (err) {
+      console.error("Export section risk summary CSV error:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to export risk summary CSV.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Auto-open via search params (e.g. from dashboard)
   const [searchParams] = useSearchParams();
@@ -308,61 +340,78 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center gap-3 bg-background px-4 py-4 md:px-6">
-          <SidebarTrigger className="md:hidden" />
-          <BreadcrumbComponent>
-            <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
-              <Breadcrumb.Item>
-                <Breadcrumb.Link asChild>
-                  <Link to={predictionBasePath}>AI Predictions</Link>
-                </Breadcrumb.Link>
-              </Breadcrumb.Item>
-              <Breadcrumb.Separator />
-              {viewerRole === "admin" ? (
-                <>
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Link asChild>
-                      <Link to={`${predictionBasePath}/${matchingScope?.grade_level ?? rows[0]?.grade_level}`}>
-                        Grade {matchingScope?.grade_level ?? rows[0]?.grade_level}
-                      </Link>
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Link asChild>
-                      <Link to={`${predictionBasePath}/${matchingScope?.grade_level ?? rows[0]?.grade_level}/${resolvedClassId}`}>
-                        {sectionName}
-                      </Link>
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page>{subjectDisplayName}</Breadcrumb.Page>
-                  </Breadcrumb.Item>
-                </>
-              ) : (
-                <>
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Link asChild>
-                      <Link
-                        to={
-                          targetSubjectId
-                            ? `${predictionBasePath}/subject/${targetSubjectId}`
-                            : predictionBasePath
-                        }
-                      >
-                        {subjectDisplayName}
-                      </Link>
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page>{sectionName}</Breadcrumb.Page>
-                  </Breadcrumb.Item>
-                </>
-              )}
-            </Breadcrumb.List>
-          </BreadcrumbComponent>
+        <header className="flex items-center justify-between gap-3 bg-background px-4 py-4 md:px-6">
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="md:hidden" />
+            <BreadcrumbComponent>
+              <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
+                <Breadcrumb.Item>
+                  <Breadcrumb.Link asChild>
+                    <Link to={predictionBasePath}>AI Predictions</Link>
+                  </Breadcrumb.Link>
+                </Breadcrumb.Item>
+                <Breadcrumb.Separator />
+                {viewerRole === "admin" ? (
+                  <>
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Link asChild>
+                        <Link to={`${predictionBasePath}/${matchingScope?.grade_level ?? rows[0]?.grade_level}`}>
+                          Grade {matchingScope?.grade_level ?? rows[0]?.grade_level}
+                        </Link>
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Link asChild>
+                        <Link to={`${predictionBasePath}/${matchingScope?.grade_level ?? rows[0]?.grade_level}/${resolvedClassId}`}>
+                          {sectionName}
+                        </Link>
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Page>{subjectDisplayName}</Breadcrumb.Page>
+                    </Breadcrumb.Item>
+                  </>
+                ) : (
+                  <>
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Link asChild>
+                        <Link
+                          to={
+                            targetSubjectId
+                              ? `${predictionBasePath}/subject/${targetSubjectId}`
+                              : predictionBasePath
+                          }
+                        >
+                          {subjectDisplayName}
+                        </Link>
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Page>{sectionName}</Breadcrumb.Page>
+                    </Breadcrumb.Item>
+                  </>
+                )}
+              </Breadcrumb.List>
+            </BreadcrumbComponent>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCsv}
+            disabled={isExporting || !selectedPeriodId}
+            className="gap-1.5 shrink-0"
+            data-testid="export-section-risk-summary-csv-button"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            <span>Export CSV</span>
+          </Button>
         </header>
 
         <div className="-mt-[1px] border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">

@@ -96,6 +96,13 @@ class FeedbackPublicationResponse(BaseModel):
     feedback_fingerprint: str = Field(min_length=64, max_length=64)
 
 
+class FeedbackDeletionResponse(BaseModel):
+    submission_id: int
+    message: str = "Feedback deleted successfully"
+    feedback: Optional[str] = None
+    feedback_fingerprint: str = Field(min_length=64, max_length=64)
+
+
 class FeedbackDraftResponse(BaseModel):
     submission_id: int
     status: Literal["NONE", "PENDING", "READY", "UNDER_REVIEW", "APPROVED", "DISCARDED", "STALE", "FAILED", "NOT_ELIGIBLE"]

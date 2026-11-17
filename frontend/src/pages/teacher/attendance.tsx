@@ -18,10 +18,12 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 import { useAcademicPeriod, useRegisterDirtyGuard } from "@/context/AcademicPeriodContext";
+import { toast } from "sonner";
 import {
   getClassAttendanceLogs,
   recordBatchAttendance,
   scanQRAttendance,
+  exportClassAttendanceCSV,
   type AttendanceStatus,
   type AttendanceRecordItem,
 } from "@/lib/attendance-api";
@@ -43,6 +45,7 @@ import {
   XCircle,
   Loader2,
   RefreshCw,
+  Download,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingPanel } from "@/components/loading-panel";
@@ -193,6 +196,7 @@ export default function TeacherAttendancePage() {
   const logsRequestIdRef = useRef(0);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Compute Attendance Targets from scoped teaching and advisory classes
   const targets = useMemo<AttendanceTarget[]>(() => {
@@ -465,6 +469,34 @@ export default function TeacherAttendancePage() {
       alert("Error saving attendance records.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Export Class Attendance CSV
+  const handleExportCsv = async () => {
+    if (!selectedClassId) return;
+    try {
+      setIsExporting(true);
+      toast.info("Preparing attendance CSV export...");
+      const { blob, filename } = await exportClassAttendanceCSV(selectedClassId, {
+        subjectId: selectedSubjectId,
+        academicPeriodId: selectedAcademicPeriodId,
+        academicYearId: selectedYearId ?? undefined,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Attendance CSV downloaded successfully.");
+    } catch (err) {
+      console.error("Export attendance CSV error:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to export attendance CSV.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -845,6 +877,23 @@ export default function TeacherAttendancePage() {
                       </Badge>
                     )}
                   </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportCsv}
+                    disabled={isExporting || !selectedClassId}
+                    className="gap-1.5"
+                    data-testid="export-attendance-csv-button"
+                  >
+                    {isExporting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    <span>Export CSV</span>
+                  </Button>
                 </div>
               </header>
               <div className="hidden -mt-[1px] bg-background px-3 sm:px-4 md:block md:px-6">

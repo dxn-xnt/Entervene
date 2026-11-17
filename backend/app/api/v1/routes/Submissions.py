@@ -8,6 +8,7 @@ from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.core.Dependencies import get_db, get_staff_id, get_student_record, require_role
 from app.core.FileUpload import delete_file, save_file
 from app.schemas.Submission import (
+    FeedbackDeletionResponse,
     FeedbackDraftResponse,
     FeedbackEligibilityResponse,
     FeedbackPublicationRequest,
@@ -19,6 +20,7 @@ from app.schemas.Submission import (
 )
 from app.services.ai.UsageGuard import actor
 from app.services.submission.SubmissionFeedbackService import (
+    delete_submission_feedback,
     discard_submission_feedback_draft,
     generate_submission_feedback_suggestion,
     get_or_create_submission_feedback_draft,
@@ -171,6 +173,26 @@ def publish_feedback(
     db: Session = Depends(get_db),
 ):
     return publish_submission_feedback(db, staff_id, submission_id, body)
+
+
+@router.delete("/{submission_id}/feedback", response_model=FeedbackDeletionResponse)
+def delete_feedback(
+    submission_id: int,
+    expected_feedback_fingerprint: Optional[str] = Query(None, description="Optional concurrency check against current feedback"),
+    current_user: dict = Depends(require_role("teacher", "admin")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    token = actor.set(str(staff_id))
+    try:
+        return delete_submission_feedback(
+            db,
+            staff_id=staff_id,
+            submission_id=submission_id,
+            expected_feedback_fingerprint=expected_feedback_fingerprint,
+        )
+    finally:
+        actor.reset(token)
 
 
 @router.get("/{submission_id}/feedback/draft", response_model=FeedbackDraftResponse)

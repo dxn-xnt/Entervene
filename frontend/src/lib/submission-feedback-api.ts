@@ -55,6 +55,13 @@ export type FeedbackPublication = {
   feedback_fingerprint: string;
 };
 
+export type FeedbackDeletion = {
+  submission_id: number;
+  message: string;
+  feedback: string | null;
+  feedback_fingerprint: string;
+};
+
 export class SubmissionFeedbackApiError extends Error {
   status: number;
   code: string | null;
@@ -136,4 +143,20 @@ export async function publishSubmissionFeedback(
     },
   );
   return readResponse<FeedbackPublication>(response, "Unable to post the approved feedback.");
+}
+
+export async function deleteSubmissionFeedback(
+  submissionId: number,
+  expectedFeedbackFingerprint?: string,
+): Promise<FeedbackDeletion> {
+  const query = expectedFeedbackFingerprint
+    ? `?expected_feedback_fingerprint=${encodeURIComponent(expectedFeedbackFingerprint)}`
+    : "";
+  const response = await apiFetch(
+    `/api/v1/submissions/${encodeURIComponent(String(submissionId))}/feedback${query}`,
+    {
+      method: "DELETE",
+    },
+  );
+  return readResponse<FeedbackDeletion>(response, "Unable to delete feedback.");
 }

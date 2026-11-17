@@ -2,7 +2,7 @@ from datetime import date
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import require_role
@@ -17,6 +17,7 @@ from app.schemas.Attendance import (
 from app.services.attendance.AttendanceService import (
     _get_staff_id_from_user_id,
     batch_mark_attendance,
+    export_class_attendance_csv,
     get_class_attendance_logs,
     get_student_attendance_summary,
     record_qr_scan_attendance,
@@ -91,6 +92,42 @@ def list_class_attendance_logs(
         academic_year_id=academic_year_id,
         staff_id=staff_id,
         role=role,
+    )
+
+
+@router.get("/class/{class_id}/export-csv")
+def export_class_attendance(
+    class_id: int,
+    subject_id: Optional[int] = Query(None, description="Filter by specific subject ID"),
+    academic_period_id: Optional[int] = Query(None, description="Filter by academic period ID"),
+    academic_year_id: Optional[int] = Query(None, description="Filter by academic year ID"),
+    start_date: Optional[date] = Query(None, description="Filter by start date (YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="Filter by end date (YYYY-MM-DD)"),
+    current_user: dict = Depends(require_role("teacher", "admin")),
+    db: Session = Depends(get_db),
+):
+    """
+    Export attendance records for a class as a CSV spreadsheet.
+    """
+    staff_id = None
+    role = str(current_user.get("role", "")).lower()
+    if role == "teacher":
+        staff_id = _attendance_staff_id(db, current_user)
+    csv_content, filename = export_class_attendance_csv(
+        db=db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+        start_date=start_date,
+        end_date=end_date,
+        staff_id=staff_id,
+        role=role,
+    )
+    return Response(
+        content=csv_content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

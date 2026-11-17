@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import require_role
+from app.core.Dependencies import get_optional_staff_id, require_role
 from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -14,6 +14,7 @@ from app.models.ai.AIModelVersion import ModelPurpose
 from app.services.prediction import DevelopmentCurrentTermPredictionReadService as read_service
 from app.services.prediction.CurrentTermV3Domain import resolve_v3_academic_scope
 from app.services.prediction.ModelVersionService import get_production_model_versions
+from app.services.prediction.RiskSummaryExportService import export_student_risk_summary_csv
 from app.services.prediction.V3PredictionScopeAuthorizationService import authorize_v3_prediction_view
 
 
@@ -165,3 +166,37 @@ def list_current_term_predictions(
         require_active_enrollment=access.require_active_enrollment,
         lifecycle_status="PRODUCTION",
     )
+
+
+@router.get("/export-csv")
+def export_current_term_predictions_csv(
+    academic_period_id: int | None = Query(None, description="Academic period ID filter"),
+    class_id: int | None = Query(None, description="Class / Section ID filter"),
+    subject_id: int | None = Query(None, description="Subject ID filter"),
+    grade_level: int | None = Query(None, ge=1, le=12, description="Grade level filter (7-12)"),
+    risk_level: str | None = Query(None, description="Risk level filter"),
+    search: str | None = Query(None, description="Search term for student name or LRN"),
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    """Export current-term student risk summary predictions as an RFC-4180 CSV file."""
+    content, filename = export_student_risk_summary_csv(
+        db,
+        academic_period_id=academic_period_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        grade_level=grade_level,
+        risk_level=risk_level,
+        search=search,
+        current_user=current_user,
+        staff_id=staff_id,
+    )
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+

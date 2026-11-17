@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiFetch } from "@/lib/api";
 import {
+  deleteSubmissionFeedback,
   generateSubmissionFeedbackSuggestion,
   getSubmissionFeedbackEligibility,
   publishSubmissionFeedback,
@@ -79,6 +80,36 @@ describe("submission feedback API", () => {
       status: 409,
       code: "FEEDBACK_COMMENT_STALE",
       message: "Existing feedback changed",
+    });
+  });
+
+  it("deletes feedback via DELETE with optional expected fingerprint", async () => {
+    apiFetchMock.mockResolvedValue(new Response(JSON.stringify({
+      submission_id: 41,
+      message: "Feedback deleted successfully",
+      feedback: null,
+      feedback_fingerprint: "0".repeat(64),
+    }), { status: 200 }));
+
+    const res = await deleteSubmissionFeedback(41, "b".repeat(64));
+
+    expect(apiFetchMock).toHaveBeenCalledWith(
+      `/api/v1/submissions/41/feedback?expected_feedback_fingerprint=${"b".repeat(64)}`,
+      { method: "DELETE" },
+    );
+    expect(res.feedback).toBeNull();
+    expect(res.feedback_fingerprint).toBe("0".repeat(64));
+  });
+
+  it("handles delete feedback 409 concurrency error", async () => {
+    apiFetchMock.mockResolvedValue(new Response(JSON.stringify({
+      detail: { code: "FEEDBACK_COMMENT_STALE", message: "Existing feedback changed; reload before deleting" },
+    }), { status: 409 }));
+
+    await expect(deleteSubmissionFeedback(41, "stale_fp")).rejects.toMatchObject<Partial<SubmissionFeedbackApiError>>({
+      status: 409,
+      code: "FEEDBACK_COMMENT_STALE",
+      message: "Existing feedback changed; reload before deleting",
     });
   });
 });
