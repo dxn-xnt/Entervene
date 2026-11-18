@@ -1,252 +1,336 @@
-# Entervene prediction system: verified implementation and evidence
+# Entervene Prediction System
 
-**Status:** Canonical prediction reference. **Verified:** 2026-10-13. **Scope:** repository and two local configurations inspected read-only; no production deployment or independent school cohort was tested. “Verified” means the stated source path or artifact was inspected, not that the prediction is clinically or educationally valid. All paths and line ranges below are relative to the repository root.
+**Document role:** Canonical technical and evidence reference
 
-## 1. Executive Summary
+**Verified against the repository:** 2026-11-18
 
-**Plain language.** Entervene has more than one prediction path. The usable development demonstration estimates a student's eventual **grade in the same term** from that student's recorded Written Work (WW), Performance Tasks (PT), and examination evidence. A Random Forest produces a number; a separate fixed rule assigns a support band. That band is not a measured probability of failure. The local demo selects an official-historical-target candidate, but it remains a development model with no independent validation on completed current three-term records. The default local configuration disables that development API and has no active next-period model. [Evidence: `backend/app/core/Config.py:L16-L20`; `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py:L37-L61`; `backend/app/services/prediction/DevelopmentCurrentTermModelSelection.py:L10-L31`.]
+**Defense companion:** [`../ML_handoff/PREDICTION_SYSTEM_CAPSTONE_DEFENSE.md`](../ML_handoff/PREDICTION_SYSTEM_CAPSTONE_DEFENSE.md)
 
-**Technical conclusion.** The corrected candidate is a 31-input `RandomForestRegressor` trained on historical JHS quarter outcomes, not current three-term outcomes. Its strongest reported historical results occur after substantial evidence. The official-target candidate contains **zero** below-75 outcomes, so high-risk detection is unmeasured. A separate older next-period route has a different feature set and a multi-signal risk engine; do not combine its output or accuracy with the development same-term path. [Evidence: `backend/app/ml/TrainCurrentTermDevelopmentModel.py:L50-L98`; `backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L31-L98`; `backend/app/services/prediction/ModelScoringService.py:L265-L342`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L5-L16`.]
+This document and the capstone-defense companion form one documentation set. This file is the source of truth for implementation details and evidence. The defense document summarizes these facts; it must not introduce a different prediction target, runtime path, or accuracy claim.
 
-## 2. Purpose and Scope of the Prediction System
+"Verified" means that the repository implementation or checked-in evidence was inspected. It does not mean that the model is independently validated for production use.
 
-| Path | Question answered | Current access and status |
-| --- | --- | --- |
-| **Development same-term V3** | “Given recorded work so far, what numeric final grade might this student receive in this same term?” | `POST/GET /api/v1/development/current-term-predictions`; development/test plus feature flag; Admin and authorized Teacher read. Grades 7–12 are supported; Grades 11–12 remain explicitly provisional and unvalidated. The HTTP writer is isolated to automated tests. This is the current demo path, not a production-approved model. [`backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py`; `backend/app/services/prediction/CurrentTermV3Domain.py`.] |
-| **Legacy next-period** | “Given a source period, what might the next-period grade be?” | `/api/v1/predictions` routes and active model lookup. The default local registry has no active `entervene_next_period_grade_rf`; requests needing it cannot score there. Its older risk engine evaluates grade and participation signals. [`backend/app/api/v1/routes/Predictions.py:L272-L389`; `backend/app/services/prediction/ModelScoringService.py:L25-L82,L265-L342`.] |
-| **Other artifacts/registry rows** | Earlier current-period or unified experiments | Local artifacts and candidate registry rows exist, but an active row alone does not prove an API uses it. No active route to the `unified_current_term_projection_v2` row was found under `backend/app/`. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L33-L38,L443-L448`; `backend/app/models/ai/AIModelVersion.py:L7-L27`.] |
-| **Historical imported predictions** | Stored research/demo records | Existing `ai_prediction` rows can appear in historical dashboard/read paths. Their saved values are not newly scored live evidence; null legacy evidence snapshots must not be retroactively explained. [`backend/app/api/v1/routes/Predictions.py:L141-L213`; `backend/app/services/prediction/PredictionReadService.py:L188-L225`.] |
+## 1. System in one sentence
 
-No automatic blanket prediction of every enrolled learner is established by the active development route. The administrative cohort script is a separate legacy import/scoring path and does not create the audited development V3 rows. [`backend/scripts/score_enrolled_cohort.py:L54-L255`; `docs/archive/prediction/TICKET-2026-PREDICTION-EVIDENCE-STAGE-1-5.md:L5-L14`.]
+Entervene estimates a student's **final grade in the same active academic term** from the graded Written Work (WW), Performance Task (PT), and Quarterly Assessment (QA) evidence currently recorded for that student, then maps the numeric estimate to a deterministic intervention band.
 
-## 3. Current Implementation and Model Versions
+The operational model purpose is:
 
-**Runtime selection is configuration-dependent.** `selected_development_model_name()` accepts only `entervene_current_term_development_rf_v3` or `entervene_current_term_official_target_rf_candidate`; unknown names fail closed. The API prefers the configured inactive DEVELOPMENT registry row. If that model name is entirely absent and the database contains exactly one other valid allowlisted development row, it uses that sole row and logs a warning; it does not fall back over malformed or duplicate configured entries. Default `Config.py` sets `app_environment=production`, feature flag false, and the **legacy V3** selector; environment files can override these defaults. The isolated `.env.demo` explicitly selects the corrected candidate. Exact artifact/schema/hash checks still apply when scoring. [`backend/app/core/Config.py:L15-L29`; `backend/app/services/prediction/DevelopmentCurrentTermModelSelection.py:L10-L31`; `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py:L39-L91`; `backend/app/services/prediction/DevelopmentCurrentTermPredictionPersistenceService.py:L63-L99`.]
+```text
+CURRENT_TERM_FINAL_GRADE_PROJECTION
+source_period_id == target_period_id
+```
 
-The corrected candidate artifact is locally present and its SHA-256 was recomputed as `f9e9fa20d617e73ccfde292c0dfc729456a4d844f86216fbf530eee9e21a94cc`. Its development dataset SHA-256 was recomputed as `789879391162415bf2df25630e7bd65be0838a0b73b3e3cc62579e9e0019f5a1`. The schema has the same ordered 31 input names as legacy V3. These ignored local files need trusted provisioning in a fresh checkout; presence here is not proof of deployment elsewhere. [`backend/app/services/prediction/schemas/entervene_current_term_official_target_rf_candidate_feature_schema.json:L1-L56`; `docs/archive/prediction/DEVELOPMENT_PREDICTION_ACCEPTANCE_4M.md:L11-L16`.]
+It is not a next-term forecast, a probability of failure, a diagnosis, or an autonomous intervention decision.
 
-The **legacy V3** was trained on mixed target meanings: official historical grades for 20/60/20 records and reconstructed old-interpolation decimals for most 20/50/30 records. The **corrected candidate** uses the stored historical workbook Quarterly Grade for all resolved periods. Earlier Task 4E/4F errors against reconstructed labels must never be quoted as official-grade accuracy. [`docs/V3_TARGET_INTEGRITY_4H.md:L5-L22,L44-L85`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L85-L96`.]
+## 2. Current architecture
 
-## 4. End-to-End Prediction Workflow
+```text
+Teacher records or updates a grade
+              |
+              v
+Post-commit prediction refresh gate
+              |
+              v
+Scope, lifecycle, finalized-grade, domain, and readiness checks
+              |
+              v
+31-feature same-term evidence row
+              |
+              v
+RandomForestRegressor -> projected final grade
+              |
+              v
+Fixed grade thresholds -> intervention level
+              |
+              v
+Append-only revision with immutable evidence snapshot
+              |
+              v
+Stable read API -> Admin and Teacher prediction pages
+```
 
-**Development path, in order:**
+The model estimates a number. The intervention level is assigned afterward by application code. Attendance and engagement may be retained as supporting context, but they do not change the current-term model's 31-feature vector or its intervention band.
 
-1. A teacher records graded classwork/submission results; typed ST1, ST2 and Term Exam results are consolidated when complete. A guarded, post-commit refresh is called by activity, submission and quiz grading services **only** with the corrected selector and enabled development API. Admins may also generate explicitly with POST. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L79-L153,L236-L331`; `backend/app/services/prediction/DevelopmentGradeRefreshService.py:L23-L65`; `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py:L63-L103`.]
-2. The API resolves the selected inactive development model and validates source term = target term, active period, no finalized same-term grade, real student/class/subject scope, supported Grade 7–12 domain, supported component-weight pattern, and evidence readiness. Grade 11–12 results remain explicitly provisional and unvalidated. [`backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py`; `backend/app/services/prediction/DevelopmentCurrentTermPredictionService.py`; `backend/app/services/prediction/CurrentTermV3Domain.py`.]
-3. The feature builder reads the student's eligible graded, non-archived, non-reading classwork in that class, subject and period. It selects a graded submission at the capture cutoff, handles remedial exams, maps each item to WW/PT/QA, resolves template weights, constructs exactly 31 features and emits warnings for out-of-training envelopes. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L79-L165,L236-L439`.]
-4. The scorer checks the exact schema and artifact metadata, loads the selected joblib pipeline, and returns one finite floating-point projected grade. It does not compute a failure probability. [`backend/app/services/prediction/DevelopmentCurrentTermScoringService.py:L22-L109`.]
-5. A separate deterministic rule maps a valid 0–100 projected grade to a support band. Ineligible or unavailable projections receive `INTERVENTION_NOT_ASSESSED`; contextual attendance/engagement fields are recorded as supporting context only. [`backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L18-L98`.]
-6. A serialized transaction rechecks the domain and evidence, saves an immutable feature/evidence snapshot with model and artifact hashes, and creates a revision only if the relevant evidence or model contract changed. GET selects the latest revision **within the chosen model version**. [`backend/app/services/prediction/DevelopmentCurrentTermPredictionPersistenceService.py:L102-L294,L298-L376`; `backend/app/services/prediction/DevelopmentCurrentTermPredictionReadService.py:L209-L335`.]
-7. The current Admin prediction pages are read-only. The legacy development writer is isolated to automated test environments and is unavailable in normal development/demo and production deployments; Teacher current-term access remains assignment-scoped. [`backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py`; `frontend/src/pages/teacher/predictions.tsx`; `frontend/src/lib/prediction-api.ts`.]
+## 3. Runtime contracts
 
-**Older next-period path:** `/api/v1/predictions/from-records` builds a distinct feature vector from period grades, classwork, assessment observations and attendance; readiness requires source grade and at least 50% completion and coverage. If ready, it resolves an **active** model, scores a next-period grade, applies `RiskEngine`, then saves a separate `ai_prediction` result. Despite a builder string `CURRENT_PERIOD_PROJECTION` in some same-period scopes, that route still defaults to the next-period model; the string alone does not create a distinct current-period scorer. [`backend/app/api/v1/routes/Predictions.py:L303-L389`; `backend/app/services/prediction/PredictionFeatureBuilderService.py:L486-L550,L606-L850`; `backend/app/services/prediction/ModelScoringService.py:L265-L342`.]
-
-## 5. Data Sources and Student Eligibility
-
-Development V3 uses student, class, subject, academic-period, grading-template, classwork-assignment and graded submission records. The validated JHS catalog mapping is `MATH7`, `SCI7`, `ENG7`, `ENG8`, `ENG9`, `MATH10`, `SCI10` with exact grade/name; other identifiable or valid subjects can enter provisional handling. Grades 11–12 are accepted only as `PROVISIONAL_UNVALIDATED_SHS`, not as validated production claims. Only ENG7 and MATH10 have matching historical grade–subject workbook holdouts. [`backend/app/services/prediction/CurrentTermV3Domain.py`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L85-L92`.]
-
-Minimum readiness is **at least four graded available activities**, WW and PT evidence, observed component weight **at least 70%**, and no unresolved evidence. The 70% is the sum of the weights of components with usable scores, **not** the student's score or the fraction of assigned activities completed. Seven or more activities, WW/PT/QA, all 100% weight, and no unresolved evidence produce `HIGH_EVIDENCE`; three activities with WW/PT is `LIMITED_EVIDENCE` and **cannot score**. Finalized same-term grades block generation; no scoreable evidence yields no development prediction row. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L191-L234,L344-L355`; `backend/app/services/prediction/DevelopmentCurrentTermPredictionService.py:L125-L221`; `backend/app/services/prediction/DevelopmentCurrentTermPredictionPersistenceService.py:L298-L356`.]
-
-Historical candidate training used **14 JHS quarter workbooks**, **1,865 student-periods**, **467 pseudonymous students**, and **5,595 correlated snapshots** at 25%, 50% and 75% activity-column evidence. The source is older quarterly ECR, with aggregate QA rather than live typed ST1/ST2/Term Exam. Snapshot stages are approximate evidence order, not observed dates. No current completed three-term independent validation cohort was found. [`docs/V3_TARGET_INTEGRITY_4H.md:L5-L22,L44-L78`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L5-L16`.]
-
-The selected historical candidate dataset contains only these **overall WW/PT/EX weight patterns**:
-
-| WW/PT/EX pattern | Student-periods | Correlated snapshots | WW + PT coverage |
-| --- | ---: | ---: | ---: |
-| 20/50/30 | 1,209 | 3,627 | 70% |
-| 20/60/20 | 656 | 1,968 | 80% |
-
-This explains why WW and PT evidence can satisfy the 70% coverage gate for the patterns represented in the candidate dataset. It does **not** establish 70% as the statistically optimal threshold. An overall **30/30/40 WW/PT/EX** template would have only 60% coverage from WW and PT and is outside the current development model's supported patterns even after EX evidence is available. Do not confuse overall component weights with the separate **30/30/40 ST1/ST2/Term Exam split within EX**. These counts describe the selected dataset, not every grading template the application can store. [`docs/V3_TARGET_INTEGRITY_4H.md:L44-L78`; `backend/app/ml/BuildCurrentTermDevelopmentDataset.py:L180-L201`; `backend/app/services/prediction/DevelopmentCurrentTermPredictionService.py:L36-L45,L93-L110`; `backend/app/services/grading/ExaminationCalculator.py:L16-L31`.]
-
-## 6. Complete Feature and Variable Inventory
-
-**Interpretation of the table.** Each row below is a model input in both V3 31-column schemas and the runtime `features` object. Numeric fields are floating-point; counts/flags are stored numerically. `0` can mean no observed component, **not** a real zero grade. The runtime requires every named key; the fitted preprocessing has median imputation for numeric nulls, but the live builder normally supplies numeric zero and readiness blocks weak evidence. Nominal grades/percentages are 0–100, yet the builder does not generally clip over-HPS scores; training support envelopes produce warnings, not universal hard bounds. `subject` is a non-empty categorical string. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L42-L58,L155-L189,L337-L439`; `backend/app/services/prediction/DevelopmentCurrentTermScoringService.py:L41-L92`; `backend/app/services/prediction/schemas/entervene_current_term_official_target_rf_candidate_feature_schema.json:L1-L56`.]
-
-| Exact input name | Source / calculation | Type and practical range | Other use |
+| Contract | Purpose | Mutability | Access and lifecycle |
 | --- | --- | --- | --- |
-| `grade_level` | Student academic level, fallback class level | Numeric; V3 supports Grades 7–12, with Grades 11–12 provisional and unvalidated | Scope gate; model |
-| `ww_weight`, `pt_weight`, `qa_weight` | Resolved subject template fractions ×100 | Numeric percentages; accepted combinations 20/50/30 or 20/60/20 | Domain gate; model; weighted derivatives |
-| `ww_available_activity_count` | Count of usable scored WW items | Nonnegative count | Readiness through aggregate; model |
-| `pt_available_activity_count` | Count of usable scored PT items | Nonnegative count | Readiness through aggregate; model |
-| `qa_available_activity_count` | Count of usable QA items; complete typed exam is one aggregate | Nonnegative count | Readiness through aggregate; model |
-| `overall_available_activity_count` | Sum of WW, PT, QA counts | Nonnegative count | ≥4 readiness, ≥7 high evidence; model |
-| `ww_points_earned_so_far`, `ww_points_possible_so_far` | Sum of selected WW score and positive HPS | Numeric grade points, nonnegative by intended records; no scorer bound | Model |
-| `ww_percent_so_far` | 100 × WW earned / HPS, or 0 without usable WW | Numeric percent; over-HPS can exceed 100 | Model; derivative |
-| `ww_weighted_score_so_far` | WW percent × WW weight / 100 | Numeric initial-grade points | Model; aggregate |
-| `pt_points_earned_so_far`, `pt_points_possible_so_far` | PT analog of WW sums | Numeric grade points | Model |
-| `pt_percent_so_far` | PT analog of WW percent | Numeric percent | Model; derivative |
-| `pt_weighted_score_so_far` | PT percent × PT weight / 100 | Numeric initial-grade points | Model; aggregate |
-| `qa_points_earned_so_far`, `qa_points_possible_so_far` | Complete typed exam percent represented against synthetic 40 HPS, or aggregate untyped QA scores | Numeric grade points; live typed QA is an aggregate representation | Model |
-| `qa_percent_so_far` | QA earned / HPS ×100; zero until complete typed set | Numeric percent | Model; derivative |
-| `qa_weighted_score_so_far` | QA percent × QA weight / 100 | Numeric initial-grade points | Model; aggregate |
-| `observed_component_weight_sum` | Sum of weights of components with a usable score | Numeric percent, 0–100 for accepted weights | ≥70 readiness; model |
-| `overall_weighted_score_so_far` | Sum of observed component weighted scores | Numeric initial-grade points | Model; derivative |
-| `overall_partial_percent` | 100 × overall weighted score / observed weight; 0 if none | Numeric normalized percent; can exceed 100 for over-HPS | Model |
-| `ww_has_evidence`, `pt_has_evidence`, `qa_has_evidence` | 1 when corresponding usable component count >0, else 0 | Binary numeric | WW/PT readiness, QA high evidence; model |
-| `has_any_input_evidence` | 1 when observed weight >0, else 0 | Binary numeric | Model |
-| `ww_score_over_hps_count_so_far`, `pt_score_over_hps_count_so_far`, `qa_score_over_hps_count_so_far` | Count selected scores greater than item HPS | Nonnegative count | Model / data-quality signal |
-| `subject` | Exact mapped canonical Mathematics, Science, English etc. | Non-empty category; one-hot encoded | Domain gate; model |
+| `GET /api/v1/current-term-predictions/scope` | Resolve valid Admin prediction scopes | Read only | Admin; based on active/published subject loads |
+| `GET /api/v1/current-term-predictions` | Read latest current-term rows for a class, subject, and period | Read only | Admin or assignment-authorized Teacher; exactly one approved production model |
+| `GET /api/v1/current-term-predictions/export-csv` | Export the stable current-term view | Read only | Same production lifecycle and scope rules |
+| `GET /api/v1/development/current-term-predictions` | Inspect isolated development rows | Read only | Development/test only with the feature flag enabled |
+| `POST /api/v1/development/current-term-predictions` | Explicitly generate a development row | Write | Automated test environment only |
+| `GET /api/v1/predictions/...` | Read historical `ai_prediction` records and evidence | Read only | Historical/archive contract; no current HTTP writer |
 
-These are **31 columns**, counting each comma-separated name individually. Full ordered list is in `backend/app/services/prediction/schemas/entervene_current_term_official_target_rf_candidate_feature_schema.json`; assembly is in `backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L337-L420`. Grade trend, prior grade, attendance, punctuality, missing work, and behavioral engagement are **not** V3 model inputs. Supporting-context fields in `backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L18-L29` are not used to assign its grade-derived band. The older next-period model and risk engine do use some of those variables; see §10. Database existence alone never implies V3 model use.
+The routers are mounted in `backend/app/main.py`. The historical router in `backend/app/api/v1/routes/Predictions.py` contains only `GET` handlers. Its retained next-period services and rows support audit/history and are not the active UI scoring path.
 
-## 7. Grade Components, Percentages, and Accuracy
+The current frontend prediction pages call the stable current-term contract through `frontend/src/lib/prediction-api.ts` and `frontend/src/components/predictions/current-term-dashboard-adapter.ts`. Consumers include the Teacher prediction, grade, section, and subject pages. The development panel still exists as an isolated component, but it is not evidence that development generation is enabled in a normal development, demo, or production deployment.
 
-**Direct answer:** grading component weights are direct V3 inputs **and** change its derived weighted-score inputs. The gradebook also uses resolved WW/PT/EX weights to compute an Initial Grade, rounds it to two decimals and applies a lookup to obtain the current Term Grade. Subject-specific 20/50/30 versus 20/60/20 therefore changes the meaning of both features and official grade targets. This mathematical effect does **not** establish that one weight pattern makes the model more accurate. No controlled, same-student weight-swap accuracy experiment was found. Historical subgroup errors confound weights with subject/cohort. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L246-L253,L337-L420`; `backend/app/services/student_record/StudentRecordService.py:L585-L677,L734-L774`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L70-L84`.]
+## 4. End-to-end behavior
 
-**Illustration, not a measured learner:** WW 80%, PT 90%, EX 70% gives Initial Grade `0.20×80 + 0.50×90 + 0.30×70 = 82.00` for core weights, and `0.20×80 + 0.60×90 + 0.20×70 = 84.00` for Applied weights. The current lookup maps these to Term Grades **85** and **86**, respectively. This was checked against `transmute_current_three_term_grade()`. It does not predict a student's future grade and says nothing causal about model accuracy. [`backend/app/services/grading/CurrentThreeTermTransmutation.py:L7-L28`; `backend/app/services/student_record/StudentRecordService.py:L759-L769`.]
+### 4.1 Grade changes and refresh
 
-Current gradebook template resolution follows the required `subject.grading_template_id` foreign key. The development database has exactly Core (20/50/30), Applied (20/60/20), and Specialized (20/50/30); there is no Subject Group or level-based fallback. A missing or malformed assigned template is a configuration error. The gradebook's no-component calculation contributes zero for that component; V3's `overall_partial_percent` divides by **observed weight**, so these are different quantities. Typed EX uses ST1/ST2/Term Exam default 30/30/40 internally and is hidden from V3 until all three are available. Incorrect templates can distort features and official grades; whether and by how much that changes predictive error is unmeasured. See `docs/THREE_GRADING_TEMPLATES_MIGRATION.md` for the development-only configuration and rollback.
+After a successful grade-related commit, the activity, submission, quiz-attempt, and quiz-analysis services can call `DevelopmentGradeRefreshService`. The refresh is guarded:
 
-The corrected candidate uses historical **official quarter grades**, while live gradebook calculations use the supplied current **three-term** transmutation table. The lookup table has been verified at two-decimal precision, but that does not make older quarterly training targets equivalent to current three-term outcomes. This domain shift is a production validation blocker. [`docs/V3_TARGET_INTEGRITY_4H.md:L44-L78`; `docs/GRADE_TRANSMUTATION_CONTRACT_4G.md:L5-L49`.]
+- In development/test, it runs only when the development feature is enabled and the selected model is the corrected official-target candidate.
+- In production, it runs only when exactly one current-term model passes all production lifecycle requirements.
+- Failures are logged and do not turn an unsuccessful prediction refresh into a successful grade mutation.
 
-## 8. Prediction Algorithm and Model Training
+There is no general scheduled job that continuously predicts every enrolled student.
 
-**Plain language.** Random Forest combines many decision trees to estimate a numeric grade from the student's recorded academic pattern. It is a regression model, not a classifier.
+### 4.2 Scope and eligibility
 
-**Technical.** The corrected candidate retains the V3 architecture: 300-tree `RandomForestRegressor`, `max_features=0.5`, `min_samples_leaf=2`, `min_samples_split=5`, seed 42; median numeric imputation and unknown-tolerant one-hot subject encoding. The target is `target_final_period_grade`, now the historical workbook's stored official Quarterly Grade. The candidate's offline 14-fold evaluation refits a new pipeline while holding out one whole workbook and its students per fold; it is **not** an evaluation of the deployed demo artifact on an unseen current school. The old V3 train/validation/test split was 3,903/840/852 snapshots by student, but its mixed/reconstructed target prevents official-grade interpretation. [`backend/app/ml/TrainCurrentTermDevelopmentModel.py:L19-L25,L50-L98,L125-L171`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L5-L16`; `docs/V3_TARGET_INTEGRITY_4H.md:L5-L22`.]
+`DevelopmentCurrentTermPredictionService` and `CurrentTermV3Domain` require:
 
-The older next-period Random Forest has its own target `target_next_period_grade` and 20-feature training report. Its local report lists 1,580 training rows, 395 test rows, MAE **1.4892** and RMSE **2.0559** against its own historical target. The default local registry row is inactive, and these metrics cannot be transferred to V3 or to current three-term learners. [`backend/app/ml/Train.py:L19-L29,L184-L200`; `backend/data/models/entervene_next_period_grade_rf_training_report.json`; `backend/app/services/prediction/ModelScoringService.py:L25-L82`.]
+- source and target period are the same;
+- an active academic year and active academic period;
+- an active/published subject load for the class and subject;
+- a real student/class/subject relationship;
+- matching student and class academic levels;
+- no finalized grade for the same term;
+- a supported grade/domain and grading-weight pattern; and
+- enough resolved academic evidence.
 
-## 9. Prediction Output, Range, and Interpretation
+A finalized same-term grade blocks a new projection because an official outcome is already available.
 
-| Quantity | Meaning and implementation | Range / caution |
+### 4.3 Feature construction
+
+`CurrentPeriodFeatureBuilderService` reads eligible, graded, non-archived, non-reading classwork for the exact student, class, subject, and period. It resolves WW, PT, and QA evidence, including the existing remedial-exam behavior, and builds exactly 31 ordered inputs:
+
+```text
+grade_level
+ww_weight, pt_weight, qa_weight
+ww_available_activity_count, pt_available_activity_count,
+qa_available_activity_count, overall_available_activity_count
+ww_points_earned_so_far, ww_points_possible_so_far,
+ww_percent_so_far, ww_weighted_score_so_far
+pt_points_earned_so_far, pt_points_possible_so_far,
+pt_percent_so_far, pt_weighted_score_so_far
+qa_points_earned_so_far, qa_points_possible_so_far,
+qa_percent_so_far, qa_weighted_score_so_far
+observed_component_weight_sum, overall_weighted_score_so_far,
+overall_partial_percent
+ww_has_evidence, pt_has_evidence, qa_has_evidence,
+has_any_input_evidence
+ww_score_over_hps_count_so_far, pt_score_over_hps_count_so_far,
+qa_score_over_hps_count_so_far
+subject
+```
+
+Identity fields, the target grade, finalized grades, attendance, engagement, and intervention labels are not model inputs. Supported WW/PT/QA weight patterns are 20/50/30 and 20/60/20. Other patterns fail the domain contract instead of being silently transformed.
+
+### 4.4 Readiness
+
+Readiness is a code-level eligibility gate, not a confidence score.
+
+| Level | Exact rule | Scoreable? |
 | --- | --- | --- |
-| Development `projected_final_term_grade` | Raw float from the selected regressor, persisted as `Numeric(6,2)` | **Nominal grade-point scale 0–100.** Scorer checks finite only, without clipping; the downstream band refuses out-of-range values and successful persistence requires an assessed band. No guaranteed prediction bound is enforced by the model call. [`backend/app/services/prediction/DevelopmentCurrentTermScoringService.py:L94-L109`; `backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L65-L84`; `backend/app/models/ai/DevelopmentCurrentTermPrediction.py:L14-L38`.] |
-| Development support band | Deterministic rule from the raw projected grade | Four bands in §10; not a probability or model confidence. Saved `risk_score` is always null. [`backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L78-L98`; `backend/app/models/ai/DevelopmentCurrentTermPrediction.py:L9-L13`.] |
-| Older next-period `predicted_period_grade` | Regressor float rounded to two decimals for API/saving | No model-side clipping is shown; may be suppressed to null on insufficient data. [`backend/app/services/prediction/ModelScoringService.py:L225-L227,L265-L342`.] |
-| Older next-period `risk_score` | Heuristic severity score from §10 | 0–100, larger means more concern; null on scorer-level insufficiency. **Not** a failure probability. [`backend/app/services/prediction/RiskEngine.py:L212-L242`; `backend/app/services/prediction/ModelScoringService.py:L311-L326`.] |
+| `HIGH_EVIDENCE` | At least 7 activities, WW/PT/QA evidence, 100% component weight observed, no unresolved evidence | Yes |
+| `STANDARD_READY` | At least 4 activities, WW and PT evidence, at least 70% component weight observed, no unresolved evidence | Yes |
+| `LIMITED_EVIDENCE` | Exactly 3 activities with WW and PT evidence and no unresolved evidence | No |
+| `INSUFFICIENT_EVIDENCE` | Any other state | No |
 
-The current three-term gradebook transmutation maps Initial Grade to Term Grade 60–100 using intervals; that is a **grade calculation**, not model postprocessing. An estimated term grade is neither a finalized grade nor a probability. [`backend/app/services/grading/CurrentThreeTermTransmutation.py:L7-L28`; `backend/app/services/student_record/StudentRecordService.py:L734-L774`.]
+Reason codes identify unresolved evidence, too few activities, missing WW/PT evidence, or insufficient observed component weight. Only `STANDARD_READY` and `HIGH_EVIDENCE` reach model scoring.
 
-## 10. Risk Scoring and At-Risk Classification
+### 4.5 Scoring and intervention band
 
-**Development V3:** the rule is `grade <75 → HIGH_RISK`, `75≤grade<85 → MODERATE_RISK`, `85≤grade<90 → NEEDS_MONITORING`, `grade≥90 → LOW_RISK`, provided the raw grade is finite and between 0 and 100. No grade or blocked readiness means `INTERVENTION_NOT_ASSESSED`. Attendance and engagement are only contextual in this rule. Thresholds are hardcoded in `backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L65-L98`, not learned or configured. Despite the field name `intervention_level`, this is a downstream band, not an empirical diagnosis or probability. [`backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L31-L98`.]
+`DevelopmentCurrentTermScoringService` rejects leakage/identity fields, requires the exact ordered schema and compatible types, verifies model purpose/target/artifact/schema/lifecycle, loads the joblib pipeline, and returns one finite number from `model.predict()`.
 
-**Older next-period:** `RiskEngine` uses the predicted grade **plus** source grade, trend, completion, coverage, missing and late work, previous-period status, and participation score. It evaluates rule triggers; severity priority is `INSUFFICIENT_DATA` above HIGH above MODERATE above MONITOR above LOW. Missing prediction, completion or coverage, or completion/coverage below 0.50, triggers insufficient data. Other high-risk triggers include predicted grade <75, source grade <75, predicted <80 with trend ≤−5, completion <0.70 with predicted <82, or ≥3 missing items with predicted <85. Behavioral engagement <60 also triggers high risk; 60–<75 moderate, 75–<85 monitoring. See the code for the complete moderate/monitor rule set and exact boundary operators. Active `risk_threshold` rows are loaded into the trace but **do not override** these hardcoded defaults. [`backend/app/services/prediction/RiskEngine.py:L12-L52,L98-L209,L244-L287`.]
+The scorer does not produce a probability or confidence. Its output is not clipped before `DevelopmentCurrentTermRiskService` validates a 0-100 value and applies:
 
-For the older path, the numeric score is **base** `0/10/35/60/85` for insufficient/low/monitor/moderate/high, plus capped penalties: `min(20,max(0,88−predicted)×1.5)` if predicted <88; `min(10,|negative trend|)`; `min(10,(0.90−completion)×25)` if completion <.90; `min(8,missing×2.5)`; `min(5,late×1.5)`; and `min(5,max(0,trigger_count−1)×1.5)`. It is then clipped to its level's score interval and 0–100. `INSUFFICIENT_DATA` returns **0** from the direct risk engine, yet the older scorer suppresses its exposed score to **null**. This is a rule-based priority, not model confidence. [`backend/app/services/prediction/RiskEngine.py:L28-L34,L212-L242`; `backend/app/services/prediction/ModelScoringService.py:L310-L326`.]
+| Projected grade | Intervention level | Meaning |
+| ---: | --- | --- |
+| `< 75` | `HIGH_RISK` | Highest support priority |
+| `75 to < 85` | `MODERATE_RISK` | Moderate support priority |
+| `85 to < 90` | `NEEDS_MONITORING` | Monitor progress |
+| `>= 90` | `LOW_RISK` | Lowest support priority |
 
-Teachers can submit a review for an older saved prediction; that review is a separate record and does not retrain the model or change its saved score. The development panel does not expose a verified grade override in its prediction response. [`backend/app/api/v1/routes/Predictions.py:L514-L551`; `backend/app/services/prediction/TeacherRiskReviewService.py:L12-L67`; `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py:L63-L128`.]
+`risk_score` is intentionally null for current-term rows. The band is not a probability of failing.
 
-## 11. Risk Thresholds and Worked Examples
+### 4.6 Persistence and revisions
 
-| Illustrative input | Actual rule result | Why |
-| --- | --- | --- |
-| Development projection **74.99** | HIGH_RISK | Strictly below 75. |
-| Development projection **75.00** | MODERATE_RISK | 75 included; below 85. |
-| Development projection **85.00** | NEEDS_MONITORING | 85 included; below 90. |
-| Development projection **90.00** | LOW_RISK | 90 included. |
-| Development with no score, or score outside 0–100 | INTERVENTION_NOT_ASSESSED | No valid band is assigned. |
-| Older next-period: predicted 84, source 88, trend 0, completion .80, coverage .80, no missing/late, prior period present, no participation signal | NEEDS_MONITORING; score **45.0/100** | Triggers predicted 82–<88 and completion <.90. Base 35 + grade penalty 6 + completion penalty 2.5 + second-trigger penalty 1.5. Checked by calling `evaluate_risk()` with these values. |
-| Older next-period: prediction, completion and coverage all missing | INSUFFICIENT_DATA; direct engine score **0**; scorer response score **null** | Missing-data rules outrank other levels. Checked by calling `evaluate_risk()`. |
+`DevelopmentCurrentTermPredictionPersistenceService` saves the academic scope, model version, projected grade, intervention level, revision, generation time, and an immutable evidence snapshot containing readiness, features, and model/schema/artifact identity.
 
-These are rule exercises, not observed students. A predicted grade of 84 alone does **not** fully determine the older path's risk: other triggered signals can raise it. [`backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L65-L98`; `backend/app/services/prediction/RiskEngine.py:L125-L242`.]
+The database enforces same-term semantics and a positive revision. A serialized transaction rechecks freshness and eligibility. Unchanged material evidence reuses the latest revision; changed evidence or a changed valid model contract creates a new revision. Reads select the latest revision within the selected model version, so histories from different models are not blended.
 
-## 12. Student-Level Personalization
+## 5. Model selection and lifecycle
 
-**Yes, within the represented academic data.** Both feature builders query a particular student, class, subject and period. V3 uses that student's own graded WW/PT/QA submissions and the class's subject weights; new eligible grades may change the projection and create another development revision. The older path may also use the student's period grade, previous grade/trend, classwork completion, attendance and participation. The same trained model and risk rules are shared across learners, while input values are individualized. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L236-L439`; `backend/app/services/prediction/DevelopmentGradeRefreshService.py:L23-L65`; `backend/app/services/prediction/PredictionFeatureBuilderService.py:L606-L850`.]
+### 5.1 Development allowlist
 
-This is **statistical personalization**, not holistic knowledge of a learner's circumstances. V3 does not consume personal context, history, attendance or improvement trend as model inputs. Old next-period history can influence its model/rules, but an absent prior grade or thin activity record limits it. Teacher review can append context to an older alert; it is not a model feature or automatic correction. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L370-L415`; `backend/app/services/prediction/ModelScoringService.py:L265-L342`; `backend/app/services/prediction/TeacherRiskReviewService.py:L12-L67`.]
+`DevelopmentCurrentTermModelSelection.py` permits only:
 
-## 13. Fairness, Bias, and Data Sufficiency
+- `entervene_current_term_development_rf_v3`
+- `entervene_current_term_official_target_rf_candidate`
 
-**Safeguards verified:** common V3 feature schema and hardcoded grade-band boundaries; strict JHS/domain gates; readiness and no-final-grade gates; per-student evidence snapshots; explicit insufficient-evidence result; whole-workbook/student holdouts in offline research. These improve consistency and traceability but do not prove equitable outcomes. [`backend/app/services/prediction/DevelopmentCurrentTermPredictionService.py:L113-L243`; `backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L191-L234`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L5-L16`.]
+The code default is legacy V3. The isolated demo configuration selects the corrected official-target candidate. An unknown selector fails closed. Development scoring requires an inactive `DEVELOPMENT` registry row that is not production validated. Development code does not automatically promote a model.
 
-**Measured limitations:** 4I's canonical official-target candidate has zero actual outcomes below 75 and zero at 75–79. Thus high-risk recall, false-negative rate on failing learners, and calibration are **not evaluable**. The seen-fold 80–84 group is overpredicted on average (+2.7156 across snapshots, +1.4807 at latest); these are historical aggregate tendencies, not proof of any protected-group disparity. First-ready errors exceed latest-ready errors. [`docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L53-L83`; `docs/RANDOM_FOREST_DEFENSE_4J.md:L27-L51`.]
+### 5.2 Production gate
 
-**Unresolved fairness risks:** fewer recorded activities can block scoring or bias the information available; missing scores are represented differently from genuinely low scores; typed exams appear only as a complete aggregate; template differences and teacher recording practices change features; five of seven mapped live grade–subject pairs lack exact-grade historical holdouts; no current three-term cohort or subgroup fairness analysis (for example by grade, program, socioeconomic status or protected group) establishes comparable error or access. The older path's attendance/participation and missing-work rules can raise severity independently of grades. Teacher review exists for older alerts but does not validate fairness. No evidence supports claiming the system is unbiased or fair for deployment. [`backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L79-L165,L191-L234,L292-L329`; `backend/app/services/prediction/RiskEngine.py:L125-L204`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L85-L96`.]
+`get_production_model_versions()` requires all of the following for `CURRENT_TERM_FINAL_GRADE_PROJECTION`:
 
-## 14. Accuracy, Validation, and Reliability
+- lifecycle is `PRODUCTION`;
+- `is_active` is true;
+- `production_validated` is true; and
+- `independent_three_term_validation` is true.
 
-**What is measured.** 4I/4J provide internal, whole-workbook held-out historical JHS **regression** error, with no student overlap between each fold's train and test workbook. The candidate official-target dataset and artifact hashes above match local files. Metrics refer to fold-fitted temporary models with the candidate architecture; they are **not** a blind external test of the demo artifact or current three-term learners. All-stage snapshot rows are correlated, so per-period latest/first-ready views are also needed. `MAE`/`RMSE` are grade points; `R²` is variance fit, not classification accuracy. [`docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L5-L49`; `docs/RANDOM_FOREST_DEFENSE_4J.md:L15-L51`.]
+The stable API and production refresh require **exactly one** such model. Zero or multiple matches fail closed. No checked-in evidence establishes that a real deployment currently has a qualifying production row. Repository capability must not be described as confirmed deployment state.
 
-| Official-target historical comparison | N | RF MAE | Comparator | Meaning |
-| --- | ---: | ---: | --- | --- |
-| 13 seen-subject folds, all stages | 5,187 snapshots | **1.6007** | Linear Regression 1.6664; global mean 3.0187 | RF's overall linear advantage is small; 25% stage favors linear. |
-| 13 seen-subject folds, latest 75% | 1,729 periods | **0.7670** | Linear Regression 1.0355; source-valid provisional 1.1012 | Late evidence includes historical QA; cannot advertise as early-term accuracy. |
-| Five exact live mapping folds, all stages | 2,019 snapshots | **1.8698** | Linear Regression 1.7797 | Linear is better on this all-stage exact-live subset. |
-| Five exact live mapping folds, latest 75% | 673 periods | **1.0913** | Linear Regression 1.1325; provisional 1.4294 | Only ENG7 and MATH10 among mapped live pairs have exact grade–subject sources. |
-| Seen-subject **first feature-ready** | 1,600 periods | **1.5443** | Linear Regression 1.6866 | Readiness replay assumes no unresolved evidence; not full live gate replay. |
-| Exact-live **first feature-ready** | 611 periods | **2.0013** | Linear Regression **1.9528** | Linear is better at first readiness here. |
+## 6. Domain support
 
-The historic provisional formula is comparable only at 75% because earlier snapshots lack QA. No controlled experiment varies grading percentages for the same academic records. Old 4E/4F legacy-V3 results are **Historical** and measure the old reconstructed/mixed target. The separate current-period v1 and next-period reports are other targets/paths. No precision, recall, F1 or ROC-AUC for high-risk failure can be inferred from these regression errors; the candidate has no failing actuals. [`docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L13-L96`; `docs/archive/prediction/V3_BASELINE_BENCHMARK_4F.md:L11-L52`; `docs/RANDOM_FOREST_DEFENSE_4J.md:L27-L51`.]
+The runtime accepts Grades 7-12 but does not assign the same evidence status to all scopes. Exact catalog tuples mapped as `VALIDATED_JHS` in code are:
 
-**Reliability status:** corrected artifact load and demo API contract were previously exercised in isolated 4M acceptance. In this audit, its artifact/dataset hashes, selector/registry flags, and focused source tests were checked; no full model retraining, independent current-cohort validation, live data mutation or fresh interactive browser acceptance was performed. A fresh checkout lacks ignored artifacts unless provisioned. [`docs/archive/prediction/DEVELOPMENT_PREDICTION_ACCEPTANCE_4M.md:L11-L33`.]
+| Grade | Subject code | Subject name |
+| ---: | --- | --- |
+| 7 | `MATH7` | Mathematics 7 |
+| 7 | `SCI7` | Science 7 |
+| 7 | `ENG7` | English 7 |
+| 8 | `ENG8` | English 8 |
+| 9 | `ENG9` | English 9 |
+| 10 | `MATH10` | Mathematics 10 |
+| 10 | `SCI10` | Science 10 |
 
-## 15. Backend and Frontend Integration
+Other identifiable JHS categories are provisional. SHS Grades 11-12 are explicitly provisional/unvalidated.
 
-The main router mounts `/api/v1/predictions` and `/api/v1/development`; the latter is hidden with 404 outside enabled development/test. Admin generates a V3 row; authorized Admin/Teacher reads the selected version's latest revision. The React panel displays a two-decimal projected grade, band, model information and final official grade if later available. Its “Intervention Level” label is the existing UI wording for a deterministic grade band, not model confidence. Historical `ai_prediction` dashboards are separate and can include old records without an audited evidence snapshot. [`backend/app/main.py:L100-L101`; `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py:L37-L128`; `frontend/src/components/predictions/development-current-term-panel.tsx:L258-L318`; `backend/app/services/prediction/PredictionReadService.py:L188-L225`.]
+Important distinction: `VALIDATED_JHS` is a runtime catalog/domain label. It does **not** mean every tuple has an exact historical grade-subject holdout. In the official-target evaluation, only ENG7 and MATH10 among these mapped pairs have exact grade-subject historical sources.
 
-## 16. Prediction Persistence and Recalculation
+## 7. Training data and target integrity
 
-V3 persistence stores student/class/subject/source=target/model version/revision, two-decimal grade, band, null risk score, generated time and evidence snapshot. Same model and unchanged feature/exam/schema/artifact values reuse a revision; changed values append a new one. GET returns the latest revision of **that model version**, so a selector switch does not erase or blend previous model histories. It checks finalized grades and active periods again before saving. The post-grade refresh is conditional on the corrected selector and successful grade-commit callers; no general scheduled refresh was found. [`backend/app/services/prediction/DevelopmentCurrentTermPredictionPersistenceService.py:L102-L294,L298-L376`; `backend/app/services/prediction/DevelopmentCurrentTermPredictionReadService.py:L209-L335`; `backend/app/services/prediction/DevelopmentGradeRefreshService.py:L23-L65`.]
+### 7.1 Historical source
 
-The older `ai_prediction` path has its own idempotency key, evidence snapshot for newly audited rows and read behavior; legacy null snapshots remain limited. `GET /latest` sorts by generation time then ID, while class risk-list route returns rows in order and does not itself collapse all revisions in that handler. Do not describe every historical row as a fresh live prediction. [`backend/app/services/prediction/PredictionPersistenceService.py:L210-L275`; `backend/app/api/v1/routes/Predictions.py:L394-L459`; `backend/app/services/prediction/PredictionReadService.py:L188-L225`.]
+The corrected official-target research set was reconstructed from 14 historical JHS workbooks:
 
-## 17. Limitations and Known Issues
+- 1,865 distinct student-period outcomes;
+- 467 pseudonymous students;
+- 5,595 partial-evidence snapshots at 25%, 50%, and 75%;
+- 1,209 outcomes using 20/50/30 and 656 using 20/60/20; and
+- Grades 7-10 across English, Mathematics, Science, ICT, and Creative Technology.
 
-1. **No independent current three-term validation or failing outcomes.** This blocks school-grade accuracy and high-risk detection claims. [`docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L5-L16,L53-L96`.]
-2. **Validated live scope is narrow.** Five of seven validated JHS catalog mappings lack exact grade–subject historical tests. SHS and other provisional subjects may be displayed, but remain unvalidated and must not be presented as production-validated accuracy. [`backend/app/services/prediction/CurrentTermV3Domain.py`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L85-L92`.]
-3. **Historical timing is approximate.** Snapshot stages use column order, not known assessment timestamps. Real cutoff accuracy is unverified. [`docs/archive/prediction/PREDICTION_STRATEGY_4E.md:L5-L11`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md:L5-L16`.]
-4. **Model output is not numerically clipped** before the development band validates 0–100. This is an explicit edge-contract gap, not evidence that observed candidate outputs left the range. [`backend/app/services/prediction/DevelopmentCurrentTermScoringService.py:L94-L109`; `backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L65-L84`.]
-5. **Grade policy parity remains conditional.** Current three-term transmutation is implemented, but some SHS exam structures and independent source-to-target parity remain untested. [`docs/GRADE_TRANSMUTATION_CONTRACT_4G.md:L44-L60`.]
-6. **Operational availability differs by configuration.** Default local development API disabled; demo API enabled and corrected candidate selected. Ignored local artifacts require trusted provisioning. No active next-period model in inspected default registry. [`backend/app/core/Config.py:L15-L29`; `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py:L37-L61`; `docs/archive/prediction/DEVELOPMENT_PREDICTION_ACCEPTANCE_4M.md:L11-L16`.]
-7. **Older records conflict with code.** The data dictionary calls risk score probabilistic 0–1, while `RiskEngine` uses 0–100 heuristic severity. The archived enrolled-cohort ticket's numeric cohort/accuracy/“100% confidence” claims are dated, unverified and not deployment evidence. [`backend/app/services/prediction/RiskEngine.py:L212-L242`; `backend/app/models/ai/AIPrediction.py:L40-L59`; `docs/DATA_DICTIONARY.md:L1349-L1399`.]
+Snapshot stages use workbook column order, not verified assessment timestamps. The source is older quarter-based data, not an independent cohort from the current three-term implementation.
 
-## 18. Verified Versus Unverified Claims
+### 7.2 Outcome distribution
 
-| Finding | Status | Basis |
-| --- | --- | --- |
-| V3 is a 31-input Random Forest numeric same-term grade estimator; bands are downstream rules | **Verified** | Scorer, schema, builder, risk code and focused tests. |
-| Demo selector resolves corrected candidate with inactive DEVELOPMENT registry entry | **Verified for local `.env.demo` on 2026-10-13** | Configuration and read-only registry query; hashes checked. |
-| Historical official-target fold metrics in §14 describe this architecture/dataset | **Partially verified** | Machine-readable report and hashes present; focused report tests passed; full 14-fold retraining was not rerun. |
-| Candidate is accurate on independent current three-term students or detects failing students | **Unverified** | No such validation cohort; official historical target has zero failing cases. |
-| Weights directly and indirectly change V3 inputs and computed grades | **Verified** | Builder and gradebook formulas. |
-| Changing weights improves or worsens predictive accuracy | **Unverified** | No controlled paired weight experiment. |
-| Fairness across protected/subgroup populations | **Unverified** | No suitable subgroup cohort or metrics. |
-| 4E/4F old V3 metrics establish official-target accuracy | **Historical / contradicted** | 4H target-lineage correction. |
-| Dual-purpose production roster/automatic next-period flow | **Historical / unsupported** | Claimed endpoint/components absent; inspected next-period registry inactive. |
-| Phase 1 prediction evidence snapshot and teacher presentation are implemented | **Partially verified** | Code/test paths exist; full release and legacy coverage still need current end-to-end audit. |
+| Official grade range | Count |
+| --- | ---: |
+| `< 75` | 0 |
+| `75-79` | 0 |
+| `80-84` | 78 |
+| `85-89` | 367 |
+| `>= 90` | 1,420 |
 
-## 19. Remaining Prediction-Only Tickets
+High-risk detection cannot be evaluated from this data. Regression error and band agreement do not establish recall for failing students.
 
-| Ticket or issue | Classification as of verification | Required next evidence/action |
-| --- | --- | --- |
-| [Prediction evidence roadmap](tickets/TICKET-2026-PREDICTION-EVIDENCE-AUDIT.md) | **Partially implemented.** Phase 1 pieces exist; append-only general series, source reconciliation and full compatibility gates are not established. | Audit current Phase 1 semantics against code/tests before deciding later prediction work. |
-| [Phase 1 evidence ticket](tickets/TICKET-2026-PREDICTION-EVIDENCE-PHASE-1.md) | **Partially implemented.** Snapshot, catalog, idempotency and teacher view code exist. | Reconcile acceptance, release, and legacy coverage gates with current implementation. |
-| Archived [Stage 1 report](archive/prediction/TICKET-2026-PREDICTION-EVIDENCE-STAGE-1-REPORT.md), [Stage 1.5 decision](archive/prediction/TICKET-2026-PREDICTION-EVIDENCE-STAGE-1-5.md), and [Stage 6 report](archive/prediction/TICKET-2026-PREDICTION-EVIDENCE-STAGE-6-REPORT.md) | **Completed dated audit and acceptance evidence.** Stage 6 is not a current release certificate. | Preserve baseline and design provenance; recheck its release blockers. On this audit, `alembic heads` shows one head, while the frontend build remains broken by unrelated TypeScript issues. |
-| Archived [TICKET-2026-ENROLLED-STUDENT-SCORING.md](archive/prediction/TICKET-2026-ENROLLED-STUDENT-SCORING.md) | **Superseded proposal / partially open principle.** It proposes an event-driven cohort scorer; the actual script still has a separate write path and its historical numeric claims are unverified. | No fabricated evidence; decide a bounded, audited prediction generation path for real students only after eligibility/model validation. |
-| Trusted model artifact provisioning and browser acceptance from 4M | **Open** | Provision checksum-verified artifacts on a clean checkout and exercise Admin/Teacher UI against isolated test data. |
-| Current three-term external validation, real lower-grade cases, cutoff timing, exact subject/weight parity | **Open; blocks accuracy and production decision** | Obtain de-identified, completed records and compare frozen candidate, Linear Regression and a source-valid academic baseline. |
+### 7.3 Legacy V3 warning
 
-The unrelated subject-remapping ticket remains in `docs/tickets/` unchanged. Its direct dependency on prediction interpretation is noted, but subject catalog migration is not part of this documentation task.
+The legacy V3 report lists test MAE 1.5714, RMSE 2.4442, and R-squared 0.6993. Those values must **not** be presented as official-grade accuracy. The target-integrity audit found mixed labels: official grades for 20/60/20 records and reconstructed/interpolated labels for most 20/50/30 records. The corrected candidate uses the stored historical Quarterly Grade as its target.
 
-## 20. Prediction Completion and Acceptance Criteria
+## 8. Corrected candidate evaluation
 
-Prediction is **not complete for production**. To advance beyond an isolated development demonstration, require all of the following with reviewable evidence:
+The canonical offline comparison uses leave-one-workbook-out historical evaluation. Fold-trained models use the candidate architecture, but this is not an external blind test of the local artifact or current three-term learners.
 
-1. Exact artifact, schema, registry and configured selector can be provisioned and reproduced from a clean checkout; every supported live subject, grade and weight has an explicit contract.
-2. Completed, de-identified **current three-term** outcomes independent of the historical training workbooks, with assessment availability dates, official grading configuration, student/workbook overlap control and naturally occurring low-grade cases.
-3. Predeclared grouped evaluation on frozen candidate, Linear Regression and a verified academic baseline, reported by evidence stage and supported grade/subject/weight, with MAE/RMSE and band confusion; actual high-risk sensitivity must be measurable before any failure-detection claim.
-4. Gradebook/template/exam/transmutation parity against supplied official completed records; independently validate provisional SHS scopes before making accuracy or production-readiness claims for them.
-5. Documented data-sufficiency and fairness analysis: who is excluded, error and alert rates across relevant cohorts, teacher review process and response to missing/late evidence. No unsupported fairness certification.
-6. Focused backend/frontend/browser tests, persistence/revision and authorization checks, and current repository release gates pass or have explicitly bounded, documented exceptions. Activation and live use require a separate decision after this evidence.
+| Historical slice | N | Random Forest MAE | Linear Regression MAE | Interpretation |
+| --- | ---: | ---: | ---: | --- |
+| Seen-subject, all stages | 5,187 snapshots | 1.6007 | 1.6664 | Small overall RF advantage |
+| Seen-subject, latest 75% | 1,729 periods | 0.7670 | 1.0355 | Best late-evidence result; not early-term accuracy |
+| Exact-live, all stages | 2,019 snapshots | 1.8698 | **1.7797** | Linear Regression is better |
+| Exact-live, latest 75% | 673 periods | **1.0913** | 1.1325 | Small RF advantage |
+| Seen-subject, first feature-ready | 1,600 periods | **1.5443** | 1.6866 | Offline readiness replay |
+| Exact-live, first feature-ready | 611 periods | 2.0013 | **1.9528** | Linear Regression is better |
 
-## 21. Future Phase: Intervention (Brief Boundary Only)
+At 25% evidence, Linear Regression is generally stronger. At 50%, results are close and the exact-live subset favors Linear Regression. At 75%, the Random Forest is strongest in the reported comparisons. All-stage rows from one period are correlated, R-squared is not classification accuracy, and reported band agreement is not proof of failure detection.
 
-Existing prediction code exposes support bands and some persistence hooks, but this document does **not** validate an intervention workflow. Phase 2 may use verified prediction outputs only after the Phase 1 acceptance conditions above are met. No intervention code or policy was changed in this audit. [`backend/app/services/prediction/DevelopmentCurrentTermPredictionPersistenceService.py:L38-L60,L247-L285`.]
+The defensible conclusion is that the Random Forest is a research candidate whose error improves with more evidence. It has not shown a consistent material advantage over a simpler baseline across the most deployment-relevant slices.
 
-## 22. Code References and Supporting Evidence
+Primary evidence: `docs/V3_TARGET_INTEGRITY_4H.md`, `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md`, `docs/RANDOM_FOREST_DEFENSE_4J.md`, and the related builders/evaluators under `backend/app/ml/`.
 
-| Authority | Key locations |
+## 9. What is dynamic
+
+The system is dynamic in these bounded ways:
+
+- Features come from the selected student's persisted academic evidence, not UI mock data.
+- An eligible grade change can trigger a guarded post-commit refresh.
+- Changed eligible evidence creates a new prediction revision.
+- Admin scope comes from active/published subject loads.
+- Teacher access is constrained to assigned academic scope.
+- The UI aggregates current-term rows by grade, class, subject, and intervention level.
+
+It does not retrain when a grade changes, choose arbitrary model files, switch between current-term and next-term targets, score when a gate fails, or infer production deployment from a checked-in artifact.
+
+## 10. Privacy, fairness, and reliability limits
+
+Verified safeguards include role/scope authorization, exact feature order, deterministic thresholds, readiness/domain gates, immutable snapshots, and grouped historical evaluation.
+
+Unresolved risks include:
+
+- no failing examples in the corrected dataset;
+- no independent current three-term cohort;
+- no protected-group or relevant subgroup error analysis;
+- five of seven runtime JHS mappings without exact grade-subject holdouts;
+- provisional/unvalidated SHS scope;
+- teacher recording and grading-template differences;
+- much better late-evidence than early-evidence error;
+- readiness affecting who becomes scoreable; and
+- activity order standing in for real assessment time.
+
+Pseudonymous research identifiers do not replace production retention, access, consent, and school-policy controls. The system cannot currently be called unbiased, failure-calibrated, or production-validated.
+
+## 11. Safe and unsafe claims
+
+| Claim | Status |
 | --- | --- |
-| Runtime routing and model gate | `backend/app/main.py:L100-L101`; `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py:L37-L128`; `backend/app/services/prediction/DevelopmentCurrentTermModelSelection.py:L10-L31` |
-| Live data, feature formulas, readiness and scope | `backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py:L79-L165,L191-L234,L236-L439`; `backend/app/services/prediction/CurrentTermV3Domain.py:L9-L63` |
-| V3 scoring, band and persistence | `backend/app/services/prediction/DevelopmentCurrentTermScoringService.py:L41-L109`; `backend/app/services/prediction/DevelopmentCurrentTermRiskService.py:L31-L98`; `backend/app/services/prediction/DevelopmentCurrentTermPredictionPersistenceService.py:L102-L376` |
-| Other prediction path | `backend/app/api/v1/routes/Predictions.py:L272-L459`; `backend/app/services/prediction/PredictionFeatureBuilderService.py:L486-L850`; `backend/app/services/prediction/ModelScoringService.py:L265-L342`; `backend/app/services/prediction/RiskEngine.py:L125-L287` |
-| Gradebook and frontend | `backend/app/services/student_record/StudentRecordService.py:L585-L677,L734-L774`; `backend/app/services/grading/ExaminationCalculator.py:L109-L172`; `frontend/src/components/predictions/development-current-term-panel.tsx:L258-L318` |
-| Dataset, target and evaluation provenance | `backend/app/ml/BuildCurrentTermOfficialTargetCandidate.py`; `backend/app/ml/EvaluateOfficialTargetRF4I.py`; `backend/app/ml/CharacterizeOfficialTargetRF4J.py`; `docs/V3_TARGET_INTEGRITY_4H.md`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md`; `docs/RANDOM_FOREST_DEFENSE_4J.md` |
+| Active architecture predicts the final grade for the same term | **Verified** |
+| The model consumes 31 academic evidence features | **Verified** |
+| The regressor and deterministic intervention rule are separate | **Verified** |
+| The UI reads the stable current-term API | **Verified in repository code** |
+| Eligible evidence changes can refresh predictions | **Verified, subject to all gates** |
+| Corrected historical metrics in Section 8 match checked-in evidence | **Supported; full retraining not rerun for this edit** |
+| The system accurately detects failing students | **Unsupported** |
+| Random Forest is proven better than Linear Regression | **Unsupported** |
+| All Grades 7-12 and subjects are empirically validated | **Unsupported** |
+| A production model is currently deployed | **Not established** |
+| Risk level is failure probability or confidence | **False** |
+| Legacy V3 metrics measure official-grade accuracy | **False** |
+| Historical next-period rows are current-term predictions | **False** |
 
-## 23. Documentation Version and Verification Date
+## 12. Production acceptance criteria
 
-**Version:** 1.0, **2026-10-13**. Source audit covered all files under `docs/` and prediction-relevant code, schemas, local artifacts and focused tests. Historical reports remain dated evidence; this document governs claims about the current implementation. Verification was read-only against database/model data. No application code, trained model, dataset, migration or intervention behavior was modified for this documentation task. Local database registry state and ignored artifacts may differ in another environment; recheck them before deployment claims.
+Before live activation or production claims, require:
+
+1. Reproducible artifact, schema, registry, and hash provisioning from a clean checkout.
+2. Independent completed outcomes from the current three-term system.
+3. Enough naturally occurring lower-grade/failing cases to measure false negatives and sensitivity.
+4. A predeclared grouped comparison with Linear Regression and a verified academic baseline.
+5. Gradebook, exam, remediation, and transmutation parity against official records.
+6. Separate validation for provisional subjects and SHS.
+7. Data-sufficiency and subgroup fairness analysis, including readiness exclusions.
+8. Passing authorization, lifecycle, revision, backend, frontend, and browser gates.
+9. A documented human review/response policy.
+10. A separate promotion decision creating exactly one valid production registry row.
+
+## 13. Code authority map
+
+| Concern | Authority |
+| --- | --- |
+| Router mounting | `backend/app/main.py` |
+| Stable reads | `backend/app/api/v1/routes/CurrentTermPredictions.py` |
+| Isolated development API | `backend/app/api/v1/routes/DevelopmentCurrentTermPredictions.py` |
+| Historical GET-only API | `backend/app/api/v1/routes/Predictions.py` |
+| Same-term orchestration | `backend/app/services/prediction/DevelopmentCurrentTermPredictionService.py` |
+| Features/readiness | `backend/app/services/prediction/CurrentPeriodFeatureBuilderService.py` |
+| Domain mapping | `backend/app/services/prediction/CurrentTermV3Domain.py` |
+| Schema/artifact scoring | `backend/app/services/prediction/DevelopmentCurrentTermScoringService.py` |
+| Intervention thresholds | `backend/app/services/prediction/DevelopmentCurrentTermRiskService.py` |
+| Revisions/snapshots | `backend/app/services/prediction/DevelopmentCurrentTermPredictionPersistenceService.py` |
+| Latest-revision reads | `backend/app/services/prediction/DevelopmentCurrentTermPredictionReadService.py` |
+| Grade-change refresh | `backend/app/services/prediction/DevelopmentGradeRefreshService.py` |
+| Production lifecycle | `backend/app/services/prediction/ModelVersionService.py` |
+| Registry/purpose | `backend/app/models/ai/AIModelVersion.py` |
+| Persisted row | `backend/app/models/ai/DevelopmentCurrentTermPrediction.py` |
+| Frontend contract | `frontend/src/lib/prediction-api.ts`; `frontend/src/components/predictions/current-term-dashboard-adapter.ts` |
+| Target/evaluation audit | `docs/V3_TARGET_INTEGRITY_4H.md`; `docs/OFFICIAL_TARGET_RF_EVALUATION_4I.md`; `docs/RANDOM_FOREST_DEFENSE_4J.md` |
+
+## 14. Verification scope
+
+This revision reconciled both prediction documents with route decorators, service gates, model lifecycle fields, persisted-row constraints, feature/readiness code, the frontend current-term adapter, checked-in schema, and evaluation reports.
+
+It did not retrain a model, mutate a registry, query a real deployment, or perform new external validation. Local ignored artifacts and database contents can differ between environments and must be checked before deployment-specific claims.

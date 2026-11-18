@@ -6,9 +6,11 @@ import { useToast } from "@/components/retroui/Toast";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Alert } from "@/components/retroui/Alert";
+import { Badge } from "@/components/retroui/Badge";
 import { apiFetch } from "@/lib/api";
 import { validateReferenceLinks } from "@/lib/classwork-reference-links";
 import {
+  createBulkManualSuggestion,
   createManualSuggestion,
   generateRecommendationDrafts,
 } from "@/lib/suggestion-api";
@@ -51,7 +53,8 @@ export type SuggestionPanelProps = {
   onOpenChange?: (open: boolean) => void;
   onClose?: () => void;
   classId: number;
-  student: TeacherAdvisoryStudentItem;
+  student?: TeacherAdvisoryStudentItem;
+  students?: TeacherAdvisoryStudentItem[];
   subjectLoads: TeacherAdvisorySubjectLoadItem[];
   onSuccess?: () => void;
 };
@@ -65,11 +68,17 @@ export function SuggestionPanel({
   onClose,
   classId,
   student,
+  students,
   subjectLoads,
   onSuccess,
 }: SuggestionPanelProps) {
   const toast = useToast();
   const isModalOpen = open !== undefined ? open : (isOpen ?? false);
+  const targetStudents = useMemo(() => {
+    if (students && students.length > 0) return students;
+    if (student) return [student];
+    return [];
+  }, [student, students]);
 
   const activeSubjects = useMemo(() => {
     const seen = new Set<number>();
@@ -217,21 +226,53 @@ export function SuggestionPanel({
     setIsSubmitting(true);
     setFormError("");
     try {
-      await createManualSuggestion({
-        student_id: student.student_id,
-        subject_id: subjectId,
-        resource_type: resourceType,
-        title: title.trim(),
-        description: description.trim() || null,
-        priority,
-        ...(resourceType === "LINK"
-          ? { external_url: externalUrl.trim() }
-          : {
-              lesson_id: selected?.lessonId ?? null,
-              classwork_assignment_id: selected?.classworkAssignmentId ?? null,
-            }),
-      });
-      toast.success({ title: "Suggestion sent to student" });
+      if (targetStudents.length > 1) {
+        const result = await createBulkManualSuggestion({
+          student_ids: targetStudents.map((s) => s.student_id),
+          subject_id: subjectId,
+          resource_type: resourceType,
+          title: title.trim(),
+          description: description.trim() || null,
+          priority,
+          ...(resourceType === "LINK"
+            ? { external_url: externalUrl.trim() }
+            : {
+                lesson_id: selected?.lessonId ?? null,
+                classwork_assignment_id: selected?.classworkAssignmentId ?? null,
+              }),
+        });
+        if (result.created_count > 0 && result.skipped_count > 0) {
+          toast.success({
+            title: `Suggested material to ${result.created_count} student${result.created_count === 1 ? "" : "s"} (${result.skipped_count} skipped as already suggested)`,
+          });
+        } else if (result.created_count > 0) {
+          toast.success({
+            title: `Successfully suggested material to ${result.created_count} student${result.created_count === 1 ? "" : "s"}`,
+          });
+        } else {
+          toast.info({
+            title: "Material is already actively suggested to all selected students",
+          });
+        }
+      } else {
+        const targetStudent = targetStudents[0];
+        if (!targetStudent) throw new Error("No student selected");
+        await createManualSuggestion({
+          student_id: targetStudent.student_id,
+          subject_id: subjectId,
+          resource_type: resourceType,
+          title: title.trim(),
+          description: description.trim() || null,
+          priority,
+          ...(resourceType === "LINK"
+            ? { external_url: externalUrl.trim() }
+            : {
+                lesson_id: selected?.lessonId ?? null,
+                classwork_assignment_id: selected?.classworkAssignmentId ?? null,
+              }),
+        });
+        toast.success({ title: "Suggestion sent to student" });
+      }
       setTitle("");
       setDescription("");
       setExternalUrl("");
@@ -301,9 +342,21 @@ export function SuggestionPanel({
         </Dialog.Header>
 
         <div className="space-y-4 p-6">
-          <Dialog.Description className="text-sm text-muted-foreground">
-            For {student.full_name}
-          </Dialog.Description>
+          <div className="rounded border-2 border-border bg-muted/40 p-3">
+            <div className="flex items-center justify-between text-xs font-bold text-foreground mb-1.5">
+              <span>Target Recipients ({targetStudents.length})</span>
+              <span className="text-muted-foreground font-normal text-[11px]">
+                {targetStudents.length === 1 ? "1 student selected" : `${targetStudents.length} students selected`}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+              {targetStudents.map((s) => (
+                <Badge key={s.student_id} variant="surface" size="sm" className="text-xs">
+                  {s.full_name}
+                </Badge>
+              ))}
+            </div>
+          </div>
           {formError && (
             <div ref={alertRef} tabIndex={-1}>
               <Alert
@@ -493,7 +546,13 @@ export function SuggestionPanel({
             className="px-5 disabled:opacity-50"
           >
             <Send size={14} className="mr-1 inline" />
-            {isSubmitting ? "Sending..." : "Send Suggestion"}
+            {isSubmitting
+              ? "Sending..."
+              : targetStudents.length > 1
+                ? `Send Suggestion to ${targetStudents.length} Students`
+                : targetStudents.length === 1
+                  ? `Send Suggestion to ${targetStudents[0].full_name}`
+                  : "Send Suggestion"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

@@ -43,12 +43,14 @@ class SubmissionResponse(BaseModel):
     links: list[SubmissionLinkResponse] = Field(default_factory=list)
     total_points: Optional[float] = None
     created_at: Optional[datetime] = None
+    feedback_focus_points: Optional[list[str]] = None
 
 
 class GradeRequest(BaseModel):
     grade: float
     feedback: Optional[str] = None
     expected_feedback_fingerprint: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    focus_points: Optional[list[str]] = Field(default=None)
 
 
 class FeedbackSuggestionResponse(BaseModel):
@@ -94,6 +96,11 @@ class FeedbackPublicationResponse(BaseModel):
     feedback_fingerprint: str = Field(min_length=64, max_length=64)
 
 
+class FeedbackDeletionResponse(BaseModel):
+    submission_id: int
+    message: str = "Feedback deleted successfully"
+    feedback: Optional[str] = None
+    feedback_fingerprint: str = Field(min_length=64, max_length=64)
 class FeedbackDraftResponse(BaseModel):
     submission_id: int
     status: Literal["NONE", "PENDING", "READY", "UNDER_REVIEW", "APPROVED", "DISCARDED", "STALE", "FAILED", "NOT_ELIGIBLE"]
@@ -105,6 +112,9 @@ class FeedbackDraftResponse(BaseModel):
     error_message: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    focus_points: Optional[list[str]] = None
+    is_template: bool = False
+    is_policy_fallback: bool = False
 
 
 

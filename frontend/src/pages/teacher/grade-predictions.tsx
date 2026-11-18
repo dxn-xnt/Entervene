@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, Link } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Text } from "@/components/retroui/Text";
@@ -13,26 +13,16 @@ import {
 } from "@/components/predictions/use-teacher-candidate-shortcut";
 import { useAuth } from "@/context/AuthContext";
 import type {
-  DashboardAtRiskResponse,
   DashboardFilters,
-  DashboardGradeGroupSummary,
-  DashboardQueryParams,
-} from "@/lib/prediction-api";
-import {
-  fetchDashboardAtRisk,
-  fetchDashboardFilters,
-  fetchDashboardGradeSummaries,
 } from "@/lib/prediction-api";
 import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { AdminBreadcrumb } from "@/components/admin/admin-breadcrumb";
 import { Card } from "@/components/retroui/Card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { BrainCircuit, School, TrendingUp } from "lucide-react";
+import { School } from "lucide-react";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
   buildCurrentTermDashboard,
   buildCurrentTermGradeSummaries,
-  currentTermRiskSummary,
   loadAuthorizedCurrentTermPredictions,
   currentTermPredictionErrorMessage,
   type AuthorizedCurrentTermRow,
@@ -41,8 +31,7 @@ import {
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import { Alert } from "@/components/retroui/Alert";
 import { Loader } from "@/components/retroui/Loader";
-import { Button } from "@/components/retroui/Button";
-import { Select } from "@/components/retroui/Select";
+import { AdminGradePredictionsWorkspace } from "@/components/predictions/admin-grade-predictions-workspace";
 
 export default function GradePredictions() {
   const { role } = useAuth();
@@ -125,34 +114,6 @@ export function AdminCurrentTermGradePredictions() {
       ? routeClassId
       : sections[0]?.class_id;
 
-  const availableSubjects = useMemo(() => {
-    const byId = new Map<number, AssignedSubjectSectionScope>();
-    assignedScopes
-      .filter((scope) => scope.class_id === selectedClassId)
-      .forEach((scope) => byId.set(scope.subject_id, scope));
-    return [...byId.values()].sort((a, b) => a.subject_name.localeCompare(b.subject_name));
-  }, [assignedScopes, selectedClassId]);
-
-  const effectiveSubjectId = availableSubjects.some((subject) => subject.subject_id === subjectId)
-    ? subjectId
-    : undefined;
-
-  const sectionRows = rows.filter((row) => row.class_id === selectedClassId);
-  const subjectRows = sectionRows.filter((row) => effectiveSubjectId === undefined || row.subject_id === effectiveSubjectId);
-  const data = buildCurrentTermDashboard(subjectRows, {
-    search,
-    interventionLevel: riskLevel,
-    limit: Math.max(10, subjectRows.length),
-  });
-  const selectedSection = sections.find((section) => section.class_id === selectedClassId);
-  const selectedSubject = availableSubjects.find((subject) => subject.subject_id === effectiveSubjectId);
-  const hasResultFilters = Boolean(search.trim() || riskLevel);
-
-  const clearResultFilters = () => {
-    setSearch("");
-    setRiskLevel(undefined);
-  };
-
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
@@ -173,7 +134,7 @@ export function AdminCurrentTermGradePredictions() {
           </Breadcrumb>
         </header>
 
-        <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+        <div className="-mt-[1px] border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           {loadError ? (
             <Alert status="error" className="font-semibold">{loadError}</Alert>
           ) : loading ? (
@@ -200,140 +161,32 @@ export function AdminCurrentTermGradePredictions() {
               description="Sections with valid subject assignments for the selected term will appear here."
             />
           ) : (
-            <div className="flex flex-col gap-4">
-              <Card className="flex flex-col gap-4 bg-background p-4 shadow-none hover:shadow-none">
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="admin-prediction-section" className="text-sm font-bold">Section</label>
-                  <Select
-                    value={selectedClassId === undefined ? "" : String(selectedClassId)}
-                    onValueChange={(value) => {
-                      setClassId(Number(value));
-                      setSubjectId(undefined);
-                      setSelected(null);
-                    }}
-                  >
-                    <Select.Trigger id="admin-prediction-section" className="w-full sm:max-w-sm">
-                      <Select.Value placeholder="Select section" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        {sections.map((section) => (
-                          <Select.Item key={section.class_id} value={String(section.class_id)}>
-                            {section.section_name}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <p className="text-sm font-bold">Subjects</p>
-                  <div className="flex flex-wrap gap-2" role="group" aria-label="Subject filters">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={effectiveSubjectId === undefined ? "default" : "outline"}
-                      aria-pressed={effectiveSubjectId === undefined}
-                      onClick={() => {
-                        setSubjectId(undefined);
-                        setSelected(null);
-                      }}
-                    >
-                      All Subjects
-                    </Button>
-                    {availableSubjects.map((subject) => (
-                      <Button
-                        key={subject.subject_id}
-                        type="button"
-                        size="sm"
-                        variant={effectiveSubjectId === subject.subject_id ? "default" : "outline"}
-                        aria-pressed={effectiveSubjectId === subject.subject_id}
-                        onClick={() => {
-                          setSubjectId(subject.subject_id);
-                          setSelected(null);
-                        }}
-                      >
-                        {subject.subject_name}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </Card>
-
-              <PredictionFilters
-                filters={null}
-                gradeLevel={numericGrade}
-                classId={selectedClassId}
-                subjectId={effectiveSubjectId}
-                academicPeriodId={selectedPeriodId ?? undefined}
-                riskLevel={riskLevel}
-                search={search}
-                hideGradeFilter
-                hideClassFilter
-                hideSubjectFilter
-                hidePeriodFilter
-                simplifiedTeacherRisk
-                riskSummary={currentTermRiskSummary(subjectRows)}
-                onSubjectChange={() => undefined}
-                onRiskChange={setRiskLevel}
-                onSearchChange={setSearch}
-                onClearAll={clearResultFilters}
-              />
-
-              <Card className="flex flex-col gap-4 bg-background p-4 shadow-none hover:shadow-none">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border pb-3">
-                  <h2 className="text-lg font-bold">Student Predictions</h2>
-                  <Badge size="sm" variant="outline" className="border-black bg-yellow-50">
-                    {selectedSubject?.subject_name ?? "All Subjects"}
-                  </Badge>
-                </div>
-
-                {!selectedSection ? (
-                  <EmptyStateCard
-                    compact
-                    icon={<School />}
-                    title="Select a section"
-                    description="Choose a section to view its assigned subjects and student predictions."
-                  />
-                ) : subjectRows.length === 0 ? (
-                  <EmptyStateCard
-                    compact
-                    icon={<TrendingUp />}
-                    title={selectedSubject
-                      ? `No predictions available for ${selectedSubject.subject_name}`
-                      : "No predictions available for this section"}
-                    description="There are currently no generated predictions for the selected scope and academic term."
-                  />
-                ) : data.items.length === 0 && hasResultFilters ? (
-                  <EmptyStateCard
-                    compact
-                    icon={<TrendingUp />}
-                    title="No predictions match these filters"
-                    description="Try another student search or risk level."
-                    actionLabel="Clear filters"
-                    onAction={clearResultFilters}
-                  />
-                ) : (
-                  <PredictionTable
-                    items={data.items}
-                    total={data.total}
-                    limit={Math.max(10, data.total)}
-                    offset={0}
-                    hideClass
-                    hideSubject={effectiveSubjectId !== undefined}
-                    hidePagination
-                    currentTerm
-                    simplifiedTeacherRisk
-                    onSort={() => undefined}
-                    onPageChange={() => undefined}
-                    onRowClick={(predictionId) =>
-                      setSelected(rows.find((row) => row.prediction_id === predictionId) || null)
-                    }
-                  />
-                )}
-              </Card>
-            </div>
+            <AdminGradePredictionsWorkspace
+              grade={numericGrade}
+              rows={rows}
+              assignedScopes={assignedScopes}
+              sections={sections}
+              selectedClassId={selectedClassId}
+              selectedSubjectId={subjectId}
+              riskLevel={riskLevel}
+              search={search}
+              onClassChange={(value) => {
+                setClassId(value);
+                setSubjectId(undefined);
+                setRiskLevel(undefined);
+                setSearch("");
+                setSelected(null);
+              }}
+              onSubjectChange={(value) => {
+                setSubjectId(value);
+                setRiskLevel(undefined);
+                setSearch("");
+                setSelected(null);
+              }}
+              onRiskChange={setRiskLevel}
+              onSearchChange={setSearch}
+              onPredictionSelect={setSelected}
+            />
           )}
         </div>
       </div>
@@ -345,258 +198,6 @@ export function AdminCurrentTermGradePredictions() {
         onOpenChange={(open) => {
           if (!open) setSelected(null);
         }}
-      />
-    </AppLayout>
-  );
-}
-
-export function LegacyGradePredictions() {
-  const { role } = useAuth();
-  const baseRole = role === "admin" ? "admin" : "teacher";
-  const { grade } = useParams<{ grade: string }>();
-  const navigate = useNavigate();
-  const { selectedPeriodId } = useAcademicPeriod();
-
-  const numericGrade = grade ? Number(grade) : undefined;
-
-  // ── State ──
-  const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
-  const [filters, setFilters] = useState<DashboardFilters | null>(null);
-  const [gradeSummaries, setGradeSummaries] = useState<DashboardGradeGroupSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Filter values
-  const [classId, setClassId] = useState<number | undefined>();
-  const [subjectId, setSubjectId] = useState<number | undefined>();
-  const [riskLevel, setRiskLevel] = useState<string | undefined>();
-  const [search, setSearch] = useState("");
-
-  // Sorting & pagination
-  const [sortBy, setSortBy] = useState<string | undefined>("student_name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [offset, setOffset] = useState(0);
-  const limit = 10;
-
-  // Detail sheet
-  const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  // ── Fetch filters and grade summaries ──
-  useEffect(() => {
-    fetchDashboardFilters().then(setFilters).catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    fetchDashboardGradeSummaries({ academic_period_id: selectedPeriodId ?? undefined })
-      .then(setGradeSummaries)
-      .catch(console.error);
-  }, [selectedPeriodId]);
-
-  // ── Fetch data on filter/sort/page change ──
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: DashboardQueryParams = {
-        grade_level: numericGrade,
-        class_id: classId,
-        subject_id: subjectId,
-        academic_period_id: selectedPeriodId ?? undefined,
-        risk_level: riskLevel,
-        search: search.trim() || undefined,
-        sort_by: sortBy,
-        sort_order: sortOrder,
-        limit,
-        offset,
-      };
-      const result = await fetchDashboardAtRisk(params);
-      setData(result);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [numericGrade, classId, subjectId, selectedPeriodId, riskLevel, search, sortBy, sortOrder, offset]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // Debounce search
-  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    if (searchTimer) clearTimeout(searchTimer);
-    setSearchTimer(
-      setTimeout(() => {
-        setOffset(0);
-      }, 400),
-    );
-  };
-
-  // ── Handlers ──
-  const handleSort = (column: string) => {
-    if (sortBy === column) {
-      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(column);
-      setSortOrder("desc");
-    }
-    setOffset(0);
-  };
-
-  const handleClearAll = () => {
-    setClassId(undefined);
-    setSubjectId(undefined);
-    setRiskLevel(undefined);
-    setSearch("");
-    setOffset(0);
-  };
-
-  const handleRowClick = (predictionId: number) => {
-    setSelectedPrediction(predictionId);
-    setSheetOpen(true);
-  };
-
-  const currentGradeGroup = gradeSummaries.find((g) => g.grade_level === numericGrade);
-
-  return (
-    <AppLayout>
-      <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col">
-            {/* ── Header ── */}
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Link asChild>
-                      <Link to={`/${baseRole}/predictions`}>AI Predictions</Link>
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page>
-                        Grade {grade}
-                      </Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </>
-                </Breadcrumb.List>
-              </Breadcrumb>
-            </header>
-
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
-              {/* ── Main Content: Table on Left + Sections on Right ── */}
-              <div className="flex flex-col lg:flex-row gap-5 items-start">
-                {/* Left Column: Filters + Table */}
-                <div className="flex-1 flex flex-col gap-4 min-w-0 w-full">
-                  <PredictionFilters
-                    filters={filters}
-                    gradeLevel={numericGrade}
-                    classId={classId}
-                    subjectId={subjectId}
-                    academicPeriodId={selectedPeriodId ?? undefined}
-                    riskLevel={riskLevel}
-                    search={search}
-                    hideGradeFilter
-                    onClassChange={(v) => {
-                      setClassId(v);
-                      setOffset(0);
-                    }}
-                    onSubjectChange={(v) => {
-                      setSubjectId(v);
-                      setOffset(0);
-                    }}
-                    hidePeriodFilter
-                    showClearButton={false}
-                    onRiskChange={(v) => {
-                      setRiskLevel(v);
-                      setOffset(0);
-                    }}
-                    onSearchChange={handleSearchChange}
-                    onClearAll={handleClearAll}
-                  />
-
-                  {loading && !data ? (
-                    <div className="flex items-center justify-center py-20 text-gray-400 font-semibold">
-                      Loading Grade {grade} predictions...
-                    </div>
-                  ) : (data?.items.length ?? 0) === 0 ? (
-                    <Empty className="flex-none px-4 py-8 shadow-md transition-shadow hover:shadow-none">
-                      <EmptyHeader>
-                        <EmptyMedia>
-                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><BrainCircuit className="size-5" /></div>
-                        </EmptyMedia>
-                        <EmptyTitle>{search.trim() || classId || subjectId || riskLevel ? "No predictions match these filters" : `No at-risk predictions yet for Grade ${grade}`}</EmptyTitle>
-                        <EmptyDescription>{search.trim() || classId || subjectId || riskLevel ? "Try another student, class, subject, or risk level." : "Risk assessments will appear when predictions are available for this grade."}</EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  ) : (
-                    <PredictionTable
-                      items={data?.items ?? []}
-                      total={data?.total ?? 0}
-                      limit={data?.limit ?? limit}
-                      offset={data?.offset ?? 0}
-                      sortBy={sortBy}
-                      sortOrder={sortOrder}
-                      onSort={handleSort}
-                      onPageChange={setOffset}
-                      onRowClick={handleRowClick}
-                    />
-                  )}
-                </div>
-
-                {/* Right Column: Sections Overview */}
-                <div className="w-full lg:w-72 xl:w-80 shrink-0 flex flex-col gap-3">
-                  <Card className="flex flex-col gap-3 border-2 border-black bg-white p-4 shadow-none hover:shadow-none">
-                    <div className="flex items-center justify-between gap-3">
-                      <Text as="h4" className="min-w-0 truncate font-head text-base font-bold">Grade {grade} Sections</Text>
-                      <Badge size="sm" variant="surface" className="font-bold">
-                        {currentGradeGroup?.sections.length ?? 0}
-                      </Badge>
-                    </div>
-
-                    <div className="flex flex-col gap-3">
-                      {currentGradeGroup && currentGradeGroup.sections.length > 0 ? (
-                        currentGradeGroup.sections.map((sec) => (
-                          <div
-                            key={sec.class_id}
-                            onClick={() => navigate(`/${baseRole}/predictions/${grade}/${sec.class_id}`)}
-                            className="flex cursor-pointer items-center justify-between gap-3 rounded border-2 border-black bg-yellow-50 p-3 transition-colors hover:bg-yellow-100"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold text-black" title={sec.section_name}>{sec.section_name}</p>
-                              <p className="truncate text-xs font-medium text-gray-600">
-                                {sec.total_students} {sec.total_students === 1 ? "student" : "students"}
-                              </p>
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <span className={`text-xs font-black px-2 py-0.5 border border-black rounded ${sec.at_risk_count > 0 ? "bg-red-200 text-red-900" : "bg-emerald-100 text-emerald-900"}`}>
-                                {sec.at_risk_count} at risk
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-gray-500 italic py-2">
-                          No sections enrolled or assigned for Grade {grade}.
-                        </p>
-                      )}
-                    </div>
-                  </Card>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Detail Sheet ── */}
-      <PredictionDetailSheet
-        predictionId={selectedPrediction}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
       />
     </AppLayout>
   );
@@ -686,7 +287,7 @@ function TeacherCurrentTermGradePredictions() {
           </Breadcrumb>
         </header>
 
-        <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+        <div className="-mt-[1px] border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <div className="flex flex-col items-start gap-5 lg:flex-row">
             <div className="flex min-w-0 flex-1 flex-col gap-4">
               <PredictionFilters

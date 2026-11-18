@@ -1,11 +1,18 @@
 from datetime import date
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.db.Base import Base
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.AcademicPeriod import AcademicPeriod
-from app.services.academic.AcademicYearService import ensure_future_academic_years
+from app.services.academic.AcademicYearService import (
+    _parse_start_year,
+    _serialize_academic_year_preparation,
+    ensure_future_academic_years,
+)
 from app.services.AcademicPeriodService import create_or_update_academic_periods
 from fastapi import HTTPException
 
@@ -229,3 +236,68 @@ def test_ensure_future_academic_years_with_custom_labeled_active_year(db_session
     assert "2026-2027" not in labels
     assert "2027-2028" in labels
     assert "2028-2029" in labels
+
+
+def test_ensure_future_academic_years_recognizes_ay_prefix(db_session):
+    active_year = AcademicYear(
+        year_label="2025-2026",
+        start_date=date(2025, 6, 2),
+        end_date=date(2026, 3, 31),
+        is_active=True,
+    )
+    prefixed_future = AcademicYear(
+        year_label="AY 2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    db_session.add_all([active_year, prefixed_future])
+    db_session.commit()
+
+    years = ensure_future_academic_years(db_session, years_ahead=2)
+    start_year_2026 = [year for year in years if "2026-2027" in year.year_label]
+
+    assert [year.year_label for year in start_year_2026] == ["AY 2026-2027"]
+    assert any(year.year_label == "2027-2028" for year in years)
+
+
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        ("2026-2027", 2026),
+        (" 2026-2027 ", 2026),
+        ("AY 2026-2027", 2026),
+        ("ay2026-2027", 2026),
+        ("2026\u20132027", 2026),
+        ("AY 2026\u20142027", 2026),
+        ("2026-2028", None),
+        ("School Year 2026-2027", None),
+    ],
+)
+def test_parse_start_year_normalizes_supported_legacy_variants(label, expected):
+    assert _parse_start_year(label) == expected
+
+
+def test_postgres_preparation_acquires_transaction_lock_for_concurrent_calls():
+    db = Mock()
+    db.get_bind.return_value = SimpleNamespace(
+        dialect=SimpleNamespace(name="postgresql")
+    )
+
+    _serialize_academic_year_preparation(db)
+
+    db.execute.assert_called_once()
+    statement = str(db.execute.call_args.args[0])
+    assert statement == "LOCK TABLE academic_year IN SHARE ROW EXCLUSIVE MODE"
+
+
+def test_non_postgres_preparation_does_not_issue_table_lock():
+    db = Mock()
+    db.get_bind.return_value = SimpleNamespace(
+        dialect=SimpleNamespace(name="sqlite")
+    )
+
+    _serialize_academic_year_preparation(db)
+
+    db.execute.assert_not_called()
+

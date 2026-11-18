@@ -313,7 +313,7 @@ export default function AdminClasses() {
                 </p>
               )}
 
-              <section className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <OverviewCard
                   title={"Total Classes"}
                   count={String(summary.total_classes)}
@@ -332,7 +332,7 @@ export default function AdminClasses() {
                 />
               </section>
 
-              <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
+              <div className="grid gap-3 md:grid-cols-[1fr_160px_160px]">
                 <label className="relative">
                   <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                   <Input

@@ -18,10 +18,12 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 import { useAcademicPeriod, useRegisterDirtyGuard } from "@/context/AcademicPeriodContext";
+import { toast } from "sonner";
 import {
   getClassAttendanceLogs,
   recordBatchAttendance,
   scanQRAttendance,
+  exportClassAttendanceCSV,
   type AttendanceStatus,
   type AttendanceRecordItem,
 } from "@/lib/attendance-api";
@@ -43,6 +45,7 @@ import {
   XCircle,
   Loader2,
   RefreshCw,
+  Download,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingPanel } from "@/components/loading-panel";
@@ -193,6 +196,7 @@ export default function TeacherAttendancePage() {
   const logsRequestIdRef = useRef(0);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Compute Attendance Targets from scoped teaching and advisory classes
   const targets = useMemo<AttendanceTarget[]>(() => {
@@ -465,6 +469,34 @@ export default function TeacherAttendancePage() {
       alert("Error saving attendance records.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Export Class Attendance CSV
+  const handleExportCsv = async () => {
+    if (!selectedClassId) return;
+    try {
+      setIsExporting(true);
+      toast.info("Preparing attendance CSV export...");
+      const { blob, filename } = await exportClassAttendanceCSV(selectedClassId, {
+        subjectId: selectedSubjectId,
+        academicPeriodId: selectedAcademicPeriodId,
+        academicYearId: selectedYearId ?? undefined,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Attendance CSV downloaded successfully.");
+    } catch (err) {
+      console.error("Export attendance CSV error:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to export attendance CSV.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -785,12 +817,12 @@ export default function TeacherAttendancePage() {
       },
       ...(!isReadOnly
         ? [
-            {
-              id: "scan" as const,
-              label: "QR Scanner",
-              icon: QrCode,
-            },
-          ]
+          {
+            id: "scan" as const,
+            label: "QR Scanner",
+            icon: QrCode,
+          },
+        ]
         : []),
       {
         id: "summary" as const,
@@ -810,13 +842,13 @@ export default function TeacherAttendancePage() {
       },
       ...(!isReadOnly
         ? [
-            {
-              id: "scan" as const,
-              label: "Scan QR",
-              name: "QR Scanner",
-              icon: QrCode,
-            },
-          ]
+          {
+            id: "scan" as const,
+            label: "Scan QR",
+            name: "QR Scanner",
+            icon: QrCode,
+          },
+        ]
         : []),
       {
         id: "summary" as const,
@@ -846,6 +878,23 @@ export default function TeacherAttendancePage() {
                     )}
                   </div>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportCsv}
+                    disabled={isExporting || !selectedClassId}
+                    className="gap-1.5"
+                    data-testid="export-attendance-csv-button"
+                  >
+                    {isExporting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    <span>Export CSV</span>
+                  </Button>
+                </div>
               </header>
               <div className="hidden -mt-[1px] bg-background px-3 sm:px-4 md:block md:px-6">
                 <Tabs
@@ -864,7 +913,7 @@ export default function TeacherAttendancePage() {
               </nav>
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] flex min-w-0 flex-1 flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
+            <div className="border-t-1 border-border -mt-[1px] flex min-w-0 flex-1 flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
               {/* Stats Overview */}
               <div className="mb-1 grid min-w-0 grid-cols-2 gap-3 [&_h3]:text-2xl [&_p]:text-xs sm:grid-cols-5 sm:[&_h3]:text-3xl sm:[&_p]:text-sm">
@@ -1153,8 +1202,8 @@ export default function TeacherAttendancePage() {
                                         {student.student_name}
                                       </span>
                                       {student.student_lrn && (
-                                        <span className="text-[11px] text-muted-foreground font-mono">
-                                          LRN: {student.student_lrn}
+                                        <span className="text-[11px] text-muted-foreground">
+                                          {student.student_lrn}
                                         </span>
                                       )}
                                     </div>
@@ -1220,10 +1269,10 @@ export default function TeacherAttendancePage() {
                               <>
                                 {males.length > 0 && (
                                   <>
-                                    <Table.Row className="hover:bg-accent border-y-2">
+                                    <Table.Row className="p-0! bg-muted/70 font-bold border-y-2">
                                       <Table.Cell
                                         colSpan={3}
-                                        className="p-1! text-sm font-semibold text-center bg-primary pr-10!"
+                                        className="p-2! text-sm font-bold text-foreground bg-muted/70 text-left"
                                       >
                                         Male
                                       </Table.Cell>
@@ -1233,10 +1282,10 @@ export default function TeacherAttendancePage() {
                                 )}
                                 {females.length > 0 && (
                                   <>
-                                    <Table.Row className="hover:bg-accent border-b-2 p-0!">
+                                    <Table.Row className="p-0! bg-muted/70 font-bold border-y-2">
                                       <Table.Cell
                                         colSpan={3}
-                                        className="p-1! text-sm font-semibold text-center bg-primary pr-10!"
+                                        className="p-2! text-sm font-bold text-foreground bg-muted/70 text-left"
                                       >
                                         Female
                                       </Table.Cell>

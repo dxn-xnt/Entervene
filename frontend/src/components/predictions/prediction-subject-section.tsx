@@ -6,7 +6,7 @@ import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { SubjectSectionCard } from "./subject-section-card";
 import type { DashboardSubjectGroupSummary } from "./current-term-dashboard-adapter";
-import { getTeacherRiskDisplaySummary } from "./teacher-risk-display";
+import { getTeacherRiskDisplaySummary, getTeacherRiskPercentage } from "./teacher-risk-display";
 import { getRiskBadgeMeta } from "@/lib/formatters";
 
 interface PredictionSubjectSectionProps {
@@ -48,6 +48,9 @@ export function PredictionSubjectSection({
           </Badge>
           <Badge size="sm" className={getRiskBadgeMeta("HIGH_RISK").bg}>
             {displaySummary.HIGH_RISK} High Risk
+          </Badge>
+          <Badge size="sm" className={getRiskBadgeMeta("ON_TRACK").bg}>
+            {displaySummary.ON_TRACK} On Track ({Math.round(getTeacherRiskPercentage(displaySummary.ON_TRACK, displaySummary.assessedTotal))}%)
           </Badge>
           {navigationEnabled && <Tooltip>
             <TooltipTrigger render={

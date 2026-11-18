@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 import uuid
 
-from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, Numeric, Index
+from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, Numeric, Index, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,6 +24,7 @@ class StudentSubmission(Base):
     status: Mapped[str] = mapped_column(String(30), default="pending")  # pending, submitted, graded, late, missed
     grade: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     feedback: Mapped[str | None] = mapped_column(Text)
+    feedback_focus_points: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     graded_by_staff_id: Mapped[str | None] = mapped_column(String(20), ForeignKey("academic_staff.staff_id"), nullable=True)

@@ -10,6 +10,7 @@ from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.Subject import Subject
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
+from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.submissions.StudentSubmission import StudentSubmission
@@ -62,6 +63,25 @@ def test_candidate_requires_moderate_risk_below_passing_threshold(current_period
             ctx["student"].student_id, ctx["class"].class_id,
             ctx["subject"].subject_id, ctx["period"].academic_period_id,
         )
+
+
+def test_fully_approved_production_prediction_creates_same_candidate(current_period_context, monkeypatch):
+    ctx = current_period_context
+    model_id = _setup(ctx, monkeypatch, [84.0])
+    model = ctx["db"].get(AIModelVersion, model_id)
+    model.lifecycle_status = "PRODUCTION"
+    model.is_active = True
+    model.production_validated = True
+    model.independent_three_term_validation = True
+    ctx["db"].commit()
+    monkeypatch.setattr(settings, "app_environment", "production")
+
+    result = _run(ctx, model_id)
+
+    rows = _interventions(ctx)
+    assert result["lifecycle_status"] == "PRODUCTION"
+    assert len(rows) == 1
+    assert rows[0].source_prediction_id == result["prediction_id"]
 
 
 @pytest.mark.parametrize("grade,expected", [(84.999, 1), (85.0, 0)])

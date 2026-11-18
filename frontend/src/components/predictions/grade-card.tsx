@@ -28,65 +28,33 @@ export function GradeCard({
   moderateRisk = 0,
   monitoring = 0,
   lowRisk = 0,
-  insufficientData = 0,
   role,
   emptyLabel = "No At-Risk Students",
 }: GradeCardProps) {
   const { role: authRole } = useAuth();
   const activeRole = role ?? (authRole === "admin" ? "admin" : "teacher");
 
-  const riskList: {
-    key: string;
-    label: string;
-    count: number;
-    percentage: number;
-    priority: number;
-  }[] = [];
-
-  if (highRisk > 0) {
-    riskList.push({
+  const moderateCount = moderateRisk || monitoring;
+  const riskList = [
+    {
+      key: "moderate_risk",
+      label: "Moderate Risk",
+      count: moderateCount,
+      percentage: totalStudents > 0 ? (moderateCount / totalStudents) * 100 : 0,
+    },
+    {
       key: "high_risk",
-      label: highRisk === 1 ? "High Risk" : "High Risks",
+      label: "High Risk",
       count: highRisk,
       percentage: totalStudents > 0 ? (highRisk / totalStudents) * 100 : 0,
-      priority: 1,
-    });
-  }
-
-  const monitoringCount = monitoring || moderateRisk;
-  if (monitoringCount > 0) {
-    riskList.push({
-      key: "monitoring",
-      label: "Monitoring",
-      count: monitoringCount,
-      percentage: totalStudents > 0 ? (monitoringCount / totalStudents) * 100 : 0,
-      priority: 2,
-    });
-  }
-
-  if (insufficientData > 0) {
-    riskList.push({
-      key: "insufficient_data",
-      label: "Insufficient Data",
-      count: insufficientData,
-      percentage: totalStudents > 0 ? (insufficientData / totalStudents) * 100 : 0,
-      priority: 3,
-    });
-  }
-
-  if (lowRisk > 0) {
-    riskList.push({
-      key: "low_risk",
-      label: "Low Risk",
+    },
+    {
+      key: "on_track",
+      label: "On Track",
       count: lowRisk,
       percentage: totalStudents > 0 ? (lowRisk / totalStudents) * 100 : 0,
-      priority: 4,
-    });
-  }
-
-  const topRisks = riskList
-    .sort((a, b) => b.count - a.count || a.priority - b.priority)
-    .slice(0, 2);
+    },
+  ];
 
   const targetUrl = `/${activeRole}/predictions/${grade}/${classId !== undefined ? classId : encodeURIComponent(name)}`;
 
@@ -111,19 +79,19 @@ export function GradeCard({
               </Badge>
             </div>
           </div>
-          {topRisks.length > 0 ? (
-            <div className="flex flex-row w-full gap-2">
-              {topRisks.map((risk) => (
+          {totalStudents > 0 ? (
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3">
+              {riskList.map((risk) => (
                 <Card
                   key={risk.key}
-                  className="p-2 px-2 shadow-none gap-2 flex-1 flex flex-row items-center border border-black bg-white min-w-0"
+                  className="flex min-w-0 flex-row items-center gap-2 bg-white p-2 shadow-none sm:flex-col sm:justify-center"
                 >
                   <Progress
                     variant="circular"
                     value={risk.percentage}
-                    className="size-20 shrink-0"
+                    className="size-14 shrink-0"
                   />
-                  <div className="flex flex-col items-center justify-center min-w-0">
+                  <div className="flex min-w-0 flex-col items-center justify-center">
                     <span className="font-head text-xl font-black text-foreground">{risk.count}</span>
                     <span className="text-xs font-semibold whitespace-nowrap">{risk.label}</span>
                   </div>

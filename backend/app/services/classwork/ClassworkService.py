@@ -937,6 +937,9 @@ def update_classwork_record(
             db, classwork_id, staff_id, auto_commit=False
         )
 
+        from app.services.submission.SubmissionFeedbackService import sync_and_dispatch_classwork_draft_jobs
+        sync_and_dispatch_classwork_draft_jobs(db, classwork_id, staff_id)
+
         targeted = [a for a in classwork.assignments if a.is_published and a.recipient_student_id]
         assigned_class_ids = [a.class_id for a in classwork.assignments if a.is_published and not a.recipient_student_id]
         for assignment in targeted:

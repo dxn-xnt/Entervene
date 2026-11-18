@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, AlertCircle, ArrowUpRight } from "lucide-react";
+import { Settings, AlertCircle, ArrowUpRight, School } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -23,61 +23,54 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 
-// Fallback initial cards matching the requested spec
-const defaultCards: OverviewCardData[] = [
-  {
-    title: "Students",
-    count: "74",
-    stat: "74",
-    statDescription: "enrolled in Term 1",
-  },
-  {
-    title: "Teachers",
-    count: "19",
-    stat: "13",
-    statDescription: "teaching in Term 1",
-  },
-  {
-    title: "Classes",
-    count: "10",
-    stat: "10",
-    statDescription: "active in Term 1",
-  },
-  {
-    title: "Subjects",
-    count: "40",
-    stat: "38",
-    statDescription: "active in Term 1",
-  },
-  {
-    title: "School Passing Rate",
-    count: "92%",
-    stat: "▲ 2 pts",
-    statDescription: "vs. last term",
-    trend: "up",
-  },
-  {
-    title: "School Attendance",
-    count: "95%",
-    stat: "Last 20 school days",
-    statDescription: "across all grade levels",
-  },
-  {
-    title: "New Enrollments",
-    count: "5",
-    stat: "▲ 2",
-    statDescription: "joined in the last 30 days",
-    trend: "up",
-  },
-  {
-    title: "Term Progress",
-    count: "Week 6",
-    stat: "of 10",
-    statDescription: "term 1 ends in 4 weeks",
-    progressValue: 60,
-  },
-];
+type EnrollmentTrendItem = { week: string; count: number; active?: number };
+type GradeMetricItem = { grade: string; rate: number };
+type StudentsPerGradeItem = { grade: string; count: number };
+type ActiveUserItem = { day: string; count: number; isDrop?: boolean };
+type TeacherWorkloadItem = { name: string; subject: string; classes: string; students: number };
+type AttentionClassItem = { name: string; issue: string; status: string; variant?: string };
+type TeacherNoWorkItem = { name: string; subject: string; status: string };
+type TopSubjectItem = { name: string; metric: string; rank: string };
+type GradeHealthApiItem = {
+  academic_level_id: number;
+  grade: string;
+  category: string;
+  students: number;
+  active_classes: number;
+  attendance_rate: number | null;
+  attendance_record_count: number;
+  completion_rate: number | null;
+  expected_submission_count: number;
+  passing_rate: number | null;
+  available_grade_count: number;
+};
+type GradeHealthItem = {
+  academicLevelId: number;
+  grade: string;
+  category: string;
+  students: number;
+  classes: number;
+  attendance: number | null;
+  attendanceRecordCount: number;
+  completion: number | null;
+  expectedSubmissionCount: number;
+  passingRate: number | null;
+  availableGradeCount: number;
+};
+type AdminDashboardDetails = {
+  enrollment_trend?: EnrollmentTrendItem[];
+  students_per_grade?: StudentsPerGradeItem[];
+  attendance_by_grade?: GradeMetricItem[];
+  completion_by_grade?: GradeMetricItem[];
+  active_users_weekly?: ActiveUserItem[];
+  teacher_workload?: TeacherWorkloadItem[];
+  classes_needing_attention?: AttentionClassItem[];
+  teachers_no_work?: TeacherNoWorkItem[];
+  top_performing_subjects?: TopSubjectItem[];
+  grade_health?: GradeHealthApiItem[];
+};
 
 const defaultEnrollmentTrend = [
   { week: "Wk 1", count: 66, active: 58 },
@@ -86,33 +79,6 @@ const defaultEnrollmentTrend = [
   { week: "Wk 4", count: 72, active: 66 },
   { week: "Wk 5", count: 74, active: 70 },
   { week: "Wk 6", count: 74, active: 74 },
-];
-
-const defaultStudentsPerGrade = [
-  { grade: "G7", count: 14 },
-  { grade: "G8", count: 12 },
-  { grade: "G9", count: 17 },
-  { grade: "G10", count: 13 },
-  { grade: "S11", count: 10 },
-  { grade: "S12", count: 8 },
-];
-
-const defaultAttendanceByGrade = [
-  { grade: "Grade 7", rate: 96 },
-  { grade: "Grade 8", rate: 93 },
-  { grade: "Grade 9", rate: 95 },
-  { grade: "Grade 10", rate: 94 },
-  { grade: "STEM 11", rate: 97 },
-  { grade: "STEM 12", rate: 96 },
-];
-
-const defaultCompletionByGrade = [
-  { grade: "Grade 7", rate: 88 },
-  { grade: "Grade 8", rate: 79 },
-  { grade: "Grade 9", rate: 86 },
-  { grade: "Grade 10", rate: 82 },
-  { grade: "STEM 11", rate: 90 },
-  { grade: "STEM 12", rate: 84 },
 ];
 
 const defaultActiveUsers = [
@@ -152,8 +118,8 @@ const defaultTopPerformingSubjects = [
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { selectedPeriodId } = useAcademicPeriod();
-  const [cards, setCards] = useState<OverviewCardData[]>(defaultCards);
-  const [details, setDetails] = useState<any>(null);
+  const [cards, setCards] = useState<OverviewCardData[]>([]);
+  const [details, setDetails] = useState<AdminDashboardDetails | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [showAllGradeHealth, setShowAllGradeHealth] = useState<boolean>(false);
@@ -164,6 +130,8 @@ export default function AdminDashboard() {
     async function fetchStats() {
       setIsLoading(true);
       setError(null);
+      setCards([]);
+      setDetails(null);
       try {
         const data = await getOverviewStats({
           scope: "system",
@@ -174,7 +142,7 @@ export default function AdminDashboard() {
             setCards(data.cards.slice(0, 8));
           }
           if (data.details) {
-            setDetails(data.details);
+            setDetails(data.details as AdminDashboardDetails);
           }
         }
       } catch (err: unknown) {
@@ -197,16 +165,16 @@ export default function AdminDashboard() {
 
   const enrollmentTrend = useMemo(() => {
     if (!details?.enrollment_trend) return defaultEnrollmentTrend;
-    return details.enrollment_trend.map((item: any, idx: number) => ({
+    return details.enrollment_trend.map((item, idx: number) => ({
       week: item.week,
       count: item.count,
       active: item.active ?? Math.min(item.count, (defaultEnrollmentTrend[idx]?.active ?? item.count)),
     }));
   }, [details]);
 
-  const studentsPerGrade = details?.students_per_grade || defaultStudentsPerGrade;
-  const attendanceByGrade = details?.attendance_by_grade || defaultAttendanceByGrade;
-  const completionByGrade = details?.completion_by_grade || defaultCompletionByGrade;
+  const studentsPerGrade = details?.students_per_grade ?? [];
+  const attendanceByGrade = details?.attendance_by_grade ?? [];
+  const completionByGrade = details?.completion_by_grade ?? [];
   const activeUsers = details?.active_users_weekly || defaultActiveUsers;
   const teacherWorkload = details?.teacher_workload || defaultTeacherWorkload;
   const classesAttention = details?.classes_needing_attention || defaultClassesNeedingAttention;
@@ -214,40 +182,30 @@ export default function AdminDashboard() {
   const topSubjects = details?.top_performing_subjects || defaultTopPerformingSubjects;
 
   const maxActiveUsersCount = Math.max(
-    ...activeUsers.map((s: any) => s.count),
+    ...activeUsers.map((s) => s.count),
     70,
   );
   const maxStudentsGradeCount = Math.max(
-    ...studentsPerGrade.map((s: any) => s.count),
+    ...studentsPerGrade.map((s) => s.count),
     20,
   );
 
   // Grade level health matrix (analogous to section-by-section health)
   const gradeHealthData = useMemo(() => {
-    const defaultList = [
-      { grade: "Grade 7", category: "Junior High", students: 14, attendance: 96, completion: 88, passingRate: 94, classes: 2 },
-      { grade: "Grade 8", category: "Junior High", students: 12, attendance: 93, completion: 79, passingRate: 91, classes: 2 },
-      { grade: "Grade 9", category: "Junior High", students: 17, attendance: 95, completion: 86, passingRate: 93, classes: 2 },
-      { grade: "Grade 10", category: "Junior High", students: 13, attendance: 94, completion: 82, passingRate: 90, classes: 2 },
-      { grade: "STEM 11", category: "Senior High", students: 10, attendance: 97, completion: 90, passingRate: 96, classes: 1 },
-      { grade: "STEM 12", category: "Senior High", students: 8, attendance: 96, completion: 84, passingRate: 95, classes: 1 },
-    ];
-
-    if (!details) return defaultList;
-
-    return defaultList.map((item) => {
-      const att = details.attendance_by_grade?.find((a: any) => a.grade === item.grade);
-      const comp = details.completion_by_grade?.find((c: any) => c.grade === item.grade);
-      const std = details.students_per_grade?.find(
-        (s: any) => s.grade === item.grade || (s.grade === "G7" && item.grade === "Grade 7") || (s.grade === "G8" && item.grade === "Grade 8") || (s.grade === "G9" && item.grade === "Grade 9") || (s.grade === "G10" && item.grade === "Grade 10") || (s.grade === "S11" && item.grade === "STEM 11") || (s.grade === "S12" && item.grade === "STEM 12")
-      );
-      return {
-        ...item,
-        attendance: att?.rate ?? item.attendance,
-        completion: comp?.rate ?? item.completion,
-        students: std?.count ?? item.students,
-      };
-    });
+    if (!Array.isArray(details?.grade_health)) return [];
+    return details.grade_health.map((item): GradeHealthItem => ({
+      academicLevelId: item.academic_level_id,
+      grade: item.grade,
+      category: item.category,
+      students: item.students,
+      attendance: item.attendance_rate,
+      attendanceRecordCount: item.attendance_record_count,
+      completion: item.completion_rate,
+      expectedSubmissionCount: item.expected_submission_count,
+      passingRate: item.passing_rate,
+      availableGradeCount: item.available_grade_count,
+      classes: item.active_classes,
+    }));
   }, [details]);
 
   const displayedGrades = showAllGradeHealth ? gradeHealthData : gradeHealthData.slice(0, 2);
@@ -278,7 +236,7 @@ export default function AdminDashboard() {
               </Button>
             </header>
 
-            <main className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-3 md:gap-6 md:px-6">
+            <main className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:gap-6 md:px-6">
               {error && (
                 <Alert status="error" className="flex items-center gap-2">
                   <AlertCircle className="size-4 shrink-0" />
@@ -319,7 +277,7 @@ export default function AdminDashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {classesAttention.map((c: any, idx: number) => {
+                        {classesAttention.map((c, idx: number) => {
                           const isDestructive = c.variant === "destructive" || c.status === "Low";
                           return (
                             <Card
@@ -373,7 +331,7 @@ export default function AdminDashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {teachersNoWork.map((t: any, idx: number) => (
+                        {teachersNoWork.map((t, idx: number) => (
                           <Card
                             key={idx}
                             onClick={() => navigate(routes.admin.users)}
@@ -543,7 +501,7 @@ export default function AdminDashboard() {
 
                       <Card.Content className="mt-3 flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
                         <div className="flex flex-col gap-2.5">
-                          {attendanceByGrade.map((item: any) => (
+                          {attendanceByGrade.map((item) => (
                             <div
                               key={item.grade}
                               className="flex items-center justify-between gap-3 text-xs sm:text-sm"
@@ -590,7 +548,7 @@ export default function AdminDashboard() {
 
                       <Card.Content className="mt-3 flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
                         <div className="flex flex-col gap-2.5">
-                          {completionByGrade.map((item: any) => (
+                          {completionByGrade.map((item) => (
                             <div
                               key={item.grade}
                               className="flex items-center justify-between gap-3 text-xs sm:text-sm"
@@ -637,9 +595,18 @@ export default function AdminDashboard() {
                     </Card.Header>
 
                     <Card.Content className="mt-1 flex flex-col gap-3 p-0">
-                      {displayedGrades.map((g: any, idx: number) => (
+                      {isLoading ? (
+                        <Card className="h-44 animate-pulse bg-muted shadow-none" />
+                      ) : gradeHealthData.length === 0 ? (
+                        <EmptyStateCard
+                          compact
+                          icon={<School />}
+                          title="No grade-level data yet"
+                          description="Grade-level health will appear when active classes and enrollments exist for the selected term."
+                        />
+                      ) : displayedGrades.map((g) => (
                         <Card
-                          key={idx}
+                          key={g.academicLevelId}
                           className="shadow-none p-4 text-xs hover:bg-retro hover:-translate-y-1 cursor-pointer transition-all"
                           onClick={() => navigate(routes.admin.classes)}
                         >
@@ -669,11 +636,11 @@ export default function AdminDashboard() {
                                   Task Completion
                                 </span>
                                 <span className="font-semibold">
-                                  {g.completion}%
+                                  {g.completion == null ? "—" : `${g.completion}%`}
                                 </span>
                               </div>
                               <Progress
-                                value={g.completion}
+                                value={g.completion ?? 0}
                                 className="h-2"
                               />
                             </div>
@@ -684,11 +651,11 @@ export default function AdminDashboard() {
                                   Attendance
                                 </span>
                                 <span className="font-semibold">
-                                  {g.attendance}%
+                                  {g.attendance == null ? "—" : `${g.attendance}%`}
                                 </span>
                               </div>
                               <Progress
-                                value={g.attendance}
+                                value={g.attendance ?? 0}
                                 className="h-2"
                               />
                             </div>
@@ -701,7 +668,9 @@ export default function AdminDashboard() {
                                 Passing Rate:{" "}
                                 <Badge
                                   variant={
-                                    g.passingRate < 75
+                                    g.passingRate == null
+                                      ? "surface"
+                                      : g.passingRate < 75
                                       ? "destructive"
                                       : g.passingRate > 87
                                         ? "success"
@@ -710,7 +679,7 @@ export default function AdminDashboard() {
                                   size="sm"
                                   className="ml-1"
                                 >
-                                  {g.passingRate}%
+                                  {g.passingRate == null ? "—" : `${g.passingRate}%`}
                                 </Badge>
                               </span>
                             </div>
@@ -757,7 +726,7 @@ export default function AdminDashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
-                        {activeUsers.map((item: any, idx: number) => (
+                        {activeUsers.map((item, idx: number) => (
                           <div
                             key={idx}
                             className="flex items-center justify-between gap-3 text-xs sm:text-sm"
@@ -807,7 +776,7 @@ export default function AdminDashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {topSubjects.map((s: any, idx: number) => (
+                        {topSubjects.map((s, idx: number) => (
                           <Card
                             key={idx}
                             onClick={() => navigate(routes.admin.subjects)}
@@ -854,7 +823,7 @@ export default function AdminDashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {teacherWorkload.map((t: any, idx: number) => (
+                        {teacherWorkload.map((t, idx: number) => (
                           <Card
                             key={idx}
                             onClick={() => navigate(routes.admin.users)}
@@ -888,7 +857,7 @@ export default function AdminDashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
-                        {studentsPerGrade.map((item: any, idx: number) => (
+                        {studentsPerGrade.map((item, idx: number) => (
                           <div
                             key={idx}
                             className="flex items-center justify-between gap-3 text-xs sm:text-sm"

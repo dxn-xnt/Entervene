@@ -130,6 +130,18 @@ export interface DevelopmentAcademicComponent {
 export interface DevelopmentCurrentTermListResponse {
   items: DevelopmentCurrentTermListItem[];
   total: number;
+  prediction_policy?: CurrentTermPredictionPolicy;
+}
+
+export interface CurrentTermInterventionBand {
+  level: DevelopmentInterventionLevel;
+  label: string;
+  minimum: number | null;
+  maximum_exclusive: number | null;
+}
+
+export interface CurrentTermPredictionPolicy {
+  intervention_bands: CurrentTermInterventionBand[];
 }
 
 export interface AdminCurrentTermScopeItem {
@@ -640,3 +652,42 @@ export async function assignPredictionIntervention(
   }
   return response.json();
 }
+
+export interface RiskSummaryExportFilters {
+  academicPeriodId?: number;
+  classId?: number;
+  subjectId?: number;
+  gradeLevel?: number;
+  riskLevel?: string;
+  search?: string;
+}
+
+export async function exportStudentRiskSummaryCSV(
+  filters?: RiskSummaryExportFilters,
+): Promise<{ blob: Blob; filename: string }> {
+  const params = new URLSearchParams();
+  if (filters?.academicPeriodId) params.append("academic_period_id", String(filters.academicPeriodId));
+  if (filters?.classId) params.append("class_id", String(filters.classId));
+  if (filters?.subjectId) params.append("subject_id", String(filters.subjectId));
+  if (filters?.gradeLevel) params.append("grade_level", String(filters.gradeLevel));
+  if (filters?.riskLevel) params.append("risk_level", filters.riskLevel);
+  if (filters?.search?.trim()) params.append("search", filters.search.trim());
+
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  const response = await apiFetch(`/api/v1/predictions/export-csv${queryString}`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.detail || "Failed to export student risk summary CSV.");
+  }
+
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = "Risk_Summary.csv";
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) filename = match[1];
+  }
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
+

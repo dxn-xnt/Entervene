@@ -20,7 +20,7 @@ export default function TeacherRequestsPage() {
                 </div>
               </div>
             </header>
-            <main className="flex-1 flex flex-col min-h-0 p-3 sm:p-4 md:p-6">
+            <main className="flex-1 flex flex-col min-h-0 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <div className="border-2 border-black rounded bg-white shadow-[4px_4px_0px_#000] flex-1 flex flex-col min-h-0 overflow-hidden">
                 <RepostWorkspace />
               </div>

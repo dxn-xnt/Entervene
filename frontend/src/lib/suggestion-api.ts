@@ -1,5 +1,7 @@
 import { apiFetch } from "@/lib/api";
 import type {
+  BulkSuggestionResponse,
+  ManualBulkSuggestionCreate,
   ManualSuggestionCreate,
   RecommendationDraftRequest,
   SuggestionListResponse,
@@ -26,6 +28,20 @@ export async function createManualSuggestion(payload: ManualSuggestionCreate): P
   }
 
   return (await response.json()) as SuggestionResponse;
+}
+
+export async function createBulkManualSuggestion(payload: ManualBulkSuggestionCreate): Promise<BulkSuggestionResponse> {
+  const response = await apiFetch("/api/v1/suggestions/manual/bulk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await responseMessage(response, "Unable to create bulk suggestions."));
+  }
+
+  return (await response.json()) as BulkSuggestionResponse;
 }
 
 export async function getTeacherSuggestions(params: {

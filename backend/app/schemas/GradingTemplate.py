@@ -39,6 +39,17 @@ class GradingTemplateUpdate(BaseModel):
     updated_at: datetime
 
 
+class GradingTemplateRevisionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    components: list[GradingTemplateComponentCreate]
+    policy_reference: str = Field(..., min_length=3, max_length=255)
+    change_reason: str = Field(..., min_length=5, max_length=1000)
+    status: str = "active"
+    subject_id: int | None = None
+    academic_year_id: int | None = None
+    academic_period_id: int | None = None
+
+
 class GradingTemplateSubject(BaseModel):
     subject_id: int
     subject_name: str
@@ -50,6 +61,11 @@ class GradingTemplateSubject(BaseModel):
 class GradingTemplateListItem(BaseModel):
     grading_template_id: int
     template_name: str
+    template_family_code: str
+    revision: int
+    supersedes_template_id: int | None
+    policy_reference: str | None
+    change_reason: str | None
     description: str | None
     passing_threshold: float
     assigned_subjects: list[GradingTemplateSubject]

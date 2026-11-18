@@ -14,6 +14,8 @@ interface AdminPredictionGradeCardProps {
 }
 
 export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProps) {
+  if (!group.sections.length) return null;
+
   const uniqueStudents = new Set(
     group.sections.flatMap((section) => section.students.map((student) => student.student_id)),
   ).size;

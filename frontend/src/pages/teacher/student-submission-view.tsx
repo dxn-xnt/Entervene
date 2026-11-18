@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, FileText, Sparkles } from "lucide-react";
+import { Eye, FileText, Sparkles, Trash2 } from "lucide-react";
 import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionLinkList from "@/components/submission-link-list";
 import { API_URL } from "@/lib/api";
@@ -11,8 +11,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Alert } from "@/components/retroui/Alert";
+import { useToast } from "@/components/retroui/Toast";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { deleteSubmissionFeedback } from "@/lib/submission-feedback-api";
 import { useNavigate } from "react-router-dom";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
+import FeedbackFocusSelector from "@/components/feedback-focus-selector";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import QuizFeedbackAssistant from "@/components/quiz-feedback-assistant";
 import {
@@ -45,6 +49,9 @@ export type StudentSubmissionViewProps = {
   onAiPublishingChange: (publishing: boolean) => void;
   onAiConflictReload: (submissionId: number) => Promise<void>;
   isReadOnly?: boolean;
+  focusPointsDraft?: string[];
+  onFocusPointsChange?: (codes: string[]) => void;
+  onFeedbackDeleted?: () => void;
 };
 
 export default function StudentSubmissionView({
@@ -66,21 +73,53 @@ export default function StudentSubmissionView({
   onAiPublishingChange,
   onAiConflictReload,
   isReadOnly = false,
+  focusPointsDraft = [],
+  onFocusPointsChange,
+  onFeedbackDeleted,
 }: StudentSubmissionViewProps) {
   const navigate = useNavigate();
+  const toast = useToast();
   const classworkKind = selected.classwork_type?.toUpperCase();
   const supportsAiFeedback =
     classworkKind === "ASSIGNMENT"
       ? selected.activity_mode?.toUpperCase() !== "MANUAL"
       : classworkKind === "ACTIVITY" && selected.activity_mode?.toUpperCase() === "ONLINE";
-  const hasUnsavedGradeChanges = selectedSubmissionDetail != null &&
-    gradeDraft !== (selectedSubmissionDetail.grade != null ? String(selectedSubmissionDetail.grade) : "");
-  // While an AI-generated draft is under review, grade saving and score edits
-  // are paused so the draft can only be saved through the explicit,
-  // fingerprint-protected "Post Approved Feedback" action.
+  const savedFocusPoints = selectedSubmissionDetail?.feedback_focus_points ?? [];
+  const focusPointsChanged =
+    focusPointsDraft.length !== savedFocusPoints.length ||
+    focusPointsDraft.some((code) => !savedFocusPoints.includes(code));
+  const hasUnsavedGradeChanges =
+    selectedSubmissionDetail != null &&
+    (gradeDraft !== (selectedSubmissionDetail.grade != null ? String(selectedSubmissionDetail.grade) : "") ||
+      focusPointsChanged);
   const [isAiReviewing, setIsAiReviewing] = useState(false);
+  const [isReviewTemplate, setIsReviewTemplate] = useState(false);
+  const [isReviewPolicyFallback, setIsReviewPolicyFallback] = useState(false);
   const [isAiPublishing, setIsAiPublishing] = useState(false);
-  const aiLocksGrading = isAiReviewing || isAiPublishing;
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeletingFeedback, setIsDeletingFeedback] = useState(false);
+  const [deleteFeedbackError, setDeleteFeedbackError] = useState("");
+
+  const handleDeleteFeedback = async () => {
+    if (!selectedSubmissionDetail) return;
+    setIsDeletingFeedback(true);
+    setDeleteFeedbackError("");
+    try {
+      await deleteSubmissionFeedback(
+        selectedSubmissionDetail.submission_id,
+        selectedSubmissionDetail.feedback_fingerprint || undefined,
+      );
+      onFeedbackChange("");
+      onFeedbackDeleted?.();
+      setIsDeleteDialogOpen(false);
+      toast.success({ title: "Feedback deleted successfully" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete feedback.";
+      setDeleteFeedbackError(message);
+    } finally {
+      setIsDeletingFeedback(false);
+    }
+  };
 
   return (
     <main className="flex flex-1 flex-col overflow-x-hidden">
@@ -134,7 +173,7 @@ export default function StudentSubmissionView({
                     <Button
                       type="button"
                       onClick={onPostGrade}
-                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || aiLocksGrading}
+                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || isAiPublishing}
                       className="whitespace-nowrap"
                     >
                       {selectedSubmissionDetail?.status === "graded"
@@ -145,14 +184,12 @@ export default function StudentSubmissionView({
                 } />
                 {isReadOnly ? (
                   <TooltipContent>Historical records are read-only</TooltipContent>
-                ) : aiLocksGrading ? (
-                  <TooltipContent>Post or discard the AI-generated feedback draft first</TooltipContent>
                 ) : null}
               </Tooltip>
             </div>
           </header>
 
-          <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+          <div className="border-t-2 border-border -mt-[1px] px-3 py-3 sm:px-4 sm:py-4 md:px-6">
             {/* Main Content Area */}
             <Card className="mx-auto w-full space-y-4">
               {/* Student Submission Banner Card */}
@@ -281,7 +318,7 @@ export default function StudentSubmissionView({
                 }
                 selectedScore={gradeDraft !== "" ? Number(gradeDraft) : null}
                 onSelectScore={(points) => {
-                  if (selectedSubmissionDetail && !isPostingGrade && !isReadOnly && !aiLocksGrading) {
+                  if (selectedSubmissionDetail && !isPostingGrade && !isReadOnly && !isAiPublishing) {
                     onGradeChange(String(points));
                   }
                 }}
@@ -293,7 +330,7 @@ export default function StudentSubmissionView({
                       max={selected.total_points ?? undefined}
                       value={gradeDraft}
                       onChange={(event) => onGradeChange(event.target.value)}
-                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || aiLocksGrading}
+                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || isAiPublishing}
                       className="w-12 bg-transparent text-right text-lg font-extrabold outline-none"
                       placeholder="0"
                     />
@@ -304,19 +341,59 @@ export default function StudentSubmissionView({
                 }
               />
 
+              {/* Optional Focus Points for Assignments & Online Activities */}
+              {!isReadOnly && supportsAiFeedback && selectedSubmissionDetail && onFocusPointsChange && (
+                <FeedbackFocusSelector
+                  selectedCodes={focusPointsDraft}
+                  onChange={onFocusPointsChange}
+                  disabled={isPostingGrade || isAiPublishing}
+                />
+              )}
+
               {/* Feedback Comment Box & Actions */}
               <div className="block shadow-none">
                 {/* Feedback Comment Box — single Teacher Feedback editor with inline AI controls */}
                 <div className="space-y-1.5 pt-2">
                   <div className="flex items-center justify-between">
-                    <label htmlFor="teacher-submission-feedback" className="block text-xl font-bold">
-                      Feedback &amp; Comments
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="teacher-submission-feedback" className="block text-xl font-bold">
+                        Feedback &amp; Comments
+                      </label>
+                      {!isReadOnly && selectedSubmissionDetail?.feedback && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setDeleteFeedbackError("");
+                            setIsDeleteDialogOpen(true);
+                          }}
+                          disabled={isPostingGrade || isAiPublishing || isDeletingFeedback}
+                          className="h-7 gap-1 border-destructive text-destructive hover:bg-destructive/10 text-xs font-bold"
+                          data-testid="delete-feedback-button"
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete Feedback
+                        </Button>
+                      )}
+                    </div>
                     {isAiReviewing && (
-                      <Badge size="sm" variant="outline" className="gap-1 bg-white font-bold">
-                        <Sparkles aria-hidden="true" className="size-3" />
-                        AI-generated
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 bg-white font-bold"
+                          data-testid="feedback-provenance-badge"
+                        >
+                          {!isReviewTemplate && <Sparkles aria-hidden="true" className="size-3" />}
+                          {isReviewTemplate ? "Score-based template" : "AI-generated draft"}
+                        </Badge>
+                        {isReviewPolicyFallback && (
+                          <span className="text-[11px] text-muted-foreground italic" data-testid="policy-fallback-note">
+                            (Contextual AI disabled by policy)
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                   <textarea
@@ -324,7 +401,7 @@ export default function StudentSubmissionView({
                     value={feedbackDraft}
                     onChange={(event) => onFeedbackChange(event.target.value)}
                     disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly || isAiPublishing}
-                    className={`min-h-24 w-full border-2 border-black p-3 text-sm outline-none rounded! placeholder:text-muted-foreground disabled:opacity-50 ${isAiReviewing ? "italic text-black font-sans" : ""}`}
+                    className={`min-h-24 w-full border-2 border-black p-3 text-sm outline-none rounded! placeholder:text-muted-foreground disabled:opacity-50 ${isAiReviewing && !isReviewTemplate ? "italic text-black font-sans" : ""}`}
                     placeholder="Write constructive feedback for the student..."
                   />
                   {!isReadOnly && supportsAiFeedback && selectedSubmissionDetail ? (
@@ -332,21 +409,32 @@ export default function StudentSubmissionView({
                       key={selectedSubmissionDetail.submission_id}
                       classworkKind={classworkKind as "ASSIGNMENT" | "ACTIVITY"}
                       submissionId={selectedSubmissionDetail.submission_id}
-                      eligibilityRevision={`${selected.is_published}:${selected.show_scores}`}
+                      eligibilityRevision={`${selected.is_published}:${selected.show_scores}:${selected.auto_ai_feedback_enabled}:${selectedSubmissionDetail.grade}:${(selectedSubmissionDetail.feedback_focus_points ?? []).join(",")}`}
                       fullyGraded={selectedSubmissionDetail.status === "graded" && selectedSubmissionDetail.grade != null && !hasUnsavedGradeChanges}
                       existingFeedback={selectedSubmissionDetail.feedback ?? ""}
                       feedbackDraft={feedbackDraft}
                       onFeedbackDraftChange={onFeedbackChange}
                       disabled={isPostingGrade}
-                      onReviewChange={setIsAiReviewing}
+                      onReviewChange={(reviewing, isTemplate = false, isPolicyFallback = false) => {
+                        setIsAiReviewing(reviewing);
+                        setIsReviewTemplate(isTemplate);
+                        setIsReviewPolicyFallback(isPolicyFallback);
+                      }}
                       onPublished={onAiFeedbackPublished}
                       onPublishingChange={(publishing) => {
                         setIsAiPublishing(publishing);
                         onAiPublishingChange(publishing);
                       }}
                       onConflictReload={onAiConflictReload}
+                      showScores={selected.show_scores}
+                      autoAiFeedbackEnabled={selected.auto_ai_feedback_enabled}
                     />
                   ) : null}
+                  {deleteFeedbackError && (
+                    <Alert status="error" onClose={() => setDeleteFeedbackError("")} className="mt-2">
+                      <Alert.Description>{deleteFeedbackError}</Alert.Description>
+                    </Alert>
+                  )}
                 </div>
 
                 {gradeError && (
@@ -360,6 +448,19 @@ export default function StudentSubmissionView({
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Published Feedback"
+        confirmationTitle="Are you sure you want to remove this feedback?"
+        description="This will delete the published comment for this submission and remove it from the student view. The student's score and grade will remain unchanged."
+        confirmLabel={isDeletingFeedback ? "Deleting..." : "Delete Feedback"}
+        cancelLabel="Keep Feedback"
+        confirmVariant="destructive"
+        isLoading={isDeletingFeedback}
+        onConfirm={handleDeleteFeedback}
+      />
     </main>
   );
 }

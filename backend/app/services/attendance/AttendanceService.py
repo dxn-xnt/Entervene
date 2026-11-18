@@ -1,3 +1,6 @@
+import csv
+import io
+import re
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -629,6 +632,179 @@ def get_class_attendance_logs(
         _to_attendance_response(record, student_name=f"{student.first_name} {student.last_name}")
         for record, student in rows
     ]
+
+
+def _sanitize_csv_value(val: Any) -> str:
+    if val is None:
+        return ""
+    text = str(val).strip()
+    # Formula injection protection: prefix with single quote if starts with unsafe formula characters
+    if text and text[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return f"'{text}"
+    return text
+
+
+def export_class_attendance_csv(
+    db: Session,
+    class_id: int,
+    subject_id: Optional[int] = None,
+    academic_period_id: Optional[int] = None,
+    academic_year_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    staff_id: Optional[str] = None,
+    role: str = "teacher",
+) -> tuple[str, str]:
+    """Export attendance logs for a specific class as an RFC-4180 CSV string with UTF-8 BOM.
+
+    Returns (csv_content, filename).
+    """
+    from app.models.academic.Class_ import Class
+    from app.models.academic.Subject import Subject
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Start date cannot be after end date.",
+        )
+
+    class_obj = db.get(Class, class_id)
+    if class_obj is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+
+    if role != "admin":
+        if academic_year_id is not None and not is_academic_year_authorized(
+            db, academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+        if class_obj.academic_year_id is not None and not is_academic_year_authorized(
+            db, class_obj.academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    if academic_year_id is not None and class_obj.academic_year_id is not None:
+        if class_obj.academic_year_id != academic_year_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Class does not belong to specified academic year.",
+            )
+
+    period = None
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        if period is None:
+            raise HTTPException(status_code=404, detail="Academic period not found.")
+        if class_obj.academic_year_id is not None and period.academic_year_id != class_obj.academic_year_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Academic class and period must belong to the same academic year.",
+            )
+        if academic_year_id is not None and period.academic_year_id != academic_year_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Academic period does not belong to specified academic year.",
+            )
+        if role != "admin" and not is_academic_year_authorized(
+            db, period.academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    _assert_attendance_read_access(
+        db,
+        class_id=class_id,
+        subject_id=subject_id,
+        staff_id=staff_id,
+        academic_period_id=academic_period_id,
+        role=role,
+    )
+
+    query = (
+        db.query(AttendanceRecord, Student, Subject, AcademicStaff)
+        .join(Student, Student.student_id == AttendanceRecord.student_id)
+        .outerjoin(Subject, Subject.subject_id == AttendanceRecord.subject_id)
+        .outerjoin(AcademicStaff, AcademicStaff.staff_id == AttendanceRecord.recorded_by_staff_id)
+        .filter(AttendanceRecord.class_id == class_id)
+    )
+
+    if subject_id:
+        query = query.filter(AttendanceRecord.subject_id == subject_id)
+
+    # Date filtering
+    if start_date:
+        query = query.filter(AttendanceRecord.date >= start_date)
+    elif period and period.start_date:
+        query = query.filter(AttendanceRecord.date >= period.start_date)
+
+    if end_date:
+        query = query.filter(AttendanceRecord.date <= end_date)
+    elif period and period.end_date:
+        query = query.filter(AttendanceRecord.date <= period.end_date)
+
+    # Deterministic ordering: date asc, last_name asc, first_name asc
+    query = query.order_by(
+        AttendanceRecord.date.asc(),
+        Student.last_name.asc(),
+        Student.first_name.asc(),
+        AttendanceRecord.attendance_id.asc(),
+    )
+    rows = query.all()
+
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+
+    headers = [
+        "Date",
+        "Student LRN",
+        "Student Name",
+        "Gender",
+        "Section",
+        "Subject",
+        "Attendance Status",
+        "Remarks",
+        "Recorded By",
+    ]
+    writer.writerow(headers)
+
+    for record, student, subj, staff in rows:
+        student_name = f"{student.last_name}, {student.first_name}"
+        if getattr(student, "suffix", None):
+            student_name += f" {student.suffix}"
+        section_name = class_obj.section_name or f"Class {class_id}"
+        subject_name = subj.subject_name if subj else "General / Homeroom"
+        status_name = record.status.capitalize() if record.status else "Present"
+        recorded_by = (
+            f"{staff.first_name} {staff.last_name}".strip()
+            if staff
+            else (record.recorded_by_staff_id or "")
+        )
+
+        row = [
+            _sanitize_csv_value(record.date.isoformat() if record.date else ""),
+            _sanitize_csv_value(student.student_lrn or ""),
+            _sanitize_csv_value(student_name),
+            _sanitize_csv_value(student.gender or ""),
+            _sanitize_csv_value(section_name),
+            _sanitize_csv_value(subject_name),
+            _sanitize_csv_value(status_name),
+            _sanitize_csv_value(record.remarks or ""),
+            _sanitize_csv_value(recorded_by),
+        ]
+        writer.writerow(row)
+
+    clean_section = re.sub(r"[^\w\-]", "_", class_obj.section_name or f"Class_{class_id}")
+    date_part = ""
+    if start_date and end_date:
+        date_part = f"_{start_date.isoformat()}_to_{end_date.isoformat()}"
+    elif period:
+        clean_period = re.sub(r"[^\w\-]", "_", period.period_name or "Term")
+        date_part = f"_{clean_period}"
+    filename = f"Attendance_{clean_section}{date_part}.csv"
+
+    # Prepend UTF-8 BOM for Microsoft Excel compatibility
+    csv_content = "\ufeff" + output.getvalue()
+    return csv_content, filename
 
 
 def get_student_attendance_summary(

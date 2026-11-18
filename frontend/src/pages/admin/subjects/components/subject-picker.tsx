@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
+import { BookOpen, Search, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Input } from "@/components/retroui/Input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import type { SubjectListItem } from "@/lib/api";
+import { EmptyStateCard } from "./empty-state-card";
 
 type SubjectPickerProps = {
   subjects: SubjectListItem[];
@@ -13,7 +14,7 @@ type SubjectPickerProps = {
   disabled?: boolean;
   singleSelect?: boolean;
   searchPlaceholder?: string;
-  alreadyOfferedSubjectIds?: Set<string>;
+  availabilityBySubjectId?: Map<string, { disabled: boolean; status: string }>;
 };
 
 function subjectCode(subject: SubjectListItem) {
@@ -27,7 +28,7 @@ export function SubjectPicker({
   disabled = false,
   singleSelect = false,
   searchPlaceholder = "Search subject or code",
-  alreadyOfferedSubjectIds = new Set(),
+  availabilityBySubjectId = new Map(),
 }: SubjectPickerProps) {
   const [query, setQuery] = useState("");
   const selectedIds = useMemo(() => new Set(selectedSubjectIds), [selectedSubjectIds]);
@@ -48,7 +49,7 @@ export function SubjectPicker({
   }, [query, subjects]);
 
   const toggleSubject = (subjectId: string) => {
-    if (alreadyOfferedSubjectIds.has(subjectId)) return;
+    if (availabilityBySubjectId.get(subjectId)?.disabled) return;
     if (disabled) return;
     if (singleSelect) {
       onChange(selectedIds.has(subjectId) ? [] : [subjectId]);
@@ -75,7 +76,7 @@ export function SubjectPicker({
       ...new Set([
         ...selectedSubjectIds,
         ...filteredSubjects
-          .filter((s) => !alreadyOfferedSubjectIds.has(String(s.subject_id)))
+          .filter((s) => !availabilityBySubjectId.get(String(s.subject_id))?.disabled)
           .map((subject) => String(subject.subject_id)),
       ]),
     ]);
@@ -138,13 +139,22 @@ export function SubjectPicker({
 
       <div className="max-h-72 overflow-y-auto rounded border-2 border-black bg-background">
         {filteredSubjects.length === 0 ? (
-          <p className="p-3 text-sm text-black/70">
-            {subjects.length ? "No subjects match your search." : "No active catalog subjects found for this grade level."}
-          </p>
+          <EmptyStateCard
+            compact
+            shadow={false}
+            className="border-0"
+            icon={<BookOpen />}
+            title={subjects.length ? "No matching subjects" : "No active catalog subjects"}
+            description={subjects.length
+              ? "Try another subject name or code."
+              : "Add an active catalog subject for this grade level before creating offerings."}
+          />
         ) : (
           filteredSubjects.map((subject) => {
             const subjectId = String(subject.subject_id);
-            const isAlreadyOffered = alreadyOfferedSubjectIds.has(subjectId);
+            const availability = availabilityBySubjectId.get(subjectId);
+            const isAlreadyOffered = availability?.disabled ?? false;
+            const statusId = availability ? `subject-offering-status-${subjectId}` : undefined;
             return (
               <label
                 key={subject.subject_id}
@@ -158,15 +168,16 @@ export function SubjectPicker({
                   onCheckedChange={() => toggleSubject(subjectId)}
                   className="mt-1 shrink-0"
                   disabled={disabled || isAlreadyOffered}
+                  aria-describedby={statusId}
                 />
                 <span className="grid min-w-0 flex-1 grid-cols-1 gap-1 text-sm md:grid-cols-[1.5fr_120px_140px_80px]">
                   <strong className="truncate">{subject.subject_name}</strong>
                   <span>{subjectCode(subject)}</span>
                   <span>{subject.grading_template.template_name}</span>
                   <span>Pass: {subject.grading_template.passing_threshold}%</span>
-                  {isAlreadyOffered ? (
-                    <span className="col-span-full text-xs font-semibold text-black/50">
-                      Already offered
+                  {availability ? (
+                    <span id={statusId} className="col-span-full text-xs font-semibold text-black/60">
+                      {availability.status}
                     </span>
                   ) : null}
                 </span>

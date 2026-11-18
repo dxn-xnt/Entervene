@@ -6,6 +6,8 @@ from typing import Any
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
+from app.services.prediction.DevelopmentCurrentTermRiskService import current_term_intervention_policy
+
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
@@ -216,6 +218,7 @@ def list_latest_development_current_term_predictions(
     require_active_enrollment: bool = False,
     lifecycle_status: str = "DEVELOPMENT",
 ) -> dict[str, Any]:
+    prediction_policy = {"intervention_bands": current_term_intervention_policy()}
     latest_revision = (
         db.query(
             DevelopmentCurrentTermPrediction.student_id.label("student_id"),
@@ -342,4 +345,4 @@ def list_latest_development_current_term_predictions(
             "generated_at": prediction.generated_at,
         })
 
-    return {"items": items, "total": len(items)}
+    return {"items": items, "total": len(items), "prediction_policy": prediction_policy}

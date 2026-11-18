@@ -268,6 +268,7 @@ def build_current_period_features_from_records(
         subject_id,
         getattr(class_, "academic_level_id", None),
         academic_year_id=period.academic_year_id,
+        academic_period_id=period.academic_period_id,
     )
     weight_values = {
         "ww": round(weights.ww_weight * 100.0, 4),

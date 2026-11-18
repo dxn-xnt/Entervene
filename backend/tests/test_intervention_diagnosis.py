@@ -215,8 +215,6 @@ def test_submitted_exam_answer_reaches_linked_competency(current_period_context,
     exams = _exam_set(ctx)
     competency, lesson = _link_competency(ctx, exams[0], statement="Read ratios")
     db = ctx["db"]
-    db.add(StudentClass(student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
-                        academic_year_id=ctx["class"].academic_year_id, enrollment_status="enrolled"))
     quiz = Quiz(classwork_id=exams[0].classwork_id, total_items=1, status="PUBLISHED")
     db.add(quiz)
     db.flush()
@@ -422,22 +420,33 @@ def test_two_subject_diagnoses_remain_isolated(current_period_context, monkeypat
     model, _ = _prepare(ctx, monkeypatch)
     first_subject_id = ctx["subject"].subject_id
     _run(ctx, model.model_version_id)
-    subject = Subject(subject_name="English", subject_codename="ENGLISH", academic_level_id=ctx["level"].academic_level_id)
-    ctx["db"].add(subject)
-    ctx["db"].flush()
     template = GradingTemplate(
-        template_name="English 20-50-30", academic_level_id=ctx["level"].academic_level_id,
-        subject_id=subject.subject_id, status="active",
+        template_name="English 20-50-30", passing_threshold=Decimal("87"), status="active",
     )
     ctx["db"].add(template)
     ctx["db"].flush()
+    subject = Subject(
+        subject_name="English",
+        subject_codename="ENGLISH",
+        academic_level_id=ctx["level"].academic_level_id,
+        grading_template_id=template.grading_template_id,
+    )
+    ctx["db"].add(subject)
+    ctx["db"].flush()
+    ctx["db"].add(SubjectLoad(
+        staff_id=ctx["staff"].staff_id,
+        subject_id=subject.subject_id,
+        class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        status="published",
+        is_active_version=True,
+    ))
     ctx["db"].add_all([
         GradingTemplateComponent(grading_template_id=template.grading_template_id, component_name=name, weight=Decimal(weight), display_order=order)
         for order, (name, weight) in enumerate((
             ("Written Works", "20"), ("Performance Tasks", "50"), ("Quarterly Assessment", "30"),
         ), start=1)
     ])
-    subject.default_grading_template = str(template.grading_template_id)
     ctx["db"].commit()
     ctx["subject"] = subject
     second_ids = {assignment.classwork_id for assignment in _ready_activities(ctx)}

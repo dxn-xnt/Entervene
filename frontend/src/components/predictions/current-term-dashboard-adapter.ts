@@ -7,6 +7,7 @@ import {
   type DashboardGradeGroupSummary,
   type DashboardPredictionItem,
   type DevelopmentCurrentTermListItem,
+  type CurrentTermPredictionPolicy,
   type RiskSummary,
   CurrentTermPredictionLoadError,
 } from "@/lib/prediction-api";
@@ -38,11 +39,20 @@ export async function loadAuthorizedCurrentTermPredictions(
         subject_id: scope.subject_id,
         academic_period_id: academicPeriodId,
       }, "admin");
-      return response.items.map((row) => ({ ...row, grade_level: scope.grade_level }));
+      return {
+        scope,
+        policy: response.prediction_policy,
+        rows: response.items.map((row) => ({ ...row, grade_level: scope.grade_level })),
+      };
     }));
     const unique = new Map<number, AuthorizedCurrentTermRow>();
-    responses.flat().forEach((row) => unique.set(row.prediction_id, row));
-    return { filters, rows: [...unique.values()], assignedScopes };
+    responses.flatMap((response) => response.rows)
+      .forEach((row) => unique.set(row.prediction_id, row));
+    const scopesWithPolicies = responses.map(({ scope, policy }) => ({
+      ...scope,
+      prediction_policy: policy,
+    }));
+    return { filters, rows: [...unique.values()], assignedScopes: scopesWithPolicies };
   }
 
   const filters = await fetchTeacherAcademicScope();
@@ -55,7 +65,12 @@ export async function loadAuthorizedCurrentTermPredictions(
   const nested = await Promise.all(classes.map(async (classItem) => {
     const scoped = await fetchTeacherAcademicScope({ class_id: classItem.class_id, academic_period_id: academicPeriodId });
     const subjects = scoped.subjects.filter((item) => constraints.subjectId === undefined || item.subject_id === constraints.subjectId);
-    subjects.forEach((subj) => {
+    const responses = await Promise.all(subjects.map((subject) => fetchCurrentTermPredictions({
+      class_id: classItem.class_id,
+      subject_id: subject.subject_id,
+      academic_period_id: academicPeriodId,
+    }, "teacher")));
+    subjects.forEach((subj, index) => {
       assignedScopes.push({
         subject_id: subj.subject_id,
         subject_name: subj.subject_name,
@@ -63,13 +78,9 @@ export async function loadAuthorizedCurrentTermPredictions(
         grade_level: classItem.grade_level ?? null,
         class_id: classItem.class_id,
         section_name: classItem.section_name,
+        prediction_policy: responses[index]?.prediction_policy,
       });
     });
-    const responses = await Promise.all(subjects.map((subject) => fetchCurrentTermPredictions({
-      class_id: classItem.class_id,
-      subject_id: subject.subject_id,
-      academic_period_id: academicPeriodId,
-    }, "teacher")));
     return responses.flatMap((response) => response.items.map((row) => ({ ...row, grade_level: classItem.grade_level ?? null })));
   }));
 
@@ -192,6 +203,69 @@ export interface AssignedSubjectSectionScope {
   grade_level?: number | null;
   class_id: number;
   section_name: string;
+  prediction_policy?: CurrentTermPredictionPolicy;
+}
+
+export interface CurrentTermRiskRangeDescriptions {
+  HIGH_RISK: string;
+  MODERATE_RISK: string;
+  ON_TRACK: string;
+  INSUFFICIENT_DATA: string;
+}
+
+function displayThreshold(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+}
+
+export function currentTermRiskRangeDescriptions(
+  scopes: AssignedSubjectSectionScope[],
+): CurrentTermRiskRangeDescriptions {
+  const bands = scopes.find((scope) => scope.prediction_policy)?.prediction_policy?.intervention_bands ?? [];
+  const highMaximum = bands.find((band) => band.level === "HIGH_RISK")?.maximum_exclusive;
+  const moderate = bands.find((band) => band.level === "MODERATE_RISK");
+  const onTrackMinimum = bands
+    .filter((band) => band.level === "NEEDS_MONITORING" || band.level === "LOW_RISK")
+    .map((band) => band.minimum)
+    .filter((minimum): minimum is number => minimum !== null)
+    .sort((a, b) => a - b)[0];
+
+  return {
+    HIGH_RISK: highMaximum === null || highMaximum === undefined
+      ? "Backend-classified high risk"
+      : `Below ${displayThreshold(highMaximum)}`,
+    MODERATE_RISK: moderate?.minimum === null
+      || moderate?.minimum === undefined
+      || moderate.maximum_exclusive === null
+      ? "Backend-classified moderate risk"
+      : `${displayThreshold(moderate.minimum)} to below ${displayThreshold(moderate.maximum_exclusive)}`,
+    ON_TRACK: onTrackMinimum === undefined
+      ? "Backend-classified on track"
+      : `${displayThreshold(onTrackMinimum)} and above`,
+    INSUFFICIENT_DATA: "No grades yet",
+  };
+}
+
+export function buildAdminDependentFilters(
+  filters: DashboardFilters | null,
+  scopes: AssignedSubjectSectionScope[],
+  constraints: { gradeLevel?: number; classId?: number } = {},
+): DashboardFilters | null {
+  if (!filters) return null;
+  const gradeLevels = new Set(scopes
+    .map((scope) => scope.grade_level)
+    .filter((grade): grade is number => grade !== null && grade !== undefined));
+  const gradeScopes = scopes.filter((scope) =>
+    constraints.gradeLevel === undefined || scope.grade_level === constraints.gradeLevel);
+  const classIds = new Set(gradeScopes.map((scope) => scope.class_id));
+  const subjectScopes = gradeScopes.filter((scope) =>
+    constraints.classId === undefined || scope.class_id === constraints.classId);
+  const subjectIds = new Set(subjectScopes.map((scope) => scope.subject_id));
+  return {
+    ...filters,
+    grades: filters.grades.filter((item) => gradeLevels.has(item.grade_level)),
+    classes: filters.classes.filter((item) => classIds.has(item.class_id)),
+    subjects: filters.subjects.filter((item) => subjectIds.has(item.subject_id)),
+  };
 }
 
 export type AdminStudentRiskLevel = "HIGH_RISK" | "MODERATE_RISK" | "ON_TRACK";
@@ -294,7 +368,10 @@ export function buildAdminPredictionHierarchy(
   } = {},
 ): AdminPredictionGradeSummary[] {
   const gradeLevels = options.gradeLevel === undefined
-    ? [7, 8, 9, 10, 11, 12]
+    ? [...new Set([
+      ...assignedScopes.map((scope) => scope.grade_level),
+      ...rows.map((row) => row.grade_level),
+    ].filter((grade): grade is number => grade !== null && grade !== undefined))].sort((a, b) => a - b)
     : [options.gradeLevel];
   const grades = new Map<number, Map<number, {
     class_id: number;

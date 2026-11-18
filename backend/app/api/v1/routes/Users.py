@@ -88,11 +88,12 @@ def archive_user(
 @router.get("/users/{user_id}/analytics")
 def get_user_analytics(
     user_id: uuid.UUID,
+    academic_period_id: int | None = Query(default=None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_admin(current_user)
-    return query_user_analytics(db, user_id)
+    return query_user_analytics(db, user_id, academic_period_id=academic_period_id)
 
 
 # Single invite flow: validate details -> create pending account and profile ->

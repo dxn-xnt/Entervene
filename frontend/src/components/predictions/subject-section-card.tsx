@@ -42,6 +42,7 @@ export function SubjectSectionCard({
   const riskList = [
     { key: "moderate_risk", label: "Moderate Risk", count: displaySummary.MODERATE_RISK },
     { key: "high_risk", label: "High Risk", count: displaySummary.HIGH_RISK },
+    { key: "on_track", label: "On Track", count: displaySummary.ON_TRACK },
   ].map((risk) => ({
     ...risk,
     percentage: getTeacherRiskPercentage(risk.count, displaySummary.assessedTotal),
@@ -65,7 +66,7 @@ export function SubjectSectionCard({
             </div>
           </div>
           {displaySummary.assessedTotal > 0 ? (
-            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3">
               {riskList.map((risk) => (
                 <Card
                   key={risk.key}
@@ -76,7 +77,7 @@ export function SubjectSectionCard({
                     value={risk.percentage}
                     className="size-14 shrink-0"
                   />
-                  <div className="flex flex-col items-center justify-center min-w-0">
+                  <div className="flex min-w-0 flex-col items-center justify-center">
                     <span className="font-head text-xl font-black text-foreground">{risk.count}</span>
                     <span className="text-xs font-semibold whitespace-nowrap">{risk.label}</span>
                   </div>
@@ -84,17 +85,17 @@ export function SubjectSectionCard({
               ))}
             </div>
           ) : totalPredictions === 0 ? (
-            <div className="w-full rounded! py-2.5 px-3 bg-gray-100 border border-black text-center shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+            <Card className="w-full border border-border bg-emerald-100/70 px-3 py-2.5 text-center shadow-none hover:shadow-none">
+              <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
                 No Predictions Yet
               </span>
-            </div>
+            </Card>
           ) : (
-            <div className="w-full rounded! py-2.5 px-3 bg-gray-100 border border-black text-center shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+            <Card className="w-full border border-border bg-emerald-100/70 px-3 py-2.5 text-center shadow-none hover:shadow-none">
+              <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
                 No Assessed Predictions
               </span>
-            </div>
+            </Card>
           )}
         </div>
   );

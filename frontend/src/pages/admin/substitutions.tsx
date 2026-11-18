@@ -209,15 +209,15 @@ export default function AdminSubstitutions() {
             </div>
             </div>
 
-            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 sm:px-4 md:px-6">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {/* Summary Metric Cards */}
-              <div className="grid grid-cols-1 gap-4 py-2 sm:grid-cols-3 md:py-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <OverviewCard title="Active Substitutions" count={String(activeCount)} />
                 <OverviewCard title="Completed Handbacks" count={String(completedCount)} />
                 <OverviewCard title="Total Tracked" count={String(substitutions.length)} />
               </div>
 
-              <div className="-mt-3! flex min-w-0 justify-start">
+              <div className="flex min-w-0 justify-start">
                 <div className="relative min-w-0 w-full sm:w-72">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input

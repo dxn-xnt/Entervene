@@ -31,7 +31,7 @@ EVIDENCE_SNAPSHOT_VERSION = "CURRENT_TERM_V3_EVIDENCE_V2"
 MODEL_TARGET_COLUMN = "target_final_period_grade"
 
 
-def _sync_corrected_intervention_if_enabled(
+def _sync_current_term_intervention_if_enabled(
     db: Session,
     model_version: AIModelVersion,
     row: DevelopmentCurrentTermPrediction,
@@ -42,11 +42,22 @@ def _sync_corrected_intervention_if_enabled(
     period_id: int,
 ) -> None:
     readiness = row.evidence_snapshot.get("readiness") if isinstance(row.evidence_snapshot, dict) else None
-    if (
-        model_version.model_name == CORRECTED_MODEL_NAME
-        and settings.app_environment.lower() in {"development", "test"}
+    environment = settings.app_environment.lower()
+    development_enabled = (
+        environment in {"development", "test"}
         and settings.development_prediction_api_enabled
         and settings.development_current_term_model_name == CORRECTED_MODEL_NAME
+        and model_version.lifecycle_status == "DEVELOPMENT"
+    )
+    production_enabled = (
+        environment == "production"
+        and model_version.lifecycle_status == "PRODUCTION"
+        and model_version.is_active
+        and model_version.production_validated
+        and model_version.independent_three_term_validation
+    )
+    if (
+        ((model_version.model_name == CORRECTED_MODEL_NAME and development_enabled) or production_enabled)
         and isinstance(readiness, dict)
         and readiness.get("status") == "READY"
     ):
@@ -61,23 +72,32 @@ def _digest_json(value: dict[str, Any]) -> str:
     return sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
-def _require_development_model(db: Session, model_version_id: int | None) -> AIModelVersion:
+def _require_current_term_model(db: Session, model_version_id: int | None) -> AIModelVersion:
     if model_version_id is None:
-        raise ValueError("A model_version_id is required for development current-term persistence.")
+        raise ValueError("A model_version_id is required for current-term persistence.")
     version = db.get(AIModelVersion, model_version_id)
     if version is None:
-        raise ValueError("The development model version was not found.")
+        raise ValueError("The current-term model version was not found.")
+    valid_development = (
+        version.lifecycle_status == "DEVELOPMENT"
+        and not version.is_active
+        and not version.production_validated
+        and not version.independent_three_term_validation
+    )
+    valid_production = (
+        version.lifecycle_status == "PRODUCTION"
+        and version.is_active
+        and version.production_validated
+        and version.independent_three_term_validation
+    )
     if (
         version.model_name not in MODEL_NAMES
         or version.model_type != "REGRESSOR"
         or version.model_purpose != ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value
         or version.target_column != MODEL_TARGET_COLUMN
-        or version.lifecycle_status != "DEVELOPMENT"
-        or version.is_active
-        or version.production_validated
-        or version.independent_three_term_validation
+        or not (valid_development or valid_production)
     ):
-        raise ValueError("The model version does not match the inactive development V3 contract.")
+        raise ValueError("The model version does not match an approved current-term lifecycle contract.")
 
     metadata = version.registry_metadata_json or {}
     if (
@@ -85,7 +105,7 @@ def _require_development_model(db: Session, model_version_id: int | None) -> AIM
         or set(metadata.get("supported_weight_patterns") or []) != prediction_service.SUPPORTED_WEIGHT_PATTERNS
         or metadata.get("period_semantics") != "SOURCE_EQUALS_TARGET_SAME_TERM"
     ):
-        raise ValueError("The model version's effective development domain does not match Task 3H.")
+        raise ValueError("The model version's effective current-term domain does not match the scorer contract.")
     require_development_model_name(version.model_name)
     schema = scorer.load_development_current_term_schema(version.model_name)
     if version.feature_schema_json != schema or metadata.get("feature_schema_sha256") != _digest_json(schema):
@@ -157,7 +177,7 @@ def _reuse_latest_prediction(
     subject_id: int,
     period_id: int,
 ) -> dict[str, Any]:
-    _sync_corrected_intervention_if_enabled(
+    _sync_current_term_intervention_if_enabled(
         db, model_version, latest,
         student_id=student_id, class_id=class_id, subject_id=subject_id,
         period_id=period_id,
@@ -330,7 +350,7 @@ def _persist_successful_result(
     )
     db.add(row)
     db.flush()
-    _sync_corrected_intervention_if_enabled(
+    _sync_current_term_intervention_if_enabled(
         db, model_version, row,
         student_id=student_id, class_id=class_id, subject_id=subject_id,
         period_id=period_id,
@@ -360,7 +380,7 @@ def _persist_successful_result(
     }
 
 
-def generate_and_persist_development_current_term(
+def generate_and_persist_current_term(
     student_id: UUID,
     class_id: int,
     subject_id: int,
@@ -382,7 +402,7 @@ def generate_and_persist_development_current_term(
     }
 
     def operation(db: Session) -> dict[str, Any]:
-        version = _require_development_model(db, model_version_id)
+        version = _require_current_term_model(db, model_version_id)
         prediction, prepared = prediction_service.prepare_development_current_term(
             db, student_id, class_id, subject_id, period_id, cutoff_at=cutoff,
             model_name=version.model_name,
@@ -489,3 +509,8 @@ def generate_and_persist_development_current_term(
             if not retryable or attempt == 2:
                 raise
     raise AssertionError("Unreachable development prediction retry state.")
+
+
+# Compatibility alias for the development/test API and existing intervention
+# callers. New lifecycle-neutral callers should use generate_and_persist_current_term.
+generate_and_persist_development_current_term = generate_and_persist_current_term

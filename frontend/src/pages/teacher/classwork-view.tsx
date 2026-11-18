@@ -144,6 +144,7 @@ export default function ClassworkView({
   const [gradeError, setGradeError] = useState("");
   const [gradeDraft, setGradeDraft] = useState("");
   const [feedbackDraft, setFeedbackDraft] = useState("");
+  const [focusPointsDraft, setFocusPointsDraft] = useState<string[]>([]);
   const [isPostingGrade, setIsPostingGrade] = useState(false);
   const [isPostingAiFeedback, setIsPostingAiFeedback] = useState(false);
   const [settingsRevision, setSettingsRevision] = useState(0);
@@ -323,6 +324,7 @@ export default function ClassworkView({
         : "",
     );
     setFeedbackDraft("");
+    setFocusPointsDraft([]);
 
     if (!student.submission_id) return;
 
@@ -342,6 +344,7 @@ export default function ClassworkView({
           : "",
       );
       setFeedbackDraft(detail.feedback ?? "");
+      setFocusPointsDraft(detail.feedback_focus_points ?? []);
     } catch (err) {
       setSubmissionDetailError(
         err instanceof Error
@@ -358,6 +361,11 @@ export default function ClassworkView({
     setSelectedSubmissionDetail(null);
     setSubmissionDetailError("");
   };
+
+  const handleFeedbackChange = useCallback((value: string) => {
+    setFeedbackDraft(value);
+    setGradeError("");
+  }, []);
 
   const handleSelectSection = (id: number | "all") => {
     setSelectedAssignmentId(id);
@@ -380,6 +388,11 @@ export default function ClassworkView({
       return;
     }
 
+    const isAutoAi = Boolean(selected?.auto_ai_feedback_enabled);
+    const feedbackToSend = isAutoAi
+      ? (selectedSubmissionDetail.feedback ?? null)
+      : (feedbackDraft.trim() || null);
+
     setIsPostingGrade(true);
     setSubmissionDetailError("");
     setGradeError("");
@@ -391,8 +404,9 @@ export default function ClassworkView({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             grade,
-            feedback: feedbackDraft.trim() || null,
+            feedback: feedbackToSend,
             expected_feedback_fingerprint: selectedSubmissionDetail.feedback_fingerprint,
+            focus_points: focusPointsDraft,
           }),
         },
       );
@@ -410,7 +424,10 @@ export default function ClassworkView({
       const updated = (await response.json()) as TeacherSubmissionDetail;
       setSelectedSubmissionDetail(updated);
       setGradeDraft(updated.grade != null ? String(updated.grade) : "");
-      setFeedbackDraft(updated.feedback ?? "");
+      if (!isAutoAi || !feedbackDraft.trim()) {
+        setFeedbackDraft(updated.feedback ?? "");
+      }
+      setFocusPointsDraft(updated.feedback_focus_points ?? focusPointsDraft);
       setSelectedStudent((current) =>
         current
           ? { ...current, status: updated.status, grade: updated.grade ?? null }
@@ -625,15 +642,14 @@ export default function ClassworkView({
         gradeError={gradeError}
         isPostingGrade={isPostingGrade || isPostingAiFeedback}
         isReadOnly={blocksLiveActions}
+        focusPointsDraft={focusPointsDraft}
+        onFocusPointsChange={setFocusPointsDraft}
         onClose={closeStudentSubmission}
         onGradeChange={(value) => {
           setGradeDraft(value);
           setGradeError("");
         }}
-        onFeedbackChange={(value) => {
-          setFeedbackDraft(value);
-          setGradeError("");
-        }}
+        onFeedbackChange={handleFeedbackChange}
         onPostGrade={postGrade}
         onOpenQuizGrading={(submissionId) => {
           if (!blocksLiveActions) setSelectedGradingSubmissionId(submissionId);
@@ -645,6 +661,12 @@ export default function ClassworkView({
           setFeedbackDraft(feedback);
         }}
         onAiPublishingChange={setIsPostingAiFeedback}
+        onFeedbackDeleted={() => {
+          setSelectedSubmissionDetail((current) => current
+            ? { ...current, feedback: null, feedback_fingerprint: "" }
+            : current);
+          setFeedbackDraft("");
+        }}
         onAiConflictReload={async (submissionId) => {
           const response = await apiFetch(`/api/v1/submissions/${submissionId}/detail`);
           if (!response.ok) throw new Error("Unable to reload saved feedback.");
@@ -656,6 +678,7 @@ export default function ClassworkView({
           // The rejected AI review draft lived in the single Teacher Feedback
           // editor; replace it with the authoritative saved comment.
           setFeedbackDraft(fresh.feedback ?? "");
+          setFocusPointsDraft(fresh.feedback_focus_points ?? []);
         }}
       />
     );

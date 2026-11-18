@@ -6,6 +6,7 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.schemas.SubjectOffering import (
     SubjectOfferingCopyAcademicYearRequest,
+    SubjectOfferingBatchCreate,
     SubjectOfferingCreate,
     SubjectOfferingUpdate,
 )
@@ -14,6 +15,7 @@ from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectYearGradingTemplate import SubjectYearGradingTemplate
 from app.services.subject_offerings.SubjectOfferingShared import (
     DEFAULT_OFFERING_STATUS,
     ensure_academic_year_is_configurable,
@@ -27,6 +29,7 @@ from app.services.subject_offerings.SubjectOfferingShared import (
 )
 from app.services.subject_offerings.SubjectOfferingTemplateService import (
     set_subject_year_template,
+    subject_year_template_is_locked,
 )
 
 
@@ -126,6 +129,102 @@ def create_subject_offering_record(db: Session, payload: SubjectOfferingCreate) 
         raise HTTPException(status_code=409, detail="Unable to create subject offering because it conflicts with existing data.") from exc
     db.refresh(offering)
     return offering_to_item(offering, db=db)
+
+
+def create_subject_offerings_batch_record(db: Session, payload: SubjectOfferingBatchCreate) -> dict:
+    """Validate and create every requested offering in one transaction."""
+    unique_items = list(dict.fromkeys(
+        (item.subject_id, item.academic_period_id) for item in payload.items
+    ))
+    if len(unique_items) != len(payload.items):
+        raise HTTPException(status_code=422, detail="Duplicate subject and academic-period requests are not allowed.")
+
+    subject_ids = sorted({subject_id for subject_id, _period_id in unique_items})
+    # Serializes concurrent batches for the same subjects on databases that
+    # support row locks, closing the preflight/create race without weakening
+    # the existing pathway-overlap rules.
+    db.query(Subject).filter(Subject.subject_id.in_(subject_ids)).order_by(
+        Subject.subject_id
+    ).with_for_update().all()
+
+    prepared: list[tuple[Subject, AcademicPeriod, list[int]]] = []
+    items_by_scope = {
+        (item.subject_id, item.academic_period_id): item for item in payload.items
+    }
+    for subject_id, period_id in unique_items:
+        item = items_by_scope[(subject_id, period_id)]
+        subject, academic_year, academic_level, period = validate_offering_scope(
+            db,
+            subject_id,
+            payload.academic_year_id,
+            payload.academic_level_id,
+            period_id,
+        )
+        ensure_academic_year_is_configurable(db, academic_year, period)
+        pathway_ids = _resolve_pathway_ids(
+            db,
+            item.pathway_ids,
+            item.pathway,
+            academic_level,
+            payload.academic_year_id,
+            subject,
+        )
+        validate_core_subject_pathway_restriction(subject, pathway_ids)
+        try:
+            ensure_offering_available(
+                db,
+                subject_id,
+                payload.academic_year_id,
+                payload.academic_level_id,
+                period_id,
+                pathway_ids=pathway_ids,
+            )
+        except HTTPException as exc:
+            if exc.status_code == 409:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"{subject.subject_name} already has a conflicting offering "
+                        f"in {period.period_name} for the selected pathway."
+                    ),
+                ) from exc
+            raise
+        prepared.append((subject, period, pathway_ids))
+
+    status = normalize_offering_status(payload.status)
+    created: list[SubjectOffering] = []
+    try:
+        for subject, period, pathway_ids in prepared:
+            offering = SubjectOffering(
+                subject_id=subject.subject_id,
+                academic_year_id=payload.academic_year_id,
+                academic_level_id=payload.academic_level_id,
+                academic_period_id=period.academic_period_id,
+                minutes=payload.minutes,
+                status=status,
+            )
+            db.add(offering)
+            db.flush()
+            for pathway_id in pathway_ids:
+                db.add(SubjectOfferingPathway(
+                    subject_offering_id=offering.subject_offering_id,
+                    pathway_id=pathway_id,
+                ))
+            created.append(offering)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="No offerings were created because the requested scope now conflicts with existing data.",
+        ) from exc
+
+    for offering in created:
+        db.refresh(offering)
+    return {
+        "created_count": len(created),
+        "subject_offerings": [offering_to_item(offering, db=db) for offering in created],
+    }
 
 
 def update_subject_offering_record(db: Session, subject_offering_id: int, payload: SubjectOfferingUpdate) -> dict:
@@ -323,6 +422,9 @@ def copy_subject_offerings_between_academic_years(
     created_count = 0
     updated_count = 0
     skipped: list[dict] = []
+    grading_assignment_created_count = 0
+    grading_assignment_updated_count = 0
+    grading_assignment_skipped_count = 0
 
     for source_offering in source_offerings:
         source_period = source_offering.academic_period
@@ -413,8 +515,44 @@ def copy_subject_offerings_between_academic_years(
         existing_pathways.add(src_pw)
         created_count += 1
 
+    source_assignments = db.query(SubjectYearGradingTemplate).filter(
+        SubjectYearGradingTemplate.academic_year_id == source_year.academic_year_id
+    ).all()
+    target_assignments = {
+        row.subject_id: row for row in db.query(SubjectYearGradingTemplate).filter(
+            SubjectYearGradingTemplate.academic_year_id == target_year.academic_year_id
+        ).all()
+    }
+    for source_assignment in source_assignments:
+        target_assignment = target_assignments.get(source_assignment.subject_id)
+        if target_assignment is None:
+            db.add(SubjectYearGradingTemplate(
+                subject_id=source_assignment.subject_id,
+                academic_year_id=target_year.academic_year_id,
+                grading_template_id=source_assignment.grading_template_id,
+            ))
+            grading_assignment_created_count += 1
+        elif not payload.overwrite_existing:
+            grading_assignment_skipped_count += 1
+        elif subject_year_template_is_locked(db, source_assignment.subject_id, target_year.academic_year_id):
+            grading_assignment_skipped_count += 1
+            skipped.append({
+                "subject_id": source_assignment.subject_id,
+                "source_subject_offering_id": None,
+                "reason": "Target-year grading assignment is locked by recorded evidence.",
+            })
+        elif target_assignment.grading_template_id != source_assignment.grading_template_id:
+            target_assignment.grading_template_id = source_assignment.grading_template_id
+            grading_assignment_updated_count += 1
+        else:
+            grading_assignment_skipped_count += 1
+
     try:
-        db.commit()
+        if payload.preview_only:
+            db.flush()
+            db.rollback()
+        else:
+            db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Unable to copy subject offerings because they conflict with existing data.") from exc
@@ -426,4 +564,8 @@ def copy_subject_offerings_between_academic_years(
         "updated_count": updated_count,
         "skipped_count": len(skipped),
         "skipped": skipped,
+        "grading_assignment_created_count": grading_assignment_created_count,
+        "grading_assignment_updated_count": grading_assignment_updated_count,
+        "grading_assignment_skipped_count": grading_assignment_skipped_count,
+        "preview_only": payload.preview_only,
     }

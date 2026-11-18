@@ -71,7 +71,6 @@ const StudentGrades = lazy(() => import("./pages/student/grades/grades"));
 const StudentTodo = lazy(() => import("./pages/student/todo"));
 const StudentTodoView = lazy(() => import("./pages/student/todo-view"));
 const StudentNotifications = lazy(() => import("./pages/student/notifications"));
-const AdminStudentView = lazy(() => import("./pages/admin/student-view"));
 
 // Quiz pages
 const StudentQuizTake = lazy(() => import("./pages/quiz/quiz-interface"));
@@ -114,7 +113,6 @@ const App = () => {
                   <Route path={routes.admin.subjectLoadStudio} element={<SubjectLoadStudio />} />
                   <Route path={routes.admin.users} element={<AdminUsers />} />
                   <Route path={routes.admin.userDetail} element={<AdminUserDetail />} />
-                  <Route path={routes.admin.studentView} element={<AdminStudentView />} />
                   <Route path={routes.admin.notifications} element={<AdminNotifications />} />
                   <Route path={routes.admin.settings} element={<AdminSettings />} />
                   <Route path={routes.admin.academicPeriods} element={<AcademicPeriods />} />

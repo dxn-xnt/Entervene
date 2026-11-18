@@ -1,6 +1,6 @@
 import uuid
 from typing import Any, Literal
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -17,6 +17,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.auth.Role import Role
 from app.models.auth.UserAccount import UserAccount
+from app.models.auth.UserLoginLog import UserLoginLog
 from app.models.auth.UserRoles import UserRoles
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -24,7 +25,10 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.users.UserShared import capitalize_name
-from app.services.academic.AcademicLifecycleService import resolve_active_academic_year
+from app.services.academic.AcademicLifecycleService import (
+    resolve_active_academic_period,
+    resolve_active_academic_year,
+)
 
 # READ SIDE OF USER MANAGEMENT
 # User data is spread across authentication, role, staff/student profile, class,
@@ -226,7 +230,11 @@ def list_users(
 
 
 
-def _get_teacher_handled_data(db: Session, staff_id: str) -> dict[str, Any]:
+def _get_teacher_handled_data(
+    db: Session,
+    staff_id: str,
+    target_period: AcademicPeriod | None = None,
+) -> dict[str, Any]:
     teacher_loads = (
         db.query(
             SubjectLoad.subject_load_id,
@@ -248,8 +256,14 @@ def _get_teacher_handled_data(db: Session, staff_id: str) -> dict[str, Any]:
         .filter(SubjectLoad.staff_id == staff_id)
         .filter(SubjectLoad.is_active_version.is_(True))
         .filter(SubjectLoad.status.in_(["active", "published"]))
-        .all()
     )
+    if target_period is not None:
+        teacher_loads = teacher_loads.filter(
+            SubjectLoad.academic_period_id == target_period.academic_period_id,
+            Class.academic_year_id == target_period.academic_year_id,
+            Class.class_status == "active",
+        )
+    teacher_loads = teacher_loads.all()
 
     class_ids = sorted({load.class_id for load in teacher_loads if load.class_id is not None})
     class_student_counts: dict[int, int] = {}
@@ -258,9 +272,10 @@ def _get_teacher_handled_data(db: Session, staff_id: str) -> dict[str, Any]:
             db.query(StudentClass.class_id, func.count(StudentClass.student_id))
             .filter(StudentClass.class_id.in_(class_ids))
             .filter(StudentClass.enrollment_status == "enrolled")
-            .group_by(StudentClass.class_id)
-            .all()
         )
+        if target_period is not None:
+            counts = counts.filter(StudentClass.academic_year_id == target_period.academic_year_id)
+        counts = counts.group_by(StudentClass.class_id).all()
         class_student_counts = {cid: cnt for cid, cnt in counts}
 
     total_weekly_minutes = 0
@@ -318,20 +333,27 @@ def _get_teacher_handled_data(db: Session, staff_id: str) -> dict[str, Any]:
             days_str = "/".join(load.days_of_week) if isinstance(load.days_of_week, list) else str(load.days_of_week)
             c_entry["schedule_slots"].append(f"{load.subject_name} ({days_str} {load.start_time}-{load.end_time})")
 
-    adviser_classes = (
+    adviser_classes_query = (
         db.query(Class.class_id, Class.section_name, AcademicLevel.grade_level)
         .outerjoin(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
         .filter(Class.adviser_staff_id == staff_id)
-        .all()
     )
+    if target_period is not None:
+        adviser_classes_query = adviser_classes_query.filter(
+            Class.academic_year_id == target_period.academic_year_id,
+            Class.class_status == "active",
+        )
+    adviser_classes = adviser_classes_query.all()
     for adv_class in adviser_classes:
         if adv_class.class_id not in classes_dict:
             st_cnt = (
                 db.query(func.count(StudentClass.student_id))
                 .filter(StudentClass.class_id == adv_class.class_id)
                 .filter(StudentClass.enrollment_status == "enrolled")
-                .scalar()
-            ) or 0
+            )
+            if target_period is not None:
+                st_cnt = st_cnt.filter(StudentClass.academic_year_id == target_period.academic_year_id)
+            st_cnt = st_cnt.scalar() or 0
             classes_dict[adv_class.class_id] = {
                 "class_id": adv_class.class_id,
                 "section_name": adv_class.section_name,
@@ -498,43 +520,25 @@ def get_user_detail(
     return item
 
 
-def get_user_analytics(db: Session, user_id: uuid.UUID) -> dict:
+def get_user_analytics(
+    db: Session,
+    user_id: uuid.UUID,
+    academic_period_id: int | None = None,
+) -> dict:
     user = _base_user_query(db).filter(UserAccount.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if academic_period_id is None:
+        target_period = resolve_active_academic_period(db)
+    else:
+        target_period = db.get(AcademicPeriod, academic_period_id)
+        if target_period is None:
+            raise HTTPException(status_code=404, detail="Academic period not found")
     client_role = role_name_to_client_role(user.role_name)
     if client_role == "student" and user.student_id:
-        try:
-            return _student_user_analytics(db, user.student_id)
-        except Exception:
-            return {
-                "summary": None,
-                "subject_mastery": [],
-                "score_trend": [],
-                "historical_performance": [],
-                "period_performance": [],
-                "quarterly_performance": [],
-                "subject_breakdown": [],
-                "activity_feed": [],
-                "classwork": [],
-                "lms_behavior": None,
-            }
+        return _student_user_analytics(db, user.student_id, user.user_id, target_period)
     if client_role == "teacher" and user.staff_id:
-        try:
-            return _teacher_user_analytics(db, user.staff_id)
-        except Exception:
-            return {
-                "summary": None,
-                "subject_mastery": [],
-                "score_trend": [],
-                "historical_performance": [],
-                "period_performance": [],
-                "quarterly_performance": [],
-                "subject_breakdown": [],
-                "activity_feed": [],
-                "classwork": [],
-                "lms_behavior": None,
-            }
+        return _teacher_user_analytics(db, user.staff_id, target_period)
     return {
         "summary": None,
         "subject_mastery": [],
@@ -549,8 +553,12 @@ def get_user_analytics(db: Session, user_id: uuid.UUID) -> dict:
     }
 
 
-def _teacher_user_analytics(db: Session, staff_id: str) -> dict:
-    tdata = _get_teacher_handled_data(db, staff_id)
+def _teacher_user_analytics(
+    db: Session,
+    staff_id: str,
+    target_period: AcademicPeriod,
+) -> dict:
+    tdata = _get_teacher_handled_data(db, staff_id, target_period)
     class_ids = tdata["class_ids"]
     subject_ids = tdata["subject_ids"]
 
@@ -559,6 +567,7 @@ def _teacher_user_analytics(db: Session, staff_id: str) -> dict:
         total_students = (
             db.query(func.count(func.distinct(StudentClass.student_id)))
             .filter(StudentClass.class_id.in_(class_ids))
+            .filter(StudentClass.academic_year_id == target_period.academic_year_id)
             .filter(StudentClass.enrollment_status == "enrolled")
             .scalar()
         ) or 0
@@ -569,9 +578,16 @@ def _teacher_user_analytics(db: Session, staff_id: str) -> dict:
             db.query(func.avg((StudentSubmission.grade / func.nullif(Classwork.total_points, 0)) * 100))
             .join(ClassworkAssignment, ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id)
             .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+            .join(StudentClass, and_(
+                StudentClass.student_id == StudentSubmission.student_id,
+                StudentClass.class_id == ClassworkAssignment.class_id,
+                StudentClass.academic_year_id == target_period.academic_year_id,
+            ))
             .filter(ClassworkAssignment.class_id.in_(class_ids))
+            .filter(ClassworkAssignment.academic_period_id == target_period.academic_period_id)
             .filter(Classwork.subject_id.in_(subject_ids))
             .filter(StudentSubmission.status == "graded")
+            .filter(StudentClass.enrollment_status == "enrolled")
             .filter(StudentSubmission.grade.isnot(None))
             .filter(Classwork.total_points > 0)
             .scalar()
@@ -582,8 +598,15 @@ def _teacher_user_analytics(db: Session, staff_id: str) -> dict:
     if avg_grade is None and class_ids:
         period_grade_avg = (
             db.query(func.avg(StudentPeriodGrade.final_period_grade))
+            .join(StudentClass, and_(
+                StudentClass.student_id == StudentPeriodGrade.student_id,
+                StudentClass.class_id == StudentPeriodGrade.class_id,
+                StudentClass.academic_year_id == target_period.academic_year_id,
+            ))
             .filter(StudentPeriodGrade.class_id.in_(class_ids))
+            .filter(StudentPeriodGrade.academic_period_id == target_period.academic_period_id)
             .filter(StudentPeriodGrade.final_period_grade.isnot(None))
+            .filter(StudentClass.enrollment_status == "enrolled")
             .scalar()
         )
         if period_grade_avg is not None:
@@ -598,25 +621,33 @@ def _teacher_user_analytics(db: Session, staff_id: str) -> dict:
                 db.query(func.avg((StudentSubmission.grade / func.nullif(Classwork.total_points, 0)) * 100))
                 .join(ClassworkAssignment, ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id)
                 .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+                .join(StudentClass, and_(
+                    StudentClass.student_id == StudentSubmission.student_id,
+                    StudentClass.class_id == ClassworkAssignment.class_id,
+                    StudentClass.academic_year_id == target_period.academic_year_id,
+                ))
                 .filter(ClassworkAssignment.class_id.in_(class_ids))
+                .filter(ClassworkAssignment.academic_period_id == target_period.academic_period_id)
                 .filter(Classwork.subject_id == sid)
                 .filter(StudentSubmission.status == "graded")
+                .filter(StudentClass.enrollment_status == "enrolled")
                 .filter(StudentSubmission.grade.isnot(None))
                 .filter(Classwork.total_points > 0)
                 .scalar()
             )
-            val = round(float(subj_avg), 1) if subj_avg is not None else 0
-            subject_breakdown.append({"subject": sname, "value": val})
+            if subj_avg is not None:
+                subject_breakdown.append({"subject": sname, "value": round(float(subj_avg), 1)})
 
     period_performance = []
     if class_ids:
         periods = (
-            db.query(AcademicPeriod.period_code, func.avg(StudentPeriodGrade.final_period_grade))
+            db.query(AcademicPeriod.period_name, func.avg(StudentPeriodGrade.final_period_grade))
             .join(StudentPeriodGrade, StudentPeriodGrade.academic_period_id == AcademicPeriod.academic_period_id)
             .filter(StudentPeriodGrade.class_id.in_(class_ids))
+            .filter(StudentPeriodGrade.academic_period_id == target_period.academic_period_id)
             .filter(StudentPeriodGrade.final_period_grade.isnot(None))
-            .group_by(AcademicPeriod.period_code, AcademicPeriod.period_order)
-            .order_by(AcademicPeriod.period_order.asc())
+            .group_by(AcademicPeriod.period_name, AcademicPeriod.period_sequence)
+            .order_by(AcademicPeriod.period_sequence.asc())
             .all()
         )
         for p_code, p_avg in periods:
@@ -630,7 +661,12 @@ def _teacher_user_analytics(db: Session, staff_id: str) -> dict:
         recent_cw = (
             db.query(Classwork.title, Subject.subject_name, Classwork.created_at)
             .join(Subject, Subject.subject_id == Classwork.subject_id)
+            .join(ClassworkAssignment, ClassworkAssignment.classwork_id == Classwork.classwork_id)
             .filter(Classwork.subject_id.in_(subject_ids))
+            .filter(ClassworkAssignment.class_id.in_(class_ids))
+            .filter(ClassworkAssignment.academic_period_id == target_period.academic_period_id)
+            .filter(ClassworkAssignment.is_published.is_(True))
+            .filter(Classwork.is_archived.is_(False))
             .order_by(Classwork.created_at.desc())
             .limit(5)
             .all()
@@ -665,11 +701,27 @@ def _teacher_user_analytics(db: Session, staff_id: str) -> dict:
     }
 
 
-def _student_user_analytics(db: Session, student_id: uuid.UUID) -> dict:
-    enrollment = _latest_student_enrollment(db, student_id)
-    assignment_rows = _student_assignment_rows(db, student_id)
+def _student_user_analytics(
+    db: Session,
+    student_id: uuid.UUID,
+    user_id: uuid.UUID,
+    target_period: AcademicPeriod,
+) -> dict:
+    enrollment = _latest_student_enrollment(db, student_id, target_period.academic_year_id)
+    assignment_rows = _student_assignment_rows(db, student_id, target_period)
     submissions_by_assignment = _student_submissions_by_assignment(db, student_id)
     metrics = _student_metric_summary(assignment_rows, submissions_by_assignment)
+    login_rows = db.query(UserLoginLog).filter(
+        UserLoginLog.user_id == user_id,
+        UserLoginLog.login_at >= datetime.combine(target_period.start_date, datetime.min.time(), tzinfo=timezone.utc),
+        UserLoginLog.login_at < datetime.combine(target_period.end_date, datetime.min.time(), tzinfo=timezone.utc)
+        + timedelta(days=1),
+    ).all()
+    session_minutes = [
+        (_as_aware(row.logout_at) - _as_aware(row.login_at)).total_seconds() / 60
+        for row in login_rows
+        if row.logout_at is not None and _as_aware(row.logout_at) >= _as_aware(row.login_at)
+    ]
     return {
         "summary": {
             "writtenWorksAverage": metrics["written_work_average"],
@@ -679,7 +731,7 @@ def _student_user_analytics(db: Session, student_id: uuid.UUID) -> dict:
             "modelConfidence": "Unavailable",
         },
         "subject_mastery": _student_subject_mastery(assignment_rows, submissions_by_assignment),
-        "score_trend": _student_score_trend(db, student_id),
+        "score_trend": _student_score_trend(db, student_id, target_period.academic_period_id),
         "historical_performance": [],
         "period_performance": [],
         "quarterly_performance": [],
@@ -687,8 +739,11 @@ def _student_user_analytics(db: Session, student_id: uuid.UUID) -> dict:
         "activity_feed": [],
         "classwork": _student_classwork_rows(assignment_rows, submissions_by_assignment),
         "lms_behavior": {
-            "totalLogins": "Unavailable",
-            "averageSession": "Unavailable",
+            "totalLogins": len(login_rows),
+            "averageSession": (
+                f"{round(sum(session_minutes) / len(session_minutes), 1):g} min"
+                if session_minutes else "Unavailable"
+            ),
             "missedActivities": metrics["missing_count"],
             "onTimeSubmissions": (
                 f"{metrics['on_time_rate']}%" if metrics["on_time_rate"] is not None else "Unavailable"
@@ -699,22 +754,29 @@ def _student_user_analytics(db: Session, student_id: uuid.UUID) -> dict:
     }
 
 
-def _latest_student_enrollment(db: Session, student_id: uuid.UUID):
+def _latest_student_enrollment(db: Session, student_id: uuid.UUID, academic_year_id: int):
     return (
         db.query(StudentClass, Class)
         .join(Class, Class.class_id == StudentClass.class_id)
         .filter(StudentClass.student_id == student_id)
+        .filter(StudentClass.academic_year_id == academic_year_id)
+        .filter(Class.academic_year_id == academic_year_id)
         .filter(StudentClass.enrollment_status == "enrolled")
         .order_by(StudentClass.enrolled_at.desc())
         .first()
     )
 
 
-def _student_assignment_rows(db: Session, student_id: uuid.UUID) -> list[tuple[ClassworkAssignment, Classwork, Subject]]:
+def _student_assignment_rows(
+    db: Session,
+    student_id: uuid.UUID,
+    target_period: AcademicPeriod,
+) -> list[tuple[ClassworkAssignment, Classwork, Subject]]:
     class_ids = [
         row.class_id
         for row in db.query(StudentClass.class_id)
         .filter(StudentClass.student_id == student_id)
+        .filter(StudentClass.academic_year_id == target_period.academic_year_id)
         .filter(StudentClass.enrollment_status == "enrolled")
         .all()
     ]
@@ -725,6 +787,8 @@ def _student_assignment_rows(db: Session, student_id: uuid.UUID) -> list[tuple[C
         .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
         .join(Subject, Subject.subject_id == Classwork.subject_id)
         .filter(ClassworkAssignment.class_id.in_(class_ids))
+        .filter(ClassworkAssignment.academic_period_id == target_period.academic_period_id)
+        .filter(ClassworkAssignment.is_published.is_(True))
         .filter(or_(ClassworkAssignment.recipient_student_id.is_(None), ClassworkAssignment.recipient_student_id == student_id))
         .filter(Classwork.is_archived.is_(False))
         .filter(Classwork.is_graded.is_(True))
@@ -812,11 +876,16 @@ def _student_subject_mastery(
     ]
 
 
-def _student_score_trend(db: Session, student_id: uuid.UUID) -> list[dict[str, Any]]:
+def _student_score_trend(
+    db: Session,
+    student_id: uuid.UUID,
+    academic_period_id: int,
+) -> list[dict[str, Any]]:
     rows = (
         db.query(StudentPeriodGrade, AcademicPeriod)
         .join(AcademicPeriod, AcademicPeriod.academic_period_id == StudentPeriodGrade.academic_period_id)
         .filter(StudentPeriodGrade.student_id == student_id)
+        .filter(StudentPeriodGrade.academic_period_id == academic_period_id)
         .order_by(AcademicPeriod.start_date.asc(), AcademicPeriod.period_sequence.asc())
         .all()
     )

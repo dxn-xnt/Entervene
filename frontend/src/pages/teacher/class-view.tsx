@@ -1312,10 +1312,11 @@ function LessonsTab({
       )}
 
       {/* ── Competency Create / Edit Modal ── */}
-      {isCompetencyModalOpen && selectedSubjectId && (
+      {isCompetencyModalOpen && selectedSubjectId && effectivePeriodId && (
         <CompetencyModal
           isOpen={isCompetencyModalOpen}
           subjectId={selectedSubjectId}
+          academicPeriodId={Number(effectivePeriodId)}
           editingCompetency={editingCompetency}
           onClose={() => {
             setIsCompetencyModalOpen(false);
@@ -2175,11 +2176,7 @@ function StudentRow({
                 </Badge>
               )}
             </div>
-          ) : (
-            <span className="text-xs font-semibold text-black/40">
-              No active suggestions
-            </span>
-          )}
+          ) : null}
         </Table.Cell>
 
       </Table.Row>

@@ -1385,11 +1385,12 @@ export default function SubjectDetails() {
             />
 
             {/* ── Competency Create/Edit Modal ── */}
-            {isCompetencyModalOpen && subjectId && (
+            {isCompetencyModalOpen && subjectId && effectivePeriodId && (
               <CompetencyModal
                 open={isCompetencyModalOpen}
                 onOpenChange={setIsCompetencyModalOpen}
                 subjectId={Number(subjectId)}
+                academicPeriodId={Number(effectivePeriodId)}
                 initialData={editingCompetency}
                 onSuccess={handleCompetencySaved}
               />

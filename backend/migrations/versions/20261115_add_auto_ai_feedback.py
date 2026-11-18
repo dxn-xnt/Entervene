@@ -1,7 +1,7 @@
 """Add automatic AI feedback toggle to classwork and create submission_feedback_draft table.
 
 Revision ID: 20261115_add_auto_ai_feedback
-Revises: 20261114_suggestion_period_origin
+Revises: 20261114_merge_suggestion_duration
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "20261115_add_auto_ai_feedback"
-down_revision = "20261114_suggestion_period_origin"
+down_revision = "20261114_merge_suggestion_duration"
 branch_labels = None
 depends_on = None
 
