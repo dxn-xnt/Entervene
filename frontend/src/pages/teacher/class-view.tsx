@@ -80,12 +80,10 @@ import {
   apiFetch,
   getTeacherAdvisoryClassDetail,
 } from "@/lib/api";
-import { getTeacherSuggestions } from "@/lib/suggestion-api";
 import type {
   TeacherAdvisoryClassDetailResponse,
   TeacherAdvisoryStudentItem,
 } from "@/types/adminClasses";
-import type { SuggestionResponse } from "@/types/suggestion";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { TeacherEmptyAvatarGroup, TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 
@@ -1527,7 +1525,6 @@ function StudentsTab({
                           <StudentRow
                             key={student.student_id}
                             student={student}
-                            classId={detail.class_id}
                             onSelectStudent={handleSelectStudent}
                           />
                         ))}
@@ -2086,102 +2083,42 @@ function ClassworkTab({
 
 function StudentRow({
   student,
-  classId,
   onSelectStudent,
 }: {
   student: TeacherAdvisoryStudentItem;
-  classId: number;
   onSelectStudent?: (student: TeacherAdvisoryStudentItem) => void;
 }) {
-  const [history, setHistory] = useState<SuggestionResponse[]>([]);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-
-  const loadHistory = useCallback(async () => {
-    setIsHistoryLoading(true);
-    try {
-      const data = await getTeacherSuggestions({
-        classId,
-        studentId: student.student_id,
-      });
-      setHistory(data.suggestions);
-    } catch {
-      setHistory([]);
-    } finally {
-      setIsHistoryLoading(false);
-    }
-  }, [classId, student.student_id]);
-
-  useEffect(() => {
-    void loadHistory();
-  }, [loadHistory]);
-
-  const activeCount = history.filter((item) => item.status === "ACTIVE").length;
-  const draftCount = history.filter((item) => item.status === "DRAFT").length;
-
   return (
-    <>
-      <Table.Row
-        className={`border-b-2 border-black bg-white transition-colors ${onSelectStudent ? "cursor-pointer hover:bg-[#F6E9B2]/40 group" : ""}`}
-        onClick={() => onSelectStudent?.(student)}
-      >
-        {/* Column 1: Student Details */}
-        <Table.Cell className="py-2.5 px-4">
-          <div className="flex items-center gap-3">
-            <Avatar variant="student" className="size-10 shrink-0">
-              <Avatar.Image
-                src={student.avatar || "/avatars/student-avatars/1.svg"}
-                alt={student.full_name}
-              />
-              <Avatar.Fallback>
-                {(student.avatar_initial || student.full_name || "?")
-                  .charAt(0)
-                  .toUpperCase()}
-              </Avatar.Fallback>
-            </Avatar>
-            <div className="min-w-0">
-              <span className="block text-base font-semibold truncate">
-                {student.full_name}
+    <Table.Row
+      className={`border-b-2 border-black bg-white transition-colors ${onSelectStudent ? "cursor-pointer hover:bg-[#F6E9B2]/40 group" : ""}`}
+      onClick={() => onSelectStudent?.(student)}
+    >
+      <Table.Cell className="py-2.5 px-4">
+        <div className="flex items-center gap-3">
+          <Avatar variant="student" className="size-10 shrink-0">
+            <Avatar.Image
+              src={student.avatar || "/avatars/student-avatars/1.svg"}
+              alt={student.full_name}
+            />
+            <Avatar.Fallback>
+              {(student.avatar_initial || student.full_name || "?")
+                .charAt(0)
+                .toUpperCase()}
+            </Avatar.Fallback>
+          </Avatar>
+          <div className="min-w-0">
+            <span className="block text-base font-semibold truncate">
+              {student.full_name}
+            </span>
+            {student.student_lrn && (
+              <span className="text-xs font-semibold text-muted-foreground">
+                {student.student_lrn}
               </span>
-              {student.student_lrn && (
-                <span className="text-xs font-semibold text-muted-foreground">
-                  {student.student_lrn}
-                </span>
-              )}
-            </div>
+            )}
           </div>
-        </Table.Cell>
-
-        {/* Column 2: Suggestion Status */}
-        <Table.Cell className="py-2.5 px-4">
-          {isHistoryLoading ? (
-            <span className="text-xs text-black/50">Loading...</span>
-          ) : activeCount > 0 || draftCount > 0 ? (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {activeCount > 0 && (
-                <Badge
-                  variant="solid"
-                  size="sm"
-                  className="border border-black bg-[#79bd80] font-bold text-black text-[11px]"
-                >
-                  {activeCount} Active
-                </Badge>
-              )}
-              {draftCount > 0 && (
-                <Badge
-                  variant="outline"
-                  size="sm"
-                  className="border border-black bg-amber-100 font-bold text-amber-900 text-[11px]"
-                >
-                  {draftCount} Draft{draftCount !== 1 ? "s" : ""}
-                </Badge>
-              )}
-            </div>
-          ) : null}
-        </Table.Cell>
-
-      </Table.Row>
-
-    </>
+        </div>
+      </Table.Cell>
+    </Table.Row>
   );
 }
 

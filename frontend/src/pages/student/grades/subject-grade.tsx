@@ -7,6 +7,7 @@ import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Table } from "@/components/retroui/Table";
 import { getStudentTodos, type TodoItem } from "@/lib/api";
+import { computeLessonMastery } from "@/lib/student-lesson-mastery";
 import { Progress } from "@/components/retroui/Progress";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { FileCheck2 } from "lucide-react";
@@ -65,8 +66,7 @@ const SubjectGrade = ({
   const gradableTodos = todos.filter(
     (t) => t.is_graded !== false && t.type?.toUpperCase() !== "READING",
   );
-  const masteryLabel =
-    completionRate >= 80 ? "High" : completionRate >= 50 ? "Moderate" : "Low";
+  const masterySummary = computeLessonMastery(todos);
 
   return (
     <AppLayout>
@@ -121,15 +121,13 @@ const SubjectGrade = ({
                       size="md"
                       className="rounded border border-black bg-white font-bold text-black"
                     >
-                      Mastery level: {masteryLabel}
+                      {masterySummary.label === "Not yet rated"
+                        ? "Not yet rated"
+                        : `Mastery level: ${masterySummary.label} (${masterySummary.percentage}%)`}
                     </Badge>
                   </Card.Content>
                   <p className="text-sm text-muted-foreground">
-                    {completionRate >= 80
-                      ? "have mastered most of the lessons well"
-                      : completionRate >= 50
-                        ? "making steady progress on lessons"
-                        : "needs focus on completing activities"}
+                    {masterySummary.description}
                   </p>
                 </Card>
               </div>

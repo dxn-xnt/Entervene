@@ -44,10 +44,15 @@ export interface LessonClasswork {
   classwork_type?: string | null;
   classwork_category?: string | null;
   is_graded?: boolean;
+  show_scores?: boolean;
   total_points?: number | null;
   due_date?: string | null;
   allow_late_submissions?: boolean;
   submission_status?: string | null;
+  is_submitted?: boolean;
+  submitted_at?: string | null;
+  grade?: number | null;
+  academic_period_id?: number;
 }
 
 export interface ClassworkDetail {

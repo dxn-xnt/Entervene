@@ -14,7 +14,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { apiFetch } from "@/lib/api";
 
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
-import { useRegisterDirtyGuard } from "@/context/AcademicPeriodContext";
+import { useOptionalAcademicPeriod, useRegisterDirtyGuard } from "@/context/AcademicPeriodContext";
 import type { TeacherClassItem } from "@/lib/api";
 
 type LessonResponse = {
@@ -66,20 +66,30 @@ export default function CreateLessonModal({
     }
   };
 
+  const academicPeriod = useOptionalAcademicPeriod();
+  const selectedPeriodId = academicPeriod?.selectedPeriodId ?? null;
+
   const {
     classes: classLoads,
     isLoading: loadingClasses,
     error: classesError,
   } = useTeacherClasses({ includeAdvisory: false });
 
-  const [subjectId, setSubjectId] = useState("");
+  const isSubjectLocked = Boolean(initialSubjectId);
+  const isCompetencyLocked = Boolean(initialCompetencyId);
+
+  const [subjectId, setSubjectId] = useState(
+    initialSubjectId ? String(initialSubjectId) : "",
+  );
   const [competencies, setCompetencies] = useState<
     Array<{ competency_id: number; statement: string; competency_code?: string | null }>
   >([]);
   const [competencyId, setCompetencyId] = useState(
     initialCompetencyId ? String(initialCompetencyId) : "",
   );
-  const [classIds, setClassIds] = useState<number[]>([]);
+  const [classIds, setClassIds] = useState<number[]>(
+    initialClassId ? [Number(initialClassId)] : [],
+  );
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
@@ -105,10 +115,14 @@ export default function CreateLessonModal({
   });
 
   useEffect(() => {
-    if (initialCompetencyId) {
-      setCompetencyId(String(initialCompetencyId));
-    }
+    setCompetencyId(initialCompetencyId ? String(initialCompetencyId) : "");
   }, [initialCompetencyId]);
+
+  useEffect(() => {
+    if (initialSubjectId) {
+      setSubjectId(String(initialSubjectId));
+    }
+  }, [initialSubjectId]);
 
   useEffect(() => {
     const fetchCompetencies = async () => {
@@ -117,18 +131,24 @@ export default function CreateLessonModal({
         return;
       }
       try {
-        const res = await apiFetch(`/api/v1/competencies/subject/${subjectId}`);
+        const query = selectedPeriodId ? `?period_id=${selectedPeriodId}` : "";
+        const res = await apiFetch(`/api/v1/competencies/subject/${subjectId}${query}`);
         if (res.ok) {
           const data = await res.json();
           setCompetencies(data);
           if (data.length > 0) {
             setCompetencyId((curr) => {
-              if (curr && data.some((c: any) => String(c.competency_id) === curr)) return curr;
               if (initialCompetencyId && data.some((c: any) => c.competency_id === initialCompetencyId)) {
                 return String(initialCompetencyId);
               }
+              if (
+                curr &&
+                data.some((c: { competency_id: number | string }) => String(c.competency_id) === curr)
+              ) return curr;
               return String(data[0].competency_id);
             });
+          } else {
+            setCompetencyId("");
           }
         }
       } catch {
@@ -136,12 +156,12 @@ export default function CreateLessonModal({
       }
     };
     fetchCompetencies();
-  }, [subjectId]);
+  }, [subjectId, initialCompetencyId, selectedPeriodId]);
 
   useEffect(() => {
     if (classLoads.length === 0) {
-      setSubjectId("");
-      setClassIds([]);
+      if (!initialSubjectId) setSubjectId("");
+      if (!initialClassId) setClassIds([]);
       return;
     }
     const contextSubject = initialSubjectId
@@ -152,6 +172,9 @@ export default function CreateLessonModal({
       : null;
 
     setSubjectId((curr) => {
+      if (initialSubjectId) {
+        return String(initialSubjectId);
+      }
       if (curr && classLoads.some((l) => String(l.subject_id) === curr)) {
         return curr;
       }
@@ -164,14 +187,12 @@ export default function CreateLessonModal({
     });
 
     if (contextClass) {
-      setClassIds((curr) =>
-        curr.length === 0
-          ? [contextClass.class_id]
-          : curr.filter((id) => classLoads.some((l) => l.class_id === id)),
-      );
+      setClassIds([contextClass.class_id]);
+    } else if (initialClassId) {
+      setClassIds([Number(initialClassId)]);
     } else {
       setClassIds((curr) =>
-        curr.filter((id) => classLoads.some((l) => l.class_id === id)),
+        curr.filter((id) => classLoads.some((l) => l.class_id === id && String(l.subject_id) === String(contextSubject?.subject_id || subjectId))),
       );
     }
   }, [classLoads, initialClassId, initialSubjectId]);
@@ -303,7 +324,9 @@ export default function CreateLessonModal({
             <Field label="Subject" isRequired={true}>
               <Select
                 value={subjectId}
+                disabled={isSubjectLocked}
                 onValueChange={(v) => {
+                  if (isSubjectLocked) return;
                   setSubjectId(v);
                   if (v && error === "Select a subject.") setError("");
                   setClassIds([]);
@@ -314,7 +337,7 @@ export default function CreateLessonModal({
                   id="subject"
                   aria-invalid={error === "Select a subject."}
                   aria-describedby={error === "Select a subject." ? "lesson-subject-error" : undefined}
-                  disabled={isLoading || isSubmitting}
+                  disabled={isLoading || isSubmitting || isSubjectLocked}
                   className="w-full min-w-0"
                 >
                   <Select.Value placeholder="Select Subject" />
@@ -359,13 +382,18 @@ export default function CreateLessonModal({
             ) : (
               <Select
                 value={competencyId}
-                onValueChange={(v) => { setCompetencyId(v); if (v && v !== "none" && error.startsWith("Learning Competency is required")) setError(""); }}
+                disabled={isCompetencyLocked}
+                onValueChange={(v) => {
+                  if (isCompetencyLocked) return;
+                  setCompetencyId(v);
+                  if (v && v !== "none" && error.startsWith("Learning Competency is required")) setError("");
+                }}
               >
                 <Select.Trigger
                   id="competency"
                   aria-invalid={error.startsWith("Learning Competency is required")}
                   aria-describedby={error.startsWith("Learning Competency is required") ? "lesson-competency-error" : undefined}
-                  disabled={isSubmitting || !subjectId}
+                  disabled={isSubmitting || !subjectId || isCompetencyLocked}
                   className="w-full min-w-0"
                 >
                   <Select.Value placeholder="Select a learning competency..." />

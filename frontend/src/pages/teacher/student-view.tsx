@@ -1,4 +1,3 @@
-import { activeFirst } from "@/lib/active-first";
 import { useState, useMemo } from "react";
 import { BookOpen } from "lucide-react";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -12,7 +11,6 @@ import { OverviewCard } from "@/components/overview-cards";
 import { ClassworkItemLine } from "@/components/item-line/classwork";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { isReadingType } from "@/lib/classwork-utils";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import type {
   StudentRecordDetailResponse,
 } from "@/lib/student-record-api";
@@ -39,14 +37,8 @@ function statusLabel(status: string) {
 
 export function StudentRecordDetail({
   detail,
-  classId,
-  subjectLoads,
-  showSuggestionPanel = true,
 }: {
   detail: StudentRecordDetailResponse;
-  classId: number | string;
-  subjectLoads: TeacherAdvisorySubjectLoadItem[];
-  showSuggestionPanel?: boolean;
 }) {
   const [performanceFilter, setPerformanceFilter] = useState<string>("all");
   const [showAllPerformance, setShowAllPerformance] = useState(false);
@@ -156,17 +148,6 @@ export function StudentRecordDetail({
           </div>
         </Card.Content>
       </Card>
-
-      {showSuggestionPanel && (
-        <ManualSuggestionPanel
-          classId={Number(classId)}
-          student={{
-            student_id: detail.student.student_id,
-            full_name: detail.student.full_name,
-          } as any}
-          subjectLoads={subjectLoads}
-        />
-      )}
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
         {/* Main Content: Classwork History */}
@@ -508,26 +489,6 @@ export function TeacherStudentView({
               />
             )}
 
-            {periods.length > 0 && onPeriodChange && (
-              <Select
-                value={selectedPeriodId}
-                onValueChange={onPeriodChange}
-              >
-                <Select.Trigger className="h-10 w-full min-w-[180px] border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] sm:w-auto">
-                  <Select.Value placeholder="Select period" />
-                </Select.Trigger>
-                <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  {activeFirst(periods).map((p) => (
-                    <Select.Item
-                      key={p.academic_period_id}
-                      value={String(p.academic_period_id)}
-                    >
-                      {p.period_name} ({p.year_label})
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select>
-            )}
           </div>
         </header>
       </div>
@@ -547,9 +508,6 @@ export function TeacherStudentView({
         ) : (
           <StudentRecordDetail
             detail={studentDetail}
-            classId={classId}
-            subjectLoads={subjectLoads as any}
-            showSuggestionPanel={false}
           />
         )}
       </div>

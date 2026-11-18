@@ -560,7 +560,7 @@ def get_my_todos(
     all_items = []
 
     for row in results:
-        is_submitted = (row.submission_status in ("submitted", "graded")) or (row.submitted_at is not None)
+        is_submitted = (row.submission_status in ("submitted", "graded", "late", "completed")) or (row.submitted_at is not None)
 
         due_dt = row.due_date
         is_past_due = False
@@ -573,6 +573,11 @@ def get_my_todos(
         status = "completed" if is_submitted else ("pastdue" if is_past_due else "pending")
 
         total_pts = float(row.total_points) if row.total_points is not None else (None if not row.is_graded or row.classwork_type == "READING" else 100.0)
+        visible_grade = (
+            float(row.grade)
+            if (row.grade is not None and row.show_scores is not False and row.submission_status == "graded")
+            else None
+        )
 
         item = {
             "assignment_id": row.classwork_assignment_id,
@@ -591,7 +596,7 @@ def get_my_todos(
             "is_submitted": is_submitted,
             "submission_status": row.submission_status,
             "show_scores": row.show_scores,
-            "grade": float(row.grade) if row.grade is not None else None,
+            "grade": visible_grade,
         }
 
         all_items.append(item)

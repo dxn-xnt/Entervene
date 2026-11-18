@@ -1357,23 +1357,6 @@ export default function SubjectDetails() {
                 ))}
             </Dialog>
 
-            {!isReadOnly && isCreatingLesson && (
-              <CreateLessonModal
-                classId={classId}
-                subjectId={subjectId}
-                initialCompetencyId={selectedCompetencyIdForNewLesson}
-                onClose={() => {
-                  setIsCreatingLesson(false);
-                  setSelectedCompetencyIdForNewLesson(undefined);
-                }}
-                onCreated={() => {
-                  setIsCreatingLesson(false);
-                  setSelectedCompetencyIdForNewLesson(undefined);
-                  window.location.reload();
-                }}
-              />
-            )}
-
             {/* ── Reused Classwork Detail & Tracking Dialog ── */}
             <ClassworkDetailModal
               selectedClasswork={selectedClasswork}
