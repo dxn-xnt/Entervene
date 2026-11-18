@@ -816,7 +816,94 @@ class TestProgressionGatekeeper:
 # 4. AI Generation & Quiz Import Adapters
 # ---------------------------------------------------------------------------
 
+def _seed_practice_readings(db_env, count: int) -> list[Classwork]:
+    db = db_env["db"]
+    readings: list[Classwork] = []
+    for index in range(1, count + 1):
+        reading = Classwork(
+            subject_id=db_env["subject"].subject_id,
+            created_by_staff_id=db_env["staff"].staff_id,
+            classwork_type="READING",
+            title=f"Linear Functions Reading {index}",
+            description=(
+                f"Source {index}: Linear functions have a constant rate of change represented by slope. "
+                "The slope-intercept equation is y = mx + b and each variable has a defined role."
+            ),
+            instructions="Read the definitions, worked examples, and formula explanations carefully.",
+            is_archived=False,
+            is_graded=False,
+        )
+        db.add(reading)
+        db.flush()
+        db.add(
+            ClassworkAssignment(
+                classwork_id=reading.classwork_id,
+                class_id=db_env["class"].class_id,
+                academic_period_id=db_env["period"].academic_period_id,
+                assigned_by_staff_id=db_env["staff"].staff_id,
+            )
+        )
+        readings.append(reading)
+    db.commit()
+    return readings
+
+
+def _raw_ai_question(index: int, *, stem: str | None = None) -> dict:
+    concepts = [
+        "How is slope represented in slope-intercept form?",
+        "What does the y-intercept describe on a graph?",
+        "When does a relation have a constant rate of change?",
+        "Which equation follows the linear-function pattern?",
+        "How can rise over run be calculated from two points?",
+        "What graph shape represents a linear relationship?",
+        "Which variable is normally used for the independent value?",
+        "How does a positive slope affect a line from left to right?",
+        "What happens when the slope of a horizontal line is measured?",
+        "Which coordinate identifies where a line crosses the vertical axis?",
+        "How can proportional relationships be recognized algebraically?",
+        "What feature distinguishes a nonlinear table from a linear table?",
+        "Which operation isolates the output variable in a linear equation?",
+        "How does changing the intercept move a graph?",
+        "What information is needed to write an equation from a graph?",
+    ]
+    return {
+        "question_text": stem or concepts[(index - 1) % len(concepts)],
+        "question_type": "MULTIPLE_CHOICE",
+        "points": 1.0,
+        "display_order": index,
+        "explanation": f"Concept {index} follows from the assigned readings.",
+        "options": [
+            {"option_text": f"Correct concept {index}", "is_correct": True, "option_order": 1},
+            {"option_text": f"Distractor {index}A", "is_correct": False, "option_order": 2},
+            {"option_text": f"Distractor {index}B", "is_correct": False, "option_order": 3},
+            {"option_text": f"Distractor {index}C", "is_correct": False, "option_order": 4},
+        ],
+    }
+
+
 class TestAdapters:
+    def test_ai_generation_rejects_teacher_outside_intervention_scope(self, db_env):
+        db = db_env["db"]
+        other_teacher = AcademicStaff(
+            staff_id="STAFF-UNAUTHORIZED",
+            first_name="Other",
+            last_name="Teacher",
+        )
+        db.add(other_teacher)
+        db.commit()
+
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(
+                PracticeAssessmentAIService.generate_practice_questions_ai(
+                    db,
+                    other_teacher.staff_id,
+                    db_env["intervention"].intervention_id,
+                    AIGeneratePracticeQuestionsRequest(target_count=1, reading_classwork_ids=[1]),
+                )
+            )
+        assert exc.value.status_code == 403
+        assert "teaching permissions" in exc.value.detail
+
     def test_ai_generation_rejects_missing_or_empty_readings(self, db_env):
         db = db_env["db"]
         staff_id = db_env["staff"].staff_id
@@ -962,6 +1049,132 @@ class TestAdapters:
             )
         assert exc.value.status_code == 422
         assert "outside the intervention subject/class scope" in exc.value.detail
+
+    @pytest.mark.parametrize(("reading_count", "target_count"), [(1, 5), (2, 5), (3, 10)])
+    def test_ai_generation_returns_exact_total_across_all_selected_readings(
+        self, db_env, reading_count, target_count
+    ):
+        readings = _seed_practice_readings(db_env, reading_count)
+        generator = AsyncMock(return_value=[_raw_ai_question(i) for i in range(1, target_count + 1)])
+
+        with patch(
+            "app.services.intervention.PracticeAssessmentAIService.generate_quiz_questions",
+            new=generator,
+        ):
+            result = asyncio.run(
+                PracticeAssessmentAIService.generate_practice_questions_ai(
+                    db_env["db"],
+                    db_env["staff"].staff_id,
+                    db_env["intervention"].intervention_id,
+                    AIGeneratePracticeQuestionsRequest(
+                        target_count=target_count,
+                        reading_classwork_ids=[reading.classwork_id for reading in readings],
+                    ),
+                )
+            )
+
+        assert len(result) == target_count
+        assert generator.await_count == 1
+        content_text = generator.await_args.kwargs["content_text"]
+        assert all(reading.title in content_text for reading in readings)
+        assert db_env["db"].query(PracticeAssessment).count() == 0
+
+    def test_ai_generation_trims_provider_over_generation_to_requested_total(self, db_env):
+        readings = _seed_practice_readings(db_env, 2)
+        with patch(
+            "app.services.intervention.PracticeAssessmentAIService.generate_quiz_questions",
+            new=AsyncMock(return_value=[_raw_ai_question(i) for i in range(1, 9)]),
+        ):
+            result = asyncio.run(
+                PracticeAssessmentAIService.generate_practice_questions_ai(
+                    db_env["db"],
+                    db_env["staff"].staff_id,
+                    db_env["intervention"].intervention_id,
+                    AIGeneratePracticeQuestionsRequest(
+                        target_count=5,
+                        reading_classwork_ids=[reading.classwork_id for reading in readings],
+                    ),
+                )
+            )
+        assert len(result) == 5
+        assert [question.display_order for question in result] == [1, 2, 3, 4, 5]
+
+    def test_ai_generation_replaces_duplicates_with_bounded_retry(self, db_env):
+        reading = _seed_practice_readings(db_env, 1)[0]
+        duplicate = _raw_ai_question(1)
+        generator = AsyncMock(
+            side_effect=[
+                [duplicate, {**duplicate}],
+                [_raw_ai_question(2)],
+            ]
+        )
+        with patch(
+            "app.services.intervention.PracticeAssessmentAIService.generate_quiz_questions",
+            new=generator,
+        ):
+            result = asyncio.run(
+                PracticeAssessmentAIService.generate_practice_questions_ai(
+                    db_env["db"],
+                    db_env["staff"].staff_id,
+                    db_env["intervention"].intervention_id,
+                    AIGeneratePracticeQuestionsRequest(
+                        target_count=2,
+                        reading_classwork_ids=[reading.classwork_id],
+                    ),
+                )
+            )
+        assert len(result) == 2
+        assert generator.await_count == 2
+        assert generator.await_args_list[1].kwargs["test_parts"][0]["count"] == 1
+
+    def test_ai_generation_replaces_candidate_with_duplicate_answer_choices(self, db_env):
+        reading = _seed_practice_readings(db_env, 1)[0]
+        invalid = _raw_ai_question(1)
+        invalid["options"][1]["option_text"] = invalid["options"][0]["option_text"]
+        generator = AsyncMock(side_effect=[[invalid], [_raw_ai_question(2)]])
+        with patch(
+            "app.services.intervention.PracticeAssessmentAIService.generate_quiz_questions",
+            new=generator,
+        ):
+            result = asyncio.run(
+                PracticeAssessmentAIService.generate_practice_questions_ai(
+                    db_env["db"],
+                    db_env["staff"].staff_id,
+                    db_env["intervention"].intervention_id,
+                    AIGeneratePracticeQuestionsRequest(
+                        target_count=1,
+                        reading_classwork_ids=[reading.classwork_id],
+                    ),
+                )
+            )
+        assert len(result) == 1
+        assert result[0].question_text == _raw_ai_question(2)["question_text"]
+        assert generator.await_count == 2
+
+    def test_ai_generation_fails_honestly_when_distinct_target_cannot_be_met(self, db_env):
+        reading = _seed_practice_readings(db_env, 1)[0]
+        duplicate = _raw_ai_question(1)
+        generator = AsyncMock(return_value=[duplicate])
+        with patch(
+            "app.services.intervention.PracticeAssessmentAIService.generate_quiz_questions",
+            new=generator,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(
+                    PracticeAssessmentAIService.generate_practice_questions_ai(
+                        db_env["db"],
+                        db_env["staff"].staff_id,
+                        db_env["intervention"].intervention_id,
+                        AIGeneratePracticeQuestionsRequest(
+                            target_count=2,
+                            reading_classwork_ids=[reading.classwork_id],
+                        ),
+                    )
+                )
+        assert exc.value.status_code == 502
+        assert "requested number of distinct" in exc.value.detail
+        assert generator.await_count == 3
+        assert db_env["db"].query(PracticeAssessment).count() == 0
 
     def test_quiz_import_adapter_allowed_types(self):
         mock_parsed_preview = QuizImportPreviewResponse(
