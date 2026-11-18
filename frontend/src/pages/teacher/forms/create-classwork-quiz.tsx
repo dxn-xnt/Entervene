@@ -53,8 +53,6 @@ import type {
 import { Badge } from "@/components/retroui/Badge";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
-import { ReferenceLinkEditor } from "@/components/classwork-reference-links";
-import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
 
 interface CreateClassworkQuizModalProps {
     draftOnly?: boolean;
@@ -106,7 +104,29 @@ export default function CreateClassworkQuizModal({
     const [createStep, setCreateStep] = useState<
         "quiz-source" | "details" | "quiz" | "assign"
     >("quiz-source");
-    const [referenceLinks, setReferenceLinks] = useState<ReferenceLinkDraft[]>([]);
+
+    const isSubjectLocked = Boolean(initialSubjectId) || Boolean(remediationTarget);
+    const isLessonLocked = Boolean(initialLessonId);
+    const [contextLesson, setContextLesson] = useState<TeacherLesson | null>(null);
+
+    useEffect(() => {
+        if (!initialLessonId) {
+            setContextLesson(null);
+            return;
+        }
+        let active = true;
+        apiFetch(`/api/v1/lessons/${initialLessonId}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+                if (active && data) {
+                    setContextLesson(data);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
+        };
+    }, [initialLessonId]);
 
     const isGradedWWPT = remediationDraft && (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK");
 
@@ -162,7 +182,7 @@ export default function CreateClassworkQuizModal({
     });
     useEffect(() => {
         if (initialSubjectId && subjects.some((subject) => String(subject.id) === String(initialSubjectId))) {
-            setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
+            setDraft((current) => current.subject_id === String(initialSubjectId) ? current : { ...current, subject_id: String(initialSubjectId) });
         }
     }, [initialSubjectId, subjects]);
     useEffect(() => {
@@ -171,8 +191,11 @@ export default function CreateClassworkQuizModal({
         }
     }, [draftOnly]);
 
-    const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([
-        createEmptyQuizQuestion(1),
+    const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>(() => [
+        {
+            ...createEmptyQuizQuestion(1),
+            lesson_id: initialLessonId || null,
+        },
     ]);
     const [quizSettings, setQuizSettings] = useState<QuizSettingsDraft>(() => ({
         ...defaultQuizSettings,
@@ -200,6 +223,21 @@ export default function CreateClassworkQuizModal({
     const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>(() =>
         initialLessonId ? [initialLessonId] : []
     );
+
+    useEffect(() => {
+        if (initialLessonId) {
+            setSelectedLessonIds([initialLessonId]);
+            setQuizQuestions((qs) =>
+                qs.map((q) => q.lesson_id ? q : { ...q, lesson_id: initialLessonId }),
+            );
+        }
+    }, [initialLessonId]);
+
+    useEffect(() => {
+        if (initialClassId) {
+            setSelectedClassIds([initialClassId]);
+        }
+    }, [initialClassId]);
     const [isLessonLoading, setIsLessonLoading] = useState(false);
     // Bulk-selection state for question-level mapping
     const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(() => new Set());
@@ -341,7 +379,10 @@ export default function CreateClassworkQuizModal({
     const addQuizQuestion = (questionType: QuizQuestionType) => {
         setQuizQuestions((current) => [
             ...current,
-            createEmptyQuizQuestion(current.length + 1, questionType),
+            {
+                ...createEmptyQuizQuestion(current.length + 1, questionType),
+                lesson_id: initialLessonId || (selectedLessonIds.length === 1 ? selectedLessonIds[0] : null),
+            },
         ]);
     };
 
@@ -448,6 +489,7 @@ export default function CreateClassworkQuizModal({
     };
 
     const toggleLesson = (lessonId: number) => {
+        if (isLessonLocked) return;
         if (createError === "Select the lesson where this quiz should appear.") setCreateError("");
         setSelectedLessonIds((current) =>
             current.includes(lessonId)
@@ -457,8 +499,6 @@ export default function CreateClassworkQuizModal({
     };
 
     const validateDetails = () => {
-        const linksError = validateReferenceLinks(referenceLinks);
-        if (linksError) return linksError;
         if (!draft.subject_id) return "Choose a subject.";
         if (!draft.title.trim()) return "Topic title is required.";
         if ((draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
@@ -821,7 +861,6 @@ export default function CreateClassworkQuizModal({
             }
             formData.append("max_attempts", String(Number(draft.max_attempts)));
             formData.append("quiz_payload", JSON.stringify(buildQuizPayload()));
-            formData.append("reference_links", JSON.stringify(referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null }))));
 
             const selectedLoad = loads.find(
                 (l) =>
@@ -1000,7 +1039,7 @@ export default function CreateClassworkQuizModal({
                                             if (val && createError === "Choose a subject.") setCreateError("");
                                             setSelectedClassIds([]);
                                         }}
-                                        disabled={isCreating || Boolean(remediationTarget)}
+                                        disabled={isCreating || isSubjectLocked}
                                     >
                                         <Select.Trigger id="quiz-subject" aria-invalid={createError === "Choose a subject."} aria-describedby={createError === "Choose a subject." ? "quiz-subject-error" : undefined} className="w-full shadow-none aria-[invalid=true]:border-destructive">
                                             <Select.Value placeholder="Choose subject" />
@@ -1037,6 +1076,24 @@ export default function CreateClassworkQuizModal({
                                     {createError === "Topic title is required." && <FormMessage id="quiz-topic-title-error">{createError}</FormMessage>}
                                 </Field>
 
+                                {contextLesson && (
+                                    <>
+                                        <Field label="Lesson">
+                                            <div className="w-full rounded border-2 border-black bg-muted/40 px-3 py-2 text-sm font-bold text-foreground">
+                                                {contextLesson.title}
+                                            </div>
+                                        </Field>
+                                        {(contextLesson.competency_statement || contextLesson.competency_code) && (
+                                            <Field label="Learning Competency">
+                                                <div className="w-full rounded border-2 border-black bg-muted/40 px-3 py-2 text-sm text-foreground">
+                                                    {contextLesson.competency_code ? `[${contextLesson.competency_code}] ` : ""}
+                                                    {contextLesson.competency_statement}
+                                                </div>
+                                            </Field>
+                                        )}
+                                    </>
+                                )}
+
 
                                 <Field label="Instructions">
                                     {remediationDraft && (
@@ -1058,7 +1115,7 @@ export default function CreateClassworkQuizModal({
                                     />
                                 </Field>
 
-                                <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isCreating} />
+
 
                                 <div className="grid gap-4 sm:grid-cols-3">
                                     {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" ? (
@@ -1985,7 +2042,7 @@ export default function CreateClassworkQuizModal({
                                                         selectedSubjectLoads.map((load) => load.class_id),
                                                     );
                                                 }}
-                                                disabled={isCreating || Boolean(remediationTarget)}
+                                                disabled={isCreating || isSubjectLocked}
                                             >
                                                 <CheckCheck className="size-4 mr-2" />
                                                 Select All
@@ -2031,7 +2088,7 @@ export default function CreateClassworkQuizModal({
                                                         key={load.subject_load_id}
                                                         type="button"
                                                         onClick={() => toggleClass(load.class_id)}
-                                                        disabled={isCreating || Boolean(remediationTarget)}
+                                                        disabled={isCreating || isSubjectLocked}
                                                         className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
                                                             ? "bg-primary text-black"
                                                             : "bg-white text-black hover:bg-accent"
@@ -2124,7 +2181,7 @@ export default function CreateClassworkQuizModal({
                                                         key={lesson.lesson_id}
                                                         type="button"
                                                         onClick={() => toggleLesson(lesson.lesson_id)}
-                                                        disabled={isCreating}
+                                                        disabled={isCreating || isLessonLocked}
                                                         className={`rounded border-2 border-black px-3 py-2 text-left text-xs font-bold cursor-pointer transition shadow-md hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-[#7ABA78]" : "bg-white"
                                                             }`}
                                                     >
@@ -2199,7 +2256,7 @@ export default function CreateClassworkQuizModal({
                                                         size="sm"
                                                         checked={someChecked ? "indeterminate" : allChecked}
                                                         onCheckedChange={toggleSelectAll}
-                                                        disabled={isCreating}
+                                                        disabled={isCreating || isLessonLocked}
                                                         className="cursor-pointer"
                                                     />
                                                     {selectedQuestionIds.size === 0
@@ -2214,7 +2271,7 @@ export default function CreateClassworkQuizModal({
                                                             <Select
                                                                 value={bulkLessonId}
                                                                 onValueChange={(val) => setBulkLessonId(val)}
-                                                                disabled={isCreating}
+                                                                disabled={isCreating || isLessonLocked}
                                                             >
                                                                 <Select.Trigger className="w-full bg-white border-2 border-black rounded px-2 py-1 h-8">
                                                                     <Select.Value placeholder="Assign lesson…" />
@@ -2281,7 +2338,7 @@ export default function CreateClassworkQuizModal({
                                                                         return next;
                                                                     });
                                                                 }}
-                                                                disabled={isCreating}
+                                                                disabled={isCreating || isLessonLocked}
                                                                 className="mt-1 shrink-0 cursor-pointer"
                                                             />
                                                             <div className="flex-1 min-w-0">
@@ -2293,7 +2350,7 @@ export default function CreateClassworkQuizModal({
                                                                                 lesson_id: val && val !== "__none__" ? Number(val) : null,
                                                                             })
                                                                         }
-                                                                        disabled={isCreating}
+                                                                        disabled={isCreating || isLessonLocked}
                                                                     >
                                                                         <Select.Trigger className="w-full bg-white border-2 border-black rounded px-2 py-1 mt-1">
                                                                             <Select.Value placeholder="Not mapped" />

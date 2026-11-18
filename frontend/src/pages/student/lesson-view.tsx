@@ -1,12 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ChevronDown,
   ChevronUp,
-  Frown as FaceSlightlyFrowning,
-  Meh as FaceNeutral,
-  Smile as FaceSlightlySmiling,
-  ScanFace,
 } from "lucide-react";
 import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Card } from "@/components/retroui/Card";
@@ -17,12 +13,23 @@ import { routes } from "@/../routes";
 import type { StudentLesson } from "@/types/student-subject";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import {
+  computeLessonCompletion,
+  computeLessonMastery,
+  FaceNeutral,
+  FaceSlightlyFrowning,
+  FaceSlightlySmiling,
+  ScanFace,
+  type MasteryClassworkInput,
+} from "@/lib/student-lesson-mastery";
 
 export interface LessonViewProps {
   lesson: StudentLesson;
   displaySubjectName: string;
   closeLessonDetail: () => void;
   renderLessonClassworkCards: (lesson: StudentLesson) => ReactNode;
+  lessonClassworks?: MasteryClassworkInput[];
+  isClassworkLoading?: boolean;
   classId?: number;
   subjectId?: number;
   fmtDate: (date: string) => string;
@@ -30,69 +37,11 @@ export interface LessonViewProps {
 
 export type StudentLessonDetailScreenProps = LessonViewProps;
 
-const MASTERY_LEVELS = [
-  {
-    id: "low",
-    label: "Low",
-    shortLabel: "Low",
-    badgeLabel: "Low",
-    badgeVariant: "destructive" as const,
-    colorClass: "text-destructive",
-    bgClass: "bg-retro bg-destructive/10 border-border",
-    icon: FaceSlightlyFrowning,
-    percentage: 35,
-    completedCount: 1,
-    pendingCount: 3,
-    description: "Related classwork suggests more practice may help.",
-  },
-  {
-    id: "moderate",
-    label: "Moderate",
-    shortLabel: "Moderate",
-    badgeLabel: "Moderate",
-    badgeVariant: "surface" as const,
-    colorClass: "text-amber-600 dark:text-amber-400",
-    bgClass: "bg-retro bg-amber-500/10 border-border",
-    icon: FaceNeutral,
-    percentage: 75,
-    completedCount: 3,
-    pendingCount: 1,
-    description: "Making steady progress in related classwork.",
-  },
-  {
-    id: "outstanding",
-    label: "Outstanding",
-    shortLabel: "Outstanding",
-    badgeLabel: "Outstanding",
-    badgeVariant: "success" as const,
-    colorClass: "text-success dark:text-success",
-    bgClass: "bg-retro bg-success/20 border-border",
-    icon: FaceSlightlySmiling,
-    percentage: 95,
-    completedCount: 4,
-    pendingCount: 0,
-    description: "Strong performance across all lesson activities.",
-  },
-  {
-    id: "no_recorded_classwork",
-    label: "No recorded classwork",
-    shortLabel: "No records",
-    badgeLabel: "Not rated",
-    badgeVariant: "outline" as const,
-    colorClass: "text-muted-foreground",
-    bgClass: "bg-retro bg-muted/40 border-border",
-    icon: ScanFace,
-    percentage: 0,
-    completedCount: 0,
-    pendingCount: 4,
-    description: "Mastery appears after related classwork is graded.",
-  },
-] as const;
-
 export {
   FaceSlightlyFrowning,
   FaceNeutral,
   FaceSlightlySmiling,
+  ScanFace,
 };
 
 export function LessonView({
@@ -100,14 +49,21 @@ export function LessonView({
   displaySubjectName,
   closeLessonDetail,
   renderLessonClassworkCards,
+  lessonClassworks = [],
   fmtDate,
 }: LessonViewProps) {
   const navigate = useNavigate();
   const [isContentExpanded, setIsContentExpanded] = useState(false);
-  const [masteryIndex, setMasteryIndex] = useState(1);
-  const currentMastery = MASTERY_LEVELS[masteryIndex];
-  const toggleMastery = () =>
-    setMasteryIndex((prev) => (prev + 1) % MASTERY_LEVELS.length);
+
+  const mastery = useMemo(
+    () => computeLessonMastery(lessonClassworks),
+    [lessonClassworks],
+  );
+  const completion = useMemo(
+    () => computeLessonCompletion(lessonClassworks),
+    [lessonClassworks],
+  );
+  const MasteryIcon = mastery.icon;
 
   return (
     <>
@@ -193,25 +149,27 @@ export function LessonView({
                       : `Created ${fmtDate(lesson.created_at!)}`}
                   </p>
                 )}
-                <Button
-                  type="button"
-                  variant="link"
-                  size="sm"
-                  onClick={() => setIsContentExpanded((prev) => !prev)}
-                  className="text-foreground p-0 text-sm gap-1 shadow-none"
-                >
-                  {isContentExpanded ? (
-                    <>
-                      Show less
-                      <ChevronUp size={14} />
-                    </>
-                  ) : (
-                    <>
-                      See more
-                      <ChevronDown size={14} />
-                    </>
-                  )}
-                </Button>
+                {lesson.content && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    onClick={() => setIsContentExpanded((prev) => !prev)}
+                    className="text-foreground p-0 text-sm gap-1 shadow-none"
+                  >
+                    {isContentExpanded ? (
+                      <>
+                        Show less
+                        <ChevronUp size={14} />
+                      </>
+                    ) : (
+                      <>
+                        See more
+                        <ChevronDown size={14} />
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -234,41 +192,39 @@ export function LessonView({
                   Lesson Mastery
                 </Card.Description>
                 <Badge
-                  variant={currentMastery.badgeVariant}
+                  variant={mastery.badgeVariant}
                   size="sm"
-                  className={cn("capitalize cursor-pointer select-none", currentMastery.badgeLabel === "Not rated" ? "bg-muted text-foreground" : "")}
-                  onClick={toggleMastery}
-                  title="Click to toggle mastery level"
+                  className={cn(
+                    mastery.percentage === null ? "bg-muted text-foreground" : "",
+                  )}
+                  data-testid="lesson-mastery-badge"
                 >
-                  {currentMastery.badgeLabel}
+                  {mastery.percentage !== null
+                    ? `${mastery.badgeLabel} · ${mastery.percentage}%`
+                    : "Not yet rated"}
                 </Badge>
               </Card.Header>
 
               <Card.Content className="flex flex-1 flex-col gap-3 -mt-1">
                 <Card
-                  role="button"
-                  tabIndex={0}
-                  onClick={toggleMastery}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      toggleMastery();
-                    }
-                  }}
                   className={cn(
-                    "shadow-none items-center flex flex-col p-3 cursor-pointer select-none transition-all duration-150 border-2 hover:border-black",
-                    currentMastery.bgClass,
+                    "shadow-none items-center flex flex-col p-3 border-2",
+                    mastery.bgClass,
                   )}
-                  title="Click to cycle mastery level"
+                  data-testid="lesson-mastery-card"
                 >
-                  <currentMastery.icon className={cn("size-8 transition-colors", currentMastery.colorClass)} />
-                  <p className={cn("text-base font-bold text-center", currentMastery.colorClass)}>
-                    {currentMastery.label}
+                  <MasteryIcon
+                    aria-hidden="true"
+                    className={cn("size-8 transition-colors", mastery.colorClass)}
+                  />
+                  <p className={cn("text-base font-bold text-center", mastery.colorClass)}>
+                    {mastery.percentage !== null
+                      ? `${mastery.label} (${mastery.percentage}%)`
+                      : "Not yet rated"}
                   </p>
-
                 </Card>
                 <p className="text-sm text-muted-foreground px-1 -mt-1">
-                  {currentMastery.description}
+                  {mastery.description}
                 </p>
               </Card.Content>
             </Card>
@@ -279,33 +235,38 @@ export function LessonView({
                   <Card.Description className="text-lg sm:text-2xl font-bold text-foreground">
                     Lesson Completion
                   </Card.Description>
-                  <Badge variant="surface" size="sm">
-                    {currentMastery.percentage > 0 ? `${currentMastery.percentage}%` : "--"}
+                  <Badge variant="surface" size="sm" data-testid="lesson-completion-badge">
+                    {completion.percentage !== null ? `${completion.percentage}%` : "--"}
                   </Badge>
                 </div>
 
-                <p className="text-lg font-semibold">2 out of 4 classworks done</p>
+                <p className="text-lg font-semibold" data-testid="lesson-completion-summary">
+                  {completion.totalCount > 0
+                    ? `${completion.completedCount} out of ${completion.totalCount} ${completion.totalCount === 1 ? "classwork" : "classworks"} done`
+                    : "No classwork assigned for this lesson yet"}
+                </p>
                 <Progress
-                  value={currentMastery.percentage}
+                  value={completion.percentage ?? 0}
                   className="h-3"
-                  aria-label={`Lesson completion: ${currentMastery.percentage}%`}
+                  aria-label={
+                    completion.percentage !== null
+                      ? `Lesson completion: ${completion.percentage}%`
+                      : "Lesson completion: No classwork assigned"
+                  }
                 />
               </div>
 
               <div className="mt-auto flex flex-wrap gap-2 pt-1">
                 <Badge variant="surface" size="sm">
-                  {currentMastery.completedCount} Completed
+                  {completion.completedCount} Completed
                 </Badge>
                 <Badge variant="default" size="sm">
-                  {currentMastery.pendingCount} Pending
+                  {completion.pendingCount} Pending
                 </Badge>
               </div>
             </Card>
-
           </aside>
         </div>
-
-
       </div>
     </>
   );

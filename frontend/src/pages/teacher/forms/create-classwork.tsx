@@ -131,9 +131,12 @@ export default function CreateClassworkModal({
       subject_id: preferredId,
     };
   });
+  const isSubjectLocked = Boolean(initialSubjectId) || Boolean(remediationTarget);
+  const isLessonLocked = Boolean(initialLessonId);
+
   useEffect(() => {
     if (initialSubjectId && subjects.some((subject) => String(subject.id) === String(initialSubjectId))) {
-      setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
+      setDraft((current) => current.subject_id === String(initialSubjectId) ? current : { ...current, subject_id: String(initialSubjectId) });
     }
   }, [initialSubjectId, subjects]);
   useEffect(() => {
@@ -154,6 +157,18 @@ export default function CreateClassworkModal({
   const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>(() =>
     initialLessonId ? [initialLessonId] : []
   );
+
+  useEffect(() => {
+    if (initialLessonId) {
+      setSelectedLessonIds([initialLessonId]);
+    }
+  }, [initialLessonId]);
+
+  useEffect(() => {
+    if (initialClassId) {
+      setSelectedClassIds([initialClassId]);
+    }
+  }, [initialClassId]);
   const [isLessonLoading, setIsLessonLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [validationError, setValidationError] = useState("");
@@ -564,6 +579,7 @@ export default function CreateClassworkModal({
                 <Select
                   value={draft.subject_id}
                   onValueChange={(val) => {
+                    if (isSubjectLocked) return;
                     setDraft((current) => ({
                       ...current,
                       subject_id: val,
@@ -572,7 +588,7 @@ export default function CreateClassworkModal({
                     setSelectedLessonIds([]);
                     setValidationError("");
                   }}
-                  disabled={isCreating || Boolean(remediationTarget)}
+                  disabled={isCreating || isSubjectLocked}
                 >
                   <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                     <Select.Value placeholder="Choose subject" />
@@ -593,6 +609,7 @@ export default function CreateClassworkModal({
                 <Select
                   value={selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""}
                   onValueChange={(val) => {
+                    if (isLessonLocked) return;
                     setSelectedLessonIds(val ? [Number(val)] : []);
                     setValidationError("");
                   }}
@@ -600,7 +617,8 @@ export default function CreateClassworkModal({
                     isCreating ||
                     !draft.subject_id ||
                     isLessonLoading ||
-                    availableLessons.length === 0
+                    availableLessons.length === 0 ||
+                    isLessonLocked
                   }
                 >
                   <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
@@ -632,6 +650,23 @@ export default function CreateClassworkModal({
                   </Select.Content>
                 </Select>
               </Field>
+
+              {(() => {
+                const selectedLesson = availableLessons.find(
+                  (l) => l.lesson_id === selectedLessonIds[0],
+                );
+                if (selectedLesson && (selectedLesson.competency_statement || selectedLesson.competency_code)) {
+                  return (
+                    <Field label="Learning Competency">
+                      <div className="w-full rounded border-2 border-black bg-muted/40 px-3 py-2 text-sm text-foreground">
+                        {selectedLesson.competency_code ? `[${selectedLesson.competency_code}] ` : ""}
+                        {selectedLesson.competency_statement}
+                      </div>
+                    </Field>
+                  );
+                }
+                return null;
+              })()}
 
 
 

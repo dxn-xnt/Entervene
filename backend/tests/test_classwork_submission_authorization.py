@@ -757,7 +757,6 @@ def test_quiz_classwork_creation_saves_builder_atomically(authz_context):
             "due_date": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
             "max_attempts": "1",
             "quiz_payload": json.dumps(_valid_quiz_payload()),
-            "reference_links": json.dumps([{"url": "https://example.test/quiz-guide", "title": "Quiz guide"}]),
         },
     )
 
@@ -766,7 +765,7 @@ def test_quiz_classwork_creation_saves_builder_atomically(authz_context):
     quiz = c["db"].query(Quiz).filter(Quiz.classwork_id == classwork_id).one()
     assert quiz.total_items == 1
     assert c["db"].query(QuizQuestion).filter(QuizQuestion.quiz_id == quiz.quiz_id).count() == 1
-    assert [link["title"] for link in response.json()["reference_links"]] == ["Quiz guide"]
+    assert response.json()["reference_links"] == []
 
 
 def test_quiz_classwork_creation_rolls_back_when_builder_fails(authz_context):

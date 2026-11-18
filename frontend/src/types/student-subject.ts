@@ -8,6 +8,7 @@ export interface StudentLessonAttachment {
 
 export interface StudentLesson {
   lesson_id: number;
+  subject_id?: number | null;
   title: string;
   description?: string | null;
   content?: string | null;

@@ -274,6 +274,8 @@ def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -
     validate_classwork_values(total_points=total_points)
     ensure_subject_owner(db, staff_id, body.subject_id)
     reference_links = _normalized_reference_links(body.reference_links)
+    if is_quiz_type(classwork_type) and reference_links:
+        raise HTTPException(status_code=400, detail="Reference links are not supported for quizzes")
     lesson_ids = dedupe_ids(body.lesson_ids)
     ensure_lessons_owned(db, staff_id, body.subject_id, lesson_ids)
 
@@ -353,12 +355,21 @@ async def create_classwork_wizard_record(
     validate_schedule(None, due_date, lock_date)
     ensure_subject_owner(db, staff_id, subject_id)
     selected_reference_links = _parse_reference_links_form(reference_links)
-    ensure_lessons_owned(db, staff_id, subject_id, selected_lesson_ids)
+    if is_quiz_type(normalized_type) and selected_reference_links:
+        raise HTTPException(status_code=400, detail="Reference links are not supported for quizzes")
 
     if academic_period_id is None:
         academic_period_id = resolve_active_academic_period(db).academic_period_id
 
     ensure_class_targets(db, staff_id, subject_id, selected_class_ids, academic_period_id)
+    ensure_lessons_owned(
+        db,
+        staff_id,
+        subject_id,
+        selected_lesson_ids,
+        class_ids=selected_class_ids,
+        academic_period_id=academic_period_id,
+    )
     if is_published:
         from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
         for class_id in selected_class_ids:
@@ -940,10 +951,23 @@ def update_classwork_record(
         parsed_levels = validate_activity_rubric(parsed_levels)
         values["total_points"] = max(level.points for level in parsed_levels)
     validate_classwork_values(total_points=values.get("total_points"))
+    if is_quiz_type(target_type):
+        if replacement_links:
+            raise HTTPException(status_code=400, detail="Reference links are not supported for quizzes")
+        replacement_links = None
     lesson_ids = values.pop("lesson_ids", None)
     if lesson_ids is not None:
         lesson_ids = dedupe_ids(lesson_ids)
-        ensure_lessons_owned(db, staff_id, classwork.subject_id, lesson_ids)
+        target_class_ids = [a.class_id for a in classwork.assignments]
+        target_period_ids = {a.academic_period_id for a in classwork.assignments if a.academic_period_id is not None}
+        ensure_lessons_owned(
+            db,
+            staff_id,
+            classwork.subject_id,
+            lesson_ids,
+            class_ids=target_class_ids or None,
+            academic_period_id=next(iter(target_period_ids)) if len(target_period_ids) == 1 else None,
+        )
     try:
         for field, value in values.items():
             setattr(classwork, field, value)
@@ -966,9 +990,6 @@ def update_classwork_record(
         enqueued_count = sync_and_dispatch_classwork_draft_jobs(
             db, classwork_id, staff_id, auto_commit=False
         )
-
-        from app.services.submission.SubmissionFeedbackService import sync_and_dispatch_classwork_draft_jobs
-        sync_and_dispatch_classwork_draft_jobs(db, classwork_id, staff_id)
 
         targeted = [a for a in classwork.assignments if a.is_published and a.recipient_student_id]
         assigned_class_ids = [a.class_id for a in classwork.assignments if a.is_published and not a.recipient_student_id]

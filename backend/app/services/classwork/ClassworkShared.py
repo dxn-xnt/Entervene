@@ -107,17 +107,65 @@ def ensure_subject_owner(db: Session, staff_id: str, subject_id: int) -> None:
             raise HTTPException(status_code=403, detail="You are not assigned to this subject")
 
 
-def ensure_lessons_owned(db: Session, staff_id: str, subject_id: int, lesson_ids: list[int]) -> None:
-    """Linked lessons must belong to the same teacher and subject as the classwork."""
+def ensure_lessons_owned(
+    db: Session,
+    staff_id: str,
+    subject_id: int,
+    lesson_ids: list[int],
+    *,
+    class_ids: list[int] | None = None,
+    academic_period_id: int | None = None,
+) -> None:
+    """Linked lessons must belong to the same teacher, subject, class scope, and academic period as the classwork."""
     if not lesson_ids:
         return
     lessons = db.query(Lesson).filter(
         Lesson.lesson_id.in_(lesson_ids),
         Lesson.subject_id == subject_id,
         Lesson.created_by_staff_id == staff_id,
+        Lesson.is_archived == False,
     ).all()
     if len(lessons) != len(lesson_ids):
         raise HTTPException(status_code=400, detail="One or more lessons cannot be linked to this classwork")
+
+    if class_ids:
+        from app.models.academic.LessonAssignment import LessonAssignment
+        target_classes = set(class_ids)
+        for lesson in lessons:
+            assigned_rows = (
+                db.query(LessonAssignment.class_id)
+                .filter(LessonAssignment.lesson_id == lesson.lesson_id)
+                .all()
+            )
+            if assigned_rows:
+                assigned_class_ids = {row[0] for row in assigned_rows}
+                if not target_classes.issubset(assigned_class_ids):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="One or more lessons are not assigned to the selected class sections",
+                    )
+
+    if academic_period_id is not None:
+        from app.models.academic.Competency import Competency
+        from app.models.academic.LessonDelivery import LessonDelivery
+        for lesson in lessons:
+            if lesson.competency_id is not None:
+                comp = db.get(Competency, lesson.competency_id)
+                if comp is not None and comp.academic_period_id is not None and comp.academic_period_id != academic_period_id:
+                    delivered = (
+                        db.query(LessonDelivery.delivery_id)
+                        .filter(
+                            LessonDelivery.lesson_id == lesson.lesson_id,
+                            LessonDelivery.academic_period_id == academic_period_id,
+                            LessonDelivery.revoked_at.is_(None),
+                        )
+                        .first()
+                    )
+                    if not delivered:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="One or more lessons belong to a different academic period",
+                        )
 
 
 def ensure_class_targets(
