@@ -66,10 +66,8 @@ import {
 } from "@/lib/lesson-delivery-api";
 import LessonDeliveryCorrectionModal from "./forms/lesson-delivery-correction-modal";
 import {
-  getTeacherRecordPeriods,
   getTeacherStudentRecordDetail,
   type StudentRecordDetailResponse,
-  type StudentRecordPeriodOption,
 } from "@/lib/student-record-api";
 import type {
   ClassworkDetail,
@@ -1384,6 +1382,8 @@ function StudentsTab({
   const activeSubjectId =
     subjectId || detail.subject_loads[0]?.subject_id || null;
 
+  const { selectedPeriodId, selectedYearId } = useAcademicPeriod();
+
   const [search, setSearch] = useState("");
   const [selectedStudent, setSelectedStudent] =
     useState<TeacherAdvisoryStudentItem | null>(null);
@@ -1391,75 +1391,62 @@ function StudentsTab({
     useState<StudentRecordDetailResponse | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
-  const [periods, setPeriods] = useState<StudentRecordPeriodOption[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
 
   useEffect(() => {
-    if (!detail.class_id || !activeSubjectId) return;
-    let isMounted = true;
-    const loadPeriods = async () => {
-      try {
-        const data = await getTeacherRecordPeriods(
-          detail.class_id,
-          activeSubjectId,
-        );
-        if (!isMounted) return;
-        setPeriods(data.periods);
-        setSelectedPeriodId(
-          String(
-            data.default_academic_period_id ||
-            data.periods[0]?.academic_period_id ||
-            "",
-          ),
-        );
-      } catch {
-        // ignore
-      }
-    };
-    void loadPeriods();
-    return () => {
-      isMounted = false;
-    };
-  }, [detail.class_id, activeSubjectId]);
-
-  const loadStudentAnalytics = useCallback(
-    async (student: TeacherAdvisoryStudentItem, periodId?: string) => {
-      if (!detail.class_id || !activeSubjectId) return;
-      setIsDetailLoading(true);
-      setDetailError("");
+    if (!selectedStudent || !detail.class_id || !activeSubjectId) {
       setStudentDetail(null);
+      setIsDetailLoading(false);
+      setDetailError("");
+      return;
+    }
+
+    let isMounted = true;
+    setIsDetailLoading(true);
+    setDetailError("");
+    setStudentDetail(null);
+
+    const loadAnalytics = async () => {
       try {
         const data = await getTeacherStudentRecordDetail(
           detail.class_id,
           activeSubjectId,
-          student.student_id,
-          periodId || selectedPeriodId || undefined,
+          selectedStudent.student_id,
+          selectedPeriodId ? String(selectedPeriodId) : undefined,
         );
-        setStudentDetail(data);
+        if (isMounted) {
+          setStudentDetail(data);
+        }
       } catch (err) {
-        setDetailError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load student analytics.",
-        );
+        if (isMounted) {
+          setDetailError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load student analytics.",
+          );
+        }
       } finally {
-        setIsDetailLoading(false);
+        if (isMounted) {
+          setIsDetailLoading(false);
+        }
       }
-    },
-    [detail.class_id, activeSubjectId, selectedPeriodId],
-  );
+    };
+
+    void loadAnalytics();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedStudent, selectedPeriodId, selectedYearId, detail.class_id, activeSubjectId]);
 
   const handleSelectStudent = (student: TeacherAdvisoryStudentItem) => {
     setSelectedStudent(student);
     onDetailViewChange?.(student);
-    void loadStudentAnalytics(student, selectedPeriodId);
   };
 
-  const handlePeriodChange = (newPeriodId: string) => {
-    setSelectedPeriodId(newPeriodId);
-    if (selectedStudent) {
-      void loadStudentAnalytics(selectedStudent, newPeriodId);
-    }
+  const handleBackToStudents = () => {
+    setSelectedStudent(null);
+    setStudentDetail(null);
+    onDetailViewChange?.(null);
   };
 
   const filteredStudents = useMemo(() => {
@@ -1480,9 +1467,6 @@ function StudentsTab({
         studentDetail={studentDetail}
         classId={detail.class_id}
         subjectLoads={detail.subject_loads as any}
-        periods={periods}
-        selectedPeriodId={selectedPeriodId}
-        onPeriodChange={handlePeriodChange}
         isDetailLoading={isDetailLoading}
         detailError={detailError}
         sectionName={detail.section_name}
@@ -1491,6 +1475,7 @@ function StudentsTab({
             ?.subject_name
         }
         subjectId={activeSubjectId}
+        onBack={handleBackToStudents}
       />
     );
   }

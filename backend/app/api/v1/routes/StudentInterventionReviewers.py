@@ -12,12 +12,16 @@ from app.services.intervention.StudentInterventionReviewerService import (
 )
 
 
-router = APIRouter(dependencies=[Depends(require_development_intervention_api)])
+router = APIRouter()
 
 
 @router.get("", response_model=StudentReviewerList)
-def list_reviewers(student=Depends(get_student_record), db: Session = Depends(get_db)):
-    return list_student_reviewers(db, student.student_id)
+def list_reviewers(
+    academic_period_id: int | None = None,
+    student=Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    return list_student_reviewers(db, student.student_id, academic_period_id=academic_period_id)
 
 
 @router.get("/{material_id}", response_model=StudentReviewerDetail)
