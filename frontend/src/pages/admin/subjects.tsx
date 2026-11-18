@@ -122,6 +122,7 @@ export default function AdminSubjects() {
   const [isLoadingOfferings, setIsLoadingOfferings] = useState(true);
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [isImportingCatalog, setIsImportingCatalog] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{ kind: "catalog" | "offerings"; file: File } | null>(null);
   const [isImportingOfferings, setIsImportingOfferings] = useState(false);
   const [isDownloadingCatalogTemplate, setIsDownloadingCatalogTemplate] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
@@ -569,7 +570,11 @@ export default function AdminSubjects() {
                         type="file"
                         accept=".csv,text/csv"
                         className="hidden"
-                        onChange={(event) => void handleCatalogImport(event.target.files?.[0])}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) setPendingImport({ kind: "catalog", file });
+                          event.target.value = "";
+                        }}
                       />
                       <Button size="header" className="col-span-2 md:col-auto" onClick={openCreateSubject}>
                         <Plus className="size-4" /> New Subject
@@ -617,7 +622,11 @@ export default function AdminSubjects() {
                         type="file"
                         accept=".csv,text/csv"
                         className="hidden"
-                        onChange={(event) => void handleOfferingImport(event.target.files?.[0])}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) setPendingImport({ kind: "offerings", file });
+                          event.target.value = "";
+                        }}
                       />
                       <Button
                         size="header"
@@ -1115,6 +1124,25 @@ export default function AdminSubjects() {
         defaultSourceAcademicYearId={isHistoricalYear ? selectedAcademicYear?.academic_year_id : undefined}
         onCopied={handleCopySetupComplete}
       />
+
+      <ConfirmDialog
+        open={Boolean(pendingImport)}
+        onOpenChange={(open) => {
+          if (!open && !isImportingCatalog && !isImportingOfferings) setPendingImport(null);
+        }}
+        title={pendingImport?.kind === "offerings" ? "Import Subject Offerings" : "Import Catalog Subjects"}
+        description="Confirm the selected CSV file before importing."
+        confirmLabel={isImportingCatalog || isImportingOfferings ? "Importing..." : "Import"}
+        isLoading={isImportingCatalog || isImportingOfferings}
+        onConfirm={async () => {
+          if (!pendingImport || isImportingCatalog || isImportingOfferings) return;
+          if (pendingImport.kind === "catalog") await handleCatalogImport(pendingImport.file);
+          else await handleOfferingImport(pendingImport.file);
+          setPendingImport(null);
+        }}
+      >
+        <p className="break-words font-medium">{pendingImport?.file.name}</p>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={Boolean(pendingAction)}
