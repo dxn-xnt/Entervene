@@ -88,8 +88,6 @@ const date = (value: string) =>
 const methods: Array<{ value: RemediationFormat; label: string; detail: string; aiRecommendable: boolean }> = [
   { value: "QUIZ", label: "Quiz", detail: "Focused practice in the existing Quiz builder", aiRecommendable: true },
   { value: "CLASSWORK", label: "Classwork", detail: "Targeted activity in the existing Classwork creator", aiRecommendable: true },
-  { value: "TOS", label: "TOS Blueprint", detail: "Teacher planning and export only; not assigned to students", aiRecommendable: false },
-  { value: "EXISTING_MATERIAL_ONLY", label: "Materials Only", detail: "Planning references only, no new graded assessment", aiRecommendable: true },
 ];
 
 const label = (value: string) =>
@@ -320,6 +318,7 @@ const reconcileGradeTreatment = (
 
 export interface InterventionSupportMaterialsHandle {
   saveAdjustments: () => Promise<boolean>;
+  validateStep: (step: number) => boolean;
 }
 
 export interface InterventionSupportMaterialsProps {
@@ -328,13 +327,14 @@ export interface InterventionSupportMaterialsProps {
   page?: "overview" | "plan";
   previousResolved?: TeacherInterventionSummary;
   onAdjustSupport?: () => void;
+  wizardStep?: number;
 }
 
 const InterventionSupportMaterials = forwardRef<
   InterventionSupportMaterialsHandle,
   InterventionSupportMaterialsProps
 >(function InterventionSupportMaterials(
-  { detail, page = "overview", previousResolved, onAdjustSupport, onChangesChange },
+  { detail, page = "overview", previousResolved, onAdjustSupport, onChangesChange, wizardStep },
   ref
 ) {
   const toast = useToast();
@@ -364,6 +364,10 @@ const InterventionSupportMaterials = forwardRef<
   const [capInput, setCapInput] = useState<string>("75");
   const [savedPlanValues, setSavedPlanValues] = useState<unknown>(null);
   const [capError, setCapError] = useState<string | null>(null);
+  const [wizardError, setWizardError] = useState<string | null>(null);
+  useEffect(() => {
+    setWizardError(null);
+  }, [wizardStep]);
   const [scorePreviews, setScorePreviews] = useState<ClassworkScorePreview[]>([]);
   const [projectionResponse, setProjectionResponse] = useState<SubjectGradeProjectionResponse | null>(null);
   const [projectionLoading, setProjectionLoading] = useState(false);
@@ -487,6 +491,13 @@ const InterventionSupportMaterials = forwardRef<
     (progress?.completed_remediation && progress.completed_remediation.length > 0) ||
     savedAssessment !== null
   );
+
+  useEffect(() => {
+    if (wizardStep == null || loading || hasSavedAssessment || !focus?.component || !isGraded(plan.teacher_choice)) return;
+    setPlan((current) => current.grade_treatment === focus.component
+      ? current
+      : { ...current, grade_treatment: focus.component });
+  }, [wizardStep, loading, hasSavedAssessment, focus?.component, plan.teacher_choice]);
 
   const setNotice = (message: string) => {
     if (message) toast.success({ title: message });
@@ -705,11 +716,6 @@ const InterventionSupportMaterials = forwardRef<
       .filter((r) => r.kind === "CLASSWORK" && (r.classwork_type === "READING" || !r.classwork_type))
       .map((r) => r.id);
   }, [selectedResources]);
-  const hasUnsavedReadingChanges = useMemo(() => {
-    if (selectedReadingIds.length !== savedReadingIds.length) return true;
-    const savedSet = new Set(savedReadingIds);
-    return selectedReadingIds.some((id) => !savedSet.has(id));
-  }, [selectedReadingIds, savedReadingIds]);
   const NO_LESSON = "__NO_LESSON__";
   const lessonKey = (item: RemediationResource) => item.lesson?.trim() || NO_LESSON;
   const materialPool = useMemo(() => {
@@ -1281,6 +1287,21 @@ const InterventionSupportMaterials = forwardRef<
     ref,
     () => ({
       saveAdjustments,
+      validateStep: (step: number) => {
+        const message = loading || working
+          ? "Wait for the current operation to finish."
+          : step === 4 && !isGraded(plan.teacher_choice)
+            ? "Choose a remediation activity."
+            : step === 4 && !plan.grade_treatment
+              ? "Select a grade treatment."
+              : step === 4 && plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id
+                ? "Select the original exam."
+              : step === 4 && plan.grade_treatment !== "PRACTICE_ONLY"
+                ? validateCap(capInput)
+                : null;
+        setWizardError(message);
+        return message == null;
+      },
     })
   );
 
@@ -1716,6 +1737,7 @@ const InterventionSupportMaterials = forwardRef<
 
   return (
     <section className="flex flex-col gap-3" aria-label="Intervention workflow">
+      {wizardError && <Alert status="error" role="alert" aria-live="assertive">{wizardError}</Alert>}
       <NoChangesMessage message={changes.noChangesMessage} />
       <div className="flex flex-col gap-2">
         <Card className="w-full space-y-2 border-2 p-3 border-black bg-primary">
@@ -1736,10 +1758,10 @@ const InterventionSupportMaterials = forwardRef<
               <div className="flex flex-row justify-between w-full items-end">
                 <h2 className="text-xl font-black -mb-1">{detail.student_name}</h2>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge variant="solid" size="md">
+                  <Badge variant="solid" size="sm">
                     Active
                   </Badge>
-                  <Badge variant="outline" size="md">
+                  <Badge variant="outline" size="sm">
                     {phase}
                   </Badge>
                 </div>
@@ -1788,7 +1810,26 @@ const InterventionSupportMaterials = forwardRef<
         <p>Loading Intervention workflow...</p>
       ) : (
         <>
-          {page === "overview" && (
+          {wizardStep === 5 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold">Summary</h3>
+              <p className="text-sm text-muted-foreground">Review the support setup before saving.</p>
+              <Card className="w-full space-y-3 rounded! border-border shadow-none!">
+                <h4 className="font-bold">Prepared Support Plan</h4>
+                <p>Support focus: {focusName}</p>
+                <h4 className="font-bold">Support Resources</h4>
+                {selectedResources.length ? <ul className="list-disc pl-5">{selectedResources.map((resource) => <li key={`${resource.kind}:${resource.id}`}>{resource.title}</li>)}</ul> : <p className="text-sm text-muted-foreground">No optional support resources selected.</p>}
+                <h4 className="font-bold">Practice Assessment</h4>
+                <p>{practiceAssessment?.title || "No optional practice assessment added."}</p>
+                <h4 className="font-bold">Remediation Activity</h4>
+                <p>{plan.teacher_choice ? label(plan.teacher_choice) : "No activity selected"}</p>
+                <p>Grade treatment: {componentLabel(plan.grade_treatment)}</p>
+                {plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY" && <p>Score adjustment cap: {capInput}%</p>}
+                <p>Targeted classworks: {selectedActivityIds.length}</p>
+              </Card>
+            </div>
+          )}
+          {((page === "overview" && wizardStep == null) || wizardStep === 1) && (
             <>
               <div className="flex flex-col gap-1">
                 <h3 className="font-black">Academic Diagnosis</h3>
@@ -2189,9 +2230,9 @@ const InterventionSupportMaterials = forwardRef<
             </>
           )}
 
-          {page === "plan" && (
+          {(page === "plan" || wizardStep != null) && (
             <div className="flex flex-col w-full gap-3">
-              <div className="flex flex-col gap-1">
+              <div className={wizardStep != null && wizardStep !== 2 ? "hidden" : "flex flex-col gap-1"}>
                 <h3 className="font-black">Supporting Resources</h3>
                 <Card className="w-full space-y-2.5">
                   {/* <p>
@@ -2957,31 +2998,12 @@ const InterventionSupportMaterials = forwardRef<
               />
 
               {/* Practice Assessment Section */}
-              <div className="flex flex-col gap-1">
+              <div className={wizardStep != null && wizardStep !== 3 ? "hidden" : "flex flex-col gap-1"}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <h3 className="font-black">Practice Assessment</h3>
                     <Badge variant="outline" size="sm">Independent & Ungraded</Badge>
                   </div>
-                  {practiceAssessment ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setIsPracticeModalOpen(true)}
-                    >
-                      <Sparkles className="size-3.5 mr-1.5" />
-                      Manage Practice
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={() => setIsPracticeModalOpen(true)}
-                    >
-                      <Plus className="size-3.5 mr-1.5" />
-                      Add Practice Assessment
-                    </Button>
-                  )}
                 </div>
 
                 <Card className="flex flex-col gap-3 p-4">
@@ -3021,7 +3043,7 @@ const InterventionSupportMaterials = forwardRef<
                             variant="default"
                             onClick={() => setIsPracticeModalOpen(true)}
                           >
-                            Edit / Configure
+                            Edit Practice Assessment
                           </Button>
                         </div>
                       </div>
@@ -3098,14 +3120,14 @@ const InterventionSupportMaterials = forwardRef<
                         className="shrink-0"
                       >
                         <Plus className="size-3.5 mr-1.5" />
-                        Configure Practice
+                        Add Practice Assessment
                       </Button>
                     </div>
                   )}
                 </Card>
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className={wizardStep != null && wizardStep !== 4 ? "hidden" : "flex flex-col gap-1"}>
                 <h3 className="font-black">Remediation Activity</h3>
                 <Card className="flex flex-col gap-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 px-1">
@@ -3130,7 +3152,7 @@ const InterventionSupportMaterials = forwardRef<
                           ...current,
                           teacher_choice: method.value,
                           grade_treatment: isGraded(method.value)
-                            ? (current.grade_treatment ?? "PRACTICE_ONLY")
+                            ? (wizardStep != null ? (focus?.component ?? "PRACTICE_ONLY") : (current.grade_treatment ?? "PRACTICE_ONLY"))
                             : null,
                         }));
                       };
@@ -3318,7 +3340,7 @@ const InterventionSupportMaterials = forwardRef<
                 </Card>
               </div>
 
-              {isGraded(plan.teacher_choice) && (
+              {isGraded(plan.teacher_choice) && (wizardStep == null || wizardStep === 4) && (
                 <div className="flex flex-col gap-1">
                   <h3 className="font-black text-xl">Grade Treatment</h3>
                   <Card className="flex flex-col gap-3 border-2 bg-card">
@@ -3368,7 +3390,7 @@ const InterventionSupportMaterials = forwardRef<
                         </Label>
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           {([
-                            "PRACTICE_ONLY",
+                            ...(wizardStep == null || !focus?.component ? ["PRACTICE_ONLY"] : []),
                             ...(focus?.component && focus.component !== "EXAMINATION"
                               ? [focus.component]
                               : []),
@@ -3383,7 +3405,7 @@ const InterventionSupportMaterials = forwardRef<
                                     : "border-border "
                                     }`}
                                   onClick={() => {
-                                    if (working) return;
+                                    if (working || wizardStep != null) return;
                                     setSelectedActivityIds([]);
                                     setPlan((current) => ({
                                       ...current,
@@ -3399,6 +3421,7 @@ const InterventionSupportMaterials = forwardRef<
                                   </span>
                                   <Checkbox
                                     checked={isSelected}
+                                    disabled={wizardStep != null}
                                     variant="solid"
                                     className={`border-black transition-colors pointer-events-none ${isSelected ? "bg-black text-white" : "bg-white text-black"}`}
                                   />
@@ -3619,7 +3642,7 @@ const InterventionSupportMaterials = forwardRef<
                 </div>
               )}
 
-              {hasOldDraft && oldDraft && (
+              {wizardStep == null && hasOldDraft && oldDraft && (
                 <Accordion className="w-full">
                   <Accordion.Item
                     value="legacy-draft"
@@ -3684,7 +3707,6 @@ const InterventionSupportMaterials = forwardRef<
         studentName={detail.student_name}
         selectedReadingIds={selectedReadingIds}
         savedReadingIds={savedReadingIds}
-        hasUnsavedReadingChanges={hasUnsavedReadingChanges}
         onAssessmentUpdated={handlePracticeAssessmentUpdated}
       />
     </section>
