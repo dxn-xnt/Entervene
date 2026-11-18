@@ -12,8 +12,6 @@ import {
   Search,
   School,
 } from "lucide-react";
-import { Link } from "react-router-dom";
-import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
 import ClassCard from "@/components/admin/classes/class-card";
 import AddClassModal from "./forms/add-class";

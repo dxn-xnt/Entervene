@@ -1,6 +1,5 @@
 import { activeFirst } from "@/lib/active-first";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type React from "react";
 import { Button } from "@/components/retroui/Button";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Checkbox } from "@/components/retroui/Checkbox";
