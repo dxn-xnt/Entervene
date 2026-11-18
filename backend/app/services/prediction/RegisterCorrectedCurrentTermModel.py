@@ -26,8 +26,18 @@ MANIFEST_PATH = Path(__file__).resolve().parent / "schemas" / f"{CORRECTED_MODEL
 
 def require_isolated_demo_database(db: Session) -> None:
     url = make_url(str(db.get_bind().url))
-    if settings.app_environment.lower() != "development" or (url.database or "").casefold() not in {"entervene_demo", "entervene_demo_4m", "entervene_demo_4n", "entervene_demo_4n2"} or url.host not in {"localhost", "127.0.0.1"}:
-        raise ValueError("Corrected model registration requires a local isolated demo database in development mode.")
+    database = (url.database or "").casefold()
+    demo_database = database in {"entervene_demo", "entervene_demo_4m", "entervene_demo_4n", "entervene_demo_4n2"}
+    opted_in_main_database = database == "entervene" and settings.allow_local_corrected_prediction_model
+    if (
+        settings.app_environment.lower() != "development"
+        or url.host not in {"localhost", "127.0.0.1"}
+        or not (demo_database or opted_in_main_database)
+    ):
+        raise ValueError(
+            "Corrected model registration requires an approved local development database; "
+            "the main Entervene database also requires explicit opt-in."
+        )
 
 
 def verified_corrected_package() -> tuple[dict, dict, str, str]:

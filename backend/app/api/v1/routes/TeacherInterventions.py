@@ -45,6 +45,8 @@ from app.services.intervention.InterventionRemediationDraftGenerationService imp
 from app.services.intervention.InterventionRemediationDraftPreflightService import (
     preflight_remediation_draft,
 )
+from app.services.intervention.RemediationGenerationEligibilityService import refresh_remediation_generation_eligibility
+from app.services.intervention.InterventionRemediationService import _row as require_active_intervention
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -130,6 +132,17 @@ async def generate_remediation_draft_endpoint(
         )
     finally:
         actor.reset(token)
+
+
+@router.post("/{intervention_id}/remediation/evidence/refresh")
+def refresh_remediation_evidence_endpoint(
+    intervention_id: int,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    row = require_active_intervention(db, staff_id, intervention_id)
+    return refresh_remediation_generation_eligibility(db, row, staff_id)
 
 
 @router.post(

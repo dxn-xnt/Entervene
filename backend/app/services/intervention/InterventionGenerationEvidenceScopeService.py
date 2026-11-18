@@ -229,7 +229,9 @@ def _verified_coverage_targets(
     return lesson_ids, competency_ids
 
 
-def resolve_generation_evidence_scope(db: Session, row: Intervention) -> dict[str, Any]:
+def resolve_generation_evidence_scope(
+    db: Session, row: Intervention, *, teaching_as_of: datetime | None = None,
+) -> dict[str, Any]:
     """Resolve the maximum evidence scope available to a future AI generator."""
     diagnosis, source, period, cutoff = _require_frozen_scope(db, row)
     activities = _verified_activities(db, row, diagnosis)
@@ -367,8 +369,9 @@ def resolve_generation_evidence_scope(db: Session, row: Intervention) -> dict[st
         "AVAILABLE_COMPONENT_ONLY" if weakest else "INSUFFICIENT_EVIDENCE"
     )
 
+    teaching_cutoff = _utc(teaching_as_of) if teaching_as_of is not None else cutoff
     delivered_lesson_ids = get_delivered_lesson_ids_as_of(
-        db, row.class_id, row.subject_id, row.academic_period_id, as_of=cutoff
+        db, row.class_id, row.subject_id, row.academic_period_id, as_of=teaching_cutoff
     )
     if delivered_lesson_ids:
         taught_status = "TEACHER_VERIFIED_DELIVERY"
@@ -395,6 +398,7 @@ def resolve_generation_evidence_scope(db: Session, row: Intervention) -> dict[st
             "source_prediction_id": source.prediction_id,
             "source_prediction_revision": source.revision,
             "evidence_cutoff_at": cutoff.isoformat(),
+            "teaching_eligibility_cutoff_at": teaching_cutoff.isoformat(),
         },
         "evidence_level": evidence_level,
         "components": weakest,

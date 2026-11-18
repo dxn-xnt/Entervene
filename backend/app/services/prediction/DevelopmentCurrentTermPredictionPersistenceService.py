@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import json
 import math
 from datetime import datetime, timezone
 from decimal import Decimal
-from hashlib import sha256
-from pathlib import Path
 from typing import Any, Callable, Mapping
 from uuid import UUID
 
@@ -16,19 +13,19 @@ from sqlalchemy.orm import Session
 
 from app.core.Config import settings
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
-from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
+from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.services.prediction import DevelopmentCurrentTermPredictionService as prediction_service
 from app.services.prediction import DevelopmentCurrentTermRiskService as intervention_service
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
-from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME, MODEL_NAMES, artifact_path, require_development_model_name
+from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
+from app.services.prediction.DevelopmentCurrentTermModelResolver import require_current_term_model
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
 from app.services.prediction.PredictionGenerationTransaction import run_prediction_generation_transaction
 from app.services.intervention.InterventionCandidateService import sync_intervention_for_persisted_prediction
 
 
 EVIDENCE_SNAPSHOT_VERSION = "CURRENT_TERM_V3_EVIDENCE_V2"
-MODEL_TARGET_COLUMN = "target_final_period_grade"
 
 
 def _sync_current_term_intervention_if_enabled(
@@ -68,54 +65,8 @@ def _sync_current_term_intervention_if_enabled(
         )
 
 
-def _digest_json(value: dict[str, Any]) -> str:
-    return sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-
-
 def _require_current_term_model(db: Session, model_version_id: int | None) -> AIModelVersion:
-    if model_version_id is None:
-        raise ValueError("A model_version_id is required for current-term persistence.")
-    version = db.get(AIModelVersion, model_version_id)
-    if version is None:
-        raise ValueError("The current-term model version was not found.")
-    valid_development = (
-        version.lifecycle_status == "DEVELOPMENT"
-        and not version.is_active
-        and not version.production_validated
-        and not version.independent_three_term_validation
-    )
-    valid_production = (
-        version.lifecycle_status == "PRODUCTION"
-        and version.is_active
-        and version.production_validated
-        and version.independent_three_term_validation
-    )
-    if (
-        version.model_name not in MODEL_NAMES
-        or version.model_type != "REGRESSOR"
-        or version.model_purpose != ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value
-        or version.target_column != MODEL_TARGET_COLUMN
-        or not (valid_development or valid_production)
-    ):
-        raise ValueError("The model version does not match an approved current-term lifecycle contract.")
-
-    metadata = version.registry_metadata_json or {}
-    if (
-        set(metadata.get("supported_subjects") or []) != prediction_service.SUPPORTED_SUBJECTS
-        or set(metadata.get("supported_weight_patterns") or []) != prediction_service.SUPPORTED_WEIGHT_PATTERNS
-        or metadata.get("period_semantics") != "SOURCE_EQUALS_TARGET_SAME_TERM"
-    ):
-        raise ValueError("The model version's effective current-term domain does not match the scorer contract.")
-    require_development_model_name(version.model_name)
-    schema = scorer.load_development_current_term_schema(version.model_name)
-    if version.feature_schema_json != schema or metadata.get("feature_schema_sha256") != _digest_json(schema):
-        raise ValueError("The model version's feature schema does not match the V3 scorer.")
-    artifact = (Path(__file__).resolve().parents[3] / version.artifact_path).resolve()
-    if artifact != artifact_path(version.model_name).resolve() or not artifact.is_file():
-        raise ValueError("The model version's artifact path does not match the V3 scorer.")
-    if metadata.get("artifact_sha256") != sha256(artifact.read_bytes()).hexdigest():
-        raise ValueError("The model version's artifact hash does not match the V3 scorer.")
-    return version
+    return require_current_term_model(db, model_version_id)
 
 
 def _prediction_scope(

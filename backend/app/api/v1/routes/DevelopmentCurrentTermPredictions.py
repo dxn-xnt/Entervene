@@ -16,7 +16,11 @@ from app.services.prediction import DevelopmentCurrentTermPredictionReadService 
 from app.services.prediction import DevelopmentCurrentTermPredictionService as prediction
 from app.services.prediction import DevelopmentCurrentTermRiskService as intervention
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
-from app.services.prediction.DevelopmentCurrentTermModelSelection import MODEL_NAMES, selected_development_model_name, require_development_model_name
+from app.services.prediction.DevelopmentCurrentTermModelSelection import MODEL_NAMES
+from app.services.prediction.DevelopmentCurrentTermModelResolver import (
+    SelectedModelResolutionError,
+    resolve_selected_development_model,
+)
 from app.services.prediction.V3PredictionScopeAuthorizationService import (
     authorize_v3_prediction_view,
 )
@@ -56,49 +60,15 @@ def require_development_prediction_write_api() -> None:
         raise HTTPException(status_code=404, detail="Not found")
 
 
-def _registered_v3(db: Session, model_name: str | None = None) -> AIModelVersion:
+def _registered_v3(db: Session) -> AIModelVersion:
     try:
-        name = require_development_model_name(model_name or selected_development_model_name())
-    except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    named_versions = db.query(AIModelVersion).filter(
-        AIModelVersion.model_name == name,
-    ).all()
-    versions = db.query(AIModelVersion).filter(
-        AIModelVersion.model_name == name,
-        AIModelVersion.model_purpose == ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value,
-        AIModelVersion.lifecycle_status == "DEVELOPMENT",
-        AIModelVersion.production_validated.is_(False),
-        AIModelVersion.independent_three_term_validation.is_(False),
-        AIModelVersion.is_active.is_(False),
-    ).all()
-    if len(versions) == 1:
-        return versions[0]
-
-    # A local database can legitimately contain only one of the allowlisted
-    # development models. If configuration drifts to the other model, use the
-    # sole valid registry entry rather than taking the prediction dashboard
-    # down. Never fall back over a malformed or duplicate configured entry.
-    if not named_versions:
-        alternatives = db.query(AIModelVersion).filter(
-            AIModelVersion.model_name.in_(MODEL_NAMES),
-            AIModelVersion.model_purpose == ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value,
-            AIModelVersion.lifecycle_status == "DEVELOPMENT",
-            AIModelVersion.production_validated.is_(False),
-            AIModelVersion.independent_three_term_validation.is_(False),
-            AIModelVersion.is_active.is_(False),
-        ).all()
-        if len(alternatives) == 1:
-            fallback = alternatives[0]
-            logger.warning(
-                "Configured development model %s is not registered; using sole valid model %s (id=%s)",
-                name,
-                fallback.model_name,
-                fallback.model_version_id,
-            )
-            return fallback
-
-    raise HTTPException(status_code=503, detail="Selected development model registry entry unavailable")
+        return resolve_selected_development_model(db)
+    except SelectedModelResolutionError as exc:
+        logger.warning("Development prediction read unavailable reason_code=%s", exc.reason_code)
+        raise HTTPException(
+            status_code=503,
+            detail={"message": str(exc), "reason_code": exc.reason_code},
+        ) from exc
 
 
 @router.post("/current-term-predictions", dependencies=[Depends(require_development_prediction_write_api)])
