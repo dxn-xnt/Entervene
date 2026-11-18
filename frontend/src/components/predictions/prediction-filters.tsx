@@ -1,3 +1,4 @@
+import { activeFirst } from "@/lib/active-first";
 import { useEffect } from "react";
 import type { DashboardFilters, RiskSummary } from "@/lib/prediction-api";
 import { Select } from "@/components/retroui/Select";
@@ -194,7 +195,7 @@ export default function PredictionFilters({
           </Select.Trigger>
           <Select.Content>
             <Select.Item value="all">All Terms</Select.Item>
-            {filters?.terms.map((t) => (
+            {activeFirst(filters?.terms).map((t) => (
               <Select.Item key={t.academic_period_id} value={String(t.academic_period_id)}>
                 {t.term_label}
               </Select.Item>

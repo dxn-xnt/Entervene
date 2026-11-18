@@ -155,4 +155,3 @@ def test_update_single_academic_period_rejects_inverted_dates(current_period_con
         )
     assert exc_info.value.status_code == 400
     assert "Start date cannot be after end date" in exc_info.value.detail
-

@@ -369,6 +369,9 @@ def seed(database_url: str) -> dict:
                 "submissions": {status: count for status, count in submissions},
             }
 
+    from app.db.sequence_repair import reconcile_database_sequences
+    reconcile_database_sequences(engine)
+
     summary = {
         "database": require_demo_database(database_url).database,
         "selected_model_name": "entervene_current_term_official_target_rf_candidate",

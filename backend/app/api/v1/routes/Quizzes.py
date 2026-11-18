@@ -141,9 +141,19 @@ def update_quiz_result_visibility(
     )
     try:
         response = update_quiz_results_settings(db, classwork, body)
+        from app.services.submission.SubmissionFeedbackService import (
+            sync_and_dispatch_classwork_draft_jobs,
+            dispatch_background_draft_processing,
+        )
+        enqueued_count = sync_and_dispatch_classwork_draft_jobs(
+            db, classwork_id, staff_id, auto_commit=False
+        )
         db.commit()
-        from app.services.submission.SubmissionFeedbackService import sync_and_dispatch_classwork_draft_jobs
-        sync_and_dispatch_classwork_draft_jobs(db, classwork_id, staff_id)
+        if enqueued_count > 0:
+            try:
+                dispatch_background_draft_processing()
+            except Exception:
+                pass
         return response
     except Exception:
         db.rollback()

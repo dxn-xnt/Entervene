@@ -1,3 +1,5 @@
+import { AcademicSelectItem } from "@/components/academic-option-label";
+import { activeFirst } from "@/lib/active-first";
 import * as React from "react"
 import { Link } from "react-router-dom"
 
@@ -69,15 +71,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <Select.Value className="text-xs" placeholder="Academic Year" />
             </Select.Trigger>
-            <Select.Content className="max-w-none min-w-48">
+            <Select.Content className="w-max! max-w-[calc(100vw-2rem)]! min-w-64">
               <Select.Group>
-                {academicYears.map((year) => (
-                  <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
-                    <span className="font-bold">{year.year_label}</span>
-                    {year.is_active && (
-                      <span className="ml-1 text-xs text-muted-foreground font-normal">(Active)</span>
-                    )}
-                  </Select.Item>
+                {activeFirst(academicYears).map((year) => (
+                  <AcademicSelectItem key={year.academic_year_id} value={String(year.academic_year_id)} label={year.year_label} active={year.is_active} />
                 ))}
               </Select.Group>
             </Select.Content>
@@ -100,15 +97,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 placeholder={periods.length === 0 ? "No terms available" : "Active Period"}
               />
             </Select.Trigger>
-            <Select.Content className="max-w-none min-w-48">
+            <Select.Content className="w-max! max-w-[calc(100vw-2rem)]! min-w-64">
               <Select.Group>
-                {periods.map((period) => (
-                  <Select.Item key={period.id} value={String(period.id)}>
-                    <span className="font-bold">{period.period}</span>
-                    {period.is_active && (
-                      <span className="ml-1 text-xs text-muted-foreground font-normal">(Active)</span>
-                    )}
-                  </Select.Item>
+                {activeFirst(periods).map((period) => (
+                  <AcademicSelectItem key={period.id} value={String(period.id)} label={period.period} active={period.is_active} />
                 ))}
               </Select.Group>
             </Select.Content>

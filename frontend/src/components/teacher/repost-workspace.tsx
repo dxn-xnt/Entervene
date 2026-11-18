@@ -1,3 +1,5 @@
+import { AcademicSelectItem } from "@/components/academic-option-label";
+import { activeFirst } from "@/lib/active-first";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
@@ -1102,10 +1104,8 @@ export function RepostWorkspace({
                       >
                         <Select.Trigger className="w-full rounded!" aria-label="Select prior academic year"><Select.Value placeholder="Select academic year" /></Select.Trigger>
                         <Select.Content className="rounded!"><Select.Group>
-                        {eligibleHistoricalYears.map((y) => (
-                          <Select.Item key={y.academic_year_id} value={String(y.academic_year_id)}>
-                            {y.year_label} {y.is_active ? "(Active)" : "(Archived)"}
-                          </Select.Item>
+                        {activeFirst(eligibleHistoricalYears).map((y) => (
+                          <AcademicSelectItem key={y.academic_year_id} value={String(y.academic_year_id)} label={`${y.year_label}${y.is_active ? "" : " (Archived)"}`} active={y.is_active} />
                         ))}
                         </Select.Group></Select.Content>
                       </Select>
@@ -1130,10 +1130,8 @@ export function RepostWorkspace({
                         >
                           <Select.Trigger className="w-full rounded!" aria-label="Select prior academic year"><Select.Value placeholder="Select academic year" /></Select.Trigger>
                           <Select.Content className="rounded!"><Select.Group>
-                          {eligibleHistoricalYears.map((y) => (
-                            <Select.Item key={y.academic_year_id} value={String(y.academic_year_id)}>
-                              {y.year_label} {y.is_active ? "(Active)" : "(Archived)"}
-                            </Select.Item>
+                          {activeFirst(eligibleHistoricalYears).map((y) => (
+                            <AcademicSelectItem key={y.academic_year_id} value={String(y.academic_year_id)} label={`${y.year_label}${y.is_active ? "" : " (Archived)"}`} active={y.is_active} />
                           ))}
                           </Select.Group></Select.Content>
                         </Select>
@@ -1155,7 +1153,7 @@ export function RepostWorkspace({
                         >
                           <Select.Trigger className="w-full rounded!" aria-label="Select specific historical term"><Select.Value placeholder="Select term" /></Select.Trigger>
                           <Select.Content className="rounded!"><Select.Group>
-                          {periodsForSelectedYear.map((p) => (
+                          {activeFirst(periodsForSelectedYear).map((p) => (
                             <Select.Item key={p.id} value={String(p.id)}>
                               {p.period} (Sequence {p.period_sequence})
                             </Select.Item>

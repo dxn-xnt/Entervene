@@ -15,6 +15,8 @@ import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
 import { useToast } from "@/components/retroui/Toast";
 import {
+  getSubstituteAvailability,
+  type SubstituteAvailability,
   getUsers,
   getTeacherSubjectLoads,
   createBulkSubstitutions,
@@ -70,6 +72,7 @@ export default function AssignSubstituteModal({
         }
       } catch (err) {
         console.error("Failed to load teachers", err);
+        if (isMounted) setErrorMsg("Unable to load teachers. Close and reopen this dialog to try again.");
       } finally {
         if (isMounted) setIsLoadingTeachers(false);
       }
@@ -130,11 +133,31 @@ export default function AssignSubstituteModal({
     );
   }, [candidateTeachers]);
 
-  const regularFaculty = React.useMemo(() => {
-    return candidateTeachers.filter(
-      (t) => (t.employment_status || "").trim().toLowerCase() !== "substitute"
-    );
-  }, [candidateTeachers]);
+  const [availability, setAvailability] = React.useState<SubstituteAvailability[]>([]);
+  const [availabilityKey, setAvailabilityKey] = React.useState("");
+  const [availabilityError, setAvailabilityError] = React.useState<string | null>(null);
+  const [availabilityAttempt, setAvailabilityAttempt] = React.useState(0);
+  const requestKey = JSON.stringify([selectedOriginalStaffId, selectedLoadIds, startDate, endDate]);
+  const canCheck = selectedLoadIds.length > 0 && Boolean(startDate) && (!endDate || endDate >= startDate) && !isLoadingLoads;
+  const availabilityReady = canCheck && availabilityKey === requestKey && !availabilityError;
+  React.useEffect(() => {
+    let current = true;
+    setAvailabilityError(null);
+    if (!canCheck) return;
+    const timer = window.setTimeout(() => {
+      getSubstituteAvailability({ subject_load_ids: selectedLoadIds, start_date: startDate, end_date: endDate || null })
+        .then((items) => {
+          if (!current) return;
+          setAvailability(items);
+          setAvailabilityKey(requestKey);
+          setSelectedSubstituteStaffId((id) => items.some((item) => item.staff_id === id && item.status !== "conflict") ? id : "");
+        })
+        .catch((error: unknown) => {
+          if (current) setAvailabilityError(error instanceof Error ? error.message : "Unable to check availability.");
+        });
+    }, 200);
+    return () => { current = false; window.clearTimeout(timer); };
+  }, [canCheck, requestKey, availabilityAttempt, selectedLoadIds, startDate, endDate]);
 
   // Available loads that are not already substituted
   const availableLoads = React.useMemo(() => {
@@ -185,6 +208,10 @@ export default function AssignSubstituteModal({
       return;
     }
 
+    if (!availabilityReady) {
+      failValidation("Check teacher availability before assigning a substitute.");
+      return;
+    }
     setIsSubmitting(true);
     setErrorMsg(null);
 
@@ -247,7 +274,7 @@ export default function AssignSubstituteModal({
                   <Select.Group>
                     {teachers.map((t) => (
                       <Select.Item key={t.staff_id || t.id} value={t.staff_id || t.id}>
-                        {t.name} ({t.staff_id || t.id}) {t.employment_status ? `• ${t.employment_status}` : ""}
+                        {t.name} ({t.staff_id || t.id}) {t.employment_status ? `• ${t.employment_status === "Regular/Permanent" ? "Permanent" : t.employment_status}` : ""}
                       </Select.Item>
                     ))}
                   </Select.Group>
@@ -392,7 +419,7 @@ export default function AssignSubstituteModal({
               <span>Substitute Teacher</span>
               {dedicatedSubs.length > 0 && (
                 <span className="text-xs font-normal text-primary">
-                  {dedicatedSubs.length} dedicated substitute(s) available
+                  {dedicatedSubs.length} dedicated substitute(s)
                 </span>
               )}
             </label>
@@ -405,32 +432,37 @@ export default function AssignSubstituteModal({
                 <Select.Value placeholder="Select Substitute Teacher..." />
               </Select.Trigger>
               <Select.Content>
-                {dedicatedSubs.length > 0 && (
-                  <Select.Group>
-                    <Select.Label className="px-2 py-1 text-xs font-bold text-muted-foreground">
-                      Dedicated Substitute Teachers
-                    </Select.Label>
-                    {dedicatedSubs.map((t) => (
-                      <Select.Item key={t.staff_id || t.id} value={t.staff_id || t.id}>
-                        {t.name} ({t.staff_id || t.id}) • Substitute
-                      </Select.Item>
-                    ))}
-                  </Select.Group>
-                )}
-                {regularFaculty.length > 0 && (
-                  <Select.Group>
-                    <Select.Label className="px-2 py-1 text-xs font-bold text-muted-foreground">
-                      Regular / Other Faculty (Peer Coverage)
-                    </Select.Label>
-                    {regularFaculty.map((t) => (
-                      <Select.Item key={t.staff_id || t.id} value={t.staff_id || t.id}>
-                        {t.name} ({t.staff_id || t.id}) {t.employment_status ? `• ${t.employment_status}` : ""}
-                      </Select.Item>
-                    ))}
-                  </Select.Group>
-                )}
+                {(["recommended", "unverified", "conflict"] as const).map((status) => {
+                  const items = availability.filter((item) => item.status === status);
+                  if (!items.length) return null;
+                  return (
+                    <Select.Group key={status}>
+                      <Select.Label>{status === "recommended" ? "Available teachers" : status === "unverified" ? "Schedule unverified" : "Schedule conflicts"}</Select.Label>
+                      {items.map((item) => {
+                        const teacher = candidateTeachers.find((t) => t.staff_id === item.staff_id);
+                        if (!teacher) return null;
+                        return (
+                          <Select.Item key={item.staff_id} value={item.staff_id} disabled={status === "conflict"} textValue={teacher.name}>
+                            <span className="flex flex-col gap-1">
+                              <span className="flex flex-wrap items-center gap-2">
+                                <span>{teacher.name} ({item.staff_id})</span>
+                                {status === "recommended" && <Badge variant="surface" size="sm">Recommended</Badge>}
+                              </span>
+                              {item.reason && <span className="text-sm text-muted-foreground">{item.reason}</span>}
+                            </span>
+                          </Select.Item>
+                        );
+                      })}
+                    </Select.Group>
+                  );
+                })}
               </Select.Content>
             </Select>
+            {canCheck && !availabilityReady && !availabilityError && <p role="status" className="text-sm text-muted-foreground">Checking teacher availability...</p>}
+            {!canCheck && <p className="text-sm text-muted-foreground">Select teaching loads and valid assignment dates to check availability.</p>}
+            {availabilityError && <div role="alert" className="flex items-center gap-2"><FormMessage>{availabilityError}</FormMessage><Button type="button" size="sm" variant="outline" onClick={() => setAvailabilityAttempt((value) => value + 1)}>Retry</Button></div>}
+            {availabilityReady && !availability.some((item) => item.status !== "conflict") && <EmptyStateCard compact icon={<Users />} title="No available teachers" description="Try different loads or assignment dates." />}
+            {availabilityReady && availability.find((item) => item.staff_id === selectedSubstituteStaffId)?.status === "unverified" && <p className="text-sm text-muted-foreground">Schedule cannot be fully verified. Review the teacher?s timetable before assigning.</p>}
             {validationError?.toLowerCase().includes("substitute teacher") && <FormMessage id="substitute-teacher-error">{validationError}</FormMessage>}
             {dedicatedSubs.length === 0 && candidateTeachers.length > 0 && (
               <Text as="p" className="text-xs text-muted-foreground">
@@ -495,7 +527,7 @@ export default function AssignSubstituteModal({
           </Button>
           <Button
             type="submit"
-            disabled={isSubmitting || selectedLoadIds.length === 0 || !selectedSubstituteStaffId}
+            disabled={isSubmitting || !availabilityReady || selectedLoadIds.length === 0 || !selectedSubstituteStaffId}
           >
             {isSubmitting ? (
               <>

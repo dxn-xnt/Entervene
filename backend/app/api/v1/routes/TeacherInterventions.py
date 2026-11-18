@@ -54,7 +54,6 @@ def require_development_intervention_api() -> None:
     if (
         settings.app_environment.lower() not in {"development", "test"}
         or not settings.development_prediction_api_enabled
-        or settings.development_current_term_model_name != CORRECTED_MODEL_NAME
     ):
         raise HTTPException(status_code=404, detail="Not found")
 

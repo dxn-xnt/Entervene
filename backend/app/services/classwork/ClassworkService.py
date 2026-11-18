@@ -959,6 +959,14 @@ def update_classwork_record(
         db.commit()
         db.refresh(classwork)
 
+        from app.services.submission.SubmissionFeedbackService import (
+            sync_and_dispatch_classwork_draft_jobs,
+            dispatch_background_draft_processing,
+        )
+        enqueued_count = sync_and_dispatch_classwork_draft_jobs(
+            db, classwork_id, staff_id, auto_commit=False
+        )
+
         from app.services.submission.SubmissionFeedbackService import sync_and_dispatch_classwork_draft_jobs
         sync_and_dispatch_classwork_draft_jobs(db, classwork_id, staff_id)
 
@@ -966,29 +974,42 @@ def update_classwork_record(
         assigned_class_ids = [a.class_id for a in classwork.assignments if a.is_published and not a.recipient_student_id]
         for assignment in targeted:
             _stage_targeted_assignment_notification(db, assignment, classwork, classwork.subject_id)
-        if targeted:
-            db.commit()
+
+        # Single atomic database commit for all classwork, rubric, lesson, link, draft, and notification state
+        db.commit()
+        db.refresh(classwork)
+
+        # External/background dispatch decoupled from database transaction
+        if enqueued_count > 0:
+            try:
+                dispatch_background_draft_processing()
+            except Exception as bg_err:
+                print(f"[Draft Dispatch] Background draft dispatch deferred: {bg_err}")
+
         if assigned_class_ids:
-            cw_lessons = db.query(ClassworkLesson.lesson_id).filter(ClassworkLesson.classwork_id == classwork_id).all()
-            lesson_ids_list = [l[0] for l in cw_lessons] if cw_lessons else None
-            notif_title, notif_body = build_classwork_notification_details(
-                db=db,
-                classwork_title=classwork.title,
-                staff_id=staff_id,
-                subject_id=classwork.subject_id,
-                lesson_ids=lesson_ids_list,
-                due_date=None,
-                action_type="Updated",
-            )
-            notify_students_for_classwork(
-                db=db,
-                class_ids=assigned_class_ids,
-                title=notif_title,
-                body_text=notif_body,
-                notification_type="assignment_due",
-                classwork_id=classwork.classwork_id,
-                subject_id=classwork.subject_id,
-            )
+            try:
+                cw_lessons = db.query(ClassworkLesson.lesson_id).filter(ClassworkLesson.classwork_id == classwork_id).all()
+                lesson_ids_list = [l[0] for l in cw_lessons] if cw_lessons else None
+                notif_title, notif_body = build_classwork_notification_details(
+                    db=db,
+                    classwork_title=classwork.title,
+                    staff_id=staff_id,
+                    subject_id=classwork.subject_id,
+                    lesson_ids=lesson_ids_list,
+                    due_date=None,
+                    action_type="Updated",
+                )
+                notify_students_for_classwork(
+                    db=db,
+                    class_ids=assigned_class_ids,
+                    title=notif_title,
+                    body_text=notif_body,
+                    notification_type="assignment_due",
+                    classwork_id=classwork.classwork_id,
+                    subject_id=classwork.subject_id,
+                )
+            except Exception as notif_err:
+                print(f"[Notification Error] Classwork notification delivery failed: {notif_err}")
     except Exception:
         db.rollback()
         raise

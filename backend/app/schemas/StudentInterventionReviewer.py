@@ -8,6 +8,7 @@ class StudentReviewerSummary(BaseModel):
     subject_name: str
     title: str
     sent_at: datetime
+    academic_period_id: int | None = None
 
 
 class StudentReviewerDetail(StudentReviewerSummary):

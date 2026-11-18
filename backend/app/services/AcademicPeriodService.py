@@ -196,6 +196,3 @@ def update_single_academic_period(
     db.commit()
     db.refresh(period)
     return period
-
-
-

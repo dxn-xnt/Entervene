@@ -17,6 +17,7 @@ import {
   dismissSuggestion,
   getTeacherSuggestions,
 } from "@/lib/suggestion-api";
+import { useOptionalAcademicPeriod } from "@/context/AcademicPeriodContext";
 import type {
   TeacherAdvisoryStudentItem,
   TeacherAdvisorySubjectLoadItem,
@@ -41,6 +42,8 @@ export function ManualSuggestionPanel({
   additionalActions,
 }: Props) {
   const toast = useToast();
+  const academicContext = useOptionalAcademicPeriod();
+  const activePeriodId = academicContext?.selectedPeriodId;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<SuggestionResponse[]>([]);
@@ -67,7 +70,7 @@ export function ManualSuggestionPanel({
 
   useEffect(() => {
     void loadHistory();
-  }, [loadHistory]);
+  }, [loadHistory, activePeriodId]);
 
   async function updateSuggestion(
     id: number,

@@ -14,6 +14,7 @@ import {
   createManualSuggestion,
   generateRecommendationDrafts,
 } from "@/lib/suggestion-api";
+import { useOptionalAcademicPeriod } from "@/context/AcademicPeriodContext";
 import type {
   TeacherAdvisoryStudentItem,
   TeacherAdvisorySubjectLoadItem,
@@ -108,6 +109,8 @@ export function SuggestionPanel({
   const [thresholdError, setThresholdError] = useState("");
   const [resourceError, setResourceError] = useState("");
   const alertRef = useRef<HTMLDivElement>(null);
+  const academicContext = useOptionalAcademicPeriod();
+  const selectedPeriodId = academicContext?.selectedPeriodId;
 
   useEffect(() => {
     if (formError) {
@@ -136,10 +139,11 @@ export function SuggestionPanel({
     setIsResourceLoading(true);
     setFormError("");
     try {
+      const periodQuery = selectedPeriodId ? `?academic_period_id=${encodeURIComponent(String(selectedPeriodId))}` : "";
       const path =
         resourceType === "LESSON"
-          ? `/api/v1/lessons/my-class/${classId}/subject/${subjectId}`
-          : `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`;
+          ? `/api/v1/lessons/my-class/${classId}/subject/${subjectId}${periodQuery}`
+          : `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments${periodQuery}`;
       const response = await apiFetch(path);
       if (!response.ok) throw new Error("Unable to load suggestion resources.");
       const data = await response.json();
@@ -172,7 +176,7 @@ export function SuggestionPanel({
     } finally {
       setIsResourceLoading(false);
     }
-  }, [classId, resourceType, subjectId]);
+  }, [classId, resourceType, selectedPeriodId, subjectId]);
 
   useEffect(() => {
     if (!subjectId && activeSubjects[0]) {

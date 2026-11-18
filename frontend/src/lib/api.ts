@@ -3465,3 +3465,19 @@ export async function getTeacherDashboardHealth(params: {
   }
   return (await res.json()) as TeacherDashboardHealthResponse;
 }
+
+export interface SubstituteAvailability {
+  staff_id: string;
+  status: "recommended" | "conflict" | "unverified";
+  reason: string | null;
+}
+export async function getSubstituteAvailability(payload: { subject_load_ids: number[]; start_date: string; end_date: string | null }): Promise<SubstituteAvailability[]> {
+  const res = await apiFetch("/api/v1/substitutions/availability", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.detail || "Unable to check teacher availability.");
+  }
+  return res.json();
+}

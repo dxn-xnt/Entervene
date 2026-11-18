@@ -131,7 +131,7 @@ export function CurriculumFilters({
             </Select.Group>
           </Select.Content>
         </Select>
-        <Button type="button" className="h-10" variant="outline" onClick={onReset}>
+        <Button type="button" className="h-10 gap-2" variant="outline" onClick={onReset}>
           Reset
         </Button>
       </div>
