@@ -429,7 +429,7 @@ export default function EditClassworkModal({
       classes: unorderedValues([...new Set(classwork.assignments?.map(item => item.class_id) ?? [])]),
       lessons: unorderedValues(classwork.linked_lessons?.map(item => item.lesson_id) ?? []),
       files: [],
-      referenceLinks: editReferenceLinks(classwork),
+      referenceLinks: isQuizType(classwork.classwork_type) ? [] : editReferenceLinks(classwork),
     },
     values: {
       draft: draftValues(editDraft, rubricLevels),
@@ -437,7 +437,7 @@ export default function EditClassworkModal({
       classes: unorderedValues([...new Set(selectedClassIds)]),
       lessons: unorderedValues(selectedLessonIds),
       files: editMaterials.map(file => [file.name, file.size, file.lastModified, file.type]),
-      referenceLinks,
+      referenceLinks: isQuizType(editDraft.classwork_type) ? [] : referenceLinks,
     },
   });
   const saveClassworkEdit = async (
@@ -461,10 +461,12 @@ export default function EditClassworkModal({
       setFormError("Classwork title is required.");
       return;
     }
-    const linksError = validateReferenceLinks(referenceLinks);
-    if (linksError) {
-      setFormError(linksError);
-      return;
+    if (!isQuizType(editDraft.classwork_type)) {
+      const linksError = validateReferenceLinks(referenceLinks);
+      if (linksError) {
+        setFormError(linksError);
+        return;
+      }
     }
     if (
       totalPoints !== null &&
@@ -567,9 +569,11 @@ export default function EditClassworkModal({
             show_scores: isQuiz ? undefined : editDraft.show_scores,
             auto_ai_feedback_enabled: autoAiSupported ? editDraft.auto_ai_feedback_enabled : false,
             lesson_ids: selectedLessonIds,
-            reference_links: JSON.stringify(referenceLinks) === JSON.stringify(editReferenceLinks(currentClasswork))
+            reference_links: isQuizType(editDraft.classwork_type)
               ? undefined
-              : referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null })),
+              : JSON.stringify(referenceLinks) === JSON.stringify(editReferenceLinks(currentClasswork))
+                ? undefined
+                : referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null })),
           }),
         },
       );
@@ -948,7 +952,9 @@ export default function EditClassworkModal({
                   </div>
                 )}
 
-                <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isSavingEdit} />
+                {!isQuizType(editDraft.classwork_type) && (
+                  <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isSavingEdit} />
+                )}
 
                 <Field label="Upload Material">
                   {currentClasswork.attachments.length === 0 &&

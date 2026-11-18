@@ -663,6 +663,8 @@ export default function SubjectClassworkTab({
               subjects={subjects}
               loads={loads}
               initialSubjectId={numericSubjectId ? String(numericSubjectId) : undefined}
+              initialClassId={classId ? Number(classId) : undefined}
+              initialLessonId={lessonFilter !== "all" ? Number(lessonFilter) : undefined}
               onClose={closeCreateWizard}
               onSuccess={async () => {
                 await loadClassworks();
@@ -677,6 +679,8 @@ export default function SubjectClassworkTab({
               subjects={subjects}
               loads={loads}
               initialSubjectId={numericSubjectId ? String(numericSubjectId) : undefined}
+              initialClassId={classId ? Number(classId) : undefined}
+              initialLessonId={lessonFilter !== "all" ? Number(lessonFilter) : undefined}
               onClose={closeCreateWizard}
               onSuccess={async () => {
                 await loadClassworks();

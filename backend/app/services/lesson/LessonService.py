@@ -599,15 +599,41 @@ def lesson_classwork_assignments(
             StudentSubmission.student_id == student.student_id,
         ).first()
         display_status = submission.status if submission else _missing_status(assignment, now)
+        is_graded = bool(classwork.is_graded) if classwork is not None else True
+        show_scores = bool(classwork.show_scores) if classwork is not None else True
+        is_submitted = bool(
+            submission
+            and (
+                submission.status in ("submitted", "graded", "late", "completed")
+                or submission.submitted_at is not None
+            )
+        )
+        visible_grade = (
+            float(submission.grade)
+            if (
+                submission is not None
+                and submission.status == "graded"
+                and submission.grade is not None
+                and is_graded
+                and show_scores
+            )
+            else None
+        )
         results.append({
             "classwork_assignment_id": assignment.classwork_assignment_id,
             "classwork_id": assignment.classwork_id,
             "title": classwork.title if classwork else "Untitled",
             "classwork_type": classwork.classwork_type if classwork else None,
             "classwork_category": classwork.classwork_category if classwork else None,
+            "is_graded": is_graded,
+            "show_scores": show_scores,
             "total_points": float(classwork.total_points) if classwork and classwork.total_points else None,
             "due_date": aware_utc(assignment.due_date).isoformat() if assignment.due_date else None,
             "submission_status": display_status,
+            "is_submitted": is_submitted,
+            "submitted_at": aware_utc(submission.submitted_at).isoformat() if submission and submission.submitted_at else None,
+            "grade": visible_grade,
+            "academic_period_id": assignment.academic_period_id,
         })
     return results
 
