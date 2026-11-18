@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { rubricPointRange, scoreBand } from "@/lib/classwork-utils";
@@ -14,6 +14,96 @@ interface RubricsScoreBoardProps {
   onSelectScore?: (points: number) => void;
   rightSlot?: ReactNode;
   rubricLevels?: ActivityRubricLevel[];
+  editable?: boolean;
+  onTotalPointsChange?: (points: number) => void;
+  disabled?: boolean;
+}
+
+function EditableScoreBadge({
+  totalPoints,
+  onTotalPointsChange,
+  disabled,
+}: {
+  totalPoints?: number | null;
+  onTotalPointsChange: (points: number) => void;
+  disabled?: boolean;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(() => String(totalPoints ?? 0));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const commit = () => {
+    const next = Number(draft);
+    if (draft === "" || !Number.isFinite(next) || next <= 0) {
+      setDraft(String(totalPoints ?? 0));
+    } else if (next !== totalPoints) {
+      onTotalPointsChange(next);
+    }
+    setIsEditing(false);
+  };
+
+  if (isEditing && !disabled) {
+    return (
+      <div className="inline-flex items-center gap-1.5">
+        <input
+          ref={inputRef}
+          type="number"
+          aria-label="Maximum score"
+          min="1"
+          step="1"
+          value={draft}
+          disabled={disabled}
+          onChange={(e) => {
+            const nextDraft = e.target.value;
+            setDraft(nextDraft);
+            const next = Number(nextDraft);
+            if (nextDraft !== "" && Number.isFinite(next) && next > 0) {
+              onTotalPointsChange(next);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setDraft(String(totalPoints ?? 0));
+              setIsEditing(false);
+            }
+          }}
+          onBlur={commit}
+          className="h-8 w-20 px-2 py-0.5 text-xs font-bold text-center border-2 border-black rounded! bg-primary text-foreground focus:outline-none focus:ring-1 focus:ring-black"
+        />
+        <span className="text-xs font-bold text-foreground">pts</span>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) setIsEditing(true);
+      }}
+      className={cn(
+        "outline-2 bg-primary text-foreground inline-flex items-center rounded! h-fit font-semibold px-2.5 py-1 text-xs select-none transition-all",
+        !disabled && "cursor-pointer hover:opacity-90 hover:-translate-y-0.5",
+        disabled && "cursor-default opacity-80"
+      )}
+      aria-label="Maximum score"
+      title={disabled ? "Score locked" : "Click to edit maximum score"}
+    >
+      {totalPoints ?? 0} pts
+    </button>
+  );
 }
 
 export default function RubricsScoreBoard({
@@ -25,6 +115,9 @@ export default function RubricsScoreBoard({
   onSelectScore,
   rightSlot,
   rubricLevels,
+  editable = false,
+  onTotalPointsChange,
+  disabled = false,
 }: RubricsScoreBoardProps) {
   const fallbackBands = [
     {
@@ -67,6 +160,13 @@ export default function RubricsScoreBoard({
 
           {rightSlot ? (
             rightSlot
+          ) : editable && onTotalPointsChange ? (
+            <EditableScoreBadge
+              key={totalPoints ?? 0}
+              totalPoints={totalPoints}
+              onTotalPointsChange={onTotalPointsChange}
+              disabled={disabled}
+            />
           ) : (
             <Badge variant="secondary" size="sm" className="py-1">
               {totalPoints ?? 0} pts

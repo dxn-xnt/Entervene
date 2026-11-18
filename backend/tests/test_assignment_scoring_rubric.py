@@ -57,3 +57,29 @@ def test_rubric_change_is_locked_after_grading_even_when_confirmed(submission):
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail["code"] == "RUBRIC_LOCKED_AFTER_GRADING"
+
+
+@pytest.mark.parametrize(
+    ("target_max", "expected_points"),
+    [
+        (20, [20, 16, 12, 8, 4]),
+        (50, [50, 40, 30, 20, 10]),
+        (75, [75, 60, 45, 30, 15]),
+    ],
+)
+def test_rubric_scales_to_target_maximum_and_sets_authoritative_total_points(target_max, expected_points):
+    levels_data = [
+        {"level_name": "Excellent", "description": "Meets all", "points": target_max, "display_order": 0},
+        {"level_name": "Good", "description": "Meets most", "points": expected_points[1], "display_order": 1},
+        {"level_name": "Fair", "description": "Meets some", "points": expected_points[2], "display_order": 2},
+        {"level_name": "Needs Improvement", "description": "Meets few", "points": expected_points[3], "display_order": 3},
+        {"level_name": "Poor", "description": "Missing", "points": expected_points[4], "display_order": 4},
+    ]
+    parsed = _parse_rubric_payload(json.dumps(levels_data), "ASSIGNMENT")
+    assert parsed is not None
+    assert [p.points for p in parsed] == expected_points
+    classwork = Classwork(classwork_type="ASSIGNMENT", total_points=max(p.points for p in parsed))
+    _replace_activity_rubric(None, classwork, parsed)
+    assert classwork.total_points == target_max
+    assert [level.points for level in classwork.rubric_levels] == expected_points
+
