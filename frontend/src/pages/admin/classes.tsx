@@ -298,11 +298,6 @@ export default function AdminClasses() {
                     />
                   )}
                 </Dialog>
-                <Link to={routes.admin.subjectLoadStudio} className="w-full md:w-auto">
-                  <Button size="header" variant={"outline"} className="w-full justify-center whitespace-nowrap md:w-auto">
-                    <Plus className="size-4" /> Subject Load Studio
-                  </Button>
-                </Link>
               </div>
             </header>
 

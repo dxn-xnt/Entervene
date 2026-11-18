@@ -18,6 +18,7 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.people.AcademicStaff import AcademicStaff
 from app.schemas.SubjectLoad import SubjectLoadItem, ConflictItem
 from app.schemas.TeacherSubstitution import (
+    SubstituteAvailabilityRequest,
     TeacherSubstitutionCreate,
     TeacherSubstitutionBulkCreate,
     TeacherSubstitutionBulkResponse,
@@ -106,6 +107,36 @@ def _format_substitution_response(
         created_at=sub.created_at,
         updated_at=sub.updated_at,
     )
+
+
+@router.post("/availability")
+def substitute_availability(
+    payload: SubstituteAvailabilityRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    from app.services.academic.SubstituteAvailabilityService import availability
+    if payload.end_date and payload.end_date < payload.start_date:
+        raise HTTPException(status_code=400, detail="End date cannot be earlier than start date.")
+    loads = db.query(SubjectLoad).filter(
+        SubjectLoad.subject_load_id.in_(payload.subject_load_ids),
+        SubjectLoad.is_active_version.is_(True), SubjectLoad.status.in_(["published", "active"]),
+    ).all()
+    if not loads or len(loads) != len(set(payload.subject_load_ids)) or len({load.staff_id for load in loads}) != 1:
+        raise HTTPException(status_code=400, detail="Select published loads belonging to one teacher.")
+    for load in loads:
+        _resolve_load_academic_context(db, load)
+    return availability(db, loads, payload.start_date, payload.end_date)
+
+
+def _revalidate_availability(db, loads, payload):
+    from app.services.academic.SubstituteAvailabilityService import availability
+    candidate = next((item for item in availability(db, loads, payload.start_date, payload.end_date)
+                      if item["staff_id"] == payload.substitute_staff_id), None)
+    if candidate is None:
+        raise HTTPException(status_code=400, detail="Select an active eligible substitute teacher.")
+    if candidate["status"] == "conflict":
+        raise HTTPException(status_code=422, detail=candidate["reason"])
 
 
 @router.post("", response_model=TeacherSubstitutionResponse, status_code=status.HTTP_201_CREATED)
@@ -217,6 +248,8 @@ def create_substitution(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Scheduling conflict for substitute: {errors[0].message}",
         )
+
+    _revalidate_availability(db, [load], payload)
 
     # 6. Insert new TeacherSubstitution with distinct batch_id
     batch_id = uuid.uuid4()
@@ -366,6 +399,8 @@ def create_bulk_substitutions(
                 detail=f"Scheduling conflict for substitute: {errors[0].message}",
             )
         all_warnings.extend([c for c in val_res.conflicts if c.severity == "warning" and c.staff_id == payload.substitute_staff_id])
+
+    _revalidate_availability(db, loads, payload)
 
     # 6. Single multi-row insert with shared batch_id
     batch_id = uuid.uuid4()

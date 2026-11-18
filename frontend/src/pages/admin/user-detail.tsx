@@ -828,7 +828,7 @@ function EditUserModal({
                     </Select.Trigger>
                     <Select.Content>
                       <Select.Item value="Regular/Permanent">
-                        Regular/Permanent
+                        Permanent
                       </Select.Item>
                       <Select.Item value="Substitute">Substitute</Select.Item>
                       <Select.Item value="Probationary">

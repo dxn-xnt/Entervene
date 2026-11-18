@@ -851,7 +851,7 @@ export default function AddUserModal({
                         <Select.Value placeholder="Select status" />
                       </Select.Trigger>
                       <Select.Content>
-                        <Select.Item value="Regular/Permanent">Regular/Permanent</Select.Item>
+                        <Select.Item value="Regular/Permanent">Permanent</Select.Item>
                         <Select.Item value="Substitute">Substitute</Select.Item>
                         <Select.Item value="Probationary">Probationary</Select.Item>
                       </Select.Content>

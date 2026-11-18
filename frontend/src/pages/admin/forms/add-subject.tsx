@@ -815,7 +815,7 @@ export default function AddSubjectModal({
                       return (
                         <label
                           key={period.academic_period_id}
-                          className="flex items-center gap-2 rounded border-2 border-black bg-background p-2 text-sm"
+                          className="flex items-center gap-2 rounded! border-2 border-border bg-background p-2 text-sm"
                         >
                           <Checkbox
                             checked={offeringForm.academic_period_ids.includes(
