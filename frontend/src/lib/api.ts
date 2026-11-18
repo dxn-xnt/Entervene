@@ -76,6 +76,7 @@ export type TeacherHandledClass = {
 export type UserDetail = User & {
   staff_id?: string;
   student_id?: string;
+  class_id?: number | null;
   lrn?: string | null;
   first_name?: string;
   middle_name?: string;
@@ -2648,9 +2649,13 @@ export async function getClassSchedule(
 }
 
 export async function getMySchedule(
-  academicPeriodId?: number
+  academicPeriodId?: number,
+  staffId?: string
 ): Promise<DynamicScheduleResponse> {
-  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const params = new URLSearchParams();
+  if (academicPeriodId) params.set("academic_period_id", String(academicPeriodId));
+  if (staffId) params.set("staff_id", staffId);
+  const query = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(`/api/v1/subject-loads/my-schedule${query}`);
   if (!response.ok) {
     throw new ApiRequestError("Failed to fetch schedule", response.status, null);
