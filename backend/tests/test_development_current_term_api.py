@@ -28,6 +28,7 @@ from app.models.people.Student import Student
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.auth.UserAccount import UserAccount
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
+from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
 from app.services.prediction.DashboardPredictionService import get_dashboard_at_risk_predictions
 from tests.test_current_period_live_feature_builder import add_activity, current_period_context
 from tests.test_development_current_term_prediction_persistence import _register_test_model
@@ -46,7 +47,7 @@ def _scope(ctx):
     }
 
 
-def _client(monkeypatch, db, *, role="admin", user_id=None, environment="test", enabled=True, model_name="entervene_current_term_development_rf_v3"):
+def _client(monkeypatch, db, *, role="admin", user_id=None, environment="test", enabled=True, model_name=CORRECTED_MODEL_NAME):
     monkeypatch.setattr(settings, "app_environment", environment)
     monkeypatch.setattr(settings, "development_prediction_api_enabled", enabled)
     monkeypatch.setattr(settings, "development_current_term_model_name", model_name)
@@ -121,32 +122,24 @@ def _insert_development_prediction(
 def test_selected_model_default_and_authorized_legacy_history(current_period_context, monkeypatch):
     ctx = current_period_context
     legacy_id = _register_test_model(ctx)
-    corrected = AIModelVersion(
-        model_name="entervene_current_term_official_target_rf_candidate",
-        model_type="REGRESSOR", model_purpose="CURRENT_TERM_FINAL_GRADE_PROJECTION",
-        algorithm="RandomForestRegressor", target_column="target_final_period_grade",
-        lifecycle_status="DEVELOPMENT", is_active=False, production_validated=False,
-        independent_three_term_validation=False,
-    )
-    ctx["db"].add(corrected)
-    ctx["db"].commit()
+    corrected_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     _insert_development_prediction(ctx, model_version_id=legacy_id, grade="81.00")
-    _insert_development_prediction(ctx, model_version_id=corrected.model_version_id, grade="89.00")
-    client = _client(monkeypatch, ctx["db"], model_name=corrected.model_name)
+    _insert_development_prediction(ctx, model_version_id=corrected_id, grade="89.00")
+    client = _client(monkeypatch, ctx["db"])
     current = client.get(PATH, params=_read_params(ctx))
     assert current.status_code == 200
     assert current.json()["total"] == 1
-    assert current.json()["items"][0]["model_version_id"] == corrected.model_version_id
+    assert current.json()["items"][0]["model_version_id"] == corrected_id
     history = client.get(PATH, params=_read_params(ctx, model_version_id=legacy_id))
     assert history.status_code == 200
     assert history.json()["total"] == 1
     assert history.json()["items"][0]["model_version_id"] == legacy_id
 
 
-def test_missing_configured_model_uses_sole_valid_registered_model(current_period_context, monkeypatch):
+def test_missing_configured_model_fails_closed_without_legacy_fallback(current_period_context, monkeypatch):
     ctx = current_period_context
     legacy_id = _register_test_model(ctx)
-    prediction = _insert_development_prediction(ctx, model_version_id=legacy_id, grade="86.00")
+    _insert_development_prediction(ctx, model_version_id=legacy_id, grade="86.00")
 
     response = _client(
         monkeypatch,
@@ -154,9 +147,8 @@ def test_missing_configured_model_uses_sole_valid_registered_model(current_perio
         model_name="entervene_current_term_official_target_rf_candidate",
     ).get(PATH, params=_read_params(ctx))
 
-    assert response.status_code == 200, response.text
-    assert response.json()["items"][0]["prediction_id"] == prediction.prediction_id
-    assert response.json()["items"][0]["model_version_id"] == legacy_id
+    assert response.status_code == 503, response.text
+    assert response.json()["detail"]["reason_code"] == "MODEL_REGISTRY_ENTRY_NOT_FOUND"
 
 
 def test_invalid_configured_registry_entry_does_not_fall_back(current_period_context, monkeypatch):
@@ -182,7 +174,7 @@ def test_invalid_configured_registry_entry_does_not_fall_back(current_period_con
     ).get(PATH, params=_read_params(ctx))
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "Selected development model registry entry unavailable"
+    assert response.json()["detail"]["reason_code"] == "MODEL_CONTRACT_INVALID"
 
 
 def _add_student(ctx, first_name="Second", last_name="Learner", lrn="300000000002"):
@@ -286,7 +278,7 @@ def clear_overrides():
 ])
 def test_get_guard_and_auth(current_period_context, monkeypatch, environment, enabled, role, expected):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     _insert_development_prediction(ctx, model_version_id=model_version_id)
 
     response = _client(
@@ -302,7 +294,7 @@ def test_get_guard_and_auth(current_period_context, monkeypatch, environment, en
 
 def test_get_returns_latest_revisions_for_each_student(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     other_student = _add_student(ctx)
     _insert_development_prediction(ctx, model_version_id=model_version_id, revision=1, grade="76.00")
     latest = _insert_development_prediction(ctx, model_version_id=model_version_id, revision=2, grade="91.25")
@@ -329,7 +321,7 @@ def test_get_returns_latest_revisions_for_each_student(current_period_context, m
 
 def test_finalized_read_distinguishes_actual_grade_from_historical_projection(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     _insert_development_prediction(ctx, model_version_id=model_version_id, grade="84.60")
     ctx["period"].start_date = date(2020, 1, 1)
     ctx["period"].end_date = date(2020, 3, 1)
@@ -355,7 +347,7 @@ def test_finalized_read_distinguishes_actual_grade_from_historical_projection(cu
 
 def test_get_filters_by_required_scope(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     match = _insert_development_prediction(ctx, model_version_id=model_version_id)
     other_class = Class(
         section_name="Babbage",
@@ -382,7 +374,7 @@ def test_get_filters_by_required_scope(current_period_context, monkeypatch):
 
 def test_get_returns_only_development_current_term_model_rows(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     included = _insert_development_prediction(ctx, model_version_id=model_version_id)
     production_model = AIModelVersion(
         model_name="current_term_production_candidate",
@@ -440,7 +432,7 @@ def test_get_returns_only_development_current_term_model_rows(current_period_con
 
 def test_get_exposes_frozen_partial_exam_details_and_marks_old_snapshots_unknown(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     row = _insert_development_prediction(ctx, model_version_id=model_version_id)
     client = _client(monkeypatch, ctx["db"])
 
@@ -462,7 +454,7 @@ def test_get_exposes_frozen_partial_exam_details_and_marks_old_snapshots_unknown
 
 def test_get_keeps_normal_production_reads_isolated(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     _insert_development_prediction(ctx, model_version_id=model_version_id)
 
     client = _client(monkeypatch, ctx["db"])
@@ -479,7 +471,7 @@ def test_get_keeps_normal_production_reads_isolated(current_period_context, monk
 
 def test_teacher_gets_latest_predictions_for_own_authorized_load(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     _add_load(ctx, ctx["staff"])
     _enroll(ctx, ctx["student"])
     _insert_development_prediction(ctx, model_version_id=model_version_id, revision=1, grade="80.00")
@@ -548,7 +540,7 @@ def test_teacher_scope_ids_cannot_bypass_subject_load_authorization(current_peri
 
 def test_teacher_results_include_only_active_class_enrollments(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     outside = _add_student(ctx, "Outside", "Learner", "300000000003")
     transferred = _add_student(ctx, "Transferred", "Learner", "300000000004")
     inactive = _add_student(ctx, "Inactive", "Learner", "300000000005")
@@ -572,7 +564,7 @@ def test_teacher_results_include_only_active_class_enrollments(current_period_co
 
 def test_active_substitute_and_view_only_permanent_teacher_can_read(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     substitute = _add_teacher(ctx, "T-SUB", "substitute@example.test")
     load = _add_load(ctx, ctx["staff"])
     _enroll(ctx, ctx["student"])
@@ -649,7 +641,7 @@ def test_rejects_client_model_fields(current_period_context, monkeypatch):
 def test_blocked_api_does_not_persist(current_period_context, monkeypatch, blocker, status):
     ctx = current_period_context
     _set_weights(ctx)
-    _register_test_model(ctx)
+    _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     if blocker == "insufficient":
         add_activity(ctx, "WRITTEN_WORK", 8, 10)
     else:
@@ -687,7 +679,7 @@ def test_controlled_admin_teacher_development_acceptance(current_period_context,
     ctx = current_period_context
     _set_weights(ctx)
     _make_ready(ctx)
-    model_version_id = _register_test_model(ctx)
+    model_version_id = _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     _add_load(ctx, ctx["staff"])
     _enroll(ctx, ctx["student"])
     teacher_b = _add_teacher(ctx, "T-DENIED", "denied.teacher@example.test")
@@ -780,7 +772,7 @@ def test_revisions_and_production_read_isolation(current_period_context, monkeyp
     ctx = current_period_context
     _set_weights(ctx)
     _make_ready(ctx)
-    _register_test_model(ctx)
+    _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     client = _client(monkeypatch, ctx["db"])
     first = client.post(PATH, json=_scope(ctx))
     assert first.status_code == 200, first.text
@@ -811,7 +803,7 @@ def test_real_postgres_http_end_to_end(current_period_context, monkeypatch):
     ctx = current_period_context
     _set_weights(ctx)
     _make_ready(ctx)
-    _register_test_model(ctx)
+    _register_test_model(ctx, model_name=CORRECTED_MODEL_NAME)
     schema = "dev_v3_api_test_" + uuid.uuid4().hex
     with configured_engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))

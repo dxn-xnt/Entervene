@@ -17,7 +17,7 @@ import { Checkbox } from "@/components/retroui/Checkbox";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Empty } from "@/components/retroui/Empty";
 import ClassworkItemLine from "@/components/item-line/classwork";
-import { Activity, BookOpen, Plus, Sparkles, Pencil, Lock } from "lucide-react";
+import { Activity, BookOpen, Plus, Sparkles, Pencil, Lock, RefreshCw } from "lucide-react";
 import AiRemediationDraftModal, {
   type DraftValidationResult,
 } from "./ai-remediation-draft-modal";
@@ -41,6 +41,8 @@ import {
   previewScoreAdjustment,
   projectSubjectGrade,
   generateRemediationDraft,
+  refreshRemediationEvidence,
+  eligibleRemediationLessonIds,
   preflightRemediationDraft,
   createRemediationAssessment,
   InterventionApiError,
@@ -67,6 +69,7 @@ import {
   type TeacherInterventionDetail,
   type TeacherInterventionSummary,
   type OriginalExamination,
+  type RemediationGenerationEligibility,
 } from "@/lib/teacher-interventions-api";
 import { SubjectGradeProjectionCard } from "./subject-grade-projection-card";
 import { formatToTitleCase } from "@/lib/formatters";
@@ -344,6 +347,8 @@ const InterventionSupportMaterials = forwardRef<
   const [materials, setMaterials] = useState<SupportMaterial[]>([]);
   const [resources, setResources] = useState<RemediationResource[]>([]);
   const [focus, setFocus] = useState<RemediationFocus | null>(null);
+  const [generationEligibility, setGenerationEligibility] = useState<RemediationGenerationEligibility | null>(null);
+  const [refreshingEvidence, setRefreshingEvidence] = useState(false);
   const [progress, setProgress] = useState<RemediationProgress | null>(null);
   const [originalExams, setOriginalExams] = useState<OriginalExamination[]>([]);
   const [plan, setPlan] = useState<RemediationPlan>({
@@ -561,6 +566,7 @@ const InterventionSupportMaterials = forwardRef<
           : null
       );
       setFocus(workspace.focus);
+      setGenerationEligibility(workspace.generation_eligibility);
       setProgress(workspace.progress);
       setOriginalExams(workspace.original_exams ?? []);
       const existingReviewer = support.items.find(
@@ -1283,6 +1289,13 @@ const InterventionSupportMaterials = forwardRef<
       return;
     }
 
+    const eligibleLessonIds = eligibleRemediationLessonIds(generationEligibility);
+    if (eligibleLessonIds.length === 0) {
+      setGenerationError("No lesson in this intervention is verified as taught at the active remediation evidence cutoff. Refresh the evidence after confirming lesson delivery, or continue with manual authoring.");
+      setShowDraftPreview(true);
+      return;
+    }
+
     if (
       isGraded(plan.teacher_choice) &&
       (!plan.grade_treatment ||
@@ -1344,7 +1357,7 @@ const InterventionSupportMaterials = forwardRef<
         item_count: 5,
         total_points: selectedTargetMaximum,
         activity_mode: "ONLINE",
-        selected_lesson_ids: focus?.lesson_ids?.length ? focus.lesson_ids : undefined,
+        selected_lesson_ids: eligibleLessonIds,
         selected_competency_ids: focus?.competency_ids?.length ? focus.competency_ids : undefined,
         selected_quiz_question_ids: quizQuestionIds?.length ? quizQuestionIds : undefined,
         selected_reading_ids: readingIds.length ? readingIds : undefined,
@@ -1367,6 +1380,26 @@ const InterventionSupportMaterials = forwardRef<
       setGenerationError(msg);
     } finally {
       setGeneratingDraft(false);
+    }
+  };
+
+  const handleRefreshRemediationEvidence = async () => {
+    setRefreshingEvidence(true);
+    try {
+      const refreshed = await refreshRemediationEvidence(interventionId);
+      const workspace = await getRemediationWorkspace(interventionId);
+      setGenerationEligibility(workspace.generation_eligibility);
+      setGenerationError(null);
+      toast.success({
+        title: refreshed.created ? "Remediation evidence refreshed" : "Remediation evidence is already current",
+        description: refreshed.created
+          ? `${refreshed.newly_eligible_lesson_ids?.length ?? 0} lesson(s) became eligible for AI generation.`
+          : undefined,
+      });
+    } catch (cause) {
+      setGenerationError(cause instanceof Error ? cause.message : "Unable to refresh remediation evidence.");
+    } finally {
+      setRefreshingEvidence(false);
     }
   };
 
@@ -2912,6 +2945,7 @@ const InterventionSupportMaterials = forwardRef<
                 plan={plan}
                 targetAssignmentSummary={targetAssignmentSummary}
                 onGenerateWithAI={handleGenerateWithAI}
+                retryDisabled={!generationEligibility?.eligible_taught_lessons.length}
                 onSaveAssessmentDraft={handleSaveAssessmentDraft}
                 onUpdateQuizQuestion={handleUpdateQuizQuestion}
                 onUpdateQuizOption={handleUpdateQuizOption}
@@ -3237,11 +3271,30 @@ const InterventionSupportMaterials = forwardRef<
                       </Empty>
                     )}
 
+                    {assigned.length === 0 &&
+                      (plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") &&
+                      generationEligibility &&
+                      generationEligibility.eligible_taught_lessons.length === 0 && (
+                        <TeacherEmptyState
+                          compact
+                          className="rounded! bg-card shadow-none hover:shadow-none"
+                          icon={<BookOpen />}
+                          title="No lessons eligible for AI generation"
+                          description={`The intervention was frozen ${date(generationEligibility.original_evidence_cutoff_at)}. A lesson marked Completed now is eligible only after an explicit evidence refresh; manual authoring remains available.`}
+                          action={generationEligibility.refresh_available ? {
+                            label: refreshingEvidence ? "Refreshing..." : "Refresh Remediation Evidence",
+                            onClick: handleRefreshRemediationEvidence,
+                            icon: <RefreshCw className={refreshingEvidence ? "size-4 animate-spin" : "size-4"} />,
+                            disabled: refreshingEvidence,
+                          } : undefined}
+                        />
+                      )}
+
                     {assigned.length === 0 && plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
                       <div className="flex flex-row flex-wrap w-full justify-end items-center gap-2 mt-2">
                         {(plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") && (
                           <Button
-                            disabled={continueDisabled || working || generatingDraft}
+                            disabled={continueDisabled || working || generatingDraft || !generationEligibility?.eligible_taught_lessons.length}
                             onClick={handleGenerateWithAI}
                             size="sm"
                             variant="outline"

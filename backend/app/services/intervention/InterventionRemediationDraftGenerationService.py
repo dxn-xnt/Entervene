@@ -28,8 +28,11 @@ from app.schemas.RemediationDraft import (
 )
 from app.services.ai import Provider
 from app.services.ai.UsageGuard import actor
-from app.services.intervention.InterventionGenerationEvidenceScopeService import (
-    resolve_generation_evidence_scope,
+from app.services.intervention.RemediationGenerationEligibilityService import (
+    LESSON_NOT_TAUGHT_AT_EVIDENCE_CUTOFF,
+    LESSON_OUTSIDE_VERIFIED_SCOPE,
+    NO_ELIGIBLE_TAUGHT_LESSONS,
+    resolve_remediation_generation_eligibility,
 )
 from app.services.intervention.InterventionRemediationDraftValidationService import (
     validate_draft_against_scope,
@@ -173,24 +176,37 @@ def build_remediation_draft_prompt(
             if lid not in scope_lesson_map:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Selected lesson ID {lid} is outside the verified evidence scope",
+                    detail={"code": LESSON_OUTSIDE_VERIFIED_SCOPE, "message": f"Selected lesson ID {lid} is outside the verified evidence scope", "lesson_id": lid},
                 )
             if lid not in taught_lesson_map:
+                eligibility = scope.get("_generation_eligibility") or {}
+                blocked = next((item for item in eligibility.get("blocked_lessons", []) if item.get("lesson_id") == lid), {})
                 raise HTTPException(
                     status_code=422,
-                    detail=(
-                        f"Selected lesson ID {lid} ('{scope_lesson_map[lid].get('title', '')}') "
-                        f"has not been verified as taught to this class as of the evidence cutoff"
-                    ),
+                    detail={
+                        "code": blocked.get("reason_code", LESSON_NOT_TAUGHT_AT_EVIDENCE_CUTOFF),
+                        "message": f"Selected lesson ID {lid} ('{scope_lesson_map[lid].get('title', '')}') has not been verified as taught to this class as of the active remediation evidence cutoff",
+                        "lesson_id": lid,
+                        "lesson_title": scope_lesson_map[lid].get("title", ""),
+                        "original_evidence_cutoff_at": eligibility.get("original_evidence_cutoff_at"),
+                        "active_remediation_cutoff_at": eligibility.get("active_remediation_cutoff_at"),
+                        "confirmed_delivery_at": blocked.get("confirmed_delivery_at"),
+                    },
                 )
         eligible_lessons = [taught_lesson_map[lid] for lid in request.selected_lesson_ids]
     else:
         eligible_lessons = [l for l in all_lessons if l.get("is_taught") is True]
 
     if not eligible_lessons:
+        eligibility = scope.get("_generation_eligibility") or {}
         raise HTTPException(
             status_code=422,
-            detail="No verified taught lessons available for remediation generation as of the evidence cutoff",
+            detail={
+                "code": NO_ELIGIBLE_TAUGHT_LESSONS,
+                "message": "No verified taught lessons are available at the active remediation evidence cutoff",
+                "original_evidence_cutoff_at": eligibility.get("original_evidence_cutoff_at"),
+                "active_remediation_cutoff_at": eligibility.get("active_remediation_cutoff_at"),
+            },
         )
 
     # Filter competencies strictly
@@ -486,7 +502,9 @@ async def generate_remediation_draft(
             detail="Intervention must be ACTIVE to generate remediation drafts",
         )
 
-    scope = resolve_generation_evidence_scope(db, intervention)
+    eligibility = resolve_remediation_generation_eligibility(db, intervention)
+    scope = eligibility.pop("scope")
+    scope["_generation_eligibility"] = eligibility
     material_context = resolve_remediation_material_context(
         db, intervention, scope, selected_reading_ids=request.selected_reading_ids,
     )

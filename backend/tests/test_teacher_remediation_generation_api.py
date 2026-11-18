@@ -42,6 +42,7 @@ from app.db.Session import get_db
 from app.models.academic.Competency import Competency
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonDelivery import LessonDelivery
+from app.models.intervention.RemediationGenerationEvidenceSnapshot import RemediationGenerationEvidenceSnapshot
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkCoverage import ClassworkCoverage
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -96,6 +97,56 @@ def _prepare_active_intervention(ctx) -> tuple[Competency, Lesson, datetime]:
     db.commit()
 
     return competency, lesson, cutoff
+
+
+def test_post_cutoff_delivery_requires_explicit_refresh_and_preserves_diagnosis(candidate_context):
+    ctx = candidate_context
+    _competency, lesson, cutoff = _prepare_active_intervention(ctx)
+    db = ctx["db"]
+    intervention = ctx["candidate"]
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+    diagnosis = dict(intervention.diagnosis_snapshot)
+    diagnosis["evidence_cutoff_at"] = cutoff.isoformat()
+    intervention.diagnosis_snapshot = diagnosis
+    source_snapshot = dict(intervention.source_prediction.evidence_snapshot)
+    source_snapshot["generation_cutoff_at"] = cutoff.isoformat()
+    intervention.source_prediction.evidence_snapshot = source_snapshot
+    delivery = db.query(LessonDelivery).filter_by(lesson_id=lesson.lesson_id).one()
+    delivery.delivered_at = cutoff + timedelta(minutes=5)
+    db.commit()
+    original_diagnosis = json.loads(json.dumps(intervention.diagnosis_snapshot))
+
+    client = _client(ctx)
+    before = client.get(f"/api/v1/teacher/interventions/{_id(ctx)}/remediation")
+    assert before.status_code == 200
+    eligibility = before.json()["generation_eligibility"]
+    assert eligibility["eligible_taught_lessons"] == []
+    assert eligibility["refresh_available"] is True
+    assert eligibility["blocked_lessons"][0]["reason_code"] == "REMEDIATION_EVIDENCE_REFRESH_REQUIRED"
+
+    refreshed = client.post(f"/api/v1/teacher/interventions/{_id(ctx)}/remediation/evidence/refresh")
+    assert refreshed.status_code == 200
+    body = refreshed.json()
+    assert body["created"] is True
+    assert body["evidence_version"] == 1
+    assert body["newly_eligible_lesson_ids"] == [lesson.lesson_id]
+    assert [item["lesson_id"] for item in body["eligible_taught_lessons"]] == [lesson.lesson_id]
+    db.refresh(intervention)
+    assert intervention.diagnosis_snapshot == original_diagnosis
+    assert db.query(RemediationGenerationEvidenceSnapshot).filter_by(intervention_id=_id(ctx)).count() == 1
+
+    repeated = client.post(f"/api/v1/teacher/interventions/{_id(ctx)}/remediation/evidence/refresh")
+    assert repeated.status_code == 200
+    assert repeated.json()["created"] is False
+    assert db.query(RemediationGenerationEvidenceSnapshot).filter_by(intervention_id=_id(ctx)).count() == 1
+
+
+def test_unauthorized_teacher_cannot_refresh_remediation_evidence(candidate_context):
+    ctx = candidate_context
+    _prepare_active_intervention(ctx)
+    client = _client(ctx, role="teacher", user_id=_other_staff(ctx).user_id)
+    response = client.post(f"/api/v1/teacher/interventions/{_id(ctx)}/remediation/evidence/refresh")
+    assert response.status_code == 404
 
 
 # ── Authentication & Authorization Tests ──

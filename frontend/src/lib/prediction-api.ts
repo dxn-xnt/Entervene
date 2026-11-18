@@ -193,7 +193,7 @@ export async function fetchDevelopmentCurrentTermPredictions(
     if (response.status === 401 || response.status === 403) {
       throw new CurrentTermPredictionLoadError("You do not have access to these current-term projections.", "access");
     }
-    if (response.status === 404) {
+    if (response.status === 404 || response.status === 503) {
       throw new CurrentTermPredictionLoadError("Current-term projections are unavailable in this environment.", "unavailable");
     }
     throw new CurrentTermPredictionLoadError("Current-term projections could not be loaded. Please try again.", "failure");

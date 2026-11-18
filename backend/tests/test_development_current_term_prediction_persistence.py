@@ -18,16 +18,18 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.prediction import DevelopmentCurrentTermPredictionPersistenceService as service
 from app.services.prediction.DevelopmentCurrentTermPredictionReadService import _academic_evidence
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
+from app.services.prediction.DevelopmentCurrentTermModelSelection import artifact_path
 from app.services.prediction.DashboardPredictionService import get_dashboard_at_risk_predictions
 from tests.test_current_period_live_feature_builder import add_activity, current_period_context
 from tests.test_development_current_term_prediction_service import _make_ready, _set_weights
 
 
 def _register_test_model(ctx, **overrides):
-    schema = scorer.load_development_current_term_schema()
+    model_name = overrides.pop("model_name", scorer.MODEL_NAME)
+    schema = scorer.load_development_current_term_schema(model_name)
     digest = sha256(json.dumps(schema, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     row = AIModelVersion(
-        model_name=scorer.MODEL_NAME,
+        model_name=model_name,
         model_type="REGRESSOR",
         model_purpose="CURRENT_TERM_FINAL_GRADE_PROJECTION",
         algorithm="RandomForestRegressor",
@@ -36,7 +38,7 @@ def _register_test_model(ctx, **overrides):
         production_validated=False,
         independent_three_term_validation=False,
         is_active=False,
-        artifact_path="data/models/entervene_current_term_development_rf_v3.joblib",
+        artifact_path=f"data/models/{model_name}.joblib",
         feature_schema_json=schema,
         registry_metadata_json={
             "supported_subjects": ["CREATIVE_TECHNOLOGY", "ENGLISH", "ICT", "MATHEMATICS", "SCIENCE"],
@@ -44,7 +46,7 @@ def _register_test_model(ctx, **overrides):
             "period_semantics": "SOURCE_EQUALS_TARGET_SAME_TERM",
             "feature_schema_sha256": digest,
             "feature_schema_version": f"sha256:{digest}",
-            "artifact_sha256": sha256(scorer.MODEL_PATH.read_bytes()).hexdigest(),
+            "artifact_sha256": sha256(artifact_path(model_name).read_bytes()).hexdigest(),
             "training_dataset_version": "test-dataset-v1",
         },
         **overrides,
