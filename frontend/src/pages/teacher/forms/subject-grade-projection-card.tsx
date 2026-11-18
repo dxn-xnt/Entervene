@@ -58,7 +58,7 @@ export function SubjectGradeProjectionCard({
           <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">Unavailable</Badge>
         </div>
-        <Alert status="warning" className="py-2 text-xs">
+        <Alert status="warning" className="rounded! py-2 text-xs">
           {error}
         </Alert>
         {onRetry && (
@@ -77,7 +77,7 @@ export function SubjectGradeProjectionCard({
           <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">Practice Only</Badge>
         </div>
-        <Alert status="info" className="py-2 text-xs">
+        <Alert status="info" className="rounded! py-2 text-xs">
           <div>
             <p className="font-bold">Ungraded Support Treatment</p>
             <p className="mt-0.5">
@@ -99,7 +99,7 @@ export function SubjectGradeProjectionCard({
           <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">Remedial Exam</Badge>
         </div>
-        <Alert status="info" className="py-2 text-xs">
+        <Alert status="info" className="rounded! py-2 text-xs">
           <div>
             <p className="font-bold">Examination Remediation</p>
             <p className="mt-0.5">
@@ -132,7 +132,7 @@ export function SubjectGradeProjectionCard({
           <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">Unavailable</Badge>
         </div>
-        <Alert status="warning" className="py-2 text-xs">
+        <Alert status="warning" className="rounded! py-2 text-xs">
           <div>
             <p className="font-bold">Subject grade projection is unavailable for this student.</p>
             <p className="mt-0.5">
@@ -192,7 +192,7 @@ export function SubjectGradeProjectionCard({
       </div>
 
       {!isUnavailable && (
-        <div className="border-2 border-border bg-background p-4 sm:p-5">
+        <div className="rounded! border-2 border-border bg-background p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-wrap items-center justify-between w-full">
               <span className="text-xl text-foreground">{gradeText(currentGrade)}</span>
@@ -271,7 +271,7 @@ export function SubjectGradeProjectionCard({
       </div>
       {isUnavailable && (
         <div className="space-y-2">
-          <Alert status="warning" className="py-2 text-xs">
+          <Alert status="warning" className="rounded! py-2 text-xs">
             <div>
               <p className="font-bold">Subject grade projection is unavailable for this student.</p>
               <p className="mt-0.5">
@@ -284,7 +284,7 @@ export function SubjectGradeProjectionCard({
           {!compact && rawPreviews.length === 0 && projection.eligible_target_gains.length > 0 && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {projection.eligible_target_gains.map((item) => (
-                <div key={item.assignment_id} className="flex items-center justify-between border bg-background p-2 text-xs">
+                <div key={item.assignment_id} className="flex items-center justify-between rounded! border border-border bg-background p-2 text-xs">
                   <span className="mr-2 truncate font-semibold">{item.title}</span>
                   <span className="shrink-0 font-bold text-success">
                     +{item.possible_score_gain.toFixed(1)} pts ({item.maximum_hypothetical_effective_score.toFixed(1)}/{item.max_points})
@@ -308,7 +308,7 @@ export function SubjectGradeProjectionCard({
               const difference = authoritativeStep ? (step as TargetProjection).possible_grade_improvement : (step as AIMidtermTargetEstimate).estimated_difference_from_baseline;
               const title = authoritativeStep ? (step as TargetProjection).title || `Assignment #${step.assignment_id}` : `Target #${step.assignment_id}`;
               return (
-                <div key={step.assignment_id} className="flex items-center justify-between border bg-background px-2 py-1 text-xs">
+                <div key={step.assignment_id} className="flex items-center justify-between rounded! border border-border bg-background px-2 py-1 text-xs">
                   <span className="min-w-0 truncate font-semibold">#{index + 1} {title}</span>
                   <span className="ml-2 shrink-0 text-muted-foreground">
                     {isAiWhatIf ? "Est." : "Grade"} <strong className="text-foreground">{gradeText(grade ?? null)}</strong>

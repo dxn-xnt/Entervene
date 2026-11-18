@@ -44,7 +44,7 @@ export function ReferenceLinkEditor({ links, onChange, disabled = false }: {
       />
     ) : (
       <div className="space-y-3">
-      {links.map((link, index) => <div key={index} className="grid gap-2 border-2 border-black bg-white p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+      {links.map((link, index) => <div key={index} className="grid gap-2 border-2 border-black rounded! bg-white p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <label className="min-w-0 text-sm font-semibold">URL
           <Input aria-label={`Reference link ${index + 1} URL`} type="url" value={link.url} placeholder="https://example.com/resource" className="mt-1 w-full shadow-none" disabled={disabled} onChange={(event) => onChange(links.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} />
         </label>

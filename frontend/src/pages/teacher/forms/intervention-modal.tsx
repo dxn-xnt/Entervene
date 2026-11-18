@@ -573,17 +573,17 @@ export default function InterventionModal({
                             <h3 className="text-base font-bold">
                               Scored competency evidence
                             </h3>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                               Ranked only when a competency has its own traceable scored evidence.
                             </p>
                             <div className="space-y-2">
                               {detail.diagnosis_snapshot.lowest_supported_competencies?.map((item) => (
-                                <Card key={item.competency_id} className="space-y-2 p-3">
+                                <Card key={item.competency_id} className="w-full space-y-3 p-4 shadow-none!">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
                                       <span className="font-semibold text-sm">{item.competency_statement}</span>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex shrink-0 items-center gap-2">
                                       <Badge variant="surface" size="sm">
                                         {item.score}/{item.possible_score}
                                       </Badge>
@@ -598,19 +598,19 @@ export default function InterventionModal({
                                   {item.supporting_scores.map((score, index) => (
                                     <div
                                       key={`${score.quiz_question_id ?? score.source_type}-${index}`}
-                                      className="text-xs text-muted-foreground flex flex-wrap gap-1.5 pt-1.5"
+                                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded! border border-border p-3 text-sm"
                                     >
                                       <Badge variant="solid" size="sm">
                                         {score.source_type === "QUIZ_QUESTION"
                                           ? `Question #${score.quiz_question_id ?? "unknown"}`
                                           : "Activity score"}
                                       </Badge>
-                                      <span>
+                                      <span className="min-w-0 break-words text-muted-foreground">
                                         {score.activity_title}
                                         {score.lesson_title ? ` · ${score.lesson_title}` : ""}
                                       </span>
                                       {score.score != null && score.possible_score != null && (
-                                        <span className="font-semibold">
+                                        <span className="whitespace-nowrap font-semibold tabular-nums">
                                           {score.score}/{score.possible_score}
                                         </span>
                                       )}

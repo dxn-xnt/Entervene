@@ -15,6 +15,7 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
+  ArrowLeft,
   Sparkles,
   Upload,
   CheckCircle2,
@@ -22,7 +23,6 @@ import {
   Lock,
   FileQuestion,
   Loader2,
-  BookOpen,
   History,
 } from "lucide-react";
 import {
@@ -513,7 +513,7 @@ export default function PracticeAssessmentModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Content size="3xl" className="max-h-[90vh] flex flex-col p-0 overflow-hidden">
         {/* Header */}
-        <Dialog.Header className="px-5 py-4 border-b-2 border-border">
+        <Dialog.Header asChild className="px-5 py-4 border-b-2 border-border">
           <Dialog.Title className="text-xl font-black">
             Practice Assessment
           </Dialog.Title>
@@ -651,7 +651,7 @@ export default function PracticeAssessmentModal({
                 <div className="space-y-4">
                   {/* Authoring Actions Bar */}
                   {!isLocked && (
-                    <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 p-3 rounded border-2 border-border">
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 p-3 rounded! border-2 border-border">
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           size="sm"
@@ -1121,11 +1121,17 @@ export default function PracticeAssessmentModal({
         </div>
 
         {/* Footer Actions */}
-        <Dialog.Footer className="px-5 py-3 border-t-2 border-border flex flex-wrap items-center justify-between gap-2 bg-muted/20">
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Close
+        <Dialog.Footer className="px-5 py-3 border-t-2 border-border flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="mr-auto"
+            disabled={isSaving || isPublishing || isArchiving}
+            onClick={onClose}
+          >
+            <ArrowLeft className="size-4" />
+            Back
           </Button>
-
           <div className="flex flex-wrap items-center gap-2">
             {assessment && assessment.status === "PUBLISHED" && (
               <Button
