@@ -2,6 +2,7 @@ import { activeFirst } from "@/lib/active-first";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { Button } from "@/components/retroui/Button";
+import { Accordion } from "@/components/retroui/Accordion";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
@@ -37,6 +38,37 @@ import {
 } from "./subject-utils";
 
 const COMMON_DURATIONS = [45, 60, 72, 96] as const;
+
+function DurationSelect({ id, value, onChange, invalid, describedBy }: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  invalid: boolean;
+  describedBy?: string;
+}) {
+  const [custom, setCustom] = useState(false);
+  const isPreset = COMMON_DURATIONS.some((minutes) => String(minutes) === value);
+  const customMode = custom || Boolean(value && !isPreset);
+  return (
+    <>
+      <Select value={customMode ? "custom" : value || undefined} onValueChange={(next) => {
+        setCustom(next === "custom");
+        onChange(next === "custom" ? "" : next);
+      }}>
+        <Select.Trigger id={id} className="w-full" aria-invalid={invalid} aria-describedby={describedBy}>
+          <Select.Value placeholder="Select duration" />
+        </Select.Trigger>
+        <Select.Content>
+          <Select.Group>
+            {COMMON_DURATIONS.map((minutes) => <Select.Item key={minutes} value={String(minutes)}>{minutes} minutes</Select.Item>)}
+            <Select.Item value="custom">Custom duration</Select.Item>
+          </Select.Group>
+        </Select.Content>
+      </Select>
+      {customMode && <Input type="number" min={1} step={1} value={value} onChange={(event) => onChange(event.target.value)} placeholder="Enter minutes" aria-label="Custom duration in minutes" aria-invalid={invalid} aria-describedby={describedBy} />}
+    </>
+  );
+}
 const pathwayScopesOverlap = (existingIds: number[], targetIds: number[]) =>
   !existingIds.length
   || !targetIds.length
@@ -666,19 +698,13 @@ export function OfferingModal({
                 {isCreateMode ? (
                   <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (Minutes) <span className="text-red-500">*</span></label>
-                    <Input
+                    <DurationSelect
                       id="create-offering-minutes"
-                      aria-invalid={error === "Minutes must be a positive whole number."}
-                      aria-describedby={error === "Minutes must be a positive whole number." ? "create-offering-minutes-error" : undefined}
-                      type="number"
-                      min={1}
                       value={form.minutes}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
-                      placeholder="e.g. 45, 60, 72, 96"
+                      onChange={(value) => setField("minutes", value)}
+                      invalid={error === "Minutes must be a positive whole number."}
+                      describedBy={error === "Minutes must be a positive whole number." ? "create-offering-minutes-error" : undefined}
                     />
-                    <div className="flex flex-wrap gap-1" aria-label="Common durations">
-                      {COMMON_DURATIONS.map((minutes) => <Button key={minutes} type="button" size="sm" variant={form.minutes === String(minutes) ? "default" : "outline"} onClick={() => setField("minutes", String(minutes))}>{minutes}</Button>)}
-                    </div>
                     {error === "Minutes must be a positive whole number." && <FormMessage id="create-offering-minutes-error">{error}</FormMessage>}
                     <p className="text-xs text-muted-foreground">Minutes per class period for all selected terms. Required for scheduling.</p>
                   </div>
@@ -730,7 +756,7 @@ export function OfferingModal({
                       ) : null}
                     </div>
                     {periods.length ? (
-                      <Button type="button" size="sm" variant="outline" onClick={toggleAllTerms}>
+                      <Button type="button" size="sm" variant="outline" className="gap-2" onClick={toggleAllTerms}>
                         {allTermsSelected ? "Clear terms" : "Select all terms"}
                       </Button>
                     ) : null}
@@ -783,19 +809,13 @@ export function OfferingModal({
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold" htmlFor="offering-minutes">Duration (Minutes)</label>
-                    <Input
+                    <DurationSelect
                       id="offering-minutes"
-                      aria-invalid={error === "Minutes must be a positive whole number."}
-                      aria-describedby={error === "Minutes must be a positive whole number." ? "offering-minutes-error" : undefined}
-                      type="number"
-                      min={1}
                       value={form.minutes}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
-                      placeholder="e.g. 45, 60, 72, 96"
+                      onChange={(value) => setField("minutes", value)}
+                      invalid={error === "Minutes must be a positive whole number."}
+                      describedBy={error === "Minutes must be a positive whole number." ? "offering-minutes-error" : undefined}
                     />
-                    <div className="flex flex-wrap gap-1" aria-label="Common durations">
-                      {COMMON_DURATIONS.map((minutes) => <Button key={minutes} type="button" size="sm" variant={form.minutes === String(minutes) ? "default" : "outline"} onClick={() => setField("minutes", String(minutes))}>{minutes}</Button>)}
-                    </div>
                     {error === "Minutes must be a positive whole number." && <FormMessage id="offering-minutes-error">{error}</FormMessage>}
                     <p className="text-xs text-muted-foreground">Minutes per period. Required for publishing.</p>
                   </div>
@@ -852,13 +872,13 @@ export function OfferingModal({
                 ) : null}
               </>
             ) : (
-              <div className="rounded! border-2 border-black p-3 shadow-[3px_3px_0_#000]">
-                <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h6 className="font-bold">Select Subjects</h6>
-                    <p className="text-xs text-muted-foreground">Catalog subjects are filtered by the selected grade level.</p>
-                  </div>
-                </div>
+              <Accordion>
+                <Accordion.Item value="subjects" className="rounded! border-border shadow-none!">
+                  <Accordion.Header className="items-center py-3 text-sm font-normal">
+                    {form.subject_ids.length ? `${form.subject_ids.length} subjects selected` : "Select Subjects"}
+                  </Accordion.Header>
+                  <Accordion.Content>
+                    <p className="mb-3 text-sm text-muted-foreground">Catalog subjects are filtered by the selected grade level.</p>
                 {duplicateCatalogLabels.length ? (
                   <Alert status="warning" className="mb-3 py-3">
                     <Alert.Title className="font-bold">Possible duplicate catalog subjects</Alert.Title>
@@ -876,6 +896,7 @@ export function OfferingModal({
                   <LoadingPanel label="Checking existing offerings..." className="w-full" />
                 ) : (
                   <SubjectPicker
+                    showSelectedChips={false}
                     subjects={subjects}
                     selectedSubjectIds={form.subject_ids}
                     onChange={handleSubjectSelectionChange}
@@ -883,16 +904,19 @@ export function OfferingModal({
                     availabilityBySubjectId={availabilityBySubjectId}
                   />
                 )}
+                  </Accordion.Content>
+                </Accordion.Item>
                 {error === "Select setup details, at least one term, and at least one subject." && !form.subject_ids.length && <FormMessage>Select at least one subject.</FormMessage>}
-              </div>
+              </Accordion>
             )}
 
           </div>
         </section>
         <Dialog.Footer>
           <NoChangesMessage message={changes.noChangesMessage} />
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>Cancel</Button>
+          <Button variant="outline" className="gap-2" onClick={() => onOpenChange(false)} disabled={isSaving}>Cancel</Button>
           <Button
+            className="gap-2"
             onClick={handleSubmit}
             disabled={
               isSaving
