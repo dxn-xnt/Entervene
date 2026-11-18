@@ -20,8 +20,53 @@ if not logger.handlers:
     logger.addHandler(_handler)
 
 
+def _frontend_url() -> str:
+    return (os.getenv("FRONTEND_URL") or settings.frontend_url).rstrip("/")
+
+
+def _invitation_link(token: str, frontend_url: str | None = None) -> str:
+    return f"{frontend_url or _frontend_url()}/setup-password?token={token}"
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _demo_invitation_link_logging_enabled() -> bool:
+    enabled = _env_flag(
+        "DEMO_INVITATION_LINKS_ENABLED",
+        settings.demo_invitation_links_enabled,
+    )
+    environment = (
+        os.getenv("APP_ENVIRONMENT")
+        or os.getenv("APP_ENV")
+        or settings.app_environment
+    ).strip().lower()
+    return enabled and environment in {"development", "test"}
+
+
+def _log_demo_invitation_link(email: str, token: str, frontend_url: str | None = None) -> None:
+    # A raw invitation URL grants account-activation access. Never log one
+    # unless the explicit demo switch and a non-production environment agree.
+    if not _demo_invitation_link_logging_enabled():
+        return
+    link = _invitation_link(token, frontend_url)
+    logger.info(
+        "\n"
+        "+------------------------------------------------------------+\n"
+        "| DEMO INVITATION LINK                                      |\n"
+        "+------------------------------------------------------------+\n"
+        f"| To   : {email}\n"
+        f"| Link : {link}\n"
+        "+------------------------------------------------------------+"
+    )
+
+
 def _build_invitation_message(email: str, token: str, frontend_url: str, from_name: str, smtp_user: str) -> MIMEMultipart:
-    link = f"{frontend_url}/setup-password?token={token}"
+    link = _invitation_link(token, frontend_url)
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Welcome to Entervene - Set Up Your Account"
     msg["From"] = f"{from_name} <{smtp_user}>"
@@ -123,10 +168,10 @@ def send_invitation_email(email: str, token: str) -> None:
     Supports real SMTP delivery (e.g. Gmail) and console logging.
     Preserves exact backwards compatibility with all callers.
     """
-    frontend_url = (getattr(settings, "frontend_url", None) or os.getenv("FRONTEND_URL", "http://localhost:5173")).rstrip("/")
-    link = f"{frontend_url}/setup-password?token={token}"
+    frontend_url = _frontend_url()
 
     logger.info("Invitation prepared for delivery")
+    _log_demo_invitation_link(email, token, frontend_url)
 
     mail_driver = (os.getenv("MAIL_DRIVER") or getattr(settings, "mail_driver", "console")).lower()
     if mail_driver == "console":
@@ -199,7 +244,7 @@ def send_batch_invitations(items: list[dict], delay_seconds: float = 0.35) -> di
     :param delay_seconds: Delay between consecutive sends.
     :return: Dict of {'sent': list[str], 'failed': list[str]}
     """
-    frontend_url = (os.getenv("FRONTEND_URL") or getattr(settings, "frontend_url", "http://localhost:5173")).rstrip("/")
+    frontend_url = _frontend_url()
     mail_driver = (os.getenv("MAIL_DRIVER") or getattr(settings, "mail_driver", "console")).lower()
 
     sent: list[str] = []
@@ -208,14 +253,15 @@ def send_batch_invitations(items: list[dict], delay_seconds: float = 0.35) -> di
     if not items:
         return {"sent": sent, "failed": failed}
 
-    # If console mode, log all generated links and mark users as sent
+    for item in items:
+        _log_demo_invitation_link(item["email"], item["token"], frontend_url)
+
+    # Console mode retains its existing no-SMTP delivery semantics. Raw links
+    # are emitted above only when the separate demo security gate allows it.
     if mail_driver == "console":
         for item in items:
             email = item["email"]
-            token = item["token"]
             user_id = item.get("user_id")
-            link = f"{frontend_url}/setup-password?token={token}"
-            logger.info(f"[Local Console] Invitation for {email}: {link}")
             _update_user_email_status(user_id, "sent")
             sent.append(email)
         return {"sent": sent, "failed": failed}

@@ -108,12 +108,33 @@ async function read<T>(path: string, method = "GET", body?: unknown): Promise<T>
 }
 
 const base = "/api/v1/teacher/interventions";
-export const listTeacherCandidates = () => read<{ items: TeacherInterventionSummary[]; total: number }>(`${base}/candidates`);
+type TeacherInterventionList = { items: TeacherInterventionSummary[]; total: number };
+
+async function readTeacherInterventionList(path: string): Promise<TeacherInterventionList> {
+  try {
+    return await read<TeacherInterventionList>(path);
+  } catch (error) {
+    // The backend deliberately hides this development-only feature behind a
+    // generic 404 when the corrected prediction model is unavailable. The
+    // navigation can still be visible in that configuration, so list views
+    // should behave like empty datasets instead of showing three load errors.
+    if (
+      error instanceof InterventionApiError &&
+      error.status === 404 &&
+      error.message.trim().toLowerCase() === "not found"
+    ) {
+      return { items: [], total: 0 };
+    }
+    throw error;
+  }
+}
+
+export const listTeacherCandidates = () => readTeacherInterventionList(`${base}/candidates`);
 export const getTeacherCandidate = (id: number) => read<TeacherInterventionDetail>(`${base}/candidates/${id}`);
 export const activateTeacherCandidate = (id: number) => read<TeacherInterventionDetail>(`${base}/candidates/${id}/activate`, "POST");
-export const listTeacherActive = () => read<{ items: TeacherInterventionSummary[]; total: number }>(`${base}/active`);
+export const listTeacherActive = () => readTeacherInterventionList(`${base}/active`);
 export const getTeacherActive = (id: number) => read<TeacherInterventionDetail>(`${base}/active/${id}`);
-export const listTeacherResolved = () => read<{ items: TeacherInterventionSummary[]; total: number }>(`${base}/resolved`);
+export const listTeacherResolved = () => readTeacherInterventionList(`${base}/resolved`);
 export const getTeacherResolved = (id: number) => read<TeacherResolvedInterventionDetail>(`${base}/resolved/${id}`);
 
 export type MaterialKind = "STUDENT_REVIEWER" | "REMEDIAL_ASSESSMENT";

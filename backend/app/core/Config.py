@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     api_requests_per_minute: int = Field(default=6000, ge=60)
     api_ip_requests_per_minute: int = Field(default=3000, ge=30)
     mail_driver: str = "console"
+    demo_invitation_links_enabled: bool = False
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_user: str | None = None
