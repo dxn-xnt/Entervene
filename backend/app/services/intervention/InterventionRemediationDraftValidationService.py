@@ -23,9 +23,7 @@ from app.schemas.RemediationDraft import (
     RemediationQuizDraft,
     parse_remediation_draft,
 )
-from app.services.intervention.InterventionGenerationEvidenceScopeService import (
-    resolve_generation_evidence_scope,
-)
+from app.services.intervention.RemediationGenerationEligibilityService import resolve_remediation_generation_eligibility
 
 
 _LEAK_PATTERNS = [
@@ -195,5 +193,7 @@ def validate_remediation_draft(
     draft_input: RemediationDraft | dict[str, Any],
 ) -> RemediationDraft:
     """Validate a remediation draft against the intervention's verified evidence scope."""
-    scope = resolve_generation_evidence_scope(db, intervention)
+    eligibility = resolve_remediation_generation_eligibility(db, intervention)
+    scope = eligibility.pop("scope")
+    scope["_generation_eligibility"] = eligibility
     return validate_draft_against_scope(scope, draft_input)

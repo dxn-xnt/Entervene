@@ -105,7 +105,7 @@ def test_separate_histories_and_fail_closed_registry(current_period_context, mon
     corrected.registry_metadata_json = dict(metadata)
     corrected.model_purpose = "NEXT_PERIOD_BASELINE_FORECAST"
     ctx["db"].commit()
-    with pytest.raises(ValueError, match="inactive development"):
+    with pytest.raises(ValueError, match="approved current-term lifecycle contract"):
         _run(ctx, corrected.model_version_id)
 
 

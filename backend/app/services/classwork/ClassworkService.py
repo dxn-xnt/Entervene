@@ -69,11 +69,38 @@ from app.services.classwork.ClassworkShared import (
     validate_classwork_values,
     validate_schedule,
 )
-from app.services.quiz.QuizBuilderService import upsert_quiz_builder
+from app.services.quiz.QuizBuilderService import (
+    get_quiz_for_classwork,
+    quiz_readiness,
+    upsert_quiz_builder,
+)
 from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 
 
 MAX_CLASSWORK_REFERENCE_LINKS = 20
+
+
+def ensure_published_quiz_student_ready(db: Session, classwork: Classwork) -> None:
+    """Keep classwork, assignment, and quiz publication state consistent.
+
+    A published quiz classwork is student-visible, so leaving its Quiz row in
+    DRAFT produces a broken student page. Promotion is allowed only after the
+    canonical readiness validator passes.
+    """
+    if not classwork.is_published or not is_quiz_type(classwork.classwork_type):
+        return
+    quiz = get_quiz_for_classwork(db, classwork.classwork_id)
+    readiness = quiz_readiness(db, classwork, quiz)
+    if not readiness.is_publish_ready or quiz is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "QUIZ_NOT_PUBLISH_READY",
+                "message": "Quiz cannot be published until its questions and scoring are complete.",
+                "readiness_errors": readiness.readiness_errors,
+            },
+        )
+    quiz.status = "PUBLISHED"
 
 
 def _normalized_reference_links(raw: object) -> list[ClassworkReferenceLinkInput]:
@@ -928,6 +955,7 @@ def update_classwork_record(
                 db.add(ClassworkLesson(classwork_id=classwork_id, lesson_id=lesson_id))
         if replacement_links is not None:
             _replace_reference_links(db, classwork, replacement_links)
+        ensure_published_quiz_student_ready(db, classwork)
         db.commit()
         db.refresh(classwork)
 
@@ -1231,6 +1259,8 @@ def assign_classwork_to_classes(
             _stage_targeted_assignment_notification(db, targeted, classwork, classwork.subject_id)
         if targeted:
             classwork.is_published = bool(body.is_published)
+        if body.is_published:
+            ensure_published_quiz_student_ready(db, classwork)
         db.commit()
 
         if class_ids and not targeted and body.is_published:

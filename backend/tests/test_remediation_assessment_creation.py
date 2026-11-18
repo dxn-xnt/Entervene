@@ -15,12 +15,18 @@ from app.models.quiz.Question import Question
 from app.models.quiz.QuestionOption import QuestionOption
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizSetting import QuizSetting
-from app.services.quiz.QuizAttemptService import _attempt_question_out
+from app.schemas.Classwork import ClassworkAssignRequest
+from app.services.quiz.QuizAttemptService import (
+    _AttemptFeedbackVisibility,
+    _attempt_question_out,
+    get_student_quiz_attempt,
+)
 from app.services.intervention.InterventionRemediationAssessmentCreationService import (
     create_remediation_assessment,
 )
 from app.services.intervention.InterventionRemediationService import get_workspace
 from app.services.classwork.ClassworkService import student_assignments
+from app.services.classwork.ClassworkService import assign_classwork_to_classes
 from app.services.classwork.ClassworkResponseService import build_classwork_response
 from tests.test_current_period_live_feature_builder import current_period_context
 from tests.test_remediation_draft_preflight import (
@@ -90,9 +96,13 @@ def test_create_unpublished_quiz_is_atomic_linked_and_idempotent(candidate_conte
     correct = db.query(QuestionOption).filter_by(is_correct=True).count()
     assert correct >= 2
     for quiz_question in quiz.questions:
-        student_item = _attempt_question_out(quiz_question, None, False, False)
+        student_item = _attempt_question_out(
+            quiz_question,
+            None,
+            _AttemptFeedbackVisibility(False, False, False, False, False),
+        )
         assert all(option.is_correct is None for option in student_item.options)
-        assert "explanation" not in student_item.model_dump()
+        assert student_item.explanation is None
 
     link = db.query(RemediationAssignmentLink).filter_by(
         remediation_assignment_id=result.classwork_assignment_id,
@@ -123,6 +133,56 @@ def test_create_unpublished_quiz_is_atomic_linked_and_idempotent(candidate_conte
         for item in group
     }
     assert result.classwork_assignment_id not in visible_assignment_ids
+
+
+def test_publishing_targeted_quiz_promotes_quiz_and_student_can_fetch_attempt(candidate_context):
+    ctx = candidate_context
+    competency, lesson, _target, _reading = _setup_intervention_with_targets(
+        ctx, "WRITTEN_WORK", 10.0,
+    )
+    result = create_remediation_assessment(
+        ctx["db"],
+        staff_id=_staff(ctx),
+        intervention_id=_id(ctx),
+        remediation_request_id=uuid4(),
+        draft_input=_make_quiz_draft(competency.competency_id, lesson.lesson_id, 10.0),
+    )
+    assignment = ctx["db"].get(ClassworkAssignment, result.classwork_assignment_id)
+    quiz = ctx["db"].get(Quiz, result.quiz_id)
+    assert quiz.status == "DRAFT"
+
+    assign_classwork_to_classes(
+        result.classwork_id,
+        ClassworkAssignRequest(
+            class_ids=[ctx["class"].class_id],
+            academic_period_id=ctx["period"].academic_period_id,
+            is_published=True,
+            max_attempts=1,
+        ),
+        _staff(ctx),
+        ctx["db"],
+        {"sub": str(ctx["staff"].user_id), "role": "teacher"},
+    )
+
+    ctx["db"].refresh(assignment)
+    ctx["db"].refresh(quiz)
+    assert assignment.is_published is True
+    assert assignment.classwork.is_published is True
+    assert quiz.status == "PUBLISHED"
+    from app.models.classwork.RemediationReadingPrerequisite import RemediationReadingPrerequisite
+    from app.services.intervention.InterventionReadingReviewService import acknowledge_intervention_reading_review
+    prerequisite = ctx["db"].query(RemediationReadingPrerequisite).filter_by(
+        remediation_assignment_id=assignment.classwork_assignment_id,
+    ).one()
+    acknowledge_intervention_reading_review(
+        ctx["db"],
+        intervention_id=_id(ctx),
+        reading_assignment_id=prerequisite.reading_assignment_id,
+        student=ctx["student"],
+    )
+    attempt = get_student_quiz_attempt(ctx["db"], ctx["student"], assignment.classwork_assignment_id)
+    assert attempt.status == "not_started"
+    assert len(attempt.questions) == 2
 
 
 def test_create_unpublished_draft_without_reading_defers_gate_to_publication(candidate_context):

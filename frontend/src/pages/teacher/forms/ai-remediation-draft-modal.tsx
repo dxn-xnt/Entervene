@@ -67,6 +67,7 @@ export interface AiRemediationDraftModalProps {
   plan: RemediationPlan;
   targetAssignmentSummary: string;
   onGenerateWithAI: () => void | Promise<void>;
+  retryDisabled?: boolean;
   onSaveAssessmentDraft: () => void | Promise<void>;
   onUpdateQuizQuestion?: (
     qIndex: number,
@@ -117,6 +118,7 @@ export default function AiRemediationDraftModal({
   plan,
   targetAssignmentSummary,
   onGenerateWithAI,
+  retryDisabled,
   onSaveAssessmentDraft,
   onUpdateQuizQuestion,
   onUpdateQuizOption,
@@ -301,7 +303,7 @@ export default function AiRemediationDraftModal({
                 <Button size="sm" variant="outline" onClick={() => onOpenChange(false)}>
                   Dismiss
                 </Button>
-                <Button size="sm" onClick={onGenerateWithAI}>
+                <Button size="sm" onClick={onGenerateWithAI} disabled={retryDisabled}>
                   Retry Generation
                 </Button>
               </div>

@@ -65,7 +65,11 @@ export interface TeacherResolvedInterventionDetail extends TeacherInterventionDe
 
 export class InterventionApiError extends Error {
   status: number;
-  constructor(status: number, message: string) { super(message); this.status = status; }
+  code?: string;
+  detail?: Record<string, unknown>;
+  constructor(status: number, message: string, code?: string, detail?: Record<string, unknown>) {
+    super(message); this.status = status; this.code = code; this.detail = detail;
+  }
 }
 
 export function candidateActivationExplanation(candidate: TeacherInterventionSummary): string | null {
@@ -101,8 +105,15 @@ async function read<T>(path: string, method = "GET", body?: unknown): Promise<T>
           const field = (item.loc ?? []).filter((part) => part !== "body").join(".");
           return field ? `${field}: ${item.msg ?? "Validation error"}` : (item.msg ?? "Validation error");
         }).join("; ")
-        : "Unable to complete the request. Please try again.";
-    throw new InterventionApiError(response.status, message);
+        : detail && typeof detail === "object" && typeof detail.message === "string"
+          ? detail.message
+          : "Unable to complete the request. Please try again.";
+    throw new InterventionApiError(
+      response.status,
+      message,
+      detail && typeof detail === "object" && typeof detail.code === "string" ? detail.code : undefined,
+      detail && typeof detail === "object" && !Array.isArray(detail) ? detail : undefined,
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -249,8 +260,30 @@ export interface RemediationWorkspace {
   progress: RemediationProgress;
   original_exams: OriginalExamination[];
   score_previews?: ClassworkScorePreview[];
+  generation_eligibility: RemediationGenerationEligibility;
 }
+export interface RemediationEligibleLesson { lesson_id: number; title: string; }
+export interface RemediationBlockedLesson extends RemediationEligibleLesson {
+  reason_code: "LESSON_NOT_TAUGHT_AT_EVIDENCE_CUTOFF" | "REMEDIATION_EVIDENCE_REFRESH_REQUIRED";
+  confirmed_delivery_at?: string | null;
+}
+export interface RemediationGenerationEligibility {
+  original_evidence_cutoff_at: string;
+  active_remediation_cutoff_at: string;
+  refresh_available: boolean;
+  eligible_taught_lessons: RemediationEligibleLesson[];
+  blocked_lessons: RemediationBlockedLesson[];
+  evidence_version: number;
+  evidence_provenance: string;
+  refreshed_by_staff_id?: string | null;
+  refreshed_at?: string | null;
+  created?: boolean;
+  newly_eligible_lesson_ids?: number[];
+}
+export const eligibleRemediationLessonIds = (eligibility: RemediationGenerationEligibility | null | undefined): number[] =>
+  eligibility?.eligible_taught_lessons.map((lesson) => lesson.lesson_id) ?? [];
 export const getRemediationWorkspace = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation`);
+export const refreshRemediationEvidence = (id: number) => read<RemediationGenerationEligibility>(`${base}/${id}/remediation/evidence/refresh`, "POST");
 export const saveRemediationPlan = (id: number, plan: Pick<RemediationPlan, "teacher_choice" | "selected_resources" | "grade_treatment"> & Partial<Pick<RemediationPlan, "original_exam_assignment_id" | "target_assignment_ids" | "score_adjustment_cap">>) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
 export const generateRemediationAdvisory = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation/advisory`, "POST");
 export const previewScoreAdjustment = (

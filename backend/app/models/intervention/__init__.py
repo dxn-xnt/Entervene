@@ -6,6 +6,7 @@ from .PracticeQuestion import PracticeQuestion
 from .PracticeQuestionOption import PracticeQuestionOption
 from .PracticeAttempt import PracticeAttempt
 from .PracticeAttemptAnswer import PracticeAttemptAnswer
+from .RemediationGenerationEvidenceSnapshot import RemediationGenerationEvidenceSnapshot
 
 __all__ = [
     "Intervention",
@@ -16,4 +17,5 @@ __all__ = [
     "PracticeQuestionOption",
     "PracticeAttempt",
     "PracticeAttemptAnswer",
+    "RemediationGenerationEvidenceSnapshot",
 ]

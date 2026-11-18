@@ -74,10 +74,11 @@ The current frontend prediction pages call the stable current-term contract thro
 After a successful grade-related commit, the activity, submission, quiz-attempt, and quiz-analysis services can call `DevelopmentGradeRefreshService`. The refresh is guarded:
 
 - In development/test, it runs only when the development feature is enabled and the selected model is the corrected official-target candidate.
+- Development reads and refreshes use the same fail-closed selected-model resolver. Missing, duplicate, legacy-selected, or contract-invalid registry states are logged with a reason code and never fall back to a different model.
 - In production, it runs only when exactly one current-term model passes all production lifecycle requirements.
 - Failures are logged and do not turn an unsuccessful prediction refresh into a successful grade mutation.
 
-There is no general scheduled job that continuously predicts every enrolled student.
+There is no general scheduled job that continuously predicts every enrolled student. A guarded CLI can inspect one exact student/class/subject/period scope without writing and requires an explicit `--apply` flag to persist that same scope.
 
 ### 4.2 Scope and eligibility
 
@@ -163,7 +164,7 @@ The database enforces same-term semantics and a positive revision. A serialized 
 - `entervene_current_term_development_rf_v3`
 - `entervene_current_term_official_target_rf_candidate`
 
-The code default is legacy V3. The isolated demo configuration selects the corrected official-target candidate. An unknown selector fails closed. Development scoring requires an inactive `DEVELOPMENT` registry row that is not production validated. Development code does not automatically promote a model.
+The code default remains legacy V3, but legacy V3 is not eligible for automatic refresh or the default development read path. The isolated demo configuration selects the corrected official-target candidate. A main local database named exactly `Entervene` may also register and select the corrected candidate only in development, on localhost, with `ALLOW_LOCAL_CORRECTED_PREDICTION_MODEL=true`. Unknown selectors, missing or duplicate rows, and contract mismatches fail closed. Development scoring requires an inactive `DEVELOPMENT` registry row that is not production validated. This local opt-in does not promote the model or establish production validation.
 
 ### 5.2 Production gate
 
@@ -324,6 +325,8 @@ Before live activation or production claims, require:
 | Latest-revision reads | `backend/app/services/prediction/DevelopmentCurrentTermPredictionReadService.py` |
 | Grade-change refresh | `backend/app/services/prediction/DevelopmentGradeRefreshService.py` |
 | Production lifecycle | `backend/app/services/prediction/ModelVersionService.py` |
+| Development selected-model resolution | `backend/app/services/prediction/DevelopmentCurrentTermModelResolver.py` |
+| Guarded one-scope regeneration | `backend/app/services/prediction/ScopedCurrentTermRegenerationService.py`; `backend/scripts/regenerate_current_term_prediction.py` |
 | Registry/purpose | `backend/app/models/ai/AIModelVersion.py` |
 | Persisted row | `backend/app/models/ai/DevelopmentCurrentTermPrediction.py` |
 | Frontend contract | `frontend/src/lib/prediction-api.ts`; `frontend/src/components/predictions/current-term-dashboard-adapter.ts` |
@@ -331,6 +334,6 @@ Before live activation or production claims, require:
 
 ## 14. Verification scope
 
-This revision reconciled both prediction documents with route decorators, service gates, model lifecycle fields, persisted-row constraints, feature/readiness code, the frontend current-term adapter, checked-in schema, and evaluation reports.
+This revision reconciled both prediction documents with route decorators, shared selected-model resolution, the guarded main-local opt-in, scoped regeneration, model lifecycle fields, persisted-row constraints, feature/readiness code, the frontend current-term adapter, checked-in schema, and evaluation reports.
 
-It did not retrain a model, mutate a registry, query a real deployment, or perform new external validation. Local ignored artifacts and database contents can differ between environments and must be checked before deployment-specific claims.
+It did not retrain a model or perform new external validation. Local registry provisioning and database-specific dry runs are operational setup actions that must be reported separately and do not establish a general deployment or production-validation claim. Local ignored artifacts and database contents can differ between environments and must be checked before deployment-specific claims.

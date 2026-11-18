@@ -307,9 +307,11 @@ Standard readiness allows WW/PT evidence totaling at least 70% observed weight. 
 
 After the grade mutation commits, a guarded refresh rebuilds evidence. If scope, model, and readiness remain valid and material evidence changed, the persistence service appends a revision. It does not retrain the model.
 
+In development, the reader and refresh share one fail-closed resolver for the corrected official-target candidate. A missing, duplicate, legacy-selected, or contract-invalid registry state is reported as unavailable rather than silently falling back to another model. The main local `Entervene` database can opt in only in development on localhost; that opt-in is not model promotion or production validation.
+
 ### Can an administrator manually force a prediction?
 
-The stable Admin interface is read-only. Explicit development generation exists only behind the isolated development route and its POST dependency permits the automated test environment, not normal demo or production use.
+The stable Admin interface is read-only. Explicit HTTP development generation remains restricted to automated tests. A guarded local command can dry-run one exact student/class/subject/period scope; persistence requires an explicit `--apply`, repeats readiness and lifecycle checks, and cannot broaden to other students.
 
 ### How do you avoid data leakage?
 

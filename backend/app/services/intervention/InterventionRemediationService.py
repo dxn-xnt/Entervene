@@ -27,6 +27,7 @@ from app.services.intervention.InterventionReviewerGenerationService import buil
 from app.services.intervention.InterventionSupportMaterialService import _basis
 from app.services.intervention.TeacherInterventionService import _eligible_scope, _source
 from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
+from app.services.intervention.RemediationGenerationEligibilityService import resolve_remediation_generation_eligibility
 from app.services.grading.ExaminationCalculator import EXAM_SUBTYPES, categorize_exam_subtype
 from app.services.grading.ComponentMapper import CanonicalGradingComponent, classify_classwork_component
 from app.services.grading.RemediationScoreAdjuster import (
@@ -376,8 +377,11 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     preview_data = preview_score_adjustment(
         db, staff_id, intervention_id, cap_percentage=cap, target_assignment_ids=target_ids
     )
+    eligibility = resolve_remediation_generation_eligibility(db, row)
+    eligibility.pop("scope", None)
     return {"plan": plan_data,
             "resources": resources(db, row, staff_id), "focus": build_remediation_focus(row),
+            "generation_eligibility": eligibility,
             "original_exams": original_exams(db, row),
             "progress": progress(db, row),
             "score_previews": preview_data.get("previews", [])}

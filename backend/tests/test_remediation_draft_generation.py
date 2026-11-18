@@ -238,7 +238,8 @@ def test_pre_validation_rejects_untaught_lesson_selection():
     with pytest.raises(HTTPException) as exc:
         build_remediation_draft_prompt(scope, req)
     assert exc.value.status_code == 422
-    assert "has not been verified as taught" in exc.value.detail
+    assert exc.value.detail["code"] == "LESSON_NOT_TAUGHT_AT_EVIDENCE_CUTOFF"
+    assert "has not been verified as taught" in exc.value.detail["message"]
 
 
 def test_pre_validation_rejects_foreign_lesson_selection():
@@ -254,7 +255,7 @@ def test_pre_validation_rejects_foreign_lesson_selection():
     with pytest.raises(HTTPException) as exc:
         build_remediation_draft_prompt(scope, req)
     assert exc.value.status_code == 422
-    assert "outside the verified evidence scope" in exc.value.detail
+    assert exc.value.detail["code"] == "LESSON_OUTSIDE_VERIFIED_SCOPE"
 
 
 def test_pre_validation_rejects_foreign_competency_selection():
@@ -289,7 +290,7 @@ def test_pre_validation_rejects_scope_with_zero_taught_lessons():
     with pytest.raises(HTTPException) as exc:
         build_remediation_draft_prompt(scope, req)
     assert exc.value.status_code == 422
-    assert "No verified taught lessons available" in exc.value.detail
+    assert exc.value.detail["code"] == "NO_ELIGIBLE_TAUGHT_LESSONS"
 
 
 def test_pre_validation_rejects_insufficient_evidence():
