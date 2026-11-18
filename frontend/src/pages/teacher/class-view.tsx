@@ -1314,10 +1314,11 @@ function LessonsTab({
       )}
 
       {/* ── Competency Create / Edit Modal ── */}
-      {isCompetencyModalOpen && selectedSubjectId && (
+      {isCompetencyModalOpen && selectedSubjectId && effectivePeriodId && (
         <CompetencyModal
           isOpen={isCompetencyModalOpen}
           subjectId={selectedSubjectId}
+          academicPeriodId={Number(effectivePeriodId)}
           editingCompetency={editingCompetency}
           onClose={() => {
             setIsCompetencyModalOpen(false);
