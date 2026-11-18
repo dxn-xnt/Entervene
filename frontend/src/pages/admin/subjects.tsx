@@ -903,11 +903,14 @@ export default function AdminSubjects() {
                     <LoadingCard label="Loading subject offerings..." />
                   ) : offerings.length === 0 ? (
                     <EmptyStateCard
+                      shadow
+                      icon={<BookOpen />}
                       title="No subjects have been offered for this setup yet."
                       description="Click Add Offerings to choose subjects for the selected year, grade, pathway, and term."
                     >
                       <Button
                         size="sm"
+                        className="gap-2"
                         onClick={openCreateOffering}
                         disabled={isLoadingOptions || isViewingInactiveAcademicYear}
                         title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
@@ -916,6 +919,7 @@ export default function AdminSubjects() {
                       </Button>
                       <Button
                         size="sm"
+                        className="gap-2"
                         variant="outline"
                         onClick={() => offeringImportInputRef.current?.click()}
                         disabled={isImportingOfferings || isViewingInactiveAcademicYear}

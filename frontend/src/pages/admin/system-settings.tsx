@@ -1,3 +1,5 @@
+import { AcademicSelectItem } from "@/components/academic-option-label";
+import { activeFirst } from "@/lib/active-first";
 import * as React from "react";
 import { Card } from "@/components/retroui/Card";
 import { Text } from "@/components/retroui/Text";
@@ -742,16 +744,13 @@ export default function AdminSystemSettings() {
                           <Select.Trigger className="w-full">
                             <Select.Value placeholder="Select academic year" />
                           </Select.Trigger>
-                          <Select.Content>
+                          <Select.Content className="w-max! min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]!">
                             <Select.Group>
-                              {academicYears.map((year) => (
-                                <Select.Item
+                              {activeFirst(academicYears).map((year) => (
+                                <AcademicSelectItem
                                   key={year.academic_year_id}
                                   value={String(year.academic_year_id)}
-                                >
-                                  {year.year_label}
-                                  {year.is_active ? " (active)" : ""}
-                                </Select.Item>
+                                 label={year.year_label} active={year.is_active} />
                               ))}
                             </Select.Group>
                           </Select.Content>
@@ -938,20 +937,18 @@ export default function AdminSystemSettings() {
                         <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
                           <Select.Value placeholder="Select Academic Year" />
                         </Select.Trigger>
-                        <Select.Content>
+                        <Select.Content className="w-max! min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]!">
                           <Select.Group>
                             {academicYears.length === 0 ? (
                               <Select.Item value="0" disabled>
                                 No Academic Years found
                               </Select.Item>
                             ) : (
-                              academicYears.map((y) => (
-                                <Select.Item
+                              activeFirst(academicYears).map((y) => (
+                                <AcademicSelectItem
                                   key={y.academic_year_id}
                                   value={String(y.academic_year_id)}
-                                >
-                                  {y.year_label} {y.is_active ? "(Active)" : ""}
-                                </Select.Item>
+                                 label={y.year_label} active={y.is_active} />
                               ))
                             )}
                           </Select.Group>
@@ -986,17 +983,15 @@ export default function AdminSystemSettings() {
                         <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
                           <Select.Value placeholder="Select Active Period" />
                         </Select.Trigger>
-                        <Select.Content>
+                        <Select.Content className="w-max! min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]!">
                           <Select.Group>
                             {academicPeriods.length === 0 ? (
                               <Select.Item value="0" disabled>
                                 No periods for this year
                               </Select.Item>
                             ) : (
-                              academicPeriods.map((p) => (
-                                <Select.Item key={p.id} value={String(p.id)}>
-                                  {p.period} {p.is_active ? "(Active)" : ""}
-                                </Select.Item>
+                              activeFirst(academicPeriods).map((p) => (
+                                <AcademicSelectItem key={p.id} value={String(p.id)} label={p.period} active={p.is_active} />
                               ))
                             )}
                           </Select.Group>
@@ -1201,7 +1196,7 @@ export default function AdminSystemSettings() {
                       </Select.Trigger>
                       <Select.Content>
                         <Select.Group>
-                          {academicYears.map((year) => (
+                          {activeFirst(academicYears).map((year) => (
                             <Select.Item
                               key={year.academic_year_id}
                               value={String(year.academic_year_id)}

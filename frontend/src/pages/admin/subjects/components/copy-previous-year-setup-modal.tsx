@@ -1,3 +1,5 @@
+import { AcademicSelectItem } from "@/components/academic-option-label";
+import { activeFirst } from "@/lib/active-first";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/retroui/Button";
 import { Checkbox } from "@/components/retroui/Checkbox";
@@ -141,12 +143,10 @@ export function CopyPreviousYearSetupModal({
                 <Select.Trigger id="copy-source-year" aria-invalid={!!error && !sourceAcademicYearId} aria-describedby={error && !sourceAcademicYearId ? "copy-source-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                   <Select.Value placeholder="Select previous year" />
                 </Select.Trigger>
-                <Select.Content>
+                <Select.Content className="w-max! min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]!">
                   <Select.Group>
-                    {sourceYears.map((year) => (
-                      <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
-                        {year.year_label}{year.is_active ? " (active)" : ""}
-                      </Select.Item>
+                    {activeFirst(sourceYears).map((year) => (
+                      <AcademicSelectItem key={year.academic_year_id} value={String(year.academic_year_id)} label={year.year_label} active={year.is_active} />
                     ))}
                   </Select.Group>
                 </Select.Content>
@@ -167,7 +167,7 @@ export function CopyPreviousYearSetupModal({
                 </Select.Trigger>
                 <Select.Content>
                   <Select.Group>
-                    {targetYears.map((year) => (
+                    {activeFirst(targetYears).map((year) => (
                       <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
                         {year.year_label}
                       </Select.Item>

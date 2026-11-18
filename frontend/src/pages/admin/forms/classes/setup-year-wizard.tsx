@@ -1,5 +1,11 @@
 "use client";
 
+import { AcademicSelectItem } from "@/components/academic-option-label";
+
+
+import { activeFirst } from "@/lib/active-first";
+
+
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Check, CheckCircle2, ShieldCheck } from "lucide-react";
 import { useAcademicPeriod, type AcademicYearItem } from "@/context/AcademicPeriodContext";
@@ -271,12 +277,10 @@ export default function SetupYearWizard({
             <Select.Trigger id="source-year-select" className="w-full">
               <Select.Value placeholder="Select source academic year" />
             </Select.Trigger>
-            <Select.Content>
+            <Select.Content className="w-max! min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]!">
               <Select.Group>
-                {availableSourceYears.map((year) => (
-                  <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
-                    {year.year_label} {year.is_active ? "(Active)" : ""}
-                  </Select.Item>
+                {activeFirst(availableSourceYears).map((year) => (
+                  <AcademicSelectItem key={year.academic_year_id} value={String(year.academic_year_id)} label={year.year_label} active={year.is_active} />
                 ))}
               </Select.Group>
             </Select.Content>

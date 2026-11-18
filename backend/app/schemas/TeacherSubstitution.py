@@ -13,6 +13,12 @@ class TeacherSubstitutionCreate(BaseModel):
     reason: str | None = None
 
 
+class SubstituteAvailabilityRequest(BaseModel):
+    subject_load_ids: list[int] = Field(min_length=1)
+    start_date: date
+    end_date: date | None = None
+
+
 class TeacherSubstitutionBulkCreate(BaseModel):
     subject_load_ids: list[int]
     substitute_staff_id: str

@@ -1,10 +1,22 @@
+import { activeFirst } from "@/lib/active-first";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, BookOpen, Lock, Pencil, Plus, Search, X } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  Lock,
+  Pencil,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
-import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
+import {
+  FormMessage,
+  NoChangesMessage,
+} from "@/components/retroui/FormMessage";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { unorderedValues } from "@/lib/form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
@@ -82,13 +94,15 @@ export function GradingTemplateManager({
   const [thresholdReason, setThresholdReason] = useState("");
   const [thresholdYearId, setThresholdYearId] = useState("");
   const [thresholdSaving, setThresholdSaving] = useState(false);
-  const [creatingRevision, setCreatingRevision] = useState(false);
+  const creatingRevision = Boolean(editing?.is_locked);
   const [policyReference, setPolicyReference] = useState("");
   const [revisionReason, setRevisionReason] = useState("");
   const handledCreateRequest = useRef(createRequest);
   const [templateSearch, setTemplateSearch] = useState("");
   const [templateGradeFilter, setTemplateGradeFilter] = useState("all");
-  const [templateStatusFilter, setTemplateStatusFilter] = useState<SubjectStatus | "all">("all");
+  const [templateStatusFilter, setTemplateStatusFilter] = useState<
+    SubjectStatus | "all"
+  >("all");
 
   const subjectCatalog = useMemo(() => {
     const seenIds = new Set<number>();
@@ -97,14 +111,17 @@ export function GradingTemplateManager({
     const items: SubjectListItem[] = [];
     for (const subject of subjects) {
       const gradeLevel = subject.academic_level?.grade_level ?? 0;
-      const normalizedCode = subject.subject_codename?.trim().toLocaleLowerCase() ?? "";
+      const normalizedCode =
+        subject.subject_codename?.trim().toLocaleLowerCase() ?? "";
       const codeKey = normalizedCode ? `${gradeLevel}:${normalizedCode}` : "";
       if (seenIds.has(subject.subject_id)) {
         duplicateLabels.add(`subject ID ${subject.subject_id}`);
         continue;
       }
       if (codeKey && seenCodes.has(codeKey)) {
-        duplicateLabels.add(`${subject.subject_codename} (Grade ${gradeLevel})`);
+        duplicateLabels.add(
+          `${subject.subject_codename} (Grade ${gradeLevel})`,
+        );
         continue;
       }
       seenIds.add(subject.subject_id);
@@ -138,7 +155,10 @@ export function GradingTemplateManager({
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
     return templates.filter((template) => {
-      if (templateStatusFilter !== "all" && template.status !== templateStatusFilter) {
+      if (
+        templateStatusFilter !== "all" &&
+        template.status !== templateStatusFilter
+      ) {
         return false;
       }
       if (templateGradeFilter !== "all") {
@@ -151,7 +171,9 @@ export function GradingTemplateManager({
       }
       if (q) {
         const matchName = template.template_name.toLowerCase().includes(q);
-        const matchDesc = (template.description || "").toLowerCase().includes(q);
+        const matchDesc = (template.description || "")
+          .toLowerCase()
+          .includes(q);
         const matchSubject = template.assigned_subjects.some(
           (sub) =>
             sub.subject_name.toLowerCase().includes(q) ||
@@ -161,7 +183,13 @@ export function GradingTemplateManager({
       }
       return true;
     });
-  }, [templates, templateSearch, templateGradeFilter, templateStatusFilter, subjectGradeMap]);
+  }, [
+    templates,
+    templateSearch,
+    templateGradeFilter,
+    templateStatusFilter,
+    subjectGradeMap,
+  ]);
   const visibleSubjects = useMemo(() => {
     const query = search.trim().toLowerCase();
     return subjectCatalog.items.filter(
@@ -175,13 +203,16 @@ export function GradingTemplateManager({
     );
   }, [grade, search, subjectCatalog.items]);
   const selectedSubjects = useMemo(
-    () => subjectCatalog.items.filter((subject) => form.subjectIds.has(subject.subject_id)),
+    () =>
+      subjectCatalog.items.filter((subject) =>
+        form.subjectIds.has(subject.subject_id),
+      ),
     [form.subjectIds, subjectCatalog.items],
   );
   const removedIds = editing
     ? editing.assigned_subjects
-      .map((subject) => subject.subject_id)
-      .filter((id) => !form.subjectIds.has(id))
+        .map((subject) => subject.subject_id)
+        .filter((id) => !form.subjectIds.has(id))
     : [];
 
   useEffect(() => {
@@ -221,7 +252,6 @@ export function GradingTemplateManager({
     setGrade("all");
     setError(null);
     setThresholdReason("");
-    setCreatingRevision(false);
     setPolicyReference("");
     setRevisionReason("");
     setThresholdYearId(
@@ -233,7 +263,10 @@ export function GradingTemplateManager({
   };
   const toggleSubject = (subject: SubjectListItem) => {
     if (subject.grading_template_assignment_locked) {
-      setError(subject.grading_template_assignment_lock_reason || "Recorded grades prevent changing this subject's grading template.");
+      setError(
+        subject.grading_template_assignment_lock_reason ||
+          "Recorded grades prevent changing this subject's grading template.",
+      );
       setValidationAttempt((attempt) => attempt + 1);
       return;
     }
@@ -257,37 +290,73 @@ export function GradingTemplateManager({
       subjectIds: lockedIds,
     }));
     if (lockedIds.size) {
-      setError(`${lockedIds.size} subject${lockedIds.size === 1 ? " is" : "s are"} kept because recorded grades lock the grading template assignment.`);
+      setError(
+        `${lockedIds.size} subject${lockedIds.size === 1 ? " is" : "s are"} kept because recorded grades lock the grading template assignment.`,
+      );
       setValidationAttempt((attempt) => attempt + 1);
     }
   };
   const templateValues = (value: EditorState) => ({
     subjects: unorderedValues([...value.subjectIds]),
-    ...(!editing?.is_locked ? {
-      name: value.name.trim(), description: value.description.trim(),
-      status: value.status,
-      weights: [Number(value.ww), Number(value.pt), Number(value.exams)],
-    } : {}),
+    ...(!editing?.is_locked
+      ? {
+          name: value.name.trim(),
+          description: value.description.trim(),
+          status: value.status,
+          weights: [Number(value.ww), Number(value.pt), Number(value.exams)],
+        }
+      : {}),
   });
   const changes = useEditFormChanges({
     enabled: !!editing,
     resetKey: editing?.grading_template_id,
-    initialValues: editing ? templateValues({
-      ...form, name: editing.template_name, description: editing.description ?? "",
-      status: editing.status,
-      ww: String(weight(editing, "Written Work")),
-      pt: String(weight(editing, "Performance Tasks")),
-      exams: String(weight(editing, "Exams")),
-      subjectIds: new Set(editing.assigned_subjects.map(subject => subject.subject_id)),
-    }) : null,
+    initialValues: editing
+      ? templateValues({
+          ...form,
+          name: editing.template_name,
+          description: editing.description ?? "",
+          status: editing.status,
+          ww: String(weight(editing, "Written Work")),
+          pt: String(weight(editing, "Performance Tasks")),
+          exams: String(weight(editing, "Exams")),
+          subjectIds: new Set(
+            editing.assigned_subjects.map((subject) => subject.subject_id),
+          ),
+        })
+      : null,
     values: templateValues(form),
   });
   const thresholdChanges = useEditFormChanges({
-    enabled: !!editing, resetKey: editing?.grading_template_id,
-    initialValues: Number(editing?.passing_threshold), values: Number(form.threshold),
+    enabled: !!editing,
+    resetKey: editing?.grading_template_id,
+    initialValues: Number(editing?.passing_threshold),
+    values: Number(form.threshold),
   });
+  const revisionChanges = useEditFormChanges({
+    enabled: !!editing && creatingRevision,
+    resetKey: editing?.grading_template_id,
+    initialValues: editing
+      ? {
+          weights: [
+            weight(editing, "Written Work"),
+            weight(editing, "Performance Tasks"),
+            weight(editing, "Exams"),
+          ],
+          policyReference: "",
+          reason: "",
+        }
+      : null,
+    values: {
+      weights: [Number(form.ww), Number(form.pt), Number(form.exams)],
+      policyReference: policyReference.trim(),
+      reason: revisionReason.trim(),
+    },
+  });
+  const revisionAuditValid =
+    policyReference.trim().length >= 3 && revisionReason.trim().length >= 5;
   const save = async () => {
-    if (!creatingRevision && !changes.guardChanges()) return;
+    const savingRevision = creatingRevision && revisionChanges.hasChanges;
+    if (!(savingRevision ? revisionChanges : changes).guardChanges()) return;
     const threshold = Number(form.threshold);
     const rawWeights = [Number(form.ww), Number(form.pt), Number(form.exams)];
     if (!form.name.trim()) {
@@ -302,7 +371,9 @@ export function GradingTemplateManager({
     }
     const [ww, pt, exams] = rawWeights.map(normalizeWeight);
     if ([ww, pt, exams].some((value) => value <= 0 || value > 100)) {
-      setError("Each component weight must be greater than 0% and no more than 100%.");
+      setError(
+        "Each component weight must be greater than 0% and no more than 100%.",
+      );
       setValidationAttempt((attempt) => attempt + 1);
       return;
     }
@@ -313,8 +384,10 @@ export function GradingTemplateManager({
       setValidationAttempt((attempt) => attempt + 1);
       return;
     }
-    if (creatingRevision && (!policyReference.trim() || revisionReason.trim().length < 5)) {
-      setError("Enter the official policy reference and a change reason of at least 5 characters.");
+    if (savingRevision && !revisionAuditValid) {
+      setError(
+        "Enter the official policy reference and a change reason of at least 5 characters.",
+      );
       setValidationAttempt((attempt) => attempt + 1);
       return;
     }
@@ -331,7 +404,7 @@ export function GradingTemplateManager({
     setSaving(true);
     setError(null);
     try {
-      if (editing && creatingRevision) {
+      if (editing && savingRevision) {
         await createGradingTemplateRevision(editing.grading_template_id, {
           components,
           policy_reference: policyReference.trim(),
@@ -347,11 +420,11 @@ export function GradingTemplateManager({
             : {}),
           ...(!editing.is_locked
             ? {
-              template_name: form.name.trim(),
-              description: form.description.trim() || null,
-              status: form.status,
-              components,
-            }
+                template_name: form.name.trim(),
+                description: form.description.trim() || null,
+                status: form.status,
+                components,
+              }
             : {}),
         });
       else
@@ -366,11 +439,11 @@ export function GradingTemplateManager({
       await onReload();
       setEditing(undefined);
       toast.success({
-        title: creatingRevision
+        title: savingRevision
           ? "New grading revision created"
           : editing
-          ? "Grading template updated"
-          : "Grading template created",
+            ? "Grading template updated"
+            : "Grading template created",
       });
     } catch (caught) {
       const message =
@@ -420,20 +493,19 @@ export function GradingTemplateManager({
   );
   const weightsAreFinite = parsedWeights.every(Number.isFinite);
   const weightsInRange =
-    weightsAreFinite && parsedWeights.every((value) => value > 0 && value <= 100);
+    weightsAreFinite &&
+    parsedWeights.every((value) => value > 0 && value <= 100);
   const total = weightsAreFinite
     ? normalizeWeight(parsedWeights.reduce((sum, value) => sum + value, 0))
     : 0;
-  const weightsValid =
-    weightsAreFinite &&
-    weightsInRange &&
-    total === 100;
+  const weightsValid = weightsAreFinite && weightsInRange && total === 100;
   const weightError =
     !weightsValid ||
     error === "Enter valid numeric grading values." ||
-    error === "Each component weight must be greater than 0% and no more than 100%." ||
     error ===
-    "Written Work, Performance Tasks, and Exams must total exactly 100%.";
+      "Each component weight must be greater than 0% and no more than 100%." ||
+    error ===
+      "Written Work, Performance Tasks, and Exams must total exactly 100%.";
   const updateWeight = (key: "ww" | "pt" | "exams", value: string) => {
     const next = { ...form, [key]: value };
     setForm(next);
@@ -441,9 +513,16 @@ export function GradingTemplateManager({
       error &&
       [next.ww, next.pt, next.exams].every((weight) => {
         const parsed = normalizeWeight(Number(weight));
-        return weight.trim() !== "" && Number.isFinite(parsed) && parsed > 0 && parsed <= 100;
+        return (
+          weight.trim() !== "" &&
+          Number.isFinite(parsed) &&
+          parsed > 0 &&
+          parsed <= 100
+        );
       }) &&
-      normalizeWeight(Number(next.ww) + Number(next.pt) + Number(next.exams)) === 100
+      normalizeWeight(
+        Number(next.ww) + Number(next.pt) + Number(next.exams),
+      ) === 100
     )
       setError(null);
   };
@@ -469,7 +548,10 @@ export function GradingTemplateManager({
             className="w-full"
           />
         </label>
-        <Select value={templateGradeFilter} onValueChange={setTemplateGradeFilter}>
+        <Select
+          value={templateGradeFilter}
+          onValueChange={setTemplateGradeFilter}
+        >
           <Select.Trigger className="w-full">
             <Select.Value placeholder="Grade" />
           </Select.Trigger>
@@ -486,7 +568,9 @@ export function GradingTemplateManager({
         </Select>
         <Select
           value={templateStatusFilter}
-          onValueChange={(val) => setTemplateStatusFilter(val as SubjectStatus | "all")}
+          onValueChange={(val) =>
+            setTemplateStatusFilter(val as SubjectStatus | "all")
+          }
         >
           <Select.Trigger className="w-full">
             <Select.Value placeholder="Status" />
@@ -499,7 +583,9 @@ export function GradingTemplateManager({
             </Select.Group>
           </Select.Content>
         </Select>
-        {templateSearch.trim() || templateGradeFilter !== "all" || templateStatusFilter !== "all" ? (
+        {templateSearch.trim() ||
+        templateGradeFilter !== "all" ||
+        templateStatusFilter !== "all" ? (
           <Button
             type="button"
             variant="outline"
@@ -521,7 +607,9 @@ export function GradingTemplateManager({
         </Card>
       ) : !filteredTemplates.length ? (
         <Card className="flex flex-col items-center justify-center gap-2 border-2 border-black p-5 py-8 text-center text-sm">
-          <p className="font-semibold">No grading templates match the selected filters.</p>
+          <p className="font-semibold">
+            No grading templates match the selected filters.
+          </p>
           <Button
             type="button"
             variant="outline"
@@ -565,7 +653,11 @@ export function GradingTemplateManager({
           <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5">
             {editing?.is_locked ? (
               <div className="flex justify-end">
-                <Badge size="sm" className="bg-black text-white" variant="solid">
+                <Badge
+                  size="sm"
+                  className="bg-black text-white"
+                  variant="solid"
+                >
                   <Lock className="mr-1 size-3" />
                   Locked
                 </Badge>
@@ -575,21 +667,22 @@ export function GradingTemplateManager({
               <Alert status="warning">
                 <Alert.Title>Creating a new immutable revision</Alert.Title>
                 <Alert.Description>
-                  Existing academic years and finalized grades will continue using revision {editing?.revision ?? 1}.
+                  Existing academic years and finalized grades will continue
+                  using revision {editing?.revision ?? 1}.
                 </Alert.Description>
               </Alert>
             ) : null}
             <AdminValidationAlert
               message={
                 error &&
-                  ![
-                    "Template name is required.",
-                    "Enter valid numeric grading values.",
-                    "Each component weight must be greater than 0% and no more than 100%.",
-                    "Written Work, Performance Tasks, and Exams must total exactly 100%.",
-                    "Choose a replacement template for removed subjects.",
-                    "Select a year and enter an audit reason.",
-                  ].includes(error)
+                ![
+                  "Template name is required.",
+                  "Enter valid numeric grading values.",
+                  "Each component weight must be greater than 0% and no more than 100%.",
+                  "Written Work, Performance Tasks, and Exams must total exactly 100%.",
+                  "Choose a replacement template for removed subjects.",
+                  "Select a year and enter an audit reason.",
+                ].includes(error)
                   ? error
                   : null
               }
@@ -682,7 +775,7 @@ export function GradingTemplateManager({
                     </Select.Trigger>
                     <Select.Content>
                       <Select.Group>
-                        {academicYears.map((year) => (
+                        {activeFirst(academicYears).map((year) => (
                           <Select.Item
                             key={year.academic_year_id}
                             value={String(year.academic_year_id)}
@@ -734,8 +827,13 @@ export function GradingTemplateManager({
                     )}
                 </Field>
                 <Button
+                  className="gap-2"
                   onClick={() => void saveThreshold()}
-                  disabled={thresholdSaving || !thresholdYearId || !thresholdChanges.hasChanges}
+                  disabled={
+                    thresholdSaving ||
+                    !thresholdYearId ||
+                    !thresholdChanges.hasChanges
+                  }
                 >
                   {thresholdSaving ? "Saving..." : "Save Threshold with Audit"}
                 </Button>
@@ -753,6 +851,7 @@ export function GradingTemplateManager({
                   {selectedSubjects.length ? (
                     <Button
                       size="sm"
+                      className="gap-2"
                       onClick={clearRemovableSubjects}
                     >
                       Clear All
@@ -767,12 +866,19 @@ export function GradingTemplateManager({
                       autoIcon={false}
                       key={subject.subject_id}
                       disabled={subject.grading_template_assignment_locked}
-                      title={subject.grading_template_assignment_lock_reason ?? undefined}
+                      title={
+                        subject.grading_template_assignment_lock_reason ??
+                        undefined
+                      }
                       onClick={() => toggleSubject(subject)}
-                      className="border-black bg-primary font-bold"
+                      className="gap-2 border-black bg-primary font-bold"
                     >
                       {subject.subject_name}
-                      {subject.grading_template_assignment_locked ? <Lock className="size-3.5" /> : <X className="size-3.5" />}
+                      {subject.grading_template_assignment_locked ? (
+                        <Lock className="size-3.5" />
+                      ) : (
+                        <X className="size-3.5" />
+                      )}
                     </Button>
                   ))}
                   {!selectedSubjects.length ? (
@@ -812,32 +918,49 @@ export function GradingTemplateManager({
               {subjectCatalog.duplicateLabels.length ? (
                 <Alert status="warning" className="mt-3 py-3">
                   <Alert.Title className="flex items-center gap-2 font-bold">
-                    <AlertTriangle className="size-4" />Duplicate catalog entries detected
+                    <AlertTriangle className="size-4" />
+                    Duplicate catalog entries detected
                   </Alert.Title>
                   <Alert.Description className="text-sm text-black/75">
-                    Duplicate IDs or grade-level subject codes were shown once: {subjectCatalog.duplicateLabels.join(", ")}.
+                    Duplicate IDs or grade-level subject codes were shown once:{" "}
+                    {subjectCatalog.duplicateLabels.join(", ")}.
                   </Alert.Description>
                 </Alert>
               ) : null}
-              <div className="mt-3 max-h-72 overflow-y-auto rounded! border-2 border-black bg-white">
+              <div
+                className={`mt-3 max-h-72 overflow-y-auto rounded! bg-white ${visibleSubjects.length ? "border-2 border-border" : ""}`}
+              >
                 {!visibleSubjects.length ? (
                   <EmptyStateCard
                     compact
+                    className="shadow-none hover:shadow-none"
                     icon={<Search />}
-                    title="No matching subjects"
-                    description="Try another subject name, code, or grade filter."
+                    title={
+                      search.trim() || grade !== "all"
+                        ? "No matching subjects"
+                        : "No subjects available"
+                    }
+                    description={
+                      search.trim() || grade !== "all"
+                        ? "Try another subject name, code, or grade filter."
+                        : "Subjects will appear here when they are added to the catalog."
+                    }
                   />
                 ) : (
                   visibleSubjects.map((subject) => {
                     const selected = form.subjectIds.has(subject.subject_id);
                     const assignedElsewhere = Boolean(
-                      subject.grading_template_id
-                      && subject.grading_template_id !== editing?.grading_template_id,
+                      subject.grading_template_id &&
+                      subject.grading_template_id !==
+                        editing?.grading_template_id,
                     );
-                    const locked = Boolean(subject.grading_template_assignment_locked);
+                    const locked = Boolean(
+                      subject.grading_template_assignment_locked,
+                    );
                     const disabled = assignedElsewhere || locked;
                     const lockTitle = locked
-                      ? subject.grading_template_assignment_lock_reason ?? "Recorded grades lock this assignment."
+                      ? (subject.grading_template_assignment_lock_reason ??
+                        "Recorded grades lock this assignment.")
                       : assignedElsewhere
                         ? `Assigned to ${subject.grading_template.template_name}`
                         : undefined;
@@ -854,12 +977,25 @@ export function GradingTemplateManager({
                           disabled={disabled}
                           onChange={() => toggleSubject(subject)}
                         />
-                        <strong className="truncate text-sm">{subject.subject_name}</strong>
+                        <strong className="truncate text-sm">
+                          {subject.subject_name}
+                        </strong>
                         <span className="flex flex-wrap items-center justify-end gap-3 text-xs text-black/65">
                           <span>{subject.subject_codename ?? "No code"}</span>
-                          <span>Grade {subject.academic_level.grade_level}</span>
-                          {assignedElsewhere ? <Badge variant="outline" size="sm">{subject.grading_template.template_name}</Badge> : null}
-                          {locked ? <Lock className="size-3.5" aria-label="Assignment locked" /> : null}
+                          <span>
+                            Grade {subject.academic_level.grade_level}
+                          </span>
+                          {assignedElsewhere ? (
+                            <Badge variant="outline" size="sm">
+                              {subject.grading_template.template_name}
+                            </Badge>
+                          ) : null}
+                          {locked ? (
+                            <Lock
+                              className="size-3.5"
+                              aria-label="Assignment locked"
+                            />
+                          ) : null}
                         </span>
                       </label>
                     );
@@ -867,7 +1003,8 @@ export function GradingTemplateManager({
                 )}
               </div>
               <p className="mt-2 text-xs text-black/60">
-                Subjects assigned to another template or containing recorded grades are locked here.
+                Subjects assigned to another template or containing recorded
+                grades are locked here.
               </p>
             </section>
 
@@ -882,7 +1019,7 @@ export function GradingTemplateManager({
                     if (
                       value &&
                       error ===
-                      "Choose a replacement template for removed subjects."
+                        "Choose a replacement template for removed subjects."
                     )
                       setError(null);
                   }}
@@ -903,7 +1040,7 @@ export function GradingTemplateManager({
                           (item) =>
                             item.status === "active" &&
                             item.grading_template_id !==
-                            editing?.grading_template_id,
+                              editing?.grading_template_id,
                         )
                         .map((item) => (
                           <Select.Item
@@ -920,8 +1057,8 @@ export function GradingTemplateManager({
             ) : null}
             {error ===
               "Choose a replacement template for removed subjects." && (
-                <FormMessage>{error}</FormMessage>
-              )}
+              <FormMessage>{error}</FormMessage>
+            )}
             <Field label="Description">
               <textarea
                 className="min-h-14 w-full rounded! border-2 border-border bg-background p-2 disabled:bg-background disabled:opacity-100"
@@ -943,9 +1080,9 @@ export function GradingTemplateManager({
                     ) : null}
                   </h4>
                   {editing?.is_locked ? (
-                    <p className="text-xs text-black/55">
-                      Weights cannot be edited after use to protect historical
-                      grade records.
+                    <p className="text-sm text-muted-foreground">
+                      Saving changed weights creates a new revision and
+                      preserves historical grade records.
                     </p>
                   ) : null}
                 </div>
@@ -972,7 +1109,9 @@ export function GradingTemplateManager({
                     </div>
                     <PercentInput
                       value={form[key as "ww" | "pt" | "exams"]}
-                      disabled={Boolean(editing?.is_locked && !creatingRevision)}
+                      disabled={Boolean(
+                        editing?.is_locked && !creatingRevision,
+                      )}
                       invalid={weightError}
                       onChange={(value) =>
                         updateWeight(key as "ww" | "pt" | "exams", value)
@@ -994,10 +1133,26 @@ export function GradingTemplateManager({
             {creatingRevision ? (
               <section className="grid gap-3 rounded! border-2 border-black bg-white p-3 md:grid-cols-2">
                 <Field label="Official policy reference">
-                  <Input value={policyReference} onChange={(event) => setPolicyReference(event.target.value)} placeholder="e.g. DepEd Order No. 015, s. 2026" />
+                  <Input
+                    value={policyReference}
+                    aria-invalid={Boolean(
+                      error && policyReference.trim().length < 3,
+                    )}
+                    aria-describedby="revision-policy-help"
+                    onChange={(event) => setPolicyReference(event.target.value)}
+                    placeholder="e.g. DepEd Order No. 015, s. 2026"
+                  />
                 </Field>
                 <Field label="Change reason">
-                  <Input value={revisionReason} onChange={(event) => setRevisionReason(event.target.value)} placeholder="Explain why this revision is needed" />
+                  <Input
+                    value={revisionReason}
+                    aria-invalid={Boolean(
+                      error && revisionReason.trim().length < 5,
+                    )}
+                    aria-describedby="revision-reason-help"
+                    onChange={(event) => setRevisionReason(event.target.value)}
+                    placeholder="Explain why this revision is needed"
+                  />
                 </Field>
               </section>
             ) : null}
@@ -1007,18 +1162,19 @@ export function GradingTemplateManager({
             <Button variant="outline" onClick={() => setEditing(undefined)}>
               Cancel
             </Button>
-            {editing?.is_locked && !creatingRevision ? (
-              <Button onClick={() => { setCreatingRevision(true); setError(null); }}>
-                <Plus className="mr-2 size-4" /> Create New Revision
-              </Button>
-            ) : (
-              <Button
-                onClick={() => void save()}
-                disabled={saving || !weightsValid || (!creatingRevision && !!editing && !changes.hasChanges)}
-              >
-                {saving ? "Saving..." : creatingRevision ? "Create Revision" : "Save Template"}
-              </Button>
-            )}
+            <Button
+              className="gap-2"
+              onClick={() => void save()}
+              disabled={
+                saving ||
+                !weightsValid ||
+                (!!editing &&
+                  !changes.hasChanges &&
+                  !revisionChanges.hasChanges)
+              }
+            >
+              {saving ? "Saving..." : "Save"}
+            </Button>
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
@@ -1053,15 +1209,20 @@ function TemplateCard({
           <h3 className="min-w-0 break-words text-2xl font-bold leading-tight">
             {template.template_name}
           </h3>
-          <Badge size="sm" variant="outline">Rev {template.revision ?? 1}</Badge>
+          <Badge size="sm" variant="outline">
+            Rev {template.revision ?? 1}
+          </Badge>
           <Badge size="sm" className="capitalize" variant="outline">
             {template.status}
           </Badge>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-
           {template.is_locked ? (
-            <Badge size="sm" className="bg-black text-white py-0.75! rounded-md!" variant="solid">
+            <Badge
+              size="sm"
+              className="bg-black text-white py-0.75! rounded-md!"
+              variant="solid"
+            >
               <Lock className="mr-1 size-3" />
               Locked
             </Badge>

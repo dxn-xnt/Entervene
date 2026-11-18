@@ -25,6 +25,8 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.auth.UserAccount import UserAccount
+from app.models.auth.Role import Role
+from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.services.academic.SubstitutionService import SubstitutionService
@@ -92,6 +94,11 @@ def sub_context():
     juan_user = UserAccount(user_id=uuid.uuid4(), email="juan@school.test", password_hash="hash")
     db.add_all([admin_user, maria_user, juan_user])
     db.flush()
+    teacher_role = Role(role_name="teacher")
+    db.add(teacher_role)
+    db.flush()
+    db.add_all([UserRoles(user_id=user.user_id, role_id=teacher_role.role_id)
+                for user in (maria_user, juan_user)])
 
     admin_staff = AcademicStaff(staff_id="A-001", first_name="Admin", last_name="User", user_id=admin_user.user_id)
     maria_staff = AcademicStaff(staff_id="T-001", first_name="Maria", last_name="Cruz", user_id=maria_user.user_id)
@@ -1159,3 +1166,51 @@ def test_bulk_substitution_schedule_conflict_atomic_rollback(sub_context):
 
 
 
+
+
+def test_substitute_availability_recommends_and_marks_unknown(sub_context):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    payload = {"subject_load_ids": [sub_context["load"].subject_load_id], "start_date": date.today().isoformat()}
+    response = client.post("/api/v1/substitutions/availability", json=payload)
+    assert response.status_code == 200
+    assert response.json() == [{"staff_id": "T-002", "status": "recommended", "reason": None}]
+    sub_context["load"].start_time = None
+    db.commit()
+    response = client.post("/api/v1/substitutions/availability", json=payload)
+    assert response.json()[0]["status"] == "unverified"
+
+
+def test_substitute_availability_blocks_overlapping_coverage(sub_context):
+    db = sub_context["db"]
+    load = sub_context["load"]
+    db.add(TeacherSubstitution(subject_load_id=load.subject_load_id,
+                              original_staff_id="T-001", substitute_staff_id="T-002",
+                              start_date=date.today(), status="active"))
+    db.commit()
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    response = client.post("/api/v1/substitutions/availability", json={
+        "subject_load_ids": [load.subject_load_id], "start_date": date.today().isoformat(),
+    })
+    assert response.status_code == 200
+    assert response.json()[0]["status"] == "conflict"
+
+
+def test_substitute_commitment_blocks_another_load(sub_context):
+    from app.services.academic.SubstituteAvailabilityService import availability
+    db = sub_context["db"]
+    target = sub_context["load"]
+    other = SubjectLoad(class_id=target.class_id, subject_id=target.subject_id,
+                        academic_period_id=target.academic_period_id, staff_id="T-001",
+                        status="published", start_time="08:30", end_time="09:30",
+                        days_of_week=["MONDAY", "WEDNESDAY", "FRIDAY"])
+    db.add(other)
+    db.flush()
+    db.add(TeacherSubstitution(subject_load_id=other.subject_load_id,
+                              original_staff_id="T-001", substitute_staff_id="T-002",
+                              start_date=date.today(), status="active"))
+    db.commit()
+    items = availability(db, [target], date.today(), None)
+    assert items[0]["status"] == "conflict"
+    items = availability(db, [target], date.today() - timedelta(days=10), date.today() - timedelta(days=1))
+    assert items[0]["status"] == "recommended"
