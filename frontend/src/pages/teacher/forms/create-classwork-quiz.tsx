@@ -1058,8 +1058,6 @@ export default function CreateClassworkQuizModal({
                                     />
                                 </Field>
 
-                                <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isCreating} />
-
                                 <div className="grid gap-4 sm:grid-cols-3">
                                     {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" ? (
                                         <p className="rounded border border-green-700 bg-green-50 p-3 text-sm font-semibold">
@@ -1214,6 +1212,8 @@ export default function CreateClassworkQuizModal({
                                         {createError === "Total points must be greater than zero." && <FormMessage id="quiz-total-points-error">{createError}</FormMessage>}
                                     </Field>
                                 </div>
+
+                                <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isCreating} />
                                 {remediationFocus && (
                                     <p className="rounded border p-3 text-sm">
                                         Evidence focus: {focusGuidance(remediationFocus)}

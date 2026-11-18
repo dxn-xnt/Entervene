@@ -12,9 +12,7 @@ import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage"
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { optionalNumber } from "@/lib/form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
-import { Progress } from "@/components/retroui/Progress";
 import { Select } from "@/components/retroui/Select";
-import { Table } from "@/components/retroui/Table";
 import { ToggleSwitch } from "@/components/retroui/ToggleSwitch";
 import { OverviewCard } from "@/components/overview-cards";
 import { useToast } from "@/components/retroui/Toast";
@@ -22,49 +20,39 @@ import { UserProfileHeader } from "@/components/profile-header";
 import { EmptyStateCard } from "./subjects/components/empty-state-card";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/retroui/Tooltip";
-import {
   ApiRequestError,
   archiveUser,
+  getClasses,
+  getClassSchedule,
+  getMySchedule,
+  getSubjectLoadStudioData,
+  getSubjects,
   getUserAnalytics,
   getUserDetail,
   resendUserInvitation,
   updateUser,
-  type TeacherHandledClass,
+  type DynamicScheduleResponse,
+  type DynamicScheduleRow,
   type TeacherHandledSubject,
   type UpdateUserPayload,
   type UserAnalytics,
   type UserDetail,
   type UserRole,
 } from "../../lib/api";
+import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
 import {
   Archive,
   BookOpen,
-  ChartNoAxesCombined,
-  ClipboardList,
+  CalendarDays,
   Clock,
-  GraduationCap,
   Layers,
   Pencil,
   RefreshCw,
-  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip as ChartTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 function sectionName(section: string | null | undefined) {
   if (!section) return null;
@@ -451,12 +439,26 @@ export default function AdminUserDetail() {
                     isPending={isPending}
                   />
                   {effectiveRole === "student" && (
-                    <StudentAnalytics data={data} />
+                    <StudentAnalytics
+                      user={user}
+                      selectedPeriodId={selectedPeriodId}
+                      selectedYearId={selectedYearId}
+                    />
                   )}
                   {effectiveRole === "teacher" && (
-                    <TeacherAnalytics data={data} />
+                    <TeacherAnalytics
+                      data={data}
+                      user={user}
+                      selectedPeriodId={selectedPeriodId}
+                    />
                   )}
-                  {effectiveRole === "admin" && <AdminAnalytics data={data} />}
+                  {effectiveRole === "admin" && (
+                    <AdminAnalytics
+                      data={data}
+                      selectedPeriodId={selectedPeriodId}
+                      selectedYearId={selectedYearId}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -916,105 +918,6 @@ function ArchiveUserDialog({
   );
 }
 
-function Panel({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-}) {
-  return (
-    <Card className="w-full p-4">
-      <Card.Header className="p-0 mb-3">
-        <Card.Title className="text-lg font-bold leading-tight mb-0">
-          {title}
-        </Card.Title>
-        {subtitle && (
-          <p className="text-[10px] text-muted-foreground">{subtitle}</p>
-        )}
-      </Card.Header>
-      <Card.Content className="p-0">{children}</Card.Content>
-    </Card>
-  );
-}
-
-function SubjectBars({
-  rows,
-}: {
-  rows: Array<Record<string, number | string>>;
-}) {
-  if (!rows || rows.length === 0) {
-    return (
-      <EmptyStateCard compact icon={<BookOpen />} title="No subject performance yet" description="Subject performance records will appear when results are available." />
-    );
-  }
-  return (
-    <div className="space-y-2">
-      {rows.map((row, index) => {
-        const value = valueNumber(row.value);
-        return (
-          <div
-            key={`${row.subject}-${index}`}
-            className="grid grid-cols-[130px_minmax(0,1fr)_36px] items-center gap-2 text-xs"
-          >
-            <span className="truncate">{row.subject}</span>
-            <Progress
-              value={Math.max(4, Math.min(value, 100))}
-              className="h-2"
-            />
-            <span className="text-right font-semibold">{value}%</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function SmallLineChart({
-  data,
-  xKey,
-}: {
-  data: Array<Record<string, number | string>>;
-  xKey: string;
-}) {
-  if (!data || data.length === 0) {
-    return (
-      <EmptyStateCard compact icon={<ChartNoAxesCombined />} title="No score trend yet" description="Period performance data will appear here once recorded." />
-    );
-  }
-  return (
-    <div className="h-36">
-      <ResponsiveContainer
-        width="100%"
-        height="100%"
-        minWidth={0}
-        minHeight={0}
-      >
-        <LineChart data={data}>
-          <CartesianGrid stroke="#e5e1d8" vertical={false} />
-          <XAxis
-            dataKey={xKey}
-            tick={{ fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <YAxis hide domain={[0, 100]} />
-          <ChartTooltip />
-          <Line
-            type="monotone"
-            dataKey="score"
-            stroke="#dc2626"
-            strokeWidth={2}
-            dot={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 type OverviewMetric = {
   title: string;
   count: string;
@@ -1025,11 +928,13 @@ type OverviewMetric = {
 
 function OverviewGrid({ metrics }: { metrics: OverviewMetric[] }) {
   const colClass =
-    metrics.length === 2
-      ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-2"
-      : metrics.length === 1
-        ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-1"
-        : "grid gap-3 md:grid-cols-2";
+    metrics.length === 3
+      ? "grid gap-3 sm:grid-cols-3"
+      : metrics.length === 2
+        ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-2"
+        : metrics.length === 1
+          ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-1"
+          : "grid gap-3 md:grid-cols-2";
 
   return (
     <div className={colClass}>
@@ -1040,229 +945,166 @@ function OverviewGrid({ metrics }: { metrics: OverviewMetric[] }) {
   );
 }
 
-function TeacherHandledSideCard({
-  handledSubjects = [],
-  handledClasses = [],
-  className,
-}: {
-  handledSubjects?: TeacherHandledSubject[];
-  handledClasses?: TeacherHandledClass[];
-  className?: string;
-}) {
-  const [activeTab, setActiveTab] = useState<"subjects" | "classes">(
-    "subjects",
-  );
-  const filteredSubjects = handledSubjects;
-  const filteredClasses = handledClasses;
+const SCHEDULE_DAY_MAP: Record<string, string> = {
+  MON: "M",
+  MONDAY: "M",
+  M: "M",
+  TUE: "T",
+  TUESDAY: "T",
+  T: "T",
+  WED: "W",
+  WEDNESDAY: "W",
+  W: "W",
+  THU: "Th",
+  THURSDAY: "Th",
+  TH: "Th",
+  FRI: "F",
+  FRIDAY: "F",
+  F: "F",
+};
 
-  return (
-    <Card className={cn("flex flex-col h-full p-4 bg-background", className)}>
-      <Card.Header className="p-0">
-        {/* Switch / Toggle header */}
-        <ToggleSwitch
-          value={activeTab}
-          onValueChange={(val) => setActiveTab(val as "subjects" | "classes")}
-          size="sm"
-        >
-          <ToggleSwitch.Item value="subjects">
-            <BookOpen className="size-3.5 shrink-0" />
-            <span>Subjects</span>
-          </ToggleSwitch.Item>
-          <ToggleSwitch.Item value="classes">
-            <GraduationCap className="size-3.5 shrink-0" />
-            <span>Classes</span>
-          </ToggleSwitch.Item>
-        </ToggleSwitch>
-      </Card.Header>
-
-      {/* Card Content Area */}
-      <Card.Content className="p-0 flex flex-col overflow-y-auto gap-2">
-        {activeTab === "subjects" ? (
-          filteredSubjects.length === 0 ? (
-            <EmptyStateCard
-              compact
-              icon={<BookOpen aria-hidden="true" />}
-              title="No subjects assigned"
-              description="No subject loads are currently mapped to this teacher."
-            />
-          ) : (
-            filteredSubjects.map((subject) => (
-              <Card
-                variant="squares"
-                key={subject.subject_id}
-                className="w-full flex flex-col shadow-none"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <h4
-                            className="font-bold text-md truncate leading-tight block"
-                            tabIndex={0}
-                          >
-                            {subject.subject_name}
-                          </h4>
-                        }
-                      />
-                      <TooltipContent>{subject.subject_name}</TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {subject.is_core ? (
-                      <Badge
-                        variant="secondary"
-                        size="sm"
-                        className="text-[10px]"
-                      >
-                        Core
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="secondary"
-                        size="sm"
-                        className="text-[10px]"
-                      >
-                        Applied
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between text-[12px] text-muted-foreground">
-                  {subject.grade_levels && subject.grade_levels.length > 0 && (
-                    <span className="font-semibold text-foreground">
-                      {subject.grade_levels.join(", ")}
-                    </span>
-                  )}
-                  {subject.weekly_hours !== undefined &&
-                    subject.weekly_hours > 0 && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="size-3" />
-                        {subject.weekly_hours} hrs/wk
-                      </span>
-                    )}
-                  <span className="flex items-center gap-1">
-                    <Layers className="size-3" />
-                    {subject.class_count ?? subject.sections?.length ?? 0}{" "}
-                    {subject.class_count === 1 ? "class" : "classes"}
-                  </span>
-                </div>
-
-                {subject.sections && subject.sections.length > 0 && (
-                  <div className="flex flex-row gap-2 items-center align-center mt-1">
-                    <div className="text-[11px] font-medium text-muted-foreground">
-                      Assigned Sections:
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {subject.sections.map((sec, idx) => (
-                        <Badge
-                          key={`${sec}-${idx}`}
-                          variant="outline"
-                          size="sm"
-                          className="text-[10px] py-0.5 px-1.5 font-medium bg-white"
-                        >
-                          {sec}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </Card>
-            ))
-          )
-        ) : filteredClasses.length === 0 ? (
-          <EmptyStateCard
-            compact
-            icon={<GraduationCap aria-hidden="true" />}
-            title="No classes assigned"
-            description="No class sections are currently handled by this teacher."
-          />
-        ) : (
-          filteredClasses.map((cls) => (
-            <Card
-              variant="squares"
-              key={cls.class_id}
-              className="w-full overflow-x-auto shadow-none"
-            >
-              <div className="flex flex-col items-start justify-between gap-2">
-                <div className="w-full flex-1 flex flex-row gap-2 items-center justify-between">
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <h4
-                          className="font-bold text-lg truncate leading-tight block"
-                          tabIndex={0}
-                        >
-                          {cls.section_name}
-                        </h4>
-                      }
-                    />
-                    <TooltipContent>{cls.section_name}</TooltipContent>
-                  </Tooltip>
-                  {cls.is_adviser && (
-                    <Badge
-                      variant="solid"
-                      size="sm"
-                      className="text-[11px] shrink-0"
-                    >
-                      Adviser
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex flex-row justify-between w-full align-center items-center">
-                  {cls.grade_level && (
-                    <span className="text-[12px] font-semibold text-muted-foreground">
-                      Grade {cls.grade_level}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                    <span className="flex items-center gap-1 font-medium text-foreground">
-                      <Users className="size-3" />
-                      {cls.student_count ?? 0}{" "}
-                      {cls.student_count === 1 ? "student" : "students"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {cls.subjects && cls.subjects.length > 0 && (
-                <div className="flex flex-row gap-2 mt-2">
-                  <div className="text-[10px] font-medium text-muted-foreground whitespace-nowrap mt-0.5">
-                    Subjects Taught:
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {cls.subjects.map((sub, idx) => (
-                      <Badge
-                        key={`${sub}-${idx}`}
-                        variant="outline"
-                        size="sm"
-                        className="text-[10px] py-0.5 px-1.5 font-medium"
-                      >
-                        {sub}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Card>
-          ))
-        )}
-      </Card.Content>
-    </Card>
-  );
+function formatClock12(hhmm?: string | null): string {
+  if (!hhmm) return "";
+  const parts = hhmm.split(":");
+  if (parts.length < 2) return hhmm;
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return hhmm;
+  const suffix = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
-function TeacherAnalytics({ data }: { data: NormalizedUserAnalytics }) {
+function TeacherAnalytics({
+  data,
+  user,
+  selectedPeriodId,
+}: {
+  data: NormalizedUserAnalytics;
+  user: UserDetail;
+  selectedPeriodId?: number | null;
+}) {
+  const [activeTab, setActiveTab] = useState<"subjects" | "schedule">("subjects");
+  const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
+  const [isScheduleLoading, setIsScheduleLoading] = useState(true);
+
+  const handledSubjects: TeacherHandledSubject[] =
+    data.handled_subjects && data.handled_subjects.length > 0
+      ? data.handled_subjects
+      : user.handled_subjects ?? [];
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTeacherSchedule() {
+      if (!user.staff_id) {
+        if (isMounted) {
+          setScheduleData(null);
+          setIsScheduleLoading(false);
+        }
+        return;
+      }
+      setIsScheduleLoading(true);
+      try {
+        const studioData = await getSubjectLoadStudioData(selectedPeriodId ?? undefined).catch(
+          () => null,
+        );
+        if (studioData) {
+          const teacherLoads = studioData.existing_loads.filter(
+            (load) =>
+              load.staff_id === user.staff_id &&
+              load.is_active_version !== false &&
+              (load.status === "published" || load.status === "active"),
+          );
+          if (teacherLoads.length > 0) {
+            const subjectMap = new Map(
+              studioData.subjects.map((s) => [s.subject_id, s]),
+            );
+            const classMap = new Map(
+              studioData.classes.map((c) => [c.class_id, c]),
+            );
+            const rows: DynamicScheduleRow[] = teacherLoads.map((load) => {
+              const sub = subjectMap.get(load.subject_id);
+              const cls = classMap.get(load.class_id);
+              const startFmt = formatClock12(load.start_time);
+              const endFmt = formatClock12(load.end_time);
+              const days = (load.days_of_week || []).map(
+                (d) => SCHEDULE_DAY_MAP[d.toUpperCase()] || d,
+              );
+              return {
+                type: "class",
+                subject_load_id: load.subject_load_id ?? undefined,
+                subject: sub?.subject_name ?? `Subject #${load.subject_id}`,
+                subject_codename: sub?.subject_codename ?? "",
+                teacher: user.name,
+                section_name: cls?.section_name ?? "",
+                start_time: load.start_time || "00:00",
+                end_time: load.end_time || "00:00",
+                time: startFmt && endFmt ? `${startFmt} - ${endFmt}` : "",
+                days: days.length > 0 ? days : ["M", "T", "W", "Th", "F"],
+                slot_type: "CLASS",
+              };
+            });
+
+            const firstClass = classMap.get(teacherLoads[0].class_id);
+            const templateGroup = firstClass?.period_template_group || "JHS";
+            const breakSlots = (studioData.period_template_slots || []).filter(
+              (slot) =>
+                slot.template_group === templateGroup &&
+                (slot.slot_type === "HOMEROOM" ||
+                  slot.slot_type === "RECESS" ||
+                  slot.slot_type === "LUNCH"),
+            );
+            for (const b of breakSlots) {
+              const startFmt = formatClock12(b.start_time);
+              const endFmt = formatClock12(b.end_time);
+              rows.push({
+                type: "break",
+                label: b.slot_name,
+                start_time: b.start_time,
+                end_time: b.end_time,
+                time: startFmt && endFmt ? `${startFmt} - ${endFmt}` : "",
+                slot_type: b.slot_type,
+              });
+            }
+            rows.sort((a, b) => (a.start_time || "00:00").localeCompare(b.start_time || "00:00"));
+            if (isMounted) {
+              setScheduleData({ is_published: true, schedule: rows });
+              return;
+            }
+          } else {
+            if (isMounted) {
+              setScheduleData({ is_published: false, schedule: [] });
+              return;
+            }
+          }
+        }
+
+        const fallback = await getMySchedule(selectedPeriodId ?? undefined, user.staff_id);
+        if (isMounted) setScheduleData(fallback);
+      } catch (err) {
+        console.error("Failed to load teacher schedule:", err);
+        if (isMounted) setScheduleData(null);
+      } finally {
+        if (isMounted) setIsScheduleLoading(false);
+      }
+    }
+
+    void loadTeacherSchedule();
+    return () => {
+      isMounted = false;
+    };
+  }, [user.staff_id, user.name, selectedPeriodId]);
+
   const summary = data.summary;
   const rawHours =
-    (summary.workloadHours !== undefined && summary.workloadHours !== null
+    summary.workloadHours !== undefined && summary.workloadHours !== null
       ? Number(summary.workloadHours)
-      : null);
+      : null;
   const loadCount =
-    (summary.loadCount !== undefined && summary.loadCount !== null
+    summary.loadCount !== undefined && summary.loadCount !== null
       ? Number(summary.loadCount)
-      : valueNumber(summary.classesHandled, 0));
+      : valueNumber(summary.classesHandled, 0);
   const workloadDisplay =
     rawHours !== null && rawHours > 0
       ? `${rawHours} hrs`
@@ -1271,362 +1113,296 @@ function TeacherAnalytics({ data }: { data: NormalizedUserAnalytics }) {
         : `${loadCount} loads`;
 
   const classCount =
-    (summary.classesHandled !== undefined && summary.classesHandled !== null
+    summary.classesHandled !== undefined && summary.classesHandled !== null
       ? Number(summary.classesHandled)
-      : 0);
+      : user.handled_classes?.length ?? 0;
   const totalStudents =
     summary.totalStudents !== undefined && summary.totalStudents !== null
       ? Number(summary.totalStudents)
       : null;
 
   const subjectCount =
-    (summary.subjectsHandled !== undefined && summary.subjectsHandled !== null
+    summary.subjectsHandled !== undefined && summary.subjectsHandled !== null && Number(summary.subjectsHandled) > 0
       ? Number(summary.subjectsHandled)
-      : 0);
-
-  const rawPerf = summary.classPerformance;
-  const hasPerf =
-    rawPerf !== null &&
-    rawPerf !== undefined &&
-    rawPerf !== "N/A" &&
-    rawPerf !== "Unavailable";
-  const numericPerf = hasPerf ? Number(rawPerf) : null;
-  const perfDisplay =
-    numericPerf !== null && !isNaN(numericPerf)
-      ? `${Math.round(numericPerf)}%`
-      : "N/A";
-
-  const handledSubjects = data.handled_subjects ?? [];
-  const handledClasses = data.handled_classes ?? [];
+      : handledSubjects.length;
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] items-stretch">
-      {/* Left Column: Stat Cards & Analytics Panels */}
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] items-start min-w-0">
+      {/* Main Column: Toggle between Subject Itemlines and Subject Load Timetable */}
       <div className="flex flex-col gap-3 min-w-0">
-        <OverviewGrid
-          metrics={[
-            {
-              title: "Class Handled",
-              count: String(classCount),
-              stat:
-                totalStudents !== null && totalStudents > 0
-                  ? `${totalStudents} ${totalStudents === 1 ? "student" : "students"}`
-                  : undefined,
-              statDescription:
-                totalStudents !== null && totalStudents > 0
-                  ? "total enrolled in assigned classes"
-                  : "assigned class sections",
-            },
-            {
-              title: "Subjects Handled",
-              count: String(subjectCount),
-              stat: `+ ${String(subjectCount)}`,
-              statDescription:
-                subjectCount > 0
-                  ? "subjects assigned"
-                  : "distinct subjects taught",
-            },
-            {
-              title: "Class Performance",
-              count: perfDisplay,
-              stat:
-                numericPerf !== null && !isNaN(numericPerf)
-                  ? numericPerf >= 75
-                    ? "Passing average"
-                    : "Needs support"
-                  : undefined,
-              statDescription:
-                numericPerf !== null && !isNaN(numericPerf)
-                  ? "score across classwork"
-                  : "no graded assessments yet",
-            },
-            {
-              title: "Workload",
-              count: workloadDisplay,
-              stat:
-                loadCount > 0
-                  ? `${loadCount} ${loadCount === 1 ? "load" : "loads"}`
-                  : undefined,
-              statDescription: "scheduled weekly teaching load",
-            },
-          ]}
-        />
-
-        <div className="grid gap-3 md:grid-cols-[1.4fr_1fr]">
-          <Panel
-            title="Period Class Performance"
-            subtitle="Average student score across all handled subjects"
+        <div>
+          <ToggleSwitch
+            value={activeTab}
+            onValueChange={(val) => setActiveTab(val as "subjects" | "schedule")}
+            size="sm"
           >
-            <SmallLineChart data={data.period_performance} xKey="period" />
-          </Panel>
-          <Panel
-            title="Subject Breakdown"
-            subtitle="Avg. score per subject handled"
-          >
-            <SubjectBars rows={data.subject_breakdown} />
-          </Panel>
+            <ToggleSwitch.Item value="subjects">
+              <BookOpen className="size-3.5 shrink-0" />
+              <span>Subjects</span>
+            </ToggleSwitch.Item>
+            <ToggleSwitch.Item value="schedule">
+              <CalendarDays className="size-3.5 shrink-0" />
+              <span>Subject Load</span>
+            </ToggleSwitch.Item>
+          </ToggleSwitch>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
-          <StudentSnapshot />
-        </div>
+        {activeTab === "subjects" ? (
+          handledSubjects.length === 0 ? (
+            <EmptyStateCard
+              icon={<BookOpen aria-hidden="true" />}
+              shadow
+              title="No subjects assigned"
+              description="No subject loads are currently mapped to this teacher."
+            />
+          ) : (
+            <div className="grid gap-2 min-w-0">
+              {handledSubjects.map((subject) => (
+                <Card key={subject.subject_id} className="block w-full p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-bold text-lg leading-tight truncate">
+                          {subject.subject_name}
+                        </h4>
+                        <Badge variant="secondary" size="sm" className="text-[10px]">
+                          {subject.is_core ? "Core" : "Applied"}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {[
+                          subject.grade_levels?.length ? subject.grade_levels.join(", ") : null,
+                          subject.sections?.length
+                            ? `Sections: ${subject.sections.join(", ")}`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" • ") || "Assigned subject"}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground shrink-0">
+                      {subject.weekly_hours !== undefined && subject.weekly_hours > 0 && (
+                        <span className="flex items-center gap-1 font-medium text-foreground">
+                          <Clock className="size-3.5" />
+                          {subject.weekly_hours} hrs/wk
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1 font-medium text-foreground">
+                        <Layers className="size-3.5" />
+                        {subject.class_count ?? subject.sections?.length ?? 0}{" "}
+                        {(subject.class_count ?? subject.sections?.length ?? 0) === 1
+                          ? "class"
+                          : "classes"}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )
+        ) : !isScheduleLoading && (!scheduleData?.is_published || !scheduleData.schedule.length) ? (
+          <EmptyStateCard
+            icon={<CalendarDays aria-hidden="true" />}
+            shadow
+            title="No published schedule yet"
+            description="This teacher’s timetable will appear here once their subject loads are published."
+          />
+        ) : (
+          <DynamicScheduleTable
+            schedule={scheduleData?.schedule || []}
+            isPublished={scheduleData?.is_published}
+            isLoading={isScheduleLoading}
+            showTeacher={false}
+            showSection={true}
+          />
+        )}
       </div>
 
-      {/* Right Column: Full-height Side Card with Subjects / Classes Toggle */}
-      <div className="flex flex-col h-full min-h-[480px]">
-        <TeacherHandledSideCard
-          handledSubjects={handledSubjects}
-          handledClasses={handledClasses}
+      {/* Right Side Column: Stacked Overview Cards */}
+      <aside className="flex flex-col gap-3 min-w-0">
+        <OverviewCard
+          title="Class Handled"
+          count={String(classCount)}
+          stat={
+            totalStudents !== null && totalStudents > 0
+              ? `${totalStudents} ${totalStudents === 1 ? "student" : "students"}`
+              : undefined
+          }
+          statDescription={
+            totalStudents !== null && totalStudents > 0
+              ? "total enrolled in assigned classes"
+              : "assigned class sections"
+          }
         />
-      </div>
+        <OverviewCard
+          title="Subjects Handled"
+          count={String(subjectCount)}
+          stat={`+ ${String(subjectCount)}`}
+          statDescription={
+            subjectCount > 0 ? "subjects assigned" : "distinct subjects taught"
+          }
+        />
+        <OverviewCard
+          title="Workload"
+          count={workloadDisplay}
+          stat={
+            loadCount > 0
+              ? `${loadCount} ${loadCount === 1 ? "load" : "loads"}`
+              : undefined
+          }
+          statDescription="scheduled weekly teaching load"
+        />
+      </aside>
     </div>
   );
 }
 
 function StudentAnalytics({
+  user,
+  selectedPeriodId,
+  selectedYearId,
+}: {
+  user: UserDetail;
+  selectedPeriodId?: number | null;
+  selectedYearId?: number | null;
+}) {
+  const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
+  const [isScheduleLoading, setIsScheduleLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSchedule() {
+      setIsScheduleLoading(true);
+      try {
+        let targetClassId = user.class_id ?? null;
+        const targetSection = sectionName(user.section);
+
+        if (!targetClassId && targetSection) {
+          const classesRes = await getClasses("active", selectedYearId);
+          const matched = classesRes.classes.find(
+            (cls) =>
+              cls.section_name.trim().toLowerCase() === targetSection.trim().toLowerCase() &&
+              (!user.grade_level || cls.academic_level.grade_level === user.grade_level),
+          );
+          targetClassId = matched?.class_id ?? null;
+        }
+
+        if (!targetClassId) {
+          if (isMounted) setScheduleData(null);
+          return;
+        }
+
+        const data = await getClassSchedule(targetClassId, selectedPeriodId ?? undefined);
+        if (isMounted) setScheduleData(data);
+      } catch (err) {
+        console.error("Failed to load student class schedule:", err);
+        if (isMounted) setScheduleData(null);
+      } finally {
+        if (isMounted) setIsScheduleLoading(false);
+      }
+    }
+
+    void loadSchedule();
+    return () => {
+      isMounted = false;
+    };
+  }, [user.class_id, user.section, user.grade_level, selectedPeriodId, selectedYearId]);
+
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-lg font-bold">Subject Load Schedule</h2>
+      {!isScheduleLoading && (!scheduleData?.is_published || !scheduleData.schedule.length) ? (
+        <EmptyStateCard
+          icon={<CalendarDays />}
+          shadow
+          title="No published schedule yet"
+          description={
+            user.section
+              ? "This section’s schedule will appear here once its subject loads are published."
+              : "Assign this student to a section to view their subject load schedule."
+          }
+        />
+      ) : (
+        <DynamicScheduleTable
+          schedule={scheduleData?.schedule || []}
+          isPublished={scheduleData?.is_published}
+          isLoading={isScheduleLoading}
+        />
+      )}
+    </section>
+  );
+}
+
+function AdminAnalytics({
   data,
+  selectedPeriodId,
+  selectedYearId,
 }: {
   data: NormalizedUserAnalytics;
+  selectedPeriodId?: number | null;
+  selectedYearId?: number | null;
 }) {
   const summary = data.summary;
-  const lms = data.lms_behavior;
-  const weakSubjects = data.subject_mastery
-    .filter((row) => valueNumber(row.value, 100) < 75)
-    .map((row) => String(row.subject));
-  return (
-    <>
-      <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
-        <div>
-          <div className="mb-1">
-            <h2 className="text-lg font-bold">Subject Overview</h2>
-          </div>
-          <OverviewGrid
-            metrics={[
-              {
-                title: "Written Works Average",
-                count: String(displayMetric(summary.writtenWorksAverage)),
-                statDescription: "out of 100",
-              },
-              {
-                title: "Performance Average",
-                count: String(displayMetric(summary.performanceAverage)),
-                statDescription: "out of 100",
-              },
-              {
-                title: "Completion Rate",
-                count:
-                  typeof summary.completionRate === "number"
-                    ? `${summary.completionRate}%`
-                    : String(displayMetric(summary.completionRate)),
-                statDescription: "activities done",
-              },
-            ]}
-          />
-        </div>
-        <Panel title="LMS Behavior">
-          <div className="grid gap-2">
-            <MiniStat label="Total logins" value={lms.totalLogins} />
-            <MiniStat label="Avg session" value={lms.averageSession} />
-            <MiniStat label="Missed activities" value={lms.missedActivities} />
-            <MiniStat
-              label="On time submissions"
-              value={lms.onTimeSubmissions}
-            />
-          </div>
-        </Panel>
-      </div>
-      <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
-        <Panel title="Subject Mastery">
-          <SubjectBars rows={data.subject_mastery} />
-          {data.subject_mastery.length > 0 && <div className="mt-4 text-[10px]">
-            Weak Subjects:{" "}
-            <span className="font-bold">
-              {weakSubjects.length
-                ? weakSubjects.join(", ")
-                : "No weak subject data available"}
-            </span>
-          </div>}
-        </Panel>
-        <Panel title="Score Trend">
-          <SmallLineChart data={data.score_trend} xKey="month" />
-        </Panel>
-      </div>
-      <ClassworkTable rows={data.classwork} />
-    </>
-  );
-}
+  const hasBackendCounts =
+    summary.classesMade !== undefined &&
+    summary.subjectLoadsAssigned !== undefined &&
+    summary.subjectsAdded !== undefined;
 
-function AdminAnalytics({ data }: { data: NormalizedUserAnalytics }) {
-  const summary = data.summary;
-  return (
-    <>
-      <OverviewGrid
-        metrics={[
-          {
-            title: "Classes Made",
-            count: String(displayMetric(summary.classesMade)),
-            statDescription: "classes created",
-          },
-          {
-            title: "Subject Loads Assigned",
-            count: String(displayMetric(summary.subjectLoadsAssigned)),
-            statDescription: "subject loads assigned",
-          },
-          {
-            title: "Subjects Added",
-            count: String(displayMetric(summary.subjectsAdded)),
-            statDescription: "subjects created",
-          },
-        ]}
-      />
-      <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr]">
-        <Panel
-          title="Subject Breakdown"
-          subtitle="Avg. score per subject handled"
-        >
-          <SubjectBars rows={data.subject_breakdown} />
-        </Panel>
-        <ActivityFeed rows={data.activity_feed} />
-      </div>
-    </>
-  );
-}
+  const [fallbackCounts, setFallbackCounts] = useState<{
+    classesMade: number;
+    subjectLoadsAssigned: number;
+    subjectsAdded: number;
+  } | null>(null);
 
-function MiniStat({ label, value }: { label: string; value: unknown }) {
-  return (
-    <Card className="border border-border p-3 shadow-none">
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="text-2xl font-black">{String(displayMetric(value))}</div>
-    </Card>
-  );
-}
+  useEffect(() => {
+    if (hasBackendCounts) return;
+    let isMounted = true;
 
-function ActivityFeed({ rows }: { rows: Array<Record<string, string>> }) {
-  return (
-    <Panel title="Recent Activity" subtitle="Latest action logged">
-      {!rows || rows.length === 0 ? (
-        <p className="py-4 text-center text-xs text-muted-foreground">
-          No recent activity logged.
-        </p>
-      ) : (
-        <div className="space-y-3">
-          {rows.map((row, index) => (
-            <div
-              key={`${row.title}-${index}`}
-              className="border-b border-black/10 pb-2 last:border-0"
-            >
-              <div className="text-xs font-bold">{row.title}</div>
-              <div className="text-[10px] text-muted-foreground">
-                {row.timestamp}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Panel>
-  );
-}
+    Promise.all([
+      getClasses("active", selectedYearId).catch(() => null),
+      getSubjectLoadStudioData(selectedPeriodId ?? undefined).catch(() => null),
+      getSubjects({ status: "active" }).catch(() => null),
+    ]).then(([classesRes, studioRes, subjectsRes]) => {
+      if (!isMounted) return;
+      setFallbackCounts({
+        classesMade: classesRes?.classes.length ?? 0,
+        subjectLoadsAssigned: studioRes?.existing_loads.length ?? 0,
+        subjectsAdded: subjectsRes?.subjects.length ?? 0,
+      });
+    });
 
-function StudentSnapshot() {
-  const rows = Array.from({ length: 5 }, (_, index) => index);
-  return (
-    <Panel
-      title="Student Performance Snapshot"
-      subtitle="Top at-risk students across all sections"
-    >
-      <Table wrapperClassName="border-0 shadow-none">
-        <Table.Header className="bg-transparent text-muted-foreground border-b border-black/10 font-normal text-[10px]">
-          <Table.Row className="hover:bg-transparent">
-            <Table.Head className="h-6 px-0 text-[10px] font-normal text-muted-foreground">
-              Student
-            </Table.Head>
-            <Table.Head className="h-6 px-0 text-[10px] font-normal text-muted-foreground">
-              Subject
-            </Table.Head>
-            <Table.Head className="h-6 px-0 text-right text-[10px] font-normal text-muted-foreground">
-              Score
-            </Table.Head>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {rows.map((row) => (
-            <Table.Row
-              key={row}
-              className="border-b border-black/10 hover:bg-transparent text-xs"
-            >
-              <Table.Cell className="py-1.5 px-0">John Doe</Table.Cell>
-              <Table.Cell className="py-1.5 px-0">Science 10</Table.Cell>
-              <Table.Cell className="py-1.5 px-0 text-right font-semibold">
-                98%
-              </Table.Cell>
-            </Table.Row>
-          ))}
-        </Table.Body>
-      </Table>
-    </Panel>
-  );
-}
+    return () => {
+      isMounted = false;
+    };
+  }, [hasBackendCounts, selectedPeriodId, selectedYearId]);
 
-function ClassworkTable({
-  rows,
-}: {
-  rows: Array<Record<string, number | string | null>>;
-}) {
+  const classesMade = summary.classesMade ?? fallbackCounts?.classesMade ?? 0;
+  const subjectLoadsAssigned =
+    summary.subjectLoadsAssigned ?? fallbackCounts?.subjectLoadsAssigned ?? 0;
+  const subjectsAdded = summary.subjectsAdded ?? fallbackCounts?.subjectsAdded ?? 0;
+
   return (
-    <section className="space-y-2">
-      <h2 className="text-lg font-bold">Classwork</h2>
-      <Table wrapperClassName="border-black">
-        <Table.Header>
-          <Table.Row>
-            <Table.Head className="text-xs font-semibold">
-              Classwork Name
-            </Table.Head>
-            <Table.Head className="text-xs font-semibold">Type</Table.Head>
-            <Table.Head className="text-xs font-semibold">Subject</Table.Head>
-            <Table.Head className="text-xs font-semibold">Status</Table.Head>
-            <Table.Head className="text-right text-xs font-semibold">
-              Score
-            </Table.Head>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {rows.length > 0 ? (
-            rows.map((row, index) => (
-              <Table.Row key={`${row.name}-${index}`}>
-                <Table.Cell className="font-semibold text-xs">
-                  {row.name}
-                </Table.Cell>
-                <Table.Cell className="text-xs">{row.type}</Table.Cell>
-                <Table.Cell className="font-semibold text-xs">
-                  {row.subject}
-                </Table.Cell>
-                <Table.Cell className="text-xs">
-                  <Badge
-                    variant={String(row.status).trim().toLowerCase() === "pending" ? "default" : "outline"}
-                    size="sm"
-                    className={String(row.status).trim().toLowerCase() === "pending" ? undefined : "text-[10px] py-0.5"}
-                  >
-                    {row.status}
-                  </Badge>
-                </Table.Cell>
-                <Table.Cell className="text-right font-bold text-xs">
-                  {row.score}
-                </Table.Cell>
-              </Table.Row>
-            ))
-          ) : (
-            <Table.Row>
-              <Table.Cell
-                colSpan={5}
-                className="p-0"
-              >
-                <EmptyStateCard compact icon={<ClipboardList />} title="No classwork records yet" description="Classwork records will appear here when available." />
-              </Table.Cell>
-            </Table.Row>
-          )}
-        </Table.Body>
-      </Table>
-    </section>
+    <OverviewGrid
+      metrics={[
+        {
+          title: "Classes Made",
+          count: String(displayMetric(classesMade)),
+          statDescription: "classes created",
+        },
+        {
+          title: "Subject Loads Assigned",
+          count: String(displayMetric(subjectLoadsAssigned)),
+          statDescription: "subject loads assigned",
+        },
+        {
+          title: "Subjects Added",
+          count: String(displayMetric(subjectsAdded)),
+          statDescription: "subjects created",
+        },
+      ]}
+    />
   );
 }
 

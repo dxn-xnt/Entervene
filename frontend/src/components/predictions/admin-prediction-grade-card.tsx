@@ -21,11 +21,10 @@ export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProp
   ).size;
   const moderateRisk = group.sections.reduce((total, section) => total + section.moderate_risk_count, 0);
   const highRisk = group.sections.reduce((total, section) => total + section.high_risk_count, 0);
-  const onTrack = group.sections.reduce((total, section) => total + section.on_track_count, 0);
   const gradePath = `/admin/predictions/${group.grade_level}`;
 
   return (
-    <Card className="flex min-w-0 flex-col bg-primary">
+    <Card className="flex min-w-0 flex-col bg-background">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
           to={gradePath}
@@ -39,9 +38,6 @@ export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProp
           </Badge>
           <Badge size="sm" className={getRiskBadgeMeta("HIGH_RISK").bg}>
             {highRisk} High Risk ({Math.round(getTeacherRiskPercentage(highRisk, uniqueStudents))}%)
-          </Badge>
-          <Badge size="sm" className={getRiskBadgeMeta("ON_TRACK").bg}>
-            {onTrack} On Track ({Math.round(getTeacherRiskPercentage(onTrack, uniqueStudents))}%)
           </Badge>
           <Tooltip>
             <TooltipTrigger render={
