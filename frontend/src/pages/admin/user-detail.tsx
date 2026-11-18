@@ -20,6 +20,7 @@ import { OverviewCard } from "@/components/overview-cards";
 import { useToast } from "@/components/retroui/Toast";
 import { UserProfileHeader } from "@/components/profile-header";
 import { EmptyStateCard } from "./subjects/components/empty-state-card";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
   Tooltip,
   TooltipContent,
@@ -39,7 +40,6 @@ import {
   type UserDetail,
   type UserRole,
 } from "../../lib/api";
-import { mergeAnalytics } from "../../mocks/userAnalytics";
 import {
   Archive,
   BookOpen,
@@ -75,6 +75,28 @@ function sectionName(section: string | null | undefined) {
 function valueNumber(value: unknown, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+type NormalizedUserAnalytics = Omit<UserAnalytics, "summary" | "lms_behavior"> & {
+  summary: Record<string, number | string | null>;
+  lms_behavior: Record<string, number | string | null>;
+};
+
+function normalizeAnalytics(analytics: UserAnalytics | null): NormalizedUserAnalytics {
+  return {
+    summary: analytics?.summary ?? {},
+    lms_behavior: analytics?.lms_behavior ?? {},
+    subject_mastery: analytics?.subject_mastery ?? [],
+    score_trend: analytics?.score_trend ?? [],
+    historical_performance: analytics?.historical_performance ?? [],
+    period_performance: analytics?.period_performance ?? [],
+    quarterly_performance: analytics?.quarterly_performance ?? [],
+    subject_breakdown: analytics?.subject_breakdown ?? [],
+    activity_feed: analytics?.activity_feed ?? [],
+    classwork: analytics?.classwork ?? [],
+    handled_subjects: analytics?.handled_subjects ?? [],
+    handled_classes: analytics?.handled_classes ?? [],
+  };
 }
 
 type StatusStyle = {
@@ -131,6 +153,7 @@ function getStatusStyle(status: string | undefined | null): StatusStyle {
 export default function AdminUserDetail() {
   const toast = useToast();
   const { userId, role } = useParams<{ userId: string; role: UserRole }>();
+  const { selectedPeriodId, selectedYearId } = useAcademicPeriod();
   const navigate = useNavigate();
   const [user, setUser] = useState<UserDetail | null>(null);
   const [analytics, setAnalytics] = useState<UserAnalytics | null>(null);
@@ -162,27 +185,16 @@ export default function AdminUserDetail() {
     let active = true;
     setLoading(true);
     setError(null);
+    setUser(null);
+    setAnalytics(null);
 
     Promise.all([
-      getUserDetail(userId).catch(() => null),
-      getUserAnalytics(userId).catch(() => null),
+      getUserDetail(userId, selectedYearId),
+      getUserAnalytics(userId, selectedPeriodId),
     ])
       .then(([detail, metrics]) => {
         if (!active) return;
-        if (detail) {
-          setUser(detail);
-        } else {
-          setUser({
-            id: userId,
-            name: "Student",
-            first_name: "Student",
-            last_name: "",
-            email: "student@school.edu.ph",
-            role: (role as UserRole) || "student",
-            account_status: "active",
-            created_at: new Date().toISOString(),
-          });
-        }
+        setUser(detail);
         setAnalytics(metrics);
       })
       .catch((err) => {
@@ -196,13 +208,10 @@ export default function AdminUserDetail() {
     return () => {
       active = false;
     };
-  }, [userId, role]);
+  }, [userId, selectedPeriodId, selectedYearId]);
 
   const effectiveRole = user?.role ?? role ?? "student";
-  const data = useMemo(
-    () => mergeAnalytics(effectiveRole, analytics),
-    [effectiveRole, analytics],
-  );
+  const data = useMemo(() => normalizeAnalytics(analytics), [analytics]);
   const isPending = (user?.account_status || "").toLowerCase() === "pending";
   const isArchived = (user?.account_status || "").toLowerCase() === "archived";
   const [resending, setResending] = useState(false);
@@ -219,7 +228,7 @@ export default function AdminUserDetail() {
     try {
       await resendUserInvitation(userId);
       toast.success({ title: "Invitation resent" });
-      const updated = await getUserDetail(userId);
+      const updated = await getUserDetail(userId, selectedYearId);
       setUser(updated);
     } catch (err: unknown) {
       toast.error({
@@ -265,7 +274,7 @@ export default function AdminUserDetail() {
     setNotice(null);
     try {
       await archiveUser(userId);
-      const updated = await getUserDetail(userId);
+      const updated = await getUserDetail(userId, selectedYearId);
       setUser(updated);
       setArchiveOpen(false);
       setNotice("User archived successfully.");
@@ -445,7 +454,7 @@ export default function AdminUserDetail() {
                     <StudentAnalytics data={data} />
                   )}
                   {effectiveRole === "teacher" && (
-                    <TeacherAnalytics user={user} data={data} />
+                    <TeacherAnalytics data={data} />
                   )}
                   {effectiveRole === "admin" && <AdminAnalytics data={data} />}
                 </div>
@@ -1244,24 +1253,16 @@ function TeacherHandledSideCard({
   );
 }
 
-function TeacherAnalytics({
-  user,
-  data,
-}: {
-  user: UserDetail;
-  data: ReturnType<typeof mergeAnalytics>;
-}) {
+function TeacherAnalytics({ data }: { data: NormalizedUserAnalytics }) {
   const summary = data.summary;
   const rawHours =
-    user.workload_hours ??
     (summary.workloadHours !== undefined && summary.workloadHours !== null
       ? Number(summary.workloadHours)
       : null);
   const loadCount =
-    user.load_count ??
     (summary.loadCount !== undefined && summary.loadCount !== null
       ? Number(summary.loadCount)
-      : (user.class_count ?? valueNumber(summary.classesHandled, 0)));
+      : valueNumber(summary.classesHandled, 0));
   const workloadDisplay =
     rawHours !== null && rawHours > 0
       ? `${rawHours} hrs`
@@ -1270,7 +1271,6 @@ function TeacherAnalytics({
         : `${loadCount} loads`;
 
   const classCount =
-    user.class_count ??
     (summary.classesHandled !== undefined && summary.classesHandled !== null
       ? Number(summary.classesHandled)
       : 0);
@@ -1280,7 +1280,6 @@ function TeacherAnalytics({
       : null;
 
   const subjectCount =
-    user.subjects?.length ||
     (summary.subjectsHandled !== undefined && summary.subjectsHandled !== null
       ? Number(summary.subjectsHandled)
       : 0);
@@ -1297,8 +1296,8 @@ function TeacherAnalytics({
       ? `${Math.round(numericPerf)}%`
       : "N/A";
 
-  const handledSubjects = user.handled_subjects ?? data.handled_subjects ?? [];
-  const handledClasses = user.handled_classes ?? data.handled_classes ?? [];
+  const handledSubjects = data.handled_subjects ?? [];
+  const handledClasses = data.handled_classes ?? [];
 
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] items-stretch">
@@ -1387,7 +1386,7 @@ function TeacherAnalytics({
 function StudentAnalytics({
   data,
 }: {
-  data: ReturnType<typeof mergeAnalytics>;
+  data: NormalizedUserAnalytics;
 }) {
   const summary = data.summary;
   const lms = data.lms_behavior;
@@ -1398,14 +1397,8 @@ function StudentAnalytics({
     <>
       <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
         <div>
-          <div className="mb-1 flex items-center justify-between">
+          <div className="mb-1">
             <h2 className="text-lg font-bold">Subject Overview</h2>
-            <div className="text-right text-sm font-bold text-red-600">
-              {summary.failureRisk}
-              <div className="text-[10px] font-normal text-foreground">
-                {summary.modelConfidence} model confidence
-              </div>
-            </div>
           </div>
           <OverviewGrid
             metrics={[
@@ -1463,7 +1456,7 @@ function StudentAnalytics({
   );
 }
 
-function AdminAnalytics({ data }: { data: ReturnType<typeof mergeAnalytics> }) {
+function AdminAnalytics({ data }: { data: NormalizedUserAnalytics }) {
   const summary = data.summary;
   return (
     <>
@@ -1471,21 +1464,18 @@ function AdminAnalytics({ data }: { data: ReturnType<typeof mergeAnalytics> }) {
         metrics={[
           {
             title: "Classes Made",
-            count: String(valueNumber(summary.classesMade)),
-            stat: "2+",
-            statDescription: "increased from previous academic year",
+            count: String(displayMetric(summary.classesMade)),
+            statDescription: "classes created",
           },
           {
             title: "Subject Loads Assigned",
-            count: String(valueNumber(summary.subjectLoadsAssigned)),
-            stat: "2+",
-            statDescription: "increased from previous academic year",
+            count: String(displayMetric(summary.subjectLoadsAssigned)),
+            statDescription: "subject loads assigned",
           },
           {
             title: "Subjects Added",
-            count: String(valueNumber(summary.subjectsAdded)),
-            stat: "8%",
-            statDescription: "increased from previous academic year",
+            count: String(displayMetric(summary.subjectsAdded)),
+            statDescription: "subjects created",
           },
         ]}
       />
@@ -1506,7 +1496,7 @@ function MiniStat({ label, value }: { label: string; value: unknown }) {
   return (
     <Card className="border border-border p-3 shadow-none">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="text-2xl font-black">{String(value)}</div>
+      <div className="text-2xl font-black">{String(displayMetric(value))}</div>
     </Card>
   );
 }
