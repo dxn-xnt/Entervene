@@ -52,6 +52,7 @@ function scaleRubricToMaxPoints(levels: ActivityRubricLevel[], targetPoints: num
 
 interface CreateClassworkModalProps {
   draftOnly?: boolean;
+  nested?: boolean;
   selectedType: ClassworkKind;
   subjects: Array<{ id: number; name: string }>;
   loads: TeacherClassLoad[];
@@ -75,6 +76,7 @@ interface CreateClassworkModalProps {
 
 export default function CreateClassworkModal({
   draftOnly = false,
+  nested = false,
   selectedType,
   subjects,
   loads,
@@ -524,7 +526,11 @@ export default function CreateClassworkModal({
 
   return (
     <>
-      <Dialog.Content size="lg">
+      <Dialog.Content
+        size="lg"
+        className={nested ? "z-[1001]!" : undefined}
+        overlay={nested ? { forceRender: true, className: "z-[1000]!" } : undefined}
+      >
         <Dialog.Header position="fixed" asChild>
           <div className="flex items-center justify-between w-full">
             <div className="flex flex-row w-full justify-between items-center">

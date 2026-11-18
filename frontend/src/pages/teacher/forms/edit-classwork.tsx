@@ -1236,7 +1236,7 @@ export default function EditClassworkModal({
                       </Field>
                     ) : (
                       <div className="flex flex-col justify-end">
-                        <div className="rounded border-2 border-dashed border-gray-300 bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
+                        <div className="rounded! border-2 border-dashed bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
                           {quizResultsDraft.summary_release_mode === "AFTER_DUE_DATE"
                             ? "Summary unlocks automatically after the due date."
                             : quizResultsDraft.summary_release_mode === "NEVER"
