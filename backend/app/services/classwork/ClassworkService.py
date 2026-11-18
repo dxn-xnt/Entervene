@@ -668,6 +668,23 @@ def _replace_activity_rubric(
             classwork.rubric_levels.remove(row)
 
 
+def _assert_rubric_change_allowed(submissions, *, confirmed: bool) -> None:
+    """Keep stored grades and their rubric denominator immutable."""
+    if any(submission.status == "graded" or submission.grade is not None for submission in submissions):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RUBRIC_LOCKED_AFTER_GRADING",
+                "message": "The rubric and maximum score cannot be changed after a submission has been graded.",
+            },
+        )
+    if submissions and not confirmed:
+        raise HTTPException(
+            status_code=409,
+            detail="This classwork already has student submissions. Rubric changes will apply when these submissions are graded.",
+        )
+
+
 def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
     try:
         from datetime import datetime, timezone
@@ -940,13 +957,7 @@ def update_classwork_record(
             for assignment in classwork.assignments
             for submission in assignment.submissions
         ]
-        if submissions and not confirm_rubric_change:
-            detail = (
-                "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades."
-                if any(s.status == "graded" or s.grade is not None for s in submissions)
-                else "This classwork already has student submissions. Rubric changes will apply when these submissions are graded."
-            )
-            raise HTTPException(status_code=409, detail=detail)
+        _assert_rubric_change_allowed(submissions, confirmed=confirm_rubric_change)
         parsed_levels = [ActivityRubricLevelInput.model_validate(level) for level in rubric_levels]
         parsed_levels = validate_activity_rubric(parsed_levels)
         values["total_points"] = max(level.points for level in parsed_levels)

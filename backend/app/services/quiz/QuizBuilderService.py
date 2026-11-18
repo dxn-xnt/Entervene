@@ -20,6 +20,8 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.Quiz import (
     QuizBuilderResponse,
     QuizBuilderUpsert,
+    QuizConfigurationResponse,
+    QuizConfigurationUpdate,
     QuizOptionOut,
     QuizQuestionIn,
     QuizQuestionOut,
@@ -320,6 +322,61 @@ def update_quiz_results_settings(
     )
 
 
+def update_quiz_configuration(
+    db: Session,
+    classwork: Classwork,
+    payload: QuizConfigurationUpdate,
+) -> QuizConfigurationResponse:
+    """Update question-independent settings without rebuilding quiz questions."""
+    locked_classwork = (
+        db.query(Classwork)
+        .filter(Classwork.classwork_id == classwork.classwork_id)
+        .with_for_update()
+        .one()
+    )
+    quiz = (
+        db.query(Quiz)
+        .filter(Quiz.classwork_id == locked_classwork.classwork_id)
+        .with_for_update()
+        .first()
+    )
+    setting = (
+        db.query(QuizSetting)
+        .filter(QuizSetting.classwork_id == locked_classwork.classwork_id)
+        .with_for_update()
+        .first()
+    )
+    if quiz is None or setting is None:
+        raise HTTPException(status_code=404, detail="Quiz settings not found")
+    if classwork_has_quiz_attempts(db, locked_classwork.classwork_id):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "QUIZ_CONFIGURATION_LOCKED_AFTER_ATTEMPT",
+                "message": "Quiz duration, attempt limits, and question behavior cannot be changed after an attempt has started.",
+            },
+        )
+
+    quiz.duration_minutes = payload.duration_minutes
+    setting.is_shuffle_questions = payload.is_shuffle_questions
+    setting.enable_per_question_scoring = payload.enable_per_question_scoring
+    setting.enable_per_question_time_limits = payload.enable_per_question_time_limits
+    setting.max_attempts = payload.max_attempts
+    db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_id == locked_classwork.classwork_id,
+    ).update({ClassworkAssignment.max_attempts: payload.max_attempts}, synchronize_session=False)
+    db.flush()
+    return QuizConfigurationResponse(
+        classwork_id=locked_classwork.classwork_id,
+        duration_minutes=quiz.duration_minutes,
+        is_shuffle_questions=setting.is_shuffle_questions,
+        enable_per_question_scoring=setting.enable_per_question_scoring,
+        enable_per_question_time_limits=setting.enable_per_question_time_limits,
+        max_attempts=setting.max_attempts or payload.max_attempts,
+        has_attempts=False,
+    )
+
+
 def delete_quiz_builder(db: Session, classwork: Classwork) -> None:
     if classwork_has_quiz_attempts(db, classwork.classwork_id):
         raise HTTPException(status_code=409, detail="Cannot delete quiz after attempts exist")
@@ -357,6 +414,7 @@ def build_quiz_response(db: Session, classwork: Classwork, quiz: Quiz) -> QuizBu
         ],
         is_publish_ready=readiness.is_publish_ready,
         readiness_errors=readiness.readiness_errors,
+        has_attempts=classwork_has_quiz_attempts(db, classwork.classwork_id),
         created_at=quiz.created_at,
     )
 

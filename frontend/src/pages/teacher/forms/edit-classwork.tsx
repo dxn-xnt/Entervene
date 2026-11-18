@@ -13,6 +13,7 @@ import { Button as RetroButton } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
+import { Alert } from "@/components/retroui/Alert";
 import { ClassworkSettingRow } from "@/components/classwork-setting-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/Toast";
@@ -53,6 +54,34 @@ type QuizResultsDraft = {
   summary_release_at: string;
 };
 
+type QuizConfigurationDraft = {
+  loaded: boolean;
+  has_attempts: boolean;
+  duration_minutes: string;
+  is_shuffle_questions: boolean;
+  enable_per_question_scoring: boolean;
+  enable_per_question_time_limits: boolean;
+  max_attempts: string;
+};
+
+const defaultQuizConfigurationDraft = (maxAttempts: string): QuizConfigurationDraft => ({
+  loaded: false,
+  has_attempts: false,
+  duration_minutes: "",
+  is_shuffle_questions: false,
+  enable_per_question_scoring: true,
+  enable_per_question_time_limits: false,
+  max_attempts: maxAttempts,
+});
+
+const quizConfigurationComparable = (draft: QuizConfigurationDraft) => ({
+  duration_minutes: draft.duration_minutes,
+  is_shuffle_questions: draft.is_shuffle_questions,
+  enable_per_question_scoring: draft.enable_per_question_scoring,
+  enable_per_question_time_limits: draft.enable_per_question_time_limits,
+  max_attempts: draft.max_attempts,
+});
+
 const defaultQuizResultsDraft = (showScores = true): QuizResultsDraft => ({
   loaded: false,
   show_quiz_results: showScores,
@@ -91,7 +120,7 @@ export default function EditClassworkModal({
     classworkToEditDraft(classwork),
   );
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [rubricConfirmation, setRubricConfirmation] = useState<"graded" | "submitted" | null>(null);
+  const [rubricConfirmation, setRubricConfirmation] = useState<"submitted" | null>(null);
   const [editMaterials, setEditMaterials] = useState<File[]>([]);
   const [referenceLinks, setReferenceLinks] = useState<ReferenceLinkDraft[]>(() => editReferenceLinks(classwork));
   const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
@@ -114,6 +143,12 @@ export default function EditClassworkModal({
   );
   const [quizResultsDraft, setQuizResultsDraft] = useState<QuizResultsDraft>(() =>
     defaultQuizResultsDraft(classwork.show_scores ?? true),
+  );
+  const [initialQuizConfiguration, setInitialQuizConfiguration] = useState<QuizConfigurationDraft>(() =>
+    defaultQuizConfigurationDraft(classworkToEditDraft(classwork).max_attempts),
+  );
+  const [quizConfigurationDraft, setQuizConfigurationDraft] = useState<QuizConfigurationDraft>(() =>
+    defaultQuizConfigurationDraft(classworkToEditDraft(classwork).max_attempts),
   );
   const [quizRevealConfirmation, setQuizRevealConfirmation] = useState(false);
   const toast = useToast();
@@ -173,6 +208,9 @@ export default function EditClassworkModal({
     const fallbackQuizResults = defaultQuizResultsDraft(classwork.show_scores ?? true);
     setInitialQuizResults(fallbackQuizResults);
     setQuizResultsDraft(fallbackQuizResults);
+    const fallbackQuizConfiguration = defaultQuizConfigurationDraft(classworkToEditDraft(classwork).max_attempts);
+    setInitialQuizConfiguration(fallbackQuizConfiguration);
+    setQuizConfigurationDraft(fallbackQuizConfiguration);
   }, [classwork, isOpen]);
 
   useEffect(() => {
@@ -183,7 +221,13 @@ export default function EditClassworkModal({
       .then(async (res) => {
         if (!res.ok || !isActive) return;
         const body = (await res.json()) as {
+          duration_minutes?: number | null;
+          has_attempts?: boolean;
           settings?: {
+            is_shuffle_questions?: boolean;
+            enable_per_question_scoring?: boolean;
+            enable_per_question_time_limits?: boolean;
+            max_attempts?: number | null;
             show_correct_answers?: boolean;
             summary_release_mode?: QuizReleaseMode;
             summary_release_at?: string | null;
@@ -202,12 +246,24 @@ export default function EditClassworkModal({
         };
         setInitialQuizResults(loaded);
         setQuizResultsDraft(loaded);
+        const configuration: QuizConfigurationDraft = {
+          loaded: true,
+          has_attempts: Boolean(body.has_attempts),
+          duration_minutes: body.duration_minutes == null ? "" : String(body.duration_minutes),
+          is_shuffle_questions: Boolean(body.settings.is_shuffle_questions),
+          enable_per_question_scoring: body.settings.enable_per_question_scoring !== false,
+          enable_per_question_time_limits: Boolean(body.settings.enable_per_question_time_limits),
+          max_attempts: String(body.settings.max_attempts ?? classworkToEditDraft(classwork).max_attempts),
+        };
+        setInitialQuizConfiguration(configuration);
+        setQuizConfigurationDraft(configuration);
+        setEditDraft((current) => ({ ...current, max_attempts: configuration.max_attempts }));
       })
       .catch(() => { });
     return () => {
       isActive = false;
     };
-  }, [classwork.classwork_id, classwork.classwork_type, classwork.show_scores, isOpen]);
+  }, [classwork, isOpen]);
   useEffect(() => {
     if (draftOnly) {
       setEditDraft((current) => ({ ...current, is_published: false }));
@@ -422,10 +478,11 @@ export default function EditClassworkModal({
     };
   };
   const changes = useEditFormChanges({
-    resetKey: `${isOpen}:${classwork.classwork_id}:${initialQuizResults.loaded}`,
+    resetKey: `${isOpen}:${classwork.classwork_id}:${initialQuizResults.loaded}:${initialQuizConfiguration.loaded}`,
     initialValues: {
       draft: draftValues(classworkToEditDraft(classwork), classwork.rubric_levels?.length ? classwork.rubric_levels : defaultActivityRubric),
       quizResults: isQuizType(classwork.classwork_type) ? quizResultsComparable(initialQuizResults) : null,
+      quizConfiguration: isQuizType(classwork.classwork_type) ? quizConfigurationComparable(initialQuizConfiguration) : null,
       classes: unorderedValues([...new Set(classwork.assignments?.map(item => item.class_id) ?? [])]),
       lessons: unorderedValues(classwork.linked_lessons?.map(item => item.lesson_id) ?? []),
       files: [],
@@ -434,6 +491,7 @@ export default function EditClassworkModal({
     values: {
       draft: draftValues(editDraft, rubricLevels),
       quizResults: isQuizType(editDraft.classwork_type) ? quizResultsComparable(quizResultsDraft) : null,
+      quizConfiguration: isQuizType(editDraft.classwork_type) ? quizConfigurationComparable({ ...quizConfigurationDraft, max_attempts: editDraft.max_attempts }) : null,
       classes: unorderedValues([...new Set(selectedClassIds)]),
       lessons: unorderedValues(selectedLessonIds),
       files: editMaterials.map(file => [file.name, file.size, file.lastModified, file.type]),
@@ -495,6 +553,22 @@ export default function EditClassworkModal({
       quizResultsDraft.loaded &&
       JSON.stringify(quizResultsComparable(quizResultsDraft)) !==
       JSON.stringify(quizResultsComparable(initialQuizResults));
+    const quizConfigurationChanged =
+      isQuiz &&
+      quizConfigurationDraft.loaded &&
+      JSON.stringify(quizConfigurationComparable({ ...quizConfigurationDraft, max_attempts: editDraft.max_attempts })) !==
+      JSON.stringify(quizConfigurationComparable(initialQuizConfiguration));
+    if (quizConfigurationChanged && quizConfigurationDraft.has_attempts) {
+      setFormError("Quiz duration, attempt limits, and question behavior cannot be changed after an attempt has started.");
+      return;
+    }
+    const duration = quizConfigurationDraft.duration_minutes.trim() === ""
+      ? null
+      : Number(quizConfigurationDraft.duration_minutes);
+    if (isQuiz && (duration !== null && (!Number.isInteger(duration) || duration <= 0))) {
+      setFormError("Quiz duration must be a positive whole number.");
+      return;
+    }
     if (quizResultsChanged) {
       if (
         quizResultsDraft.summary_release_mode === "SCHEDULED" &&
@@ -536,12 +610,16 @@ export default function EditClassworkModal({
     const originalRubric = classwork.rubric_levels ?? [];
     const rubricChanged =
       hasRubric && JSON.stringify(rubricLevels) !== JSON.stringify(originalRubric);
+    if (rubricChanged && currentClasswork.has_graded_submissions) {
+      setFormError("The rubric and maximum score cannot be changed after a submission has been graded.");
+      return;
+    }
     if (
       rubricChanged &&
-      (currentClasswork.has_submissions || currentClasswork.has_graded_submissions)
+      currentClasswork.has_submissions
     ) {
       if (!rubricConfirmed) {
-        setRubricConfirmation(currentClasswork.has_graded_submissions ? "graded" : "submitted");
+        setRubricConfirmation("submitted");
         return;
       }
     }
@@ -590,7 +668,11 @@ export default function EditClassworkModal({
           throw new Error(msgs || "Validation error");
         }
         throw new Error(
-          typeof detail === "string" ? detail : "Unable to update classwork.",
+          typeof detail === "string"
+            ? detail
+            : detail && typeof detail === "object" && typeof detail.message === "string"
+              ? detail.message
+              : "Unable to update classwork.",
         );
       }
 
@@ -611,7 +693,7 @@ export default function EditClassworkModal({
                 : null,
               allow_late_submissions: editDraft.allow_late_submissions,
               max_attempts: isQuiz
-                ? attempts
+                ? Number(initialQuizConfiguration.max_attempts || attempts)
                 : null,
               is_published: publishValue,
             }),
@@ -633,6 +715,34 @@ export default function EditClassworkModal({
             typeof detail === "string"
               ? detail
               : "Unable to update assignment settings.",
+          );
+        }
+      }
+
+      if (quizConfigurationChanged) {
+        const configurationResponse = await apiFetch(
+          `/api/v1/quizzes/classwork/${currentClasswork.classwork_id}/configuration`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              duration_minutes: duration,
+              is_shuffle_questions: quizConfigurationDraft.is_shuffle_questions,
+              enable_per_question_scoring: quizConfigurationDraft.enable_per_question_scoring,
+              enable_per_question_time_limits: quizConfigurationDraft.enable_per_question_time_limits,
+              max_attempts: attempts,
+            }),
+          },
+        );
+        if (!configurationResponse.ok) {
+          const body = await configurationResponse.json().catch(() => ({}));
+          const detail = body.detail;
+          throw new Error(
+            typeof detail === "string"
+              ? detail
+              : detail && typeof detail.message === "string"
+                ? detail.message
+                : "Unable to update quiz configuration.",
           );
         }
       }
@@ -1093,11 +1203,20 @@ export default function EditClassworkModal({
 
                 {(editDraft.classwork_type === "ACTIVITY" ||
                   editDraft.classwork_type === "ASSIGNMENT") && (
-                    <ActivityRubricEditor
-                      levels={rubricLevels}
-                      onChange={setRubricLevels}
-                      disabled={isSavingEdit}
-                    />
+                    <div className="space-y-3">
+                      {currentClasswork.has_graded_submissions && (
+                        <Alert status="warning">
+                          <Alert.Description>
+                            This rubric is locked because a submission has already been graded. Existing scores keep their original denominator.
+                          </Alert.Description>
+                        </Alert>
+                      )}
+                      <ActivityRubricEditor
+                        levels={rubricLevels}
+                        onChange={setRubricLevels}
+                        disabled={isSavingEdit || Boolean(currentClasswork.has_graded_submissions)}
+                      />
+                    </div>
                   )}
               </div>
 
@@ -1183,12 +1302,64 @@ export default function EditClassworkModal({
                             max_attempts: event.target.value,
                           }))
                         }
-                        disabled={isSavingEdit}
+                        disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
                         className="w-full bg-white border-2 border-black rounded shadow-md"
                       />
                     </Field>
                   )}
                 </div>
+
+                {isQuizType(editDraft.classwork_type) && (
+                  <div className="space-y-3">
+                    {quizConfigurationDraft.has_attempts && (
+                      <Alert status="warning">
+                        <Alert.Description>
+                          Quiz duration, attempt limits, and question behavior are locked because a student has already started an attempt. Result-release settings remain editable.
+                        </Alert.Description>
+                      </Alert>
+                    )}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Duration (minutes)">
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={quizConfigurationDraft.duration_minutes}
+                          onChange={(event) => setQuizConfigurationDraft((current) => ({
+                            ...current,
+                            duration_minutes: event.target.value,
+                          }))}
+                          disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                          placeholder="No time limit"
+                          className="w-full bg-white border-2 border-black rounded shadow-md"
+                        />
+                      </Field>
+                    </div>
+                    <div className="space-y-2">
+                      <ClassworkSettingRow
+                        label="Shuffle questions"
+                        tooltip="Shows quiz questions in a different order for each attempt."
+                        checked={quizConfigurationDraft.is_shuffle_questions}
+                        onCheckedChange={(checked) => setQuizConfigurationDraft((current) => ({ ...current, is_shuffle_questions: checked }))}
+                        disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                      />
+                      <ClassworkSettingRow
+                        label="Per-question scoring"
+                        tooltip="Keeps each quiz question's configured point value."
+                        checked={quizConfigurationDraft.enable_per_question_scoring}
+                        onCheckedChange={(checked) => setQuizConfigurationDraft((current) => ({ ...current, enable_per_question_scoring: checked }))}
+                        disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                      />
+                      <ClassworkSettingRow
+                        label="Per-question time limits"
+                        tooltip="Uses the quiz's existing per-question timing behavior."
+                        checked={quizConfigurationDraft.enable_per_question_time_limits}
+                        onCheckedChange={(checked) => setQuizConfigurationDraft((current) => ({ ...current, enable_per_question_time_limits: checked }))}
+                        disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {isQuizType(editDraft.classwork_type) && (
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -1465,9 +1636,7 @@ export default function EditClassworkModal({
               </Text>
             </Dialog.Header>
             <div className="px-5 py-5 text-sm text-foreground">
-              {rubricConfirmation === "graded"
-                ? "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades."
-                : "This classwork already has student submissions. Rubric changes will apply when these submissions are graded."}
+              This classwork already has student submissions. Rubric changes will apply when these submissions are graded.
             </div>
             <Dialog.Footer className="mt-0">
               <RetroButton

@@ -80,6 +80,24 @@ vi.mock("@/lib/api", async (importOriginal) => {
           json: () => Promise.resolve(sampleLesson),
         });
       }
+      if (url.includes("/api/v1/quizzes/classwork/")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            duration_minutes: 30,
+            has_attempts: false,
+            settings: {
+              is_shuffle_questions: true,
+              enable_per_question_scoring: true,
+              enable_per_question_time_limits: false,
+              max_attempts: 2,
+              show_correct_answers: true,
+              summary_release_mode: "IMMEDIATE",
+              summary_release_at: null,
+            },
+          }),
+        });
+      }
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     }),
   };
@@ -257,5 +275,47 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     // Rendered for Assignment
     expect(screen.getByText("Reference Links")).toBeDefined();
     expect(screen.getByText(/Add Reference Link/i)).toBeDefined();
+  });
+
+  it("restores editable quiz creation settings before attempts", async () => {
+    const quizClasswork: TeacherClasswork = {
+      classwork_id: 12,
+      title: "Editable Quiz",
+      classwork_type: "QUIZ",
+      total_points: 20,
+      is_published: true,
+      show_scores: true,
+      is_locked: false,
+      is_archived: false,
+      subject_id: 10,
+      attachments: [],
+      reference_links: [],
+      assignments: [{
+        classwork_assignment_id: 1,
+        classwork_id: 12,
+        class_id: 100,
+        max_attempts: 1,
+        is_published: true,
+        show_scores: true,
+      }],
+    };
+
+    render(
+      <MemoryRouter>
+        <EditClassworkModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classwork={quizClasswork}
+          onSuccess={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    const duration = await screen.findByLabelText("Duration (minutes)") as HTMLInputElement;
+    const attempts = screen.getByLabelText("Allowed Attempts") as HTMLInputElement;
+    expect(duration.value).toBe("30");
+    expect(attempts.value).toBe("2");
+    expect(screen.getByRole("switch", { name: "Shuffle questions" }).getAttribute("aria-checked")).toBe("true");
+    expect(duration.disabled).toBe(false);
   });
 });

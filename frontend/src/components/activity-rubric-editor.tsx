@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BookOpen } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { RubricTemplateDialog } from "@/components/rubric-template-dialog";
+import { RubricLevelFields } from "@/components/rubric-level-fields";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import { activityRubricMaximum } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
@@ -31,6 +32,7 @@ export function ActivityRubricEditor({ levels, onChange, disabled }: Props) {
         totalPoints={activityRubricMaximum(levels)}
         rubricLevels={levels}
       />
+      <RubricLevelFields levels={levels} onChange={onChange} disabled={disabled} />
       {dialogMode && (
         <RubricTemplateDialog
           key={dialogMode}

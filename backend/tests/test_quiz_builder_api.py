@@ -373,6 +373,68 @@ def test_quiz_builder_blocks_edits_and_delete_after_attempt_exists(quiz_api_cont
     assert delete_response.status_code == 409
 
 
+def test_teacher_can_update_quiz_configuration_before_attempts(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    assert c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}",
+        json=_valid_payload(c["lesson"].lesson_id),
+    ).status_code == 200
+
+    response = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/configuration",
+        json={
+            "duration_minutes": 45,
+            "is_shuffle_questions": False,
+            "enable_per_question_scoring": True,
+            "enable_per_question_time_limits": True,
+            "max_attempts": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "classwork_id": classwork_id,
+        "duration_minutes": 45,
+        "is_shuffle_questions": False,
+        "enable_per_question_scoring": True,
+        "enable_per_question_time_limits": True,
+        "max_attempts": 3,
+        "has_attempts": False,
+    }
+    c["db"].refresh(c["assignment"])
+    assert c["assignment"].max_attempts == 3
+
+
+def test_quiz_configuration_is_locked_after_attempt_starts(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    assert c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}",
+        json=_valid_payload(c["lesson"].lesson_id),
+    ).status_code == 200
+    c["db"].add(StudentSubmission(
+        student_id=c["student"].student_id,
+        classwork_assignment_id=c["assignment"].classwork_assignment_id,
+        status="pending",
+    ))
+    c["db"].commit()
+
+    response = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/configuration",
+        json={
+            "duration_minutes": 45,
+            "is_shuffle_questions": False,
+            "enable_per_question_scoring": True,
+            "enable_per_question_time_limits": True,
+            "max_attempts": 3,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "QUIZ_CONFIGURATION_LOCKED_AFTER_ATTEMPT"
+
+
 def test_quiz_results_settings_update_both_visibility_fields_after_attempt_exists(quiz_api_context):
     c = quiz_api_context
     classwork_id = c["quiz_classwork"].classwork_id
