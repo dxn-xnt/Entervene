@@ -91,29 +91,18 @@ async def generate_practice_questions_ai(
     }
     approved_rids.update(prereq_rids)
 
-    if not approved_rids:
+    # Unsaved selections are valid generation inputs. The context resolver below
+    # still enforces the intervention subject/class/period reading scope.
+    selected_rids = (
+        list(payload.reading_classwork_ids)
+        if payload.reading_classwork_ids is not None
+        else list(approved_rids)
+    )
+    if not selected_rids:
         raise HTTPException(
             status_code=422,
-            detail=(
-                "No readable reading materials found for this intervention. "
-                "No approved reading materials are assigned to this intervention. "
-                "Please select and save supporting reading materials in the intervention before generating practice questions."
-            ),
+            detail="Select supporting reading materials before generating practice questions.",
         )
-
-    if payload.reading_classwork_ids is not None:
-        unapproved = [cid for cid in payload.reading_classwork_ids if cid not in approved_rids]
-        if unapproved:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"Reading classwork ID(s) {unapproved} are not approved supporting materials for this intervention. "
-                    "Questions can only be generated from reading materials saved in the intervention plan."
-                ),
-            )
-        selected_rids = list(payload.reading_classwork_ids)
-    else:
-        selected_rids = list(approved_rids)
 
     # 3. Extract reading materials context
     context = resolve_remediation_material_context(

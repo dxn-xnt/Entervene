@@ -4,8 +4,10 @@ import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Input } from "@/components/retroui/Input";
+import { Tabs } from "@/components/retroui/Tabs";
 import { Label } from "@/components/retroui/Label";
 import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
 import { useToast } from "@/components/retroui/Toast";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import {
@@ -13,6 +15,7 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
+  ArrowLeft,
   Sparkles,
   Upload,
   CheckCircle2,
@@ -20,7 +23,6 @@ import {
   Lock,
   FileQuestion,
   Loader2,
-  BookOpen,
   History,
 } from "lucide-react";
 import {
@@ -47,7 +49,6 @@ interface PracticeAssessmentModalProps {
   studentName?: string;
   selectedReadingIds?: number[];
   savedReadingIds?: number[];
-  hasUnsavedReadingChanges?: boolean;
   onAssessmentUpdated?: (assessment: PracticeAssessmentDetail | null) => void;
 }
 
@@ -81,15 +82,14 @@ export default function PracticeAssessmentModal({
   onClose,
   interventionId,
   studentName,
-  selectedReadingIds = [],
+  selectedReadingIds,
   savedReadingIds,
-  hasUnsavedReadingChanges = false,
   onAssessmentUpdated,
 }: PracticeAssessmentModalProps) {
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const effectiveApprovedReadings = savedReadingIds !== undefined ? savedReadingIds : selectedReadingIds;
+  const effectiveApprovedReadings = selectedReadingIds ?? savedReadingIds ?? [];
 
   // Assessment Config State
   const [assessment, setAssessment] = useState<PracticeAssessmentDetail | null>(null);
@@ -321,19 +321,10 @@ export default function PracticeAssessmentModal({
     setAiError(null);
     setErrorMessage(null);
 
-    // Guard against unsaved reading selection in intervention workspace
-    if (hasUnsavedReadingChanges) {
-      setAiError(
-        "You have unsaved changes to your supporting reading materials in the intervention plan. Save the intervention plan first so questions are grounded in approved materials."
-      );
-      setIsAiGenerating(false);
-      return;
-    }
-
     // Validate approved reading selection
     if (!effectiveApprovedReadings || effectiveApprovedReadings.length === 0) {
       setAiError(
-        "No approved supporting reading materials are currently saved for this intervention. Please select and save reading materials under Supporting Resources before generating practice questions with AI."
+        "Select supporting reading materials before generating practice questions with AI."
       );
       setIsAiGenerating(false);
       return;
@@ -522,38 +513,25 @@ export default function PracticeAssessmentModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Content size="3xl" className="max-h-[90vh] flex flex-col p-0 overflow-hidden">
         {/* Header */}
-        <Dialog.Header className="px-5 py-4 border-b-2 border-border">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <Dialog.Title className="text-xl font-black">
-                Practice Assessment
-              </Dialog.Title>
-              <Dialog.Description className="text-sm text-muted-foreground">
-                Ungraded assessment completed before remediation
-                {studentName ? ` · Student: ${studentName}` : ""}
-              </Dialog.Description>
-            </div>
-            <div className="flex items-center gap-2">
-              {assessment && (
-                <Badge
-                  variant={
-                    assessment.status === "PUBLISHED"
-                      ? "solid"
-                      : assessment.status === "ARCHIVED"
-                        ? "outline"
-                        : "surface"
-                  }
-                  size="md"
-                >
-                  {assessment.status}
-                </Badge>
-              )}
-            </div>
-          </div>
+        <Dialog.Header asChild className="px-5 py-4 border-b-2 border-border">
+          <Dialog.Title className="text-xl font-black">
+            Practice Assessment
+          </Dialog.Title>
         </Dialog.Header>
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <Dialog.Description className="min-w-0 flex-1 text-sm text-muted-foreground">
+              Ungraded assessment completed before remediation
+              {studentName ? ` ? Student: ${studentName}` : ""}
+            </Dialog.Description>
+            {assessment && (
+              <Badge variant="solid" size="sm" className="shrink-0">
+                {assessment.status}
+              </Badge>
+            )}
+          </div>
           {isLoading ? (
             <div className="flex items-center justify-center p-12">
               <Loader2 className="size-8 animate-spin text-primary" />
@@ -573,9 +551,9 @@ export default function PracticeAssessmentModal({
                 <div className="rounded border-2 border-amber-600 bg-amber-100 p-4 text-amber-950 shadow-xs">
                   <div className="flex items-start gap-3">
                     <Lock className="size-5 text-amber-800 shrink-0 mt-0.5" />
-                    <div className="space-y-1">
+                    <div className="flex flex-col gap-1.5">
                       <h5 className="text-amber-950 font-black text-sm">Questions Locked</h5>
-                      <p className="text-amber-900 text-xs sm:text-sm font-medium leading-relaxed">
+                      <p className="text-amber-900 text-sm sm:text-sm font-medium leading-relaxed">
                         Student attempts already exist for this Practice Assessment. Question content is permanently locked
                         to preserve attempt and feedback snapshot integrity. You can still adjust the title, passing percentage,
                         and progression policy.
@@ -586,17 +564,18 @@ export default function PracticeAssessmentModal({
               )}
 
               {/* General Settings Card */}
-              <Card className="flex flex-col gap-4 border-2 border-border p-4">
+              <Card className="w-full shadow-none! flex flex-col gap-4 border-2 border-border p-4">
                 <h4 className="font-bold text-base">Configuration & Policies</h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Title */}
-                  <div className="space-y-1.5">
+                  <div className="flex min-w-0 flex-col gap-1.5">
                     <Label htmlFor="practice-title" className="text-sm font-semibold">
                       Assessment Title
                     </Label>
                     <Input
                       id="practice-title"
+                      className="w-full"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       placeholder="Practice Assessment"
@@ -604,15 +583,16 @@ export default function PracticeAssessmentModal({
                   </div>
 
                   {/* Passing Percentage */}
-                  <div className="space-y-1.5">
+                  <div className="flex min-w-0 flex-col gap-1.5">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="practice-passing-percent" className="text-sm font-semibold">
                         Passing Percentage (0–100%)
                       </Label>
-                      <span className="text-xs font-mono font-bold text-muted-foreground">{passingPercentage}%</span>
+                      <span className="text-sm font-mono font-bold text-muted-foreground">{passingPercentage}%</span>
                     </div>
                     <Input
                       id="practice-passing-percent"
+                      className="w-full"
                       type="number"
                       min={0}
                       max={100}
@@ -638,7 +618,7 @@ export default function PracticeAssessmentModal({
                         <div
                           key={policy.value}
                           onClick={() => setGatekeeperPolicy(policy.value)}
-                          className={`cursor-pointer rounded border-2 p-3 transition-colors ${isSelected
+                          className={`cursor-pointer rounded! border-2 p-3 transition-colors ${isSelected
                             ? "border-primary bg-primary/10"
                             : "border-border hover:bg-muted/40"
                             }`}
@@ -647,7 +627,7 @@ export default function PracticeAssessmentModal({
                             <span className="font-bold text-sm">{policy.title}</span>
                             {isSelected && <CheckCircle2 className="size-4 text-primary" />}
                           </div>
-                          <p className="mt-1 text-xs text-muted-foreground">{policy.description}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{policy.description}</p>
                         </div>
                       );
                     })}
@@ -656,56 +636,43 @@ export default function PracticeAssessmentModal({
               </Card>
 
               {/* Navigation Tabs (Questions vs Attempts) */}
-              <div className="flex border-b-2 border-border gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("questions")}
-                  className={`pb-2 px-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "questions"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                  Questions ({questions.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("attempts")}
-                  className={`pb-2 px-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "attempts"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                  Student Attempts ({attempts.length})
-                </button>
-              </div>
+              <Tabs
+                tabs={[{ id: "questions", label: "Questions" }, { id: "attempts", label: "Student Attempts" }]}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                counts={{ questions: questions.length, attempts: attempts.length }}
+                className="-mx-5!"
+                listClassName="px-5!"
+                tabClassName="rounded-t-lg!"
+              />
 
               {/* TAB 1: Questions Management */}
               {activeTab === "questions" && (
                 <div className="space-y-4">
                   {/* Authoring Actions Bar */}
                   {!isLocked && (
-                    <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 p-3 rounded border-2 border-border">
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 p-3 rounded! border-2 border-border">
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleAddQuestion("MULTIPLE_CHOICE")}
                         >
-                          <Plus className="size-3.5 mr-1" /> Add Multiple Choice
+                          <Plus className="size-3.5 " /> Add Multiple Choice
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleAddQuestion("TRUE_FALSE")}
                         >
-                          <Plus className="size-3.5 mr-1" /> Add True / False
+                          <Plus className="size-3.5 " /> Add True / False
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleAddQuestion("IDENTIFICATION")}
                         >
-                          <Plus className="size-3.5 mr-1" /> Add Identification
+                          <Plus className="size-3.5 " /> Add Identification
                         </Button>
                       </div>
 
@@ -724,9 +691,9 @@ export default function PracticeAssessmentModal({
                           onClick={() => fileInputRef.current?.click()}
                         >
                           {isImporting ? (
-                            <Loader2 className="size-3.5 mr-1 animate-spin" />
+                            <Loader2 className="size-3.5  animate-spin" />
                           ) : (
-                            <Upload className="size-3.5 mr-1" />
+                            <Upload className="size-3.5 " />
                           )}
                           Import (.docx, .pdf, .txt)
                         </Button>
@@ -736,7 +703,7 @@ export default function PracticeAssessmentModal({
                           variant="default"
                           onClick={() => setShowAiDrawer(!showAiDrawer)}
                         >
-                          <Sparkles className="size-3.5 mr-1" /> Generate with AI
+                          <Sparkles className="size-3.5 " /> Generate with AI
                         </Button>
                       </div>
                     </div>
@@ -748,7 +715,7 @@ export default function PracticeAssessmentModal({
                       <AlertTriangle className="size-4 text-amber-600" />
                       <Alert.Title className="text-amber-900 font-bold">Import Warnings</Alert.Title>
                       <Alert.Description>
-                        <ul className="list-disc pl-4 text-xs space-y-1 text-amber-800">
+                        <ul className="list-disc pl-4 text-sm space-y-1 text-amber-800">
                           {importWarnings.map((w, idx) => (
                             <li key={idx}>{w}</li>
                           ))}
@@ -759,10 +726,9 @@ export default function PracticeAssessmentModal({
 
                   {/* AI Generation Drawer */}
                   {showAiDrawer && (
-                    <Card className="border-2 border-primary bg-primary/5 p-4 space-y-3">
+                    <Card className="w-full shadow-none! w-full rounded! border-2 border-border bg-card p-4 space-y-4 shadow-none!">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <Sparkles className="size-4 text-primary" />
                           <h4 className="font-bold text-sm">AI Practice Question Generation</h4>
                         </div>
                         <Badge variant="surface" size="sm">
@@ -770,64 +736,44 @@ export default function PracticeAssessmentModal({
                         </Badge>
                       </div>
 
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         Generates multiple-choice practice questions grounded strictly in the selected reading materials
                         for this intervention.
                       </p>
 
-                      <div className="flex items-center gap-2 text-xs">
-                        <BookOpen className="size-4 text-primary" />
+                      <div className="flex items-center gap-2 text-sm">
                         <span>
                           Source Readings:{" "}
-                          <strong>{effectiveApprovedReadings.length} approved material(s) saved</strong>
+                          <strong>{effectiveApprovedReadings.length} material(s) selected</strong>
                         </span>
                       </div>
 
-                      {hasUnsavedReadingChanges && (
-                        <Alert status="warning" className="border-2 border-amber-400 bg-amber-50">
-                          <AlertTriangle className="size-4 text-amber-600" />
-                          <Alert.Title className="text-amber-900 font-bold text-xs">Unsaved Reading Selections</Alert.Title>
-                          <Alert.Description className="text-xs text-amber-800">
-                            You have unsaved changes to your supporting reading materials in the intervention plan.
-                            Please save the intervention plan first before generating practice questions with AI.
-                          </Alert.Description>
-                        </Alert>
-                      )}
-
-                      {!hasUnsavedReadingChanges && effectiveApprovedReadings.length === 0 && (
-                        <Alert status="info" className="border">
-                          <AlertTriangle className="size-4" />
-                          <Alert.Title className="font-bold text-xs">No Saved Reading Materials</Alert.Title>
-                          <Alert.Description className="text-xs">
-                            No approved supporting reading materials are currently saved for this intervention.
-                            Please select and save reading materials under Supporting Resources before generating practice questions.
-                          </Alert.Description>
-                        </Alert>
+                      {effectiveApprovedReadings.length === 0 && (
+                        <p className="text-sm text-muted-foreground">Select supporting reading materials to generate practice questions.</p>
                       )}
 
                       {aiError && (
-                        <Alert status="error" className="border">
-                          <AlertTriangle className="size-3.5" />
-                          <Alert.Description className="text-xs">{aiError}</Alert.Description>
-                        </Alert>
+                        <FormMessage aria-live="assertive">{aiError}</FormMessage>
                       )}
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs font-semibold">Target Questions Count</Label>
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="practice-ai-count" className="text-sm font-semibold">Target Questions Count</Label>
                           <Input
                             type="number"
                             min={1}
                             max={20}
+                            id="practice-ai-count"
                             value={aiTargetCount}
                             onChange={(e) =>
                               setAiTargetCount(Math.max(1, Math.min(20, Number(e.target.value) || 1)))
                             }
                           />
                         </div>
-                        <div className="sm:col-span-2 space-y-1">
-                          <Label className="text-xs font-semibold">Focus / Teacher Guidance (Optional)</Label>
+                        <div className="sm:col-span-2 flex flex-col gap-1.5">
+                          <Label htmlFor="practice-ai-guidance" className="text-sm font-semibold">Focus / Teacher Guidance (Optional)</Label>
                           <Input
+                            id="practice-ai-guidance"
                             value={aiGuidance}
                             onChange={(e) => setAiGuidance(e.target.value)}
                             placeholder="e.g. Focus on definitions and key formulas"
@@ -849,18 +795,17 @@ export default function PracticeAssessmentModal({
                           variant="default"
                           disabled={
                             isAiGenerating ||
-                            hasUnsavedReadingChanges ||
                             effectiveApprovedReadings.length === 0
                           }
                           onClick={handleGenerateAI}
                         >
                           {isAiGenerating ? (
                             <>
-                              <Loader2 className="size-3.5 mr-1.5 animate-spin" /> Generating...
+                              <Loader2 className="size-3.5  animate-spin" /> Generating...
                             </>
                           ) : (
                             <>
-                              <Sparkles className="size-3.5 mr-1.5" /> Generate Questions
+                              <Sparkles className="size-3.5 " /> Generate Questions
                             </>
                           )}
                         </Button>
@@ -881,7 +826,7 @@ export default function PracticeAssessmentModal({
                       {questions.map((q, qIdx) => (
                         <Card
                           key={qIdx}
-                          className="border-2 border-border p-4 space-y-3 relative group"
+                          className="w-full shadow-none! border-2 border-border p-4 space-y-3 relative group"
                         >
                           {/* Question Card Header */}
                           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
@@ -896,7 +841,7 @@ export default function PracticeAssessmentModal({
                               </Badge>
                               {q.is_ai_generated && (
                                 <Badge variant="surface" size="sm">
-                                  <Sparkles className="size-3 mr-1" /> AI Generated
+                                  <Sparkles className="size-3 " /> AI Generated
                                 </Badge>
                               )}
                             </div>
@@ -937,7 +882,7 @@ export default function PracticeAssessmentModal({
                           {/* Question Text & Points */}
                           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             <div className="sm:col-span-3 space-y-1">
-                              <Label className="text-xs font-semibold">Question Text</Label>
+                              <Label className="text-sm font-semibold">Question Text</Label>
                               <textarea
                                 disabled={isLocked}
                                 value={q.question_text}
@@ -949,8 +894,8 @@ export default function PracticeAssessmentModal({
                                 className="w-full rounded border-2 border-border bg-background p-2.5 text-sm transition focus:outline-hidden focus:border-black min-h-20 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs font-semibold">Points</Label>
+                            <div className="flex flex-col gap-1.5">
+                              <Label className="text-sm font-semibold">Points</Label>
                               <Input
                                 type="number"
                                 min={0.5}
@@ -969,14 +914,14 @@ export default function PracticeAssessmentModal({
 
                           {/* Options / Answer Keys */}
                           <div className="space-y-2 pt-1">
-                            <Label className="text-xs font-semibold">
+                            <Label className="text-sm font-semibold">
                               {q.question_type === "IDENTIFICATION"
                                 ? "Accepted Answer Key (Exact Match)"
                                 : "Answer Options (Select the correct answer)"}
                             </Label>
 
                             {q.question_type === "IDENTIFICATION" ? (
-                              <div className="space-y-1">
+                              <div className="flex flex-col gap-1.5">
                                 <Input
                                   disabled={isLocked}
                                   value={q.options[0]?.option_text || ""}
@@ -985,7 +930,7 @@ export default function PracticeAssessmentModal({
                                   className="disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default font-mono text-sm"
                                 />
                                 {isLocked && (
-                                  <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                                  <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1">
                                     <CheckCircle2 className="size-3.5" /> Accepted student answer key
                                   </p>
                                 )}
@@ -1006,7 +951,7 @@ export default function PracticeAssessmentModal({
                                     {opt.is_correct && (
                                       <div className="flex items-center gap-1 text-emerald-700">
                                         <CheckCircle2 className="size-4" />
-                                        <span className="text-xs font-bold uppercase tracking-wider">Correct</span>
+                                        <span className="text-sm font-bold uppercase tracking-wider">Correct</span>
                                       </div>
                                     )}
                                   </div>
@@ -1066,9 +1011,9 @@ export default function PracticeAssessmentModal({
                                     size="sm"
                                     variant="ghost"
                                     onClick={() => handleAddOption(qIdx)}
-                                    className="text-xs"
+                                    className="text-sm"
                                   >
-                                    <Plus className="size-3 mr-1" /> Add Option
+                                    <Plus className="size-3 " /> Add Option
                                   </Button>
                                 )}
                               </div>
@@ -1077,7 +1022,7 @@ export default function PracticeAssessmentModal({
 
                           {/* Explanation */}
                           <div className="space-y-1 pt-1">
-                            <Label className="text-xs font-semibold text-muted-foreground">
+                            <Label className="text-sm font-semibold text-muted-foreground">
                               Explanation / Rationale (Shown after submission)
                             </Label>
                             <textarea
@@ -1118,7 +1063,7 @@ export default function PracticeAssessmentModal({
                             key={att.attempt_id}
                             className="border-2 border-border p-3 flex flex-wrap items-center justify-between gap-3"
                           >
-                            <div className="space-y-1">
+                            <div className="flex flex-col gap-1.5">
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-sm">Attempt #{att.attempt_number}</span>
                                 {isSubmitted ? (
@@ -1138,7 +1083,7 @@ export default function PracticeAssessmentModal({
                                   </Badge>
                                 )}
                               </div>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-sm text-muted-foreground">
                                 Started: {new Date(att.started_at).toLocaleString("en-PH")}
                                 {isSubmitted && att.completed_at
                                   ? ` · Submitted: ${new Date(att.completed_at).toLocaleString("en-PH")}`
@@ -1150,16 +1095,16 @@ export default function PracticeAssessmentModal({
                               {isSubmitted ? (
                                 <>
                                   <div className="text-lg font-black">{Number(att.score_percentage).toFixed(1)}%</div>
-                                  <div className="text-xs text-muted-foreground">
+                                  <div className="text-sm text-muted-foreground">
                                     {Number(att.total_score).toFixed(1)} / {Number(att.max_score).toFixed(1)} pts
                                   </div>
                                 </>
                               ) : isStarted ? (
-                                <div className="text-xs font-semibold text-muted-foreground italic">
+                                <div className="text-sm font-semibold text-muted-foreground italic">
                                   Draft In Progress
                                 </div>
                               ) : (
-                                <div className="text-xs font-semibold text-muted-foreground">
+                                <div className="text-sm font-semibold text-muted-foreground">
                                   {att.status}
                                 </div>
                               )}
@@ -1176,11 +1121,17 @@ export default function PracticeAssessmentModal({
         </div>
 
         {/* Footer Actions */}
-        <Dialog.Footer className="px-5 py-3 border-t-2 border-border flex flex-wrap items-center justify-between gap-2 bg-muted/20">
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Close
+        <Dialog.Footer className="px-5 py-3 border-t-2 border-border flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="mr-auto"
+            disabled={isSaving || isPublishing || isArchiving}
+            onClick={onClose}
+          >
+            <ArrowLeft className="size-4" />
+            Back
           </Button>
-
           <div className="flex flex-wrap items-center gap-2">
             {assessment && assessment.status === "PUBLISHED" && (
               <Button
@@ -1190,7 +1141,7 @@ export default function PracticeAssessmentModal({
                 onClick={handleArchive}
                 className="text-muted-foreground hover:text-foreground"
               >
-                {isArchiving ? <Loader2 className="size-3.5 mr-1.5 animate-spin" /> : null}
+                {isArchiving ? <Loader2 className="size-3.5  animate-spin" /> : null}
                 Archive
               </Button>
             )}
@@ -1201,7 +1152,7 @@ export default function PracticeAssessmentModal({
               disabled={isSaving || isPublishing || isArchiving}
               onClick={handleSaveDraft}
             >
-              {isSaving ? <Loader2 className="size-3.5 mr-1.5 animate-spin" /> : null}
+              {isSaving ? <Loader2 className="size-3.5  animate-spin" /> : null}
               Save Draft
             </Button>
 
@@ -1211,7 +1162,7 @@ export default function PracticeAssessmentModal({
               disabled={isPublishing || isSaving || isArchiving || questions.length === 0}
               onClick={handlePublish}
             >
-              {isPublishing ? <Loader2 className="size-3.5 mr-1.5 animate-spin" /> : null}
+              {isPublishing ? <Loader2 className="size-3.5  animate-spin" /> : null}
               {assessment?.status === "PUBLISHED" ? "Re-publish" : "Publish Assessment"}
             </Button>
           </div>

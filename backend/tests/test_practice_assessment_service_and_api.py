@@ -831,9 +831,10 @@ class TestAdapters:
                 )
             )
         assert exc.value.status_code == 422
-        assert "No readable reading materials found" in exc.value.detail
+        assert "Select supporting reading materials" in exc.value.detail
 
-    def test_ai_generation_success_with_readings(self, db_env):
+    @pytest.mark.parametrize("saved_in_plan", [True, False])
+    def test_ai_generation_success_with_readings(self, db_env, saved_in_plan):
         db = db_env["db"]
         staff_id = db_env["staff"].staff_id
         intervention_id = db_env["intervention"].intervention_id
@@ -863,7 +864,7 @@ class TestAdapters:
         )
         db.add(cw_assign)
         db_env["intervention"].remediation_plan = {
-            "selected_resources": [{"kind": "CLASSWORK", "id": cw.classwork_id}]
+            "selected_resources": [{"kind": "CLASSWORK", "id": cw.classwork_id}] if saved_in_plan else []
         }
         db.commit()
 
@@ -891,7 +892,7 @@ class TestAdapters:
             preview = asyncio.run(
                 PracticeAssessmentAIService.generate_practice_questions_ai(
                     db, staff_id, intervention_id,
-                    AIGeneratePracticeQuestionsRequest(target_count=1),
+                    AIGeneratePracticeQuestionsRequest(target_count=1, reading_classwork_ids=[cw.classwork_id]),
                 )
             )
 
@@ -901,7 +902,7 @@ class TestAdapters:
         assert len(preview[0].options) == 4
         assert any(o.is_correct for o in preview[0].options)
 
-    def test_ai_generation_rejects_unapproved_reading_ids(self, db_env):
+    def test_ai_generation_rejects_out_of_scope_reading_ids(self, db_env):
         db = db_env["db"]
         staff_id = db_env["staff"].staff_id
         intervention_id = db_env["intervention"].intervention_id
@@ -923,10 +924,10 @@ class TestAdapters:
             subject_id=subj.subject_id,
             created_by_staff_id=staff_id,
             classwork_type="READING",
-            title="Unapproved Class Reading",
+            title="Archived Reading",
             description="Content of unapproved reading",
             instructions="Read this.",
-            is_archived=False,
+            is_archived=True,
             is_graded=False,
         )
         db.add_all([cw1, cw2])
@@ -960,7 +961,7 @@ class TestAdapters:
                 )
             )
         assert exc.value.status_code == 422
-        assert "not approved supporting materials" in exc.value.detail
+        assert "outside the intervention subject/class scope" in exc.value.detail
 
     def test_quiz_import_adapter_allowed_types(self):
         mock_parsed_preview = QuizImportPreviewResponse(

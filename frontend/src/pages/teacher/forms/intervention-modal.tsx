@@ -159,6 +159,7 @@ export interface InterventionModalProps {
   onActivate: () => void | Promise<void>;
   previousResolved?: TeacherInterventionSummary;
   newerActive?: TeacherInterventionSummary;
+  startSetup?: boolean;
 }
 
 export default function InterventionModal({
@@ -174,16 +175,20 @@ export default function InterventionModal({
   onActivate,
   previousResolved,
   newerActive,
+  startSetup = false,
 }: InterventionModalProps) {
   const [supportPage, setSupportPage] = useState<"overview" | "plan">("overview");
   const [savingAdjustments, setSavingAdjustments] = useState(false);
   const [supportHasChanges, setSupportHasChanges] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const contentRef = useRef<HTMLDivElement>(null);
   const supportMaterialsRef = useRef<InterventionSupportMaterialsHandle>(null);
   const interventionId = detail?.intervention_id;
 
   useEffect(() => {
-    setSupportPage("overview");
-  }, [isOpen, interventionId]);
+    setSupportPage(startSetup && selectedKind === "active" ? "plan" : "overview");
+    setWizardStep(1);
+  }, [isOpen, interventionId, startSetup, selectedKind]);
 
   const isActive = selectedKind === "active" && detail?.status === "ACTIVE";
   const activationExplanation = detail ? candidateActivationExplanation(detail) : null;
@@ -194,7 +199,7 @@ export default function InterventionModal({
         size="2xl"
         className="max-h-[90vh] flex flex-col p-0 overflow-hidden"
       >
-        <Dialog.Header className="">
+        <Dialog.Header asChild={isActive && supportPage === "plan"}>
           <Dialog.Title className="text-xl font-bold">
             {selectedKind === "resolved"
               ? "Resolved Intervention"
@@ -204,9 +209,12 @@ export default function InterventionModal({
                   : "Active Intervention"
                 : "Candidate Review"}
           </Dialog.Title>
+          {isActive && supportPage === "plan" && (
+            <span className="ml-auto text-base font-semibold">Step {wizardStep} of 5</span>
+          )}
         </Dialog.Header>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div ref={contentRef} className="flex-1 overflow-y-auto p-5 space-y-5">
           {detailLoading ? (
             <div
               aria-label={
@@ -395,6 +403,7 @@ export default function InterventionModal({
                     ref={supportMaterialsRef}
                     key={detail.intervention_id}
                     page={supportPage}
+                    wizardStep={supportPage === "plan" ? wizardStep : undefined}
                     detail={detail}
                     previousResolved={previousResolved}
                     onAdjustSupport={() => setSupportPage("plan")}
@@ -419,7 +428,7 @@ export default function InterventionModal({
                           <div className="flex flex-row justify-between w-full items-end">
                             <h2 className="text-xl font-black -mb-1">{detail.student_name}</h2>
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="solid" size="md">
+                              <Badge variant="solid" size="sm">
                                 Candidate
                               </Badge>
                               <Badge
@@ -564,17 +573,17 @@ export default function InterventionModal({
                             <h3 className="text-base font-bold">
                               Scored competency evidence
                             </h3>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                               Ranked only when a competency has its own traceable scored evidence.
                             </p>
                             <div className="space-y-2">
                               {detail.diagnosis_snapshot.lowest_supported_competencies?.map((item) => (
-                                <Card key={item.competency_id} className="space-y-2 p-3">
+                                <Card key={item.competency_id} className="w-full space-y-3 p-4 shadow-none!">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
                                       <span className="font-semibold text-sm">{item.competency_statement}</span>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex shrink-0 items-center gap-2">
                                       <Badge variant="surface" size="sm">
                                         {item.score}/{item.possible_score}
                                       </Badge>
@@ -589,19 +598,19 @@ export default function InterventionModal({
                                   {item.supporting_scores.map((score, index) => (
                                     <div
                                       key={`${score.quiz_question_id ?? score.source_type}-${index}`}
-                                      className="text-xs text-muted-foreground flex flex-wrap gap-1.5 pt-1.5"
+                                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded! border border-border p-3 text-sm"
                                     >
                                       <Badge variant="solid" size="sm">
                                         {score.source_type === "QUIZ_QUESTION"
                                           ? `Question #${score.quiz_question_id ?? "unknown"}`
                                           : "Activity score"}
                                       </Badge>
-                                      <span>
+                                      <span className="min-w-0 break-words text-muted-foreground">
                                         {score.activity_title}
                                         {score.lesson_title ? ` · ${score.lesson_title}` : ""}
                                       </span>
                                       {score.score != null && score.possible_score != null && (
-                                        <span className="font-semibold">
+                                        <span className="whitespace-nowrap font-semibold tabular-nums">
                                           {score.score}/{score.possible_score}
                                         </span>
                                       )}
@@ -685,17 +694,33 @@ export default function InterventionModal({
         <Dialog.Footer className="mt-0">
           <Button
             variant="outline"
+            className="mr-auto"
             onClick={onClose}
             disabled={activating || savingAdjustments}
           >
-            Close
+            {isActive && supportPage === "plan" ? "Cancel" : "Close"}
           </Button>
+          {isActive && supportPage === "plan" && wizardStep > 1 && (
+            <Button variant="outline" disabled={savingAdjustments} onClick={() => {
+              setWizardStep((step) => step - 1);
+              contentRef.current?.scrollTo({ top: 0 });
+            }}>Back</Button>
+          )}
           {isActive && (
             <Button
               variant={supportPage === "plan" ? "outline" : "default"}
-              disabled={activating || savingAdjustments || (supportPage === "plan" && !supportHasChanges)}
+              disabled={activating || savingAdjustments || (supportPage === "plan" && wizardStep === 5 && !supportHasChanges)}
               onClick={async () => {
                 if (supportPage === "plan") {
+                  if (!supportMaterialsRef.current?.validateStep(wizardStep)) {
+                    contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+                    return;
+                  }
+                  if (wizardStep < 5) {
+                    setWizardStep((step) => step + 1);
+                    contentRef.current?.scrollTo({ top: 0 });
+                    return;
+                  }
                   if (supportMaterialsRef.current) {
                     setSavingAdjustments(true);
                     try {
@@ -710,6 +735,7 @@ export default function InterventionModal({
                     setSupportPage("overview");
                   }
                 } else {
+                  setWizardStep(1);
                   setSupportPage("plan");
                 }
               }}
@@ -717,7 +743,7 @@ export default function InterventionModal({
               {supportPage === "plan" ? (
                 savingAdjustments ? (
                   "Saving adjustments..."
-                ) : (
+                ) : wizardStep < 5 ? "Next" : (
                   <>
                     <Save className="size-4 mr-1.5" />
                     Save Adjustments
@@ -738,7 +764,7 @@ export default function InterventionModal({
             >
               {activating
                 ? "Checking and approving..."
-                : "Approve Intervention"}
+                : "Proceed"}
             </Button>
           )}
         </Dialog.Footer>
