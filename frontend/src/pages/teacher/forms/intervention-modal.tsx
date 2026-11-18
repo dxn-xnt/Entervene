@@ -159,6 +159,7 @@ export interface InterventionModalProps {
   onActivate: () => void | Promise<void>;
   previousResolved?: TeacherInterventionSummary;
   newerActive?: TeacherInterventionSummary;
+  startSetup?: boolean;
 }
 
 export default function InterventionModal({
@@ -174,16 +175,20 @@ export default function InterventionModal({
   onActivate,
   previousResolved,
   newerActive,
+  startSetup = false,
 }: InterventionModalProps) {
   const [supportPage, setSupportPage] = useState<"overview" | "plan">("overview");
   const [savingAdjustments, setSavingAdjustments] = useState(false);
   const [supportHasChanges, setSupportHasChanges] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const contentRef = useRef<HTMLDivElement>(null);
   const supportMaterialsRef = useRef<InterventionSupportMaterialsHandle>(null);
   const interventionId = detail?.intervention_id;
 
   useEffect(() => {
-    setSupportPage("overview");
-  }, [isOpen, interventionId]);
+    setSupportPage(startSetup && selectedKind === "active" ? "plan" : "overview");
+    setWizardStep(1);
+  }, [isOpen, interventionId, startSetup, selectedKind]);
 
   const isActive = selectedKind === "active" && detail?.status === "ACTIVE";
   const activationExplanation = detail ? candidateActivationExplanation(detail) : null;
@@ -194,7 +199,7 @@ export default function InterventionModal({
         size="2xl"
         className="max-h-[90vh] flex flex-col p-0 overflow-hidden"
       >
-        <Dialog.Header className="">
+        <Dialog.Header asChild={isActive && supportPage === "plan"}>
           <Dialog.Title className="text-xl font-bold">
             {selectedKind === "resolved"
               ? "Resolved Intervention"
@@ -204,9 +209,12 @@ export default function InterventionModal({
                   : "Active Intervention"
                 : "Candidate Review"}
           </Dialog.Title>
+          {isActive && supportPage === "plan" && (
+            <span className="ml-auto text-base font-semibold">Step {wizardStep} of 5</span>
+          )}
         </Dialog.Header>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div ref={contentRef} className="flex-1 overflow-y-auto p-5 space-y-5">
           {detailLoading ? (
             <div
               aria-label={
@@ -395,6 +403,7 @@ export default function InterventionModal({
                     ref={supportMaterialsRef}
                     key={detail.intervention_id}
                     page={supportPage}
+                    wizardStep={supportPage === "plan" ? wizardStep : undefined}
                     detail={detail}
                     previousResolved={previousResolved}
                     onAdjustSupport={() => setSupportPage("plan")}
@@ -419,7 +428,7 @@ export default function InterventionModal({
                           <div className="flex flex-row justify-between w-full items-end">
                             <h2 className="text-xl font-black -mb-1">{detail.student_name}</h2>
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="solid" size="md">
+                              <Badge variant="solid" size="sm">
                                 Candidate
                               </Badge>
                               <Badge
@@ -685,17 +694,33 @@ export default function InterventionModal({
         <Dialog.Footer className="mt-0">
           <Button
             variant="outline"
+            className="mr-auto"
             onClick={onClose}
             disabled={activating || savingAdjustments}
           >
-            Close
+            {isActive && supportPage === "plan" ? "Cancel" : "Close"}
           </Button>
+          {isActive && supportPage === "plan" && wizardStep > 1 && (
+            <Button variant="outline" disabled={savingAdjustments} onClick={() => {
+              setWizardStep((step) => step - 1);
+              contentRef.current?.scrollTo({ top: 0 });
+            }}>Back</Button>
+          )}
           {isActive && (
             <Button
               variant={supportPage === "plan" ? "outline" : "default"}
-              disabled={activating || savingAdjustments || (supportPage === "plan" && !supportHasChanges)}
+              disabled={activating || savingAdjustments || (supportPage === "plan" && wizardStep === 5 && !supportHasChanges)}
               onClick={async () => {
                 if (supportPage === "plan") {
+                  if (!supportMaterialsRef.current?.validateStep(wizardStep)) {
+                    contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+                    return;
+                  }
+                  if (wizardStep < 5) {
+                    setWizardStep((step) => step + 1);
+                    contentRef.current?.scrollTo({ top: 0 });
+                    return;
+                  }
                   if (supportMaterialsRef.current) {
                     setSavingAdjustments(true);
                     try {
@@ -710,6 +735,7 @@ export default function InterventionModal({
                     setSupportPage("overview");
                   }
                 } else {
+                  setWizardStep(1);
                   setSupportPage("plan");
                 }
               }}
@@ -717,7 +743,7 @@ export default function InterventionModal({
               {supportPage === "plan" ? (
                 savingAdjustments ? (
                   "Saving adjustments..."
-                ) : (
+                ) : wizardStep < 5 ? "Next" : (
                   <>
                     <Save className="size-4 mr-1.5" />
                     Save Adjustments
@@ -738,7 +764,7 @@ export default function InterventionModal({
             >
               {activating
                 ? "Checking and approving..."
-                : "Approve Intervention"}
+                : "Proceed"}
             </Button>
           )}
         </Dialog.Footer>
