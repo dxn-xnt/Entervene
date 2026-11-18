@@ -1,5 +1,11 @@
 "use client";
 
+import { AcademicSelectItem } from "@/components/academic-option-label";
+
+
+import { activeFirst } from "@/lib/active-first";
+
+
 import * as React from "react";
 import { format } from "date-fns";
 import { CalendarDays } from "lucide-react";
@@ -380,15 +386,13 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                                 <Select.Trigger id="academic-year" aria-invalid={error === "Please select a valid academic year."} aria-describedby={error === "Please select a valid academic year." ? "academic-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                                     <Select.Value placeholder="Select Academic Year" />
                                 </Select.Trigger>
-                                <Select.Content>
+                                <Select.Content className="w-max! min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]!">
                                     <Select.Group>
                                         {academicYears.length === 0 ? (
                                             <Select.Item value="none" disabled>Loading academic years...</Select.Item>
                                         ) : (
-                                            academicYears.map((ay) => (
-                                                <Select.Item key={ay.academic_year_id} value={ay.year_label}>
-                                                    {ay.year_label} {ay.is_active ? "(Active)" : ""}
-                                                </Select.Item>
+                                            activeFirst(academicYears).map((ay) => (
+                                                <AcademicSelectItem key={ay.academic_year_id} value={ay.year_label} label={ay.year_label} active={ay.is_active} />
                                             ))
                                         )}
                                     </Select.Group>

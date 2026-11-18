@@ -1,5 +1,8 @@
 "use client";
 
+import { activeFirst } from "@/lib/active-first";
+
+
 import * as React from "react";
 import { Button } from "@/components/retroui/Button";
 import { Checkbox } from "@/components/retroui/Checkbox";
@@ -697,7 +700,7 @@ export default function AddSubjectModal({
                     className="max-h-72 overflow-y-auto"
                   >
                     <Select.Group>
-                      {offeringOptions?.academic_years.map((year) => (
+                      {activeFirst(offeringOptions?.academic_years).map((year) => (
                         <Select.Item
                           key={year.academic_year_id}
                           value={String(year.academic_year_id)}

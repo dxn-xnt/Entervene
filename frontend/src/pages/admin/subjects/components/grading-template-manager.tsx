@@ -1,3 +1,4 @@
+import { activeFirst } from "@/lib/active-first";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
@@ -774,7 +775,7 @@ export function GradingTemplateManager({
                     </Select.Trigger>
                     <Select.Content>
                       <Select.Group>
-                        {academicYears.map((year) => (
+                        {activeFirst(academicYears).map((year) => (
                           <Select.Item
                             key={year.academic_year_id}
                             value={String(year.academic_year_id)}

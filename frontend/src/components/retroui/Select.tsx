@@ -111,8 +111,10 @@ const SelectGroup = SelectPrimitive.Group;
 const SelectItem = ({
   className,
   children,
+  endAdornment,
+  showIndicator = true,
   ...props
-}: SelectPrimitive.SelectItemProps) => (
+}: SelectPrimitive.SelectItemProps & { endAdornment?: React.ReactNode; showIndicator?: boolean }) => (
   <SelectPrimitive.Item
     className={cn(
       "relative flex w-full max-w-full cursor-default select-none items-center rounded-[var(--radius)] px-3 py-2 font-sans text-sm font-normal outline-none data-[highlighted]:bg-primary data-[highlighted]:text-primary-foreground focus:bg-primary focus:text-primary-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
@@ -121,14 +123,15 @@ const SelectItem = ({
     {...props}
   >
     <SelectPrimitive.ItemText asChild>
-      <span className="truncate block w-full">{children}</span>
+      <span className={cn("truncate block w-full", endAdornment && "w-auto min-w-0 flex-1")}>{children}</span>
     </SelectPrimitive.ItemText>
+    {endAdornment && <span className={cn("ml-auto shrink-0 pl-4", showIndicator && "pr-5")}>{endAdornment}</span>}
 
-    <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+    {showIndicator && <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
         <Check className="h-4 w-4 text-foreground" />
       </SelectPrimitive.ItemIndicator>
-    </span>
+    </span>}
   </SelectPrimitive.Item>
 );
 

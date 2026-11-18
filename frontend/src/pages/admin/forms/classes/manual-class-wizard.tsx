@@ -1,5 +1,7 @@
 "use client";
 
+import { activeFirst } from "@/lib/active-first";
+
 import { Plus, Settings, Trash2, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -369,7 +371,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
             }}>
               <Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger>
               <Select.Content><Select.Group>
-                {(options.academic_years ?? [options.academic_year]).map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}
+                {activeFirst(options.academic_years ?? [options.academic_year]).map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}
               </Select.Group></Select.Content>
             </Select>
           </Field>

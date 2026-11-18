@@ -1,3 +1,4 @@
+import { activeFirst } from "@/lib/active-first";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { Button } from "@/components/retroui/Button";
@@ -705,7 +706,7 @@ export function OfferingModal({
                         </Select.Trigger>
                         <Select.Content>
                           <Select.Group>
-                            {options?.academic_years.map((year) => (
+                            {activeFirst(options?.academic_years).map((year) => (
                               <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
                                 {year.year_label}
                               </Select.Item>

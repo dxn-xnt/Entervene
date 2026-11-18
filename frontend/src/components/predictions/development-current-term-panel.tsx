@@ -1,3 +1,4 @@
+import { activeFirst } from "@/lib/active-first";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Eye, Search } from "lucide-react";
 import { getClasses, getClassStudents, getSubjects } from "@/lib/api";
@@ -220,7 +221,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
             setTeacherPeriodId(value === "none" ? null : Number(value)); setClassId(null); setSubjectId(null); setSelected(null);
           }}>
             <Select.Trigger id="dev-period" className="w-full"><Select.Value placeholder="Select term" /></Select.Trigger>
-            <Select.Content><Select.Item value="none">Select term</Select.Item>{teacherTerms.map((item) => <Select.Item key={item.academic_period_id} value={String(item.academic_period_id)}>{item.term_label}</Select.Item>)}</Select.Content>
+            <Select.Content><Select.Item value="none">Select term</Select.Item>{activeFirst(teacherTerms).map((item) => <Select.Item key={item.academic_period_id} value={String(item.academic_period_id)}>{item.term_label}</Select.Item>)}</Select.Content>
           </Select>
         </div>}
         <div className="w-full sm:w-44">
