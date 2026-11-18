@@ -1,4 +1,3 @@
-import { activeFirst } from "@/lib/active-first";
 import { useState, useMemo } from "react";
 import { BookOpen } from "lucide-react";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -508,26 +507,6 @@ export function TeacherStudentView({
               />
             )}
 
-            {periods.length > 0 && onPeriodChange && (
-              <Select
-                value={selectedPeriodId}
-                onValueChange={onPeriodChange}
-              >
-                <Select.Trigger className="h-10 w-full min-w-[180px] border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] sm:w-auto">
-                  <Select.Value placeholder="Select period" />
-                </Select.Trigger>
-                <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  {activeFirst(periods).map((p) => (
-                    <Select.Item
-                      key={p.academic_period_id}
-                      value={String(p.academic_period_id)}
-                    >
-                      {p.period_name} ({p.year_label})
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select>
-            )}
           </div>
         </header>
       </div>
