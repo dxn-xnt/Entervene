@@ -1677,6 +1677,7 @@ def sync_and_dispatch_classwork_draft_jobs(
     db: Session,
     classwork_id: int,
     staff_id: str | None = None,
+    auto_commit: bool = True,
 ) -> int:
     """Re-evaluates and enqueues draft jobs when classwork score/answer release settings change."""
     classwork = db.get(Classwork, classwork_id)
@@ -1704,7 +1705,7 @@ def sync_and_dispatch_classwork_draft_jobs(
         if draft is not None:
             enqueued_count += 1
 
-    if enqueued_count > 0:
+    if enqueued_count > 0 and auto_commit:
         db.commit()
         dispatch_background_draft_processing()
 

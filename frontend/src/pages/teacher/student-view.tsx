@@ -2,7 +2,6 @@ import { activeFirst } from "@/lib/active-first";
 import { useState, useMemo } from "react";
 import { BookOpen } from "lucide-react";
 import { Avatar } from "@/components/retroui/Avatar";
-import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/teacher/button";
@@ -16,7 +15,6 @@ import { isReadingType } from "@/lib/classwork-utils";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import type {
   StudentRecordDetailResponse,
-  StudentRecordPeriodOption,
 } from "@/lib/student-record-api";
 import type {
   TeacherAdvisoryStudentItem,
@@ -387,14 +385,12 @@ export interface TeacherStudentViewProps {
   studentDetail: StudentRecordDetailResponse | null;
   classId: number | string;
   subjectLoads?: TeacherAdvisorySubjectLoadItem[];
-  periods?: StudentRecordPeriodOption[];
-  selectedPeriodId?: string;
-  onPeriodChange?: (periodId: string) => void;
   isDetailLoading?: boolean;
   detailError?: string;
   sectionName?: string;
   subjectName?: string;
   subjectId?: number | string | null;
+  onBack?: () => void;
 }
 
 export function TeacherStudentView({
@@ -402,14 +398,12 @@ export function TeacherStudentView({
   studentDetail,
   classId,
   subjectLoads = [],
-  periods = [],
-  selectedPeriodId,
-  onPeriodChange,
   isDetailLoading = false,
   detailError = "",
   sectionName,
   subjectName,
   subjectId,
+  onBack,
 }: TeacherStudentViewProps) {
   const studentName =
     studentDetail?.student?.full_name || student?.full_name || "Student Record";
@@ -471,7 +465,8 @@ export function TeacherStudentView({
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item className="min-w-0 shrink-0">
                       <Breadcrumb.Link
-                        href={sectionHref}
+                        href={onBack ? undefined : sectionHref}
+                        onClick={onBack ? (e: React.MouseEvent) => { e.preventDefault(); onBack(); } : undefined}
                         className="cursor-pointer block max-w-[120px] sm:max-w-[180px] truncate"
                       >
                         {displaySection}

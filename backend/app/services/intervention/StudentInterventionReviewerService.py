@@ -10,8 +10,8 @@ from app.schemas.StudentInterventionReviewer import (
 )
 
 
-def _query(db: Session, student_id):
-    return db.query(InterventionSupportMaterial, Intervention).join(
+def _query(db: Session, student_id, academic_period_id: int | None = None):
+    q = db.query(InterventionSupportMaterial, Intervention).join(
         Intervention, InterventionSupportMaterial.intervention_id == Intervention.intervention_id,
     ).filter(
         Intervention.student_id == student_id,
@@ -20,13 +20,17 @@ def _query(db: Session, student_id):
         InterventionSupportMaterial.status == "SENT",
         InterventionSupportMaterial.sent_at.is_not(None),
     )
+    if academic_period_id is not None:
+        q = q.filter(Intervention.academic_period_id == academic_period_id)
+    return q
 
 
-def list_student_reviewers(db: Session, student_id) -> StudentReviewerList:
-    rows = _query(db, student_id).order_by(InterventionSupportMaterial.sent_at.desc()).all()
+def list_student_reviewers(db: Session, student_id, academic_period_id: int | None = None) -> StudentReviewerList:
+    rows = _query(db, student_id, academic_period_id=academic_period_id).order_by(InterventionSupportMaterial.sent_at.desc()).all()
     items = [StudentReviewerSummary(
         material_id=material.material_id, subject_name=intervention.subject.subject_name,
         title=material.current_content["title"], sent_at=material.sent_at,
+        academic_period_id=intervention.academic_period_id,
     ) for material, intervention in rows]
     return StudentReviewerList(items=items, total=len(items))
 

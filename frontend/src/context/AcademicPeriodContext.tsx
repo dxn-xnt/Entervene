@@ -677,6 +677,12 @@ export const useAcademicPeriod = () => {
   return ctx;
 };
 
+// Safe hook for optional consumers that may be rendered outside an AcademicPeriodProvider
+// eslint-disable-next-line react-refresh/only-export-components
+export const useOptionalAcademicPeriod = () => {
+  return useContext(AcademicPeriodContext);
+};
+
 /**
  * Hook for pages/components to register a dirty-state guard against academic period switches.
  * When isDirty is true, any term switch (via sidebar or cross-tab sync) is blocked with a confirmation prompt.
