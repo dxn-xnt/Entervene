@@ -703,9 +703,7 @@ function StudentsTab({
   onRetry: () => void;
   onEdit: () => void;
 }) {
-  const { classId } = useParams();
   const [search, setSearch] = useState("");
-  const navigate = useNavigate();
   const students = studentData?.students ?? [];
   const searchTerm = search.trim().toLocaleLowerCase();
   const filteredStudents = students
@@ -805,12 +803,7 @@ function StudentsTab({
                         {group.map((student) => (
                           <Table.Row
                             key={student.student_id}
-                            className="cursor-pointer hover:bg-accent/40 transition-colors"
-                            onClick={() =>
-                              navigate(
-                                `/admin/classes/${classId}/students/${student.student_id}`
-                              )
-                            }
+                            className="hover:bg-accent/40 transition-colors"
                           >
                             <Table.Cell>
                               <div className="flex items-center gap-3">

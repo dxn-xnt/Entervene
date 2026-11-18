@@ -16,7 +16,6 @@ export const routes = {
     classes: "/admin/classes",
     classDetail: "/admin/classes/:classId",
     subjectLoadStudio: "/admin/subject-load-studio",
-    studentView: "/admin/classes/:classId/students/:studentId",
     users: "/admin/users",
     userDetail: "/admin/users/:role/:userId",
     interventions: "/admin/interventions",
