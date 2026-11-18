@@ -334,7 +334,7 @@ export default function SubjectDetails() {
 
         const [classesResponse, lessonsResponse, assignmentsResponse, competenciesResponse] =
           await Promise.all([
-            apiFetch("/api/v1/classwork-assignments/teacher/classes").then(async (response) => {
+            apiFetch(`/api/v1/classwork-assignments/teacher/classes${lessonQuery}`).then(async (response) => {
               if (!response.ok) throw new Error("Unable to load subject context.");
               const data = (await response.json()) as TeacherClassLoad[];
               if (requestId === loadRequestIdRef.current) setLoads(data);
