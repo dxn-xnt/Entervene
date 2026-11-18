@@ -24,17 +24,25 @@ from app.services.intervention.StudentPersistentInterventionService import (
 )
 
 
-router = APIRouter(dependencies=[Depends(require_development_intervention_api)])
+router = APIRouter()
 
 
 @router.get("", response_model=StudentPersistentInterventionList)
-def list_mine(student=Depends(get_student_record), db: Session = Depends(get_db)):
-    return list_active(db, student.student_id)
+def list_mine(
+    academic_period_id: int | None = None,
+    student=Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    return list_active(db, student.student_id, academic_period_id=academic_period_id)
 
 
 @router.get("/resolved", response_model=StudentPersistentInterventionList)
-def list_previous(student=Depends(get_student_record), db: Session = Depends(get_db)):
-    return list_resolved(db, student.student_id)
+def list_previous(
+    academic_period_id: int | None = None,
+    student=Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    return list_resolved(db, student.student_id, academic_period_id=academic_period_id)
 
 
 @router.get("/resolved/{intervention_id}", response_model=StudentPersistentIntervention)

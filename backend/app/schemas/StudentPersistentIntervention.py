@@ -88,6 +88,7 @@ class StudentPersistentIntervention(BaseModel):
     subject_name: str
     class_id: int
     class_name: str
+    academic_period_id: int | None = None
     teacher_name: str | None
     required_readings: list[StudentRequiredReading]
     resource_issues: list[StudentRequiredReadingIssue]

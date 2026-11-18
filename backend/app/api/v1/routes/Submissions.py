@@ -193,8 +193,6 @@ def delete_feedback(
         )
     finally:
         actor.reset(token)
-
-
 @router.get("/{submission_id}/feedback/draft", response_model=FeedbackDraftResponse)
 def get_feedback_draft(
     submission_id: int,

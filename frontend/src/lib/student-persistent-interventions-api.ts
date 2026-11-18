@@ -63,6 +63,7 @@ export interface StudentPersistentIntervention {
   subject_name: string;
   class_id: number;
   class_name: string;
+  academic_period_id?: number | null;
   teacher_name: string | null;
   required_readings: StudentRequiredReading[];
   resource_issues: StudentRequiredReadingIssue[];
@@ -82,12 +83,16 @@ async function read<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export const listMyActiveInterventions = () =>
-  read<{ items: StudentPersistentIntervention[] }>(base);
+export const listMyActiveInterventions = (periodId?: number | null) =>
+  read<{ items: StudentPersistentIntervention[] }>(
+    periodId ? `${base}?academic_period_id=${periodId}` : base
+  );
 export const getMyActiveIntervention = (id: number) =>
   read<StudentPersistentIntervention>(`${base}/${id}`);
-export const listMyResolvedInterventions = () =>
-  read<{ items: StudentPersistentIntervention[] }>(`${base}/resolved`);
+export const listMyResolvedInterventions = (periodId?: number | null) =>
+  read<{ items: StudentPersistentIntervention[] }>(
+    periodId ? `${base}/resolved?academic_period_id=${periodId}` : `${base}/resolved`
+  );
 export const getMyResolvedIntervention = (id: number) =>
   read<StudentPersistentIntervention>(`${base}/resolved/${id}`);
 

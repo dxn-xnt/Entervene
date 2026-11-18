@@ -33,4 +33,3 @@ class PeriodTemplateRevision(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="scheduled")
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
-

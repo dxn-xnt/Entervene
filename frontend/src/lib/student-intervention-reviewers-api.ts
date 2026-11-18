@@ -5,6 +5,7 @@ export interface StudentReviewerSummary {
   subject_name: string;
   title: string;
   sent_at: string;
+  academic_period_id?: number | null;
 }
 
 export interface StudentReviewerDetail extends StudentReviewerSummary {
@@ -22,5 +23,8 @@ async function read<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export const listMyReviewers = () => read<{ items: StudentReviewerSummary[]; total: number }>(base);
+export const listMyReviewers = (periodId?: number | null) =>
+  read<{ items: StudentReviewerSummary[]; total: number }>(
+    periodId ? `${base}?academic_period_id=${periodId}` : base
+  );
 export const getMyReviewer = (id: number) => read<StudentReviewerDetail>(`${base}/${id}`);

@@ -272,6 +272,7 @@ def _summary(db: Session, row: Intervention, student_id) -> StudentPersistentInt
         intervention_id=row.intervention_id, status=row.status,
         subject_id=row.subject_id, subject_name=row.subject.subject_name,
         class_id=row.class_id, class_name=row.class_.section_name,
+        academic_period_id=row.academic_period_id,
         teacher_name=f"{teacher.first_name} {teacher.last_name}" if teacher else None,
         required_readings=required_readings,
         resource_issues=resource_issues,
@@ -281,10 +282,13 @@ def _summary(db: Session, row: Intervention, student_id) -> StudentPersistentInt
     )
 
 
-def list_active(db: Session, student_id) -> StudentPersistentInterventionList:
-    rows = db.query(Intervention).filter(
+def list_active(db: Session, student_id, academic_period_id: int | None = None) -> StudentPersistentInterventionList:
+    query = db.query(Intervention).filter(
         Intervention.student_id == student_id, Intervention.status == "ACTIVE",
-    ).order_by(Intervention.activated_at.desc()).all()
+    )
+    if academic_period_id is not None:
+        query = query.filter(Intervention.academic_period_id == academic_period_id)
+    rows = query.order_by(Intervention.activated_at.desc()).all()
     return StudentPersistentInterventionList(items=[_summary(db, row, student_id) for row in rows])
 
 
@@ -299,10 +303,13 @@ def get_active(db: Session, student_id, intervention_id: int) -> StudentPersiste
     return _summary(db, row, student_id)
 
 
-def list_resolved(db: Session, student_id) -> StudentPersistentInterventionList:
-    rows = db.query(Intervention).filter(
+def list_resolved(db: Session, student_id, academic_period_id: int | None = None) -> StudentPersistentInterventionList:
+    query = db.query(Intervention).filter(
         Intervention.student_id == student_id, Intervention.status == "RESOLVED",
-    ).order_by(Intervention.resolved_at.desc(), Intervention.intervention_id.desc()).all()
+    )
+    if academic_period_id is not None:
+        query = query.filter(Intervention.academic_period_id == academic_period_id)
+    rows = query.order_by(Intervention.resolved_at.desc(), Intervention.intervention_id.desc()).all()
     return StudentPersistentInterventionList(items=[_summary(db, row, student_id) for row in rows])
 
 

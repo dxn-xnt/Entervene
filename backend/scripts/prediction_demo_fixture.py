@@ -307,6 +307,8 @@ def seed(database_url: str, run_id: str, replace: bool) -> Path:
                 create_assessments(session, manifest, scope=scope, students=students)
                 create_attendance(session, manifest, scope=scope, students=students)
                 create_period_grades(session, manifest, scope=scope, students=students)
+            from app.db.sequence_repair import reconcile_database_sequences
+            reconcile_database_sequences(session)
         manifest["status"] = "COMPLETE"
         write_manifest(path, manifest)
         return path
