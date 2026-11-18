@@ -19,6 +19,7 @@ interface CompetencyModalProps {
   onSaved?: (competency: CompetencyItem) => void;
   onSuccess?: (competency?: CompetencyItem) => Promise<void> | void;
   subjectId: number;
+  academicPeriodId: number;
   editingCompetency?: CompetencyItem | null;
   initialData?: CompetencyItem | null;
 }
@@ -31,6 +32,7 @@ export default function CompetencyModal({
   onSaved,
   onSuccess,
   subjectId,
+  academicPeriodId,
   editingCompetency,
   initialData,
 }: CompetencyModalProps) {
@@ -114,12 +116,17 @@ export default function CompetencyModal({
         if (!parsedSubjectId || isNaN(parsedSubjectId)) {
           throw new Error("A valid Subject must be selected to create a competency.");
         }
+        const parsedAcademicPeriodId = Number(academicPeriodId);
+        if (!parsedAcademicPeriodId || isNaN(parsedAcademicPeriodId)) {
+          throw new Error("A valid academic period must be selected to create a competency.");
+        }
 
         const res = await apiFetch("/api/v1/competencies/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             subject_id: parsedSubjectId,
+            academic_period_id: parsedAcademicPeriodId,
             statement: statement.trim(),
             competency_code: competencyCode.trim() || null,
             description: description.trim() || null,
