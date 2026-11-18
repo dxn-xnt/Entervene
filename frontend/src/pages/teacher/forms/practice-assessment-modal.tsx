@@ -3,6 +3,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
+import { Checkbox } from "@/components/retroui/Checkbox";
 import { Input } from "@/components/retroui/Input";
 import { Tabs } from "@/components/retroui/Tabs";
 import { Label } from "@/components/retroui/Label";
@@ -829,7 +830,7 @@ export default function PracticeAssessmentModal({
                           className="w-full shadow-none! border-2 border-border p-4 space-y-3 relative group"
                         >
                           {/* Question Card Header */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <span className="font-black text-sm">#{qIdx + 1}</span>
                               <Badge variant="outline" size="sm">
@@ -891,7 +892,7 @@ export default function PracticeAssessmentModal({
                                 }
                                 placeholder="Enter the question prompt..."
                                 rows={3}
-                                className="w-full rounded border-2 border-border bg-background p-2.5 text-sm transition focus:outline-hidden focus:border-black min-h-20 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
+                                className="w-full rounded! border-2 border-border bg-background p-2.5 text-sm transition focus:outline-hidden focus:border-black min-h-20 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
                               />
                             </div>
                             <div className="flex flex-col gap-1.5">
@@ -936,23 +937,21 @@ export default function PracticeAssessmentModal({
                                 )}
                               </div>
                             ) : q.question_type === "TRUE_FALSE" ? (
-                              <div className="grid grid-cols-2 gap-2">
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                 {q.options.map((opt, optIdx) => (
                                   <div
                                     key={optIdx}
                                     onClick={() => !isLocked && handleSetCorrectOption(qIdx, optIdx)}
-                                    className={`flex items-center justify-between p-2.5 rounded border-2 transition-colors ${
+                                    className={`flex items-center gap-3 p-3 rounded! border-2 border-border transition-colors ${
                                       opt.is_correct
-                                        ? "border-emerald-600 bg-emerald-50 text-emerald-950 font-bold"
+                                        ? "bg-primary/10 text-foreground font-semibold"
                                         : "border-border bg-background text-foreground"
                                     } ${isLocked ? "cursor-default" : "cursor-pointer hover:bg-muted/40"}`}
                                   >
-                                    <span className="text-sm">{opt.option_text}</span>
+                                    <Checkbox variant="solid" checked={opt.is_correct} disabled={isLocked} onCheckedChange={() => handleSetCorrectOption(qIdx, optIdx)} aria-label={"Mark option " + (optIdx + 1) + " as correct answer"} className="shrink-0 border-border disabled:opacity-100" />
+                                    <span className="flex-1 text-sm">{opt.option_text}</span>
                                     {opt.is_correct && (
-                                      <div className="flex items-center gap-1 text-emerald-700">
-                                        <CheckCircle2 className="size-4" />
-                                        <span className="text-sm font-bold uppercase tracking-wider">Correct</span>
-                                      </div>
+                                      <Badge variant="success" size="sm" className="shrink-0">Correct</Badge>
                                     )}
                                   </div>
                                 ))}
@@ -963,21 +962,13 @@ export default function PracticeAssessmentModal({
                                 {q.options.map((opt, optIdx) => (
                                   <div
                                     key={optIdx}
-                                    className={`flex items-center gap-2 rounded border p-1.5 transition-colors ${
+                                    className={`flex flex-wrap items-center gap-3 rounded! border-2 border-border p-3 transition-colors ${
                                       opt.is_correct
-                                        ? "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/20"
-                                        : "border-transparent"
+                                        ? "bg-primary/10"
+                                        : "bg-card"
                                     }`}
                                   >
-                                    <input
-                                      type="radio"
-                                      name={`correct-opt-${qIdx}`}
-                                      checked={opt.is_correct}
-                                      disabled={isLocked}
-                                      onChange={() => handleSetCorrectOption(qIdx, optIdx)}
-                                      className="size-4 text-primary cursor-pointer disabled:cursor-default"
-                                      title="Mark as correct answer"
-                                    />
+                                    <Checkbox variant="solid" checked={opt.is_correct} disabled={isLocked} onCheckedChange={() => handleSetCorrectOption(qIdx, optIdx)} aria-label={"Mark option " + (optIdx + 1) + " as correct answer"} className="shrink-0 border-border disabled:opacity-100" />
                                     <Input
                                       disabled={isLocked}
                                       value={opt.option_text}
@@ -985,10 +976,10 @@ export default function PracticeAssessmentModal({
                                         handleUpdateOptionText(qIdx, optIdx, e.target.value)
                                       }
                                       placeholder={`Option ${String.fromCharCode(65 + optIdx)}`}
-                                      className="flex-1 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
+                                      className="min-w-0 flex-1 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
                                     />
                                     {opt.is_correct && (
-                                      <Badge variant="solid" size="sm" className="bg-emerald-600 text-white shrink-0">
+                                      <Badge variant="success" size="sm" className="shrink-0">
                                         Correct
                                       </Badge>
                                     )}
@@ -1033,7 +1024,7 @@ export default function PracticeAssessmentModal({
                               }
                               placeholder="Explanation for the correct answer..."
                               rows={2}
-                              className="w-full rounded border-2 border-border bg-background p-2.5 text-sm transition focus:outline-hidden focus:border-black min-h-16 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
+                              className="w-full rounded! border-2 border-border bg-background p-2.5 text-sm transition focus:outline-hidden focus:border-black min-h-16 disabled:opacity-100 disabled:bg-muted/30 disabled:text-foreground disabled:cursor-default"
                             />
                           </div>
                         </Card>
