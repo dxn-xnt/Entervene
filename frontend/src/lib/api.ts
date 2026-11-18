@@ -636,8 +636,9 @@ export async function getUsers(params: { role?: UserRole; search?: string; statu
   return (await response.json()) as User[];
 }
 
-export async function getUserDetail(userId: string) {
-  const response = await apiFetch(`/api/v1/users/${encodeURIComponent(userId)}`);
+export async function getUserDetail(userId: string, academicYearId?: number | null) {
+  const query = academicYearId != null ? `?academic_year_id=${academicYearId}` : "";
+  const response = await apiFetch(`/api/v1/users/${encodeURIComponent(userId)}${query}`);
 
   if (!response.ok) {
     throw new Error("Unable to load user details. Please try again.");
@@ -659,8 +660,9 @@ export async function resendUserInvitation(userId: string): Promise<{ message: s
   return (await response.json()) as { message: string };
 }
 
-export async function getUserAnalytics(userId: string) {
-  const response = await apiFetch(`/api/v1/users/${encodeURIComponent(userId)}/analytics`);
+export async function getUserAnalytics(userId: string, academicPeriodId?: number | null) {
+  const query = academicPeriodId != null ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/users/${encodeURIComponent(userId)}/analytics${query}`);
 
   if (!response.ok) {
     throw new Error("Unable to load user analytics. Please try again.");

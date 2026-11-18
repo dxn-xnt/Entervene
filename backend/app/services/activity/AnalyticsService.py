@@ -27,7 +27,7 @@ from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.schemas.TeacherDashboard import DashboardGradeDetails, DashboardScopeLabel, DashboardSupportSummary
+from app.schemas.TeacherDashboard import DashboardGrade, DashboardGradeDetails, DashboardScopeLabel, DashboardSupportSummary
 from app.services.activity.TeacherDashboardMetrics import (
     DashboardScope,
     build_dashboard_engagement,
@@ -130,6 +130,153 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
     ).scalar() or 0
     total_subjects = active_subjects
 
+    # One selected-period roster drives every grade-level denominator. This
+    # prevents withdrawn learners and records from another year from leaking
+    # into otherwise plausible-looking dashboard percentages.
+    active_class_rows = (
+        db.query(Class)
+        .options(joinedload(Class.academic_level))
+        .filter(Class.academic_year_id == year_id, Class.class_status == "active")
+        .order_by(Class.academic_level_id, Class.class_id)
+        .all()
+        if year_id is not None else []
+    )
+    active_class_ids = {row.class_id for row in active_class_rows}
+    enrolled_by_class: dict[int, set[Any]] = {
+        class_id: set() for class_id in active_class_ids
+    }
+    if active_class_ids:
+        enrollments = db.query(StudentClass).filter(
+            StudentClass.class_id.in_(active_class_ids),
+            StudentClass.academic_year_id == year_id,
+            StudentClass.enrollment_status == "enrolled",
+        ).all()
+        for enrollment in enrollments:
+            enrolled_by_class[enrollment.class_id].add(enrollment.student_id)
+
+    active_load_rows = db.query(SubjectLoad).filter(
+        *load_filters,
+        SubjectLoad.class_id.in_(active_class_ids),
+    ).all() if active_class_ids else []
+    active_scope = {(row.class_id, row.subject_id) for row in active_load_rows}
+    scoped_subject_ids = {subject_id for _, subject_id in active_scope}
+
+    assignments: list[ClassworkAssignment] = []
+    if active_scope and period_id is not None:
+        assignments = (
+            db.query(ClassworkAssignment)
+            .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
+            .options(joinedload(ClassworkAssignment.classwork))
+            .filter(
+                ClassworkAssignment.academic_period_id == period_id,
+                ClassworkAssignment.is_published.is_(True),
+                Classwork.is_archived.is_(False),
+                or_(*(
+                    and_(ClassworkAssignment.class_id == class_id, Classwork.subject_id == subject_id)
+                    for class_id, subject_id in sorted(active_scope)
+                )),
+            )
+            .all()
+        )
+    assignments_by_id = {row.classwork_assignment_id: row for row in assignments}
+    submissions = db.query(StudentSubmission).filter(
+        StudentSubmission.classwork_assignment_id.in_(assignments_by_id),
+    ).all() if assignments_by_id else []
+    engagement = build_dashboard_engagement(
+        assignments_by_id,
+        enrolled_by_class,
+        submissions,
+        _dashboard_aware_datetime(_teacher_dashboard_now()),
+    )
+
+    attendance_by_class: dict[int, list[AttendanceRecord]] = {
+        class_id: [] for class_id in active_class_ids
+    }
+    if active_class_ids and target_period is not None:
+        attendance_rows = db.query(AttendanceRecord).filter(
+            AttendanceRecord.class_id.in_(active_class_ids),
+            AttendanceRecord.date >= target_period.start_date,
+            AttendanceRecord.date <= target_period.end_date,
+        ).all()
+        for record in attendance_rows:
+            if record.student_id in enrolled_by_class.get(record.class_id, set()):
+                attendance_by_class[record.class_id].append(record)
+
+    threshold_subjects = db.query(Subject).filter(
+        Subject.subject_id.in_(scoped_subject_ids),
+    ).all() if scoped_subject_ids else []
+    policy_context = read_passing_threshold_context_or_422(
+        db,
+        academic_year_id=year_id,
+        subject_ids=scoped_subject_ids,
+        academic_period_id=period_id,
+    ) if year_id is not None and scoped_subject_ids else None
+    thresholds = {
+        subject.subject_id: resolve_dashboard_passing_threshold(subject, context=policy_context)
+        for subject in threshold_subjects
+    }
+    grade_rows = db.query(StudentPeriodGrade).filter(
+        StudentPeriodGrade.academic_period_id == period_id,
+        StudentPeriodGrade.class_id.in_(active_class_ids),
+        StudentPeriodGrade.subject_id.in_(scoped_subject_ids),
+    ).all() if period_id is not None and active_class_ids and scoped_subject_ids else []
+    scoped_grades = [
+        DashboardGrade(
+            student_id=str(row.student_id),
+            class_id=row.class_id,
+            subject_id=row.subject_id,
+            academic_period_id=row.academic_period_id,
+            current_grade=float(row.final_period_grade) if row.final_period_grade is not None else None,
+        )
+        for row in grade_rows
+        if row.student_id in enrolled_by_class.get(row.class_id, set())
+        and (row.class_id, row.subject_id) in active_scope
+    ]
+
+    grade_health: list[dict[str, Any]] = []
+    levels_and_classes: dict[int, list[Class]] = {}
+    for class_row in active_class_rows:
+        levels_and_classes.setdefault(class_row.academic_level_id, []).append(class_row)
+    ordered_levels = sorted(
+        levels_and_classes.values(),
+        key=lambda rows: (rows[0].academic_level.grade_level, rows[0].academic_level_id),
+    )
+    for level_classes in ordered_levels:
+        level = level_classes[0].academic_level
+        level_class_ids = {row.class_id for row in level_classes}
+        level_students = set().union(*(
+            enrolled_by_class[row.class_id] for row in level_classes
+        ))
+        level_assignment_ids = [
+            assignment_id for assignment_id, assignment in assignments_by_id.items()
+            if assignment.class_id in level_class_ids
+        ]
+        completion = summarize_dashboard_engagement(engagement, level_assignment_ids)
+        attendance = summarize_dashboard_attendance([
+            record for class_id in level_class_ids for record in attendance_by_class[class_id]
+        ])
+        level_grades = [grade for grade in scoped_grades if grade.class_id in level_class_ids]
+        grade_summary = summarize_dashboard_grades(level_grades, thresholds)
+        grade_health.append({
+            "academic_level_id": level.academic_level_id,
+            "grade": level.level_name,
+            "category": "Senior High" if level.grade_level >= 11 else "Junior High",
+            "students": len(level_students),
+            "active_classes": len(level_class_ids),
+            "attendance_rate": attendance.rate,
+            "attendance_record_count": attendance.record_count,
+            "completion_rate": completion.completion_rate_percent if level_assignment_ids else None,
+            "expected_submission_count": completion.expected_count,
+            "completed_submission_count": completion.completed_count,
+            "passing_rate": grade_summary.passing_rate_percent,
+            "available_grade_count": grade_summary.available_grade_count,
+        })
+
+    overall_attendance = summarize_dashboard_attendance([
+        record for records in attendance_by_class.values() for record in records
+    ])
+    overall_grade_summary = summarize_dashboard_grades(scoped_grades, thresholds)
+
     # Ungraded submissions count
     ungraded_count = (
         db.query(StudentSubmission)
@@ -189,11 +336,26 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
         },
         {
             "title": "School Passing Rate",
-            "count": "—", "stat": "Not calculated", "statDescription": period_name,
+            "count": (
+                f"{overall_grade_summary.passing_rate_percent}%"
+                if overall_grade_summary.passing_rate_percent is not None else "—"
+            ),
+            "stat": (
+                f"{overall_grade_summary.passing_count} of "
+                f"{overall_grade_summary.available_grade_count} recorded grades passing"
+                if overall_grade_summary.passing_count is not None else "Not calculated"
+            ),
+            "statDescription": period_name,
         },
         {
             "title": "School Attendance",
-            "count": "—", "stat": "Not calculated", "statDescription": period_name,
+            "count": f"{overall_attendance.rate}%" if overall_attendance.rate is not None else "—",
+            "stat": (
+                f"{overall_attendance.present_count + overall_attendance.late_count} of "
+                f"{overall_attendance.record_count} recorded entries"
+                if overall_attendance.record_count else "Not calculated"
+            ),
+            "statDescription": period_name,
         },
         {
             "title": "Student-Teacher Ratio",
@@ -242,9 +404,19 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
             "classes": {"total": total_classes, "active": active_classes},
             "subjects": {"total": total_subjects, "active": active_subjects},
             "enrollment_trend": [],
-            "students_per_grade": [],
-            "attendance_by_grade": [],
-            "completion_by_grade": [],
+            "students_per_grade": [
+                {"grade": row["grade"], "count": row["students"]}
+                for row in grade_health
+            ],
+            "attendance_by_grade": [
+                {"grade": row["grade"], "rate": row["attendance_rate"]}
+                for row in grade_health if row["attendance_rate"] is not None
+            ],
+            "completion_by_grade": [
+                {"grade": row["grade"], "rate": row["completion_rate"]}
+                for row in grade_health if row["completion_rate"] is not None
+            ],
+            "grade_health": grade_health,
             "active_users_weekly": [],
             "teacher_workload": [],
             "classes_needing_attention": [],

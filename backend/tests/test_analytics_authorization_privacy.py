@@ -125,6 +125,7 @@ def test_explicit_historical_and_future_periods_are_respected(
         "period_id": period.academic_period_id,
         "period_name": period.period_name,
         "academic_year": year_label,
+        "academic_year_id": period.academic_year_id,
         "is_active": False,
     }
     assert response.json()["details"]["teachers"]["active_loads"] == 0
@@ -341,6 +342,76 @@ def test_admin_system_empty_period_returns_genuine_zero_and_empty_data(db, data)
     cards = {card["title"]: card for card in body["cards"]}
     assert cards["Ungraded Backlog"]["count"] == "0"
     assert cards["Assessments Published"]["count"] == "0"
+
+
+def test_admin_grade_health_uses_selected_period_roster_and_real_evidence(db, data):
+    db.add_all([
+        StudentPeriodGrade(
+            student_id=data["students"]["active_one"].student_id,
+            class_id=data["class_"].class_id,
+            subject_id=data["subject"].subject_id,
+            academic_period_id=data["period"].academic_period_id,
+            final_period_grade=90,
+        ),
+        StudentPeriodGrade(
+            student_id=data["students"]["active_two"].student_id,
+            class_id=data["class_"].class_id,
+            subject_id=data["subject"].subject_id,
+            academic_period_id=data["period"].academic_period_id,
+            final_period_grade=80,
+        ),
+        # A withdrawn learner's otherwise passing grade must not affect the rate.
+        StudentPeriodGrade(
+            student_id=data["students"]["withdrawn"].student_id,
+            class_id=data["class_"].class_id,
+            subject_id=data["subject"].subject_id,
+            academic_period_id=data["period"].academic_period_id,
+            final_period_grade=100,
+        ),
+    ])
+    db.commit()
+    client = create_client(db, {"sub": str(uuid.uuid4()), "role": "admin"})
+
+    response = client.get("/analytics/overview", params={
+        "scope": "system",
+        "academic_period_id": data["period"].academic_period_id,
+    })
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["details"]["grade_health"] == [{
+        "academic_level_id": data["class_"].academic_level_id,
+        "grade": "Grade 7",
+        "category": "Junior High",
+        "students": 4,
+        "active_classes": 3,
+        "attendance_rate": 50.0,
+        "attendance_record_count": 2,
+        "completion_rate": 71.4,
+        "expected_submission_count": 7,
+        "completed_submission_count": 5,
+        "passing_rate": 50.0,
+        "available_grade_count": 2,
+    }]
+    cards = {card["title"]: card for card in body["cards"]}
+    assert cards["School Passing Rate"]["count"] == "50.0%"
+    assert cards["School Attendance"]["count"] == "50.0%"
+
+
+def test_admin_grade_health_keeps_missing_metrics_unavailable(db, data):
+    client = create_client(db, {"sub": str(uuid.uuid4()), "role": "admin"})
+
+    response = client.get("/analytics/overview", params={
+        "scope": "system",
+        "academic_period_id": data["empty_period"].academic_period_id,
+    })
+
+    assert response.status_code == 200, response.text
+    health = response.json()["details"]["grade_health"]
+    assert len(health) == 1
+    assert health[0]["completion_rate"] is None
+    assert health[0]["attendance_rate"] is None
+    assert health[0]["passing_rate"] is None
 
 
 def test_admin_class_and_subject_overviews_keep_exact_period_scope(db, data):

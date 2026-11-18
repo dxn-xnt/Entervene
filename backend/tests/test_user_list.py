@@ -23,6 +23,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.auth.Role import Role
 from app.models.auth.UserAccount import UserAccount
+from app.models.auth.UserLoginLog import UserLoginLog
 from app.models.auth.UserRoles import UserRoles
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -187,7 +188,7 @@ def test_list_users_batches_mixed_user_summaries_and_preserves_filters(client, d
     assert teacher["class_count"] == 2
     assert student["section"] == "Latest-0"
     assert student["grade_level"] == 7
-    assert set(student) == {"id", "name", "email", "role", "created_at", "account_status", "section", "grade_level"}
+    assert set(student) == {"id", "name", "email", "avatar", "role", "created_at", "account_status", "section", "grade_level"}
     assert all(item["role"] == "teacher" for item in client.get("/api/v1/users?role=teacher").json())
     assert len(client.get("/api/v1/users?search=student0").json()) == 1
 
@@ -301,25 +302,33 @@ def test_student_user_analytics_uses_real_records_and_labels_unavailable_data(cl
     written_assignment = ClassworkAssignment(
         classwork_id=written.classwork_id,
         class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=staff.staff_id,
+        is_published=True,
         due_date=due,
     )
     performance_assignment = ClassworkAssignment(
         classwork_id=performance.classwork_id,
         class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=staff.staff_id,
+        is_published=True,
         due_date=due,
     )
     missing_assignment = ClassworkAssignment(
         classwork_id=missing.classwork_id,
         class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=staff.staff_id,
+        is_published=True,
         due_date=datetime(2025, 7, 10, tzinfo=timezone.utc),
     )
     reading_assignment = ClassworkAssignment(
         classwork_id=reading.classwork_id,
         class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=staff.staff_id,
+        is_published=True,
         due_date=due,
     )
     db.add_all([written_assignment, performance_assignment, missing_assignment, reading_assignment])
@@ -345,6 +354,11 @@ def test_student_user_analytics_uses_real_records_and_labels_unavailable_data(cl
             academic_period_id=period.academic_period_id,
             final_period_grade=86.5,
         ),
+        UserLoginLog(
+            user_id=student_account.user_id,
+            login_at=datetime(2025, 7, 1, 8, 0, tzinfo=timezone.utc),
+            logout_at=datetime(2025, 7, 1, 8, 30, tzinfo=timezone.utc),
+        ),
     ])
     db.commit()
 
@@ -356,12 +370,35 @@ def test_student_user_analytics_uses_real_records_and_labels_unavailable_data(cl
     assert body["summary"]["performanceAverage"] is None
     assert body["summary"]["completionRate"] == 66.67
     assert body["summary"]["failureRisk"].startswith("Unavailable")
-    assert body["lms_behavior"]["totalLogins"] == "Unavailable"
+    assert body["lms_behavior"]["totalLogins"] == 1
+    assert body["lms_behavior"]["averageSession"] == "30 min"
     assert body["lms_behavior"]["missedActivities"] == 1
     assert body["lms_behavior"]["onTimeSubmissions"] == "50.0%"
     assert body["subject_mastery"] == [{"subject": "Computer Programming", "value": 80}]
     assert body["score_trend"] == [{"month": "Q1", "score": 86.5}]
     assert [row["name"] for row in body["classwork"]] == ["Missing Task", "Written 1", "Performance 1"]
+
+    teacher_response = client.get(
+        f"/api/v1/users/{teacher_account.user_id}/analytics",
+        params={"academic_period_id": period.academic_period_id},
+    )
+    assert teacher_response.status_code == 200
+    teacher_body = teacher_response.json()
+    assert teacher_body["summary"] == {
+        "workloadHours": 0.0,
+        "loadCount": 1,
+        "classesHandled": 1,
+        "subjectsHandled": 1,
+        "totalStudents": 1,
+        "classPerformance": 80.0,
+    }
+    assert teacher_body["subject_breakdown"] == [
+        {"subject": "Computer Programming", "value": 80.0}
+    ]
+    assert teacher_body["period_performance"] == [{"period": "Q1", "score": 86.5}]
+    assert [row["subject_name"] for row in teacher_body["handled_subjects"]] == [
+        "Computer Programming"
+    ]
 
 
 def test_list_users_allows_null_profile_dob(client, db_and_engine):
