@@ -11,7 +11,6 @@ import { OverviewCard } from "@/components/overview-cards";
 import { ClassworkItemLine } from "@/components/item-line/classwork";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { isReadingType } from "@/lib/classwork-utils";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import type {
   StudentRecordDetailResponse,
 } from "@/lib/student-record-api";
@@ -38,14 +37,8 @@ function statusLabel(status: string) {
 
 export function StudentRecordDetail({
   detail,
-  classId,
-  subjectLoads,
-  showSuggestionPanel = true,
 }: {
   detail: StudentRecordDetailResponse;
-  classId: number | string;
-  subjectLoads: TeacherAdvisorySubjectLoadItem[];
-  showSuggestionPanel?: boolean;
 }) {
   const [performanceFilter, setPerformanceFilter] = useState<string>("all");
   const [showAllPerformance, setShowAllPerformance] = useState(false);
@@ -155,17 +148,6 @@ export function StudentRecordDetail({
           </div>
         </Card.Content>
       </Card>
-
-      {showSuggestionPanel && (
-        <ManualSuggestionPanel
-          classId={Number(classId)}
-          student={{
-            student_id: detail.student.student_id,
-            full_name: detail.student.full_name,
-          } as any}
-          subjectLoads={subjectLoads}
-        />
-      )}
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
         {/* Main Content: Classwork History */}
@@ -486,27 +468,6 @@ export function TeacherStudentView({
               </Breadcrumb.List>
             </Breadcrumb>
           </div>
-
-          <div className="flex shrink-0 flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center justify-end">
-            {(student || studentDetail?.student) && subjectLoads && subjectLoads.length > 0 && (
-              <ManualSuggestionPanel
-                classId={Number(classId)}
-                student={
-                  student || {
-                    student_id: studentDetail?.student?.student_id || "",
-                    full_name: studentName,
-                    student_lrn: studentDetail?.student?.lrn || null,
-                    gender: studentDetail?.student?.gender || "",
-                    email: studentDetail?.student?.email || null,
-                    account_status: studentDetail?.student?.status || null,
-                    avatar_initial: studentName ? studentName.charAt(0) : "S",
-                  }
-                }
-                subjectLoads={subjectLoads}
-                displayMode="header"
-              />
-            )}
-          </div>
         </header>
       </div>
 
@@ -525,9 +486,6 @@ export function TeacherStudentView({
         ) : (
           <StudentRecordDetail
             detail={studentDetail}
-            classId={classId}
-            subjectLoads={subjectLoads as any}
-            showSuggestionPanel={false}
           />
         )}
       </div>

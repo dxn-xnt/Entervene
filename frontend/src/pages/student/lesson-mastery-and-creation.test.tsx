@@ -277,7 +277,7 @@ describe("StudentLessonMastery Component UI", () => {
       <StudentLessonMastery
         lessons={lessons}
         assignmentIdsByLesson={assignmentIdsByLesson}
-        classworks={classworks as any}
+        classworks={classworks}
       />,
     );
 
@@ -344,7 +344,7 @@ describe("StudentLessonMastery Component UI", () => {
       <StudentLessonMastery
         lessons={lessonsPeriod1}
         assignmentIdsByLesson={{ 1: [101] }}
-        classworks={classworksPeriod1 as any}
+        classworks={classworksPeriod1}
       />,
     );
 
@@ -356,7 +356,7 @@ describe("StudentLessonMastery Component UI", () => {
       <StudentLessonMastery
         lessons={lessonsPeriod2}
         assignmentIdsByLesson={{ 2: [201] }}
-        classworks={classworksPeriod2 as any}
+        classworks={classworksPeriod2}
       />,
     );
 

@@ -141,7 +141,10 @@ export default function CreateLessonModal({
               if (initialCompetencyId && data.some((c: any) => c.competency_id === initialCompetencyId)) {
                 return String(initialCompetencyId);
               }
-              if (curr && data.some((c: any) => String(c.competency_id) === curr)) return curr;
+              if (
+                curr &&
+                data.some((c: { competency_id: number | string }) => String(c.competency_id) === curr)
+              ) return curr;
               return String(data[0].competency_id);
             });
           } else {

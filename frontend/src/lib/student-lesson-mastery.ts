@@ -136,7 +136,7 @@ export function isEligibleGradedAssessment(item: MasteryClassworkInput): boolean
 
 export function isCompletedClasswork(item: MasteryClassworkInput): boolean {
   if (item.is_submitted === true) return true;
-  if (Boolean(item.submitted_at)) return true;
+  if (item.submitted_at) return true;
   const subStatus = (item.submission_status ?? item.status ?? "").trim().toLowerCase();
   return (
     subStatus === "submitted" ||
