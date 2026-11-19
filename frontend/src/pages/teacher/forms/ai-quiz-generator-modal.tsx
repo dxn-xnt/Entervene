@@ -14,7 +14,11 @@ import {
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/teacher/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/retroui/Tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
@@ -67,7 +71,7 @@ export interface AIQuizGeneratorModalProps {
     synthesizedTitle?: string,
     associatedLessonIds?: number[],
     additionalCoverageScope?: string,
-    associatedLessonTitles?: string[]
+    associatedLessonTitles?: string[],
   ) => void;
 }
 
@@ -164,10 +168,14 @@ export default function AIQuizGeneratorModal({
   const [sourceMode, setSourceMode] = useState<"lesson" | "specific">("lesson");
   const [lessons, setLessons] = useState<TeacherLessonItem[]>([]);
   const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
-  const [readingClassworks, setReadingClassworks] = useState<ReadingClassworkItem[]>([]);
+  const [readingClassworks, setReadingClassworks] = useState<
+    ReadingClassworkItem[]
+  >([]);
   const [selectedReadingIds, setSelectedReadingIds] = useState<number[]>([]);
   const [isLoadingSource, setIsLoadingSource] = useState(false);
-  const [additionalCoverage, setAdditionalCoverage] = useState(() => remediationFocus ? focusGuidance(remediationFocus) : "");
+  const [additionalCoverage, setAdditionalCoverage] = useState(() =>
+    remediationFocus ? focusGuidance(remediationFocus) : "",
+  );
 
   const handleSourceModeChange = (mode: "lesson" | "specific") => {
     setSourceMode(mode);
@@ -188,7 +196,7 @@ export default function AIQuizGeneratorModal({
 
     if (sourceMode === "specific" && selectedReadingIds.length > 0) {
       const selectedItems = readingClassworks.filter((r) =>
-        selectedReadingIds.includes(r.classwork_id)
+        selectedReadingIds.includes(r.classwork_id),
       );
       if (selectedItems.length === 1) {
         return `${sName}: ${selectedItems[0].title} Quiz`;
@@ -203,7 +211,7 @@ export default function AIQuizGeneratorModal({
 
     if (sourceMode === "lesson" && selectedLessonIds.length > 0) {
       const selectedItems = lessons.filter((l) =>
-        selectedLessonIds.includes(l.lesson_id)
+        selectedLessonIds.includes(l.lesson_id),
       );
       if (selectedItems.length === 1) {
         return `${sName}: ${selectedItems[0].title} Quiz`;
@@ -238,10 +246,24 @@ export default function AIQuizGeneratorModal({
 
   // Test parts
   const [testParts, setTestParts] = useState<TestPartRow[]>([
-    { id: "part-1", type: "MULTIPLE_CHOICE", count: 5, points_per_item: 1, difficulty_breakdown: DEFAULT_BREAKDOWN(5) },
-    { id: "part-2", type: "TRUE_FALSE", count: 5, points_per_item: 1, difficulty_breakdown: DEFAULT_BREAKDOWN(5) },
+    {
+      id: "part-1",
+      type: "MULTIPLE_CHOICE",
+      count: 5,
+      points_per_item: 1,
+      difficulty_breakdown: DEFAULT_BREAKDOWN(5),
+    },
+    {
+      id: "part-2",
+      type: "TRUE_FALSE",
+      count: 5,
+      points_per_item: 1,
+      difficulty_breakdown: DEFAULT_BREAKDOWN(5),
+    },
   ]);
-  const [expandedPartIds, setExpandedPartIds] = useState<Set<string>>(new Set());
+  const [expandedPartIds, setExpandedPartIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   // Generation
   const [isGenerating, setIsGenerating] = useState(false);
@@ -261,14 +283,27 @@ export default function AIQuizGeneratorModal({
       })
       .then((data) => {
         if (!active) return;
-        const eligible = data.filter((l) => Number(l.subject_id) === Number(currentSubjectId));
+        const eligible = data.filter(
+          (l) => Number(l.subject_id) === Number(currentSubjectId),
+        );
         setLessons(eligible);
-        if (remediationFocus) setSelectedLessonIds(remediationFocus.lesson_ids.filter((id) => eligible.some((lesson) => lesson.lesson_id === id)));
+        if (remediationFocus)
+          setSelectedLessonIds(
+            remediationFocus.lesson_ids.filter((id) =>
+              eligible.some((lesson) => lesson.lesson_id === id),
+            ),
+          );
       })
-      .catch(() => { if (active) setLessons([]); })
-      .finally(() => { if (active) setIsLoadingSource(false); });
+      .catch(() => {
+        if (active) setLessons([]);
+      })
+      .finally(() => {
+        if (active) setIsLoadingSource(false);
+      });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [isOpen, currentSubjectId, remediationFocus]);
 
   useEffect(() => {
@@ -282,11 +317,19 @@ export default function AIQuizGeneratorModal({
         if (!res.ok) throw new Error();
         return (await res.json()) as ReadingClassworkItem[];
       })
-      .then((data) => { if (active) setReadingClassworks(data); })
-      .catch(() => { if (active) setReadingClassworks([]); })
-      .finally(() => { if (active) setIsLoadingSource(false); });
+      .then((data) => {
+        if (active) setReadingClassworks(data);
+      })
+      .catch(() => {
+        if (active) setReadingClassworks([]);
+      })
+      .finally(() => {
+        if (active) setIsLoadingSource(false);
+      });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [isOpen, currentSubjectId, sourceMode]);
 
   // Reset error when modal opens/closes
@@ -300,15 +343,20 @@ export default function AIQuizGeneratorModal({
 
   const totalItemCount = useMemo(
     () => testParts.reduce((s, p) => s + (Number(p.count) || 0), 0),
-    [testParts]
+    [testParts],
   );
   const totalPointsCount = useMemo(
-    () => testParts.reduce((s, p) => s + (Number(p.count) || 0) * (Number(p.points_per_item) || 1), 0),
-    [testParts]
+    () =>
+      testParts.reduce(
+        (s, p) => s + (Number(p.count) || 0) * (Number(p.points_per_item) || 1),
+        0,
+      ),
+    [testParts],
   );
   const hasAnyBreakdownError = useMemo(
-    () => testParts.some((p) => hasBreakdownError(p, expandedPartIds.has(p.id))),
-    [testParts, expandedPartIds]
+    () =>
+      testParts.some((p) => hasBreakdownError(p, expandedPartIds.has(p.id))),
+    [testParts, expandedPartIds],
   );
 
   // ── Test part mutations ──────────────────────────────────────────────────
@@ -316,9 +364,15 @@ export default function AIQuizGeneratorModal({
   const addTestPart = () => {
     const used = new Set(testParts.map((p) => p.type));
     const next =
-      (["MULTIPLE_CHOICE", "TRUE_FALSE", "IDENTIFICATION", "SHORT_ANSWER", "ESSAY"] as AIQuizPartType[]).find(
-        (t) => !used.has(t)
-      ) ?? "MULTIPLE_CHOICE";
+      (
+        [
+          "MULTIPLE_CHOICE",
+          "TRUE_FALSE",
+          "IDENTIFICATION",
+          "SHORT_ANSWER",
+          "ESSAY",
+        ] as AIQuizPartType[]
+      ).find((t) => !used.has(t)) ?? "MULTIPLE_CHOICE";
     setTestParts((prev) => [
       ...prev,
       {
@@ -334,7 +388,11 @@ export default function AIQuizGeneratorModal({
   const removeTestPart = (id: string) => {
     if (testParts.length <= 1) return;
     setTestParts((prev) => prev.filter((p) => p.id !== id));
-    setExpandedPartIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
+    setExpandedPartIds((prev) => {
+      const s = new Set(prev);
+      s.delete(id);
+      return s;
+    });
   };
 
   const updateTestPart = (id: string, patch: Partial<TestPartRow>) => {
@@ -345,8 +403,10 @@ export default function AIQuizGeneratorModal({
 
         // Auto-adjust points when type changes
         if (patch.type && patch.type !== p.type) {
-          if (patch.type === "ESSAY" && p.points_per_item === 1) updated.points_per_item = 5;
-          else if (p.type === "ESSAY" && updated.points_per_item === 5) updated.points_per_item = 1;
+          if (patch.type === "ESSAY" && p.points_per_item === 1)
+            updated.points_per_item = 5;
+          else if (p.type === "ESSAY" && updated.points_per_item === 5)
+            updated.points_per_item = 1;
         }
 
         // When count changes and breakdown is still default, sync EASY to new count
@@ -355,7 +415,7 @@ export default function AIQuizGeneratorModal({
         }
 
         return updated;
-      })
+      }),
     );
   };
 
@@ -370,34 +430,52 @@ export default function AIQuizGeneratorModal({
   const updateBreakdown = (
     id: string,
     diff: keyof DifficultyBreakdown,
-    value: number
+    value: number,
   ) => {
     setTestParts((prev) =>
       prev.map((p) =>
         p.id === id
-          ? { ...p, difficulty_breakdown: { ...p.difficulty_breakdown, [diff]: Math.max(0, value) } }
-          : p
-      )
+          ? {
+              ...p,
+              difficulty_breakdown: {
+                ...p.difficulty_breakdown,
+                [diff]: Math.max(0, value),
+              },
+            }
+          : p,
+      ),
     );
   };
 
   // ── Generate ─────────────────────────────────────────────────────────────
 
   const handleGenerate = async () => {
-    if (sourceMode === "specific" && readingClassworks.length > 0 && selectedReadingIds.length === 0) {
-      setError("Please select at least one reading classwork in 'By Specific Readings' mode.");
+    if (
+      sourceMode === "specific" &&
+      readingClassworks.length > 0 &&
+      selectedReadingIds.length === 0
+    ) {
+      setError(
+        "Please select at least one reading classwork in 'By Specific Readings' mode.",
+      );
       return;
     }
     if (totalItemCount <= 0) {
       setError("Configure at least one test part with 1 or more items.");
       return;
     }
-    if (testParts.reduce((sum, part) => sum + Number(part.count || 0), 0) > 20) {
-      setError("Generate up to 20 questions at a time. Reduce the item counts before continuing.");
+    if (
+      testParts.reduce((sum, part) => sum + Number(part.count || 0), 0) > 20
+    ) {
+      setError(
+        "Generate up to 20 questions at a time. Reduce the item counts before continuing.",
+      );
       return;
     }
     if (hasAnyBreakdownError) {
-      setError("Difficulty breakdown totals must equal the item count for each part.");
+      setError(
+        "Difficulty breakdown totals must equal the item count for each part.",
+      );
       return;
     }
 
@@ -411,17 +489,23 @@ export default function AIQuizGeneratorModal({
         body: JSON.stringify({
           subject_id: currentSubjectId,
           lesson_ids: sourceMode === "lesson" ? selectedLessonIds : [],
-          reading_classwork_ids: sourceMode === "specific" ? selectedReadingIds : [],
+          reading_classwork_ids:
+            sourceMode === "specific" ? selectedReadingIds : [],
           additional_coverage: additionalCoverage.trim() || null,
           test_parts: testParts.map((p) => ({
             type: p.type,
             count: Math.max(1, Math.min(50, Number(p.count) || 1)),
-            points_per_item: Math.max(0.5, Math.min(100, Number(p.points_per_item) || 1)),
+            points_per_item: Math.max(
+              0.5,
+              Math.min(100, Number(p.points_per_item) || 1),
+            ),
             difficulty_breakdown: isDefaultBreakdown(p)
               ? { EASY: p.count }
               : Object.fromEntries(
-                Object.entries(p.difficulty_breakdown).filter(([, v]) => v > 0)
-              ),
+                  Object.entries(p.difficulty_breakdown).filter(
+                    ([, v]) => v > 0,
+                  ),
+                ),
           })),
         }),
       });
@@ -430,20 +514,29 @@ export default function AIQuizGeneratorModal({
         const err = await response.json().catch(() => null);
         const detail = err?.detail;
         const msg = Array.isArray(detail)
-          ? detail.map((e: { loc?: string[]; msg?: string }) => e.msg).join("; ")
+          ? detail
+              .map((e: { loc?: string[]; msg?: string }) => e.msg)
+              .join("; ")
           : typeof detail === "string"
             ? detail
             : `AI generation failed (${response.status})`;
         throw new Error(msg);
       }
 
-      const data = await response.json() as { questions: GeneratedQuizApiQuestion[]; warnings?: string[] };
+      const data = (await response.json()) as {
+        questions: GeneratedQuizApiQuestion[];
+        warnings?: string[];
+      };
 
       if (!data.questions?.length) {
-        throw new Error("AI returned an empty question list. Please try again.");
+        throw new Error(
+          "AI returned an empty question list. Please try again.",
+        );
       }
 
-      const drafts: QuizQuestionDraft[] = mapGeneratedQuizQuestions(data.questions);
+      const drafts: QuizQuestionDraft[] = mapGeneratedQuizQuestions(
+        data.questions,
+      );
 
       // Derive lessons from chosen source
       let derivedLessonIds: number[] = [];
@@ -451,7 +544,7 @@ export default function AIQuizGeneratorModal({
 
       if (sourceMode === "specific") {
         const selectedItems = readingClassworks.filter((r) =>
-          selectedReadingIds.includes(r.classwork_id)
+          selectedReadingIds.includes(r.classwork_id),
         );
         const idSet = new Set<number>();
         const titleSet = new Set<string>();
@@ -478,12 +571,14 @@ export default function AIQuizGeneratorModal({
         synthesizedQuizTitle,
         derivedLessonIds,
         additionalCoverage.trim() || undefined,
-        derivedLessonTitles
+        derivedLessonTitles,
       );
       onClose();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to generate quiz. Please try again."
+        err instanceof Error
+          ? err.message
+          : "Unable to generate quiz. Please try again.",
       );
     } finally {
       setIsGenerating(false);
@@ -507,7 +602,9 @@ export default function AIQuizGeneratorModal({
   return (
     <Dialog
       open={isOpen}
-      onOpenChange={(open) => { if (!open && !isGenerating) onClose(); }}
+      onOpenChange={(open) => {
+        if (!open && !isGenerating) onClose();
+      }}
     >
       <Dialog.Content
         size="2xl"
@@ -515,15 +612,12 @@ export default function AIQuizGeneratorModal({
         overlay={{ forceRender: true }}
       >
         {/* ── Fixed Header ── */}
-        <Dialog.Header
-          position="fixed"
-        >
+        <Dialog.Header position="fixed">
           <h2 className="font-sans text-xl font-bold">AI Quiz Generator</h2>
         </Dialog.Header>
 
         {/* ── Scrollable Body ── */}
         <section className="flex flex-col gap-4 p-5">
-
           {error && <FormMessage>{error}</FormMessage>}
 
           {/* Subject Selection */}
@@ -548,13 +642,15 @@ export default function AIQuizGeneratorModal({
                   }}
                   disabled={isGenerating}
                 >
-                  <Select.Trigger className="w-full"><Select.Value /></Select.Trigger>
+                  <Select.Trigger className="w-full">
+                    <Select.Value />
+                  </Select.Trigger>
                   <Select.Content>
-                  {subjects.map((s) => (
-                    <Select.Item key={s.id} value={String(s.id)}>
-                      {s.name}
-                    </Select.Item>
-                  ))}
+                    {subjects.map((s) => (
+                      <Select.Item key={s.id} value={String(s.id)}>
+                        {s.name}
+                      </Select.Item>
+                    ))}
                   </Select.Content>
                 </Select>
               </div>
@@ -577,8 +673,16 @@ export default function AIQuizGeneratorModal({
             <div className="grid grid-cols-2 gap-2">
               {(
                 [
-                  { mode: "lesson", icon: <List className="w-3.5 h-3.5" />, label: "By Lesson" },
-                  { mode: "specific", icon: <BookMarked className="w-3.5 h-3.5" />, label: "By Specific Readings" },
+                  {
+                    mode: "lesson",
+                    icon: <List className="w-3.5 h-3.5" />,
+                    label: "By Lesson",
+                  },
+                  {
+                    mode: "specific",
+                    icon: <BookMarked className="w-3.5 h-3.5" />,
+                    label: "By Specific Readings",
+                  },
                 ] as const
               ).map(({ mode, icon, label }) => (
                 <Button
@@ -600,7 +704,8 @@ export default function AIQuizGeneratorModal({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">
-                    Select lessons — all attached readings will be used as source material.
+                    Select lessons — all attached readings will be used as
+                    source material.
                   </span>
                   {lessons.length > 0 && (
                     <button
@@ -609,12 +714,14 @@ export default function AIQuizGeneratorModal({
                         setSelectedLessonIds(
                           selectedLessonIds.length === lessons.length
                             ? []
-                            : lessons.map((l) => l.lesson_id)
+                            : lessons.map((l) => l.lesson_id),
                         )
                       }
                       className="text-sm font-bold text-foreground hover:underline cursor-pointer shrink-0 ml-2"
                     >
-                      {selectedLessonIds.length === lessons.length ? "Deselect All" : "Select All"}
+                      {selectedLessonIds.length === lessons.length
+                        ? "Deselect All"
+                        : "Select All"}
                     </button>
                   )}
                 </div>
@@ -625,9 +732,9 @@ export default function AIQuizGeneratorModal({
                     Loading lessons…
                   </div>
                 ) : lessons.length === 0 ? (
-                  <div className="p-3 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
-                    No lessons found. AI will generate based on general curriculum for{" "}
-                    <strong>{currentSubjectName}</strong>.
+                  <div className="p-3 border-2 border-dashed border-black/30 rounded! bg-neutral-50 text-sm text-muted-foreground">
+                    No lessons found. AI will generate based on general
+                    curriculum for <strong>{currentSubjectName}</strong>.
                   </div>
                 ) : (
                   <div className="max-h-32 overflow-y-auto rounded! border-2 border-border p-2 space-y-1.5 bg-background shadow-none">
@@ -636,8 +743,11 @@ export default function AIQuizGeneratorModal({
                       return (
                         <label
                           key={lesson.lesson_id}
-                          className={`flex items-center gap-2 p-2 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${sel ? "bg-primary border-border font-bold" : "hover:bg-neutral-50"
-                            }`}
+                          className={`flex items-center gap-2 p-2 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${
+                            sel
+                              ? "bg-primary border-border font-bold"
+                              : "hover:bg-neutral-50"
+                          }`}
                         >
                           <input
                             type="checkbox"
@@ -646,12 +756,14 @@ export default function AIQuizGeneratorModal({
                               setSelectedLessonIds((prev) =>
                                 prev.includes(lesson.lesson_id)
                                   ? prev.filter((id) => id !== lesson.lesson_id)
-                                  : [...prev, lesson.lesson_id]
+                                  : [...prev, lesson.lesson_id],
                               )
                             }
                             className="rounded rounded! border-2 border-border accent-black w-4 h-4 cursor-pointer"
                           />
-                          <span className="flex-1 truncate">{lesson.title}</span>
+                          <span className="flex-1 truncate">
+                            {lesson.title}
+                          </span>
                         </label>
                       );
                     })}
@@ -677,7 +789,7 @@ export default function AIQuizGeneratorModal({
                         setSelectedReadingIds(
                           selectedReadingIds.length === readingClassworks.length
                             ? []
-                            : readingClassworks.map((r) => r.classwork_id)
+                            : readingClassworks.map((r) => r.classwork_id),
                         )
                       }
                       className="text-sm font-bold text-foreground hover:underline cursor-pointer shrink-0 ml-2"
@@ -695,9 +807,9 @@ export default function AIQuizGeneratorModal({
                     Loading reading classworks…
                   </div>
                 ) : readingClassworks.length === 0 ? (
-                  <div className="p-3 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
-                    No reading classworks found for this subject. Try "By Lesson" mode or add
-                    reading classworks first.
+                  <div className="p-3 border-2 border-dashed border-black/30 rounded! bg-neutral-50 text-sm text-muted-foreground">
+                    No reading classworks found for this subject. Try "By
+                    Lesson" mode or add reading classworks first.
                   </div>
                 ) : (
                   <div className="max-h-40 overflow-y-auto rounded! border-2 border-border p-2 space-y-3 bg-background shadow-none">
@@ -708,14 +820,17 @@ export default function AIQuizGeneratorModal({
                         </p>
                         <div className="space-y-1">
                           {items.map((cw) => {
-                            const sel = selectedReadingIds.includes(cw.classwork_id);
+                            const sel = selectedReadingIds.includes(
+                              cw.classwork_id,
+                            );
                             return (
                               <label
                                 key={cw.classwork_id}
-                                className={`flex items-center gap-2 p-1.5 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${sel
+                                className={`flex items-center gap-2 p-1.5 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${
+                                  sel
                                     ? "bg-primary border-border font-bold"
                                     : "hover:bg-neutral-50"
-                                  }`}
+                                }`}
                               >
                                 <input
                                   type="checkbox"
@@ -723,13 +838,17 @@ export default function AIQuizGeneratorModal({
                                   onChange={() =>
                                     setSelectedReadingIds((prev) =>
                                       prev.includes(cw.classwork_id)
-                                        ? prev.filter((id) => id !== cw.classwork_id)
-                                        : [...prev, cw.classwork_id]
+                                        ? prev.filter(
+                                            (id) => id !== cw.classwork_id,
+                                          )
+                                        : [...prev, cw.classwork_id],
                                     )
                                   }
                                   className="rounded rounded! border-2 border-border accent-black w-4 h-4 cursor-pointer"
                                 />
-                                <span className="flex-1 truncate">{cw.title}</span>
+                                <span className="flex-1 truncate">
+                                  {cw.title}
+                                </span>
                               </label>
                             );
                           })}
@@ -739,7 +858,8 @@ export default function AIQuizGeneratorModal({
                   </div>
                 )}
                 <p className="text-sm text-muted-foreground">
-                  {selectedReadingIds.length} reading classwork(s) selected across lessons.
+                  {selectedReadingIds.length} reading classwork(s) selected
+                  across lessons.
                 </p>
               </div>
             )}
@@ -774,7 +894,9 @@ export default function AIQuizGeneratorModal({
             <div className="space-y-2">
               {testParts.map((part, index) => {
                 const isExpanded = expandedPartIds.has(part.id);
-                const rowPts = (Number(part.count) || 0) * (Number(part.points_per_item) || 1);
+                const rowPts =
+                  (Number(part.count) || 0) *
+                  (Number(part.points_per_item) || 1);
                 const bError = hasBreakdownError(part, isExpanded);
 
                 return (
@@ -788,63 +910,102 @@ export default function AIQuizGeneratorModal({
                         #{index + 1}
                       </span>
 
-                      <Select value={part.type} onValueChange={(value) => updateTestPart(part.id, { type: value as AIQuizPartType })}>
-                        <Select.Trigger className="min-w-[160px] flex-1"><Select.Value /></Select.Trigger>
+                      <Select
+                        value={part.type}
+                        onValueChange={(value) =>
+                          updateTestPart(part.id, {
+                            type: value as AIQuizPartType,
+                          })
+                        }
+                      >
+                        <Select.Trigger className="min-w-[160px] flex-1">
+                          <Select.Value />
+                        </Select.Trigger>
                         <Select.Content>
-                          <Select.Item value="MULTIPLE_CHOICE">Multiple Choice (4 Options)</Select.Item>
-                          <Select.Item value="TRUE_FALSE">True or False (2 Options)</Select.Item>
-                          <Select.Item value="IDENTIFICATION">Identification (Auto-graded key)</Select.Item>
-                          <Select.Item value="SHORT_ANSWER">Short Answer (Essay)</Select.Item>
-                          <Select.Item value="ESSAY">Essay / Open-ended Response</Select.Item>
+                          <Select.Item value="MULTIPLE_CHOICE">
+                            Multiple Choice (4 Options)
+                          </Select.Item>
+                          <Select.Item value="TRUE_FALSE">
+                            True or False (2 Options)
+                          </Select.Item>
+                          <Select.Item value="IDENTIFICATION">
+                            Identification (Auto-graded key)
+                          </Select.Item>
+                          <Select.Item value="SHORT_ANSWER">
+                            Short Answer (Essay)
+                          </Select.Item>
+                          <Select.Item value="ESSAY">
+                            Essay / Open-ended Response
+                          </Select.Item>
                         </Select.Content>
                       </Select>
 
                       <div className="flex items-center gap-1 shrink-0">
                         <Tooltip>
-                          <TooltipTrigger render={<Input
-                            type="number"
-                            min={1}
-                            max={50}
-                            value={part.count}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const parsed = raw === "" ? 1 : parseInt(raw, 10);
-                              const clamped = isNaN(parsed) ? 1 : Math.max(1, Math.min(50, parsed));
-                              e.target.value = String(clamped);
-                              updateTestPart(part.id, { count: clamped });
-                            }}
-                            className="w-14 h-8 text-center rounded! border-2 border-border rounded shadow-none"
-                            aria-label="Number of questions"
-                          />} />
+                          <TooltipTrigger
+                            render={
+                              <Input
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={part.count}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  const parsed =
+                                    raw === "" ? 1 : parseInt(raw, 10);
+                                  const clamped = isNaN(parsed)
+                                    ? 1
+                                    : Math.max(1, Math.min(50, parsed));
+                                  e.target.value = String(clamped);
+                                  updateTestPart(part.id, { count: clamped });
+                                }}
+                                className="w-16 h-8 px-1 text-center border-2 border-border rounded! shadow-none bg-background [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                aria-label="Number of questions"
+                              />
+                            }
+                          />
                           <TooltipContent>Questions</TooltipContent>
                         </Tooltip>
-                        <span className="text-sm font-semibold text-muted-foreground">items</span>
+                        <span className="text-sm font-semibold text-muted-foreground">
+                          items
+                        </span>
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="text-sm font-bold text-black">@</span>
                         <Tooltip>
-                          <TooltipTrigger render={<Input
-                            type="number"
-                            min={0.5}
-                            max={100}
-                            step={0.5}
-                            value={part.points_per_item}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const parsed = raw === "" ? 1 : parseFloat(raw);
-                              const clamped = isNaN(parsed) ? 1 : Math.max(0.5, Math.min(100, parsed));
-                              e.target.value = String(clamped);
-                              updateTestPart(part.id, { points_per_item: clamped });
-                            }}
-                            className="w-14 h-8 text-center rounded! border-2 border-border rounded shadow-none bg-background"
-                            aria-label="Points per question"
-                          />} />
+                          <TooltipTrigger
+                            render={
+                              <Input
+                                type="number"
+                                min={0.5}
+                                max={100}
+                                step={0.5}
+                                value={part.points_per_item}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  const parsed =
+                                    raw === "" ? 1 : parseFloat(raw);
+                                  const clamped = isNaN(parsed)
+                                    ? 1
+                                    : Math.max(0.5, Math.min(100, parsed));
+                                  e.target.value = String(clamped);
+                                  updateTestPart(part.id, {
+                                    points_per_item: clamped,
+                                  });
+                                }}
+                                className="w-16 h-8 px-1 text-center border-2 border-border rounded! shadow-none bg-background [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                aria-label="Points per question"
+                              />
+                            }
+                          />
                           <TooltipContent>Points per question</TooltipContent>
                         </Tooltip>
-                        <span className="text-sm font-semibold text-muted-foreground">pt(s)</span>
+                        <span className="text-sm font-semibold text-muted-foreground">
+                          pt(s)
+                        </span>
                       </div>
 
                       <Badge size="sm" variant="outline" className="shrink-0">
@@ -852,41 +1013,56 @@ export default function AIQuizGeneratorModal({
                       </Badge>
 
                       <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex"><Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={testParts.length <= 1}
-                          onClick={() => removeTestPart(part.id)}
-                          className="h-8 w-8 p-0 rounded! border-2 border-border text-red-600 hover:bg-red-50 disabled:opacity-30 cursor-pointer ml-auto shrink-0"
-                          aria-label="Remove test part"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button></span>} />
-                        <TooltipContent>{testParts.length <= 1 ? "Keep one part" : "Remove part"}</TooltipContent>
+                        <TooltipTrigger
+                          render={
+                            <span className="inline-flex">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={testParts.length <= 1}
+                                onClick={() => removeTestPart(part.id)}
+                                className="h-8 w-8 p-0 rounded! border-2 border-border text-red-600 hover:bg-red-50 disabled:opacity-30 cursor-pointer ml-auto shrink-0"
+                                aria-label="Remove test part"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </span>
+                          }
+                        />
+                        <TooltipContent>
+                          {testParts.length <= 1
+                            ? "Keep one part"
+                            : "Remove part"}
+                        </TooltipContent>
                       </Tooltip>
                     </div>
 
                     {/* ── Prominent Difficulty Customizer Toggle ── */}
-                    <div className="mt-2.5 pt-2 border-t-2 border-black/10 flex items-center justify-between">
+                    <div className="mt-2.5 pt-2 flex items-center justify-between">
                       <Button
                         type="button"
                         size="sm"
-                        variant={isExpanded || !isDefaultBreakdown(part) ? "default" : "outline"}
+                        variant={
+                          isExpanded || !isDefaultBreakdown(part)
+                            ? "default"
+                            : "outline"
+                        }
                         onClick={() => togglePartExpanded(part.id)}
-                        className="gap-2"
+                        className="gap-2 shadow-none"
                       >
                         <Settings2 className="w-3.5 h-3.5" />
                         <span>Customize Difficulty</span>
                         <span
-                          className={`px-1.5 py-0.5 text-sm font-semibold ${isExpanded
-                              ? "bg-background/20 text-white"
+                          className={`px-1.5 py-0.5 text-sm font-semibold ${
+                            isExpanded
+                              ? "bg-background/20 text-black"
                               : bError
-                                ? "bg-red-500 text-white"
+                                ? "bg-red-500 text-black"
                                 : isDefaultBreakdown(part)
                                   ? "bg-neutral-200 text-black/80"
                                   : "bg-black text-white"
-                            }`}
+                          }`}
                         >
                           {bError
                             ? `⚠ ${breakdownSum(part)}/${part.count}`
@@ -911,12 +1087,13 @@ export default function AIQuizGeneratorModal({
                         {(["EASY", "MEDIUM", "HARD"] as const).map((diff) => (
                           <div key={diff} className="flex items-center gap-1">
                             <span
-                              className={`text-sm font-bold ${diff === "EASY"
+                              className={`text-sm font-bold ${
+                                diff === "EASY"
                                   ? "text-green-700"
                                   : diff === "MEDIUM"
                                     ? "text-amber-600"
                                     : "text-red-600"
-                                }`}
+                              }`}
                             >
                               {diff[0] + diff.slice(1).toLowerCase()}
                             </span>
@@ -928,14 +1105,15 @@ export default function AIQuizGeneratorModal({
                               onFocus={(e) => e.target.select()}
                               onChange={(e) => {
                                 const raw = e.target.value;
-                                const parsed = raw === "" ? 0 : parseInt(raw, 10);
+                                const parsed =
+                                  raw === "" ? 0 : parseInt(raw, 10);
                                 const clamped = isNaN(parsed)
                                   ? 0
                                   : Math.max(0, Math.min(part.count, parsed));
                                 e.target.value = String(clamped);
                                 updateBreakdown(part.id, diff, clamped);
                               }}
-                              className="w-12 h-7 text-center text-sm font-bold rounded! border-2 border-border rounded focus:outline-none focus:ring-1 focus:ring-black"
+                              className="w-14 h-7 px-1 text-center text-sm font-bold border-2 border-border rounded! focus:outline-none focus:ring-1 focus:ring-black [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </div>
                         ))}
@@ -945,7 +1123,9 @@ export default function AIQuizGeneratorModal({
                           </span>
                         )}
                         {!bError && !isDefaultBreakdown(part) && (
-                          <span className="text-sm text-green-600 font-bold">✓</span>
+                          <span className="text-sm text-green-600 font-bold">
+                            ✓
+                          </span>
                         )}
                       </div>
                     )}
@@ -995,7 +1175,9 @@ export default function AIQuizGeneratorModal({
               type="button"
               variant="default"
               size="sm"
-              disabled={isGenerating || totalItemCount <= 0 || hasAnyBreakdownError}
+              disabled={
+                isGenerating || totalItemCount <= 0 || hasAnyBreakdownError
+              }
               onClick={handleGenerate}
               className="gap-2"
             >
