@@ -1,5 +1,6 @@
 "use client";
 
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCheck, FileText, Plus, Trash2, X } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
@@ -132,9 +133,12 @@ export default function CreateClassworkModal({
       subject_id: preferredId,
     };
   });
+  const isSubjectLocked = Boolean(initialSubjectId) || Boolean(remediationTarget);
+  const isLessonLocked = Boolean(initialLessonId);
+
   useEffect(() => {
     if (initialSubjectId && subjects.some((subject) => String(subject.id) === String(initialSubjectId))) {
-      setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
+      setDraft((current) => current.subject_id === String(initialSubjectId) ? current : { ...current, subject_id: String(initialSubjectId) });
     }
   }, [initialSubjectId, subjects]);
   useEffect(() => {
@@ -155,6 +159,18 @@ export default function CreateClassworkModal({
   const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>(() =>
     initialLessonId ? [initialLessonId] : []
   );
+
+  useEffect(() => {
+    if (initialLessonId) {
+      setSelectedLessonIds([initialLessonId]);
+    }
+  }, [initialLessonId]);
+
+  useEffect(() => {
+    if (initialClassId) {
+      setSelectedClassIds([initialClassId]);
+    }
+  }, [initialClassId]);
   const [isLessonLoading, setIsLessonLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [validationError, setValidationError] = useState("");
@@ -569,6 +585,7 @@ export default function CreateClassworkModal({
                 <Select
                   value={draft.subject_id}
                   onValueChange={(val) => {
+                    if (isSubjectLocked) return;
                     setDraft((current) => ({
                       ...current,
                       subject_id: val,
@@ -577,7 +594,7 @@ export default function CreateClassworkModal({
                     setSelectedLessonIds([]);
                     setValidationError("");
                   }}
-                  disabled={isCreating || Boolean(remediationTarget)}
+                  disabled={isCreating || isSubjectLocked}
                 >
                   <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                     <Select.Value placeholder="Choose subject" />
@@ -598,6 +615,7 @@ export default function CreateClassworkModal({
                 <Select
                   value={selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""}
                   onValueChange={(val) => {
+                    if (isLessonLocked) return;
                     setSelectedLessonIds(val ? [Number(val)] : []);
                     setValidationError("");
                   }}
@@ -605,7 +623,8 @@ export default function CreateClassworkModal({
                     isCreating ||
                     !draft.subject_id ||
                     isLessonLoading ||
-                    availableLessons.length === 0
+                    availableLessons.length === 0 ||
+                    isLessonLocked
                   }
                 >
                   <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
@@ -637,6 +656,23 @@ export default function CreateClassworkModal({
                   </Select.Content>
                 </Select>
               </Field>
+
+              {(() => {
+                const selectedLesson = availableLessons.find(
+                  (l) => l.lesson_id === selectedLessonIds[0],
+                );
+                if (selectedLesson && (selectedLesson.competency_statement || selectedLesson.competency_code)) {
+                  return (
+                    <Field label="Learning Competency">
+                      <div className="w-full rounded border-2 border-black bg-muted/40 px-3 py-2 text-sm text-foreground">
+                        {selectedLesson.competency_code ? `[${selectedLesson.competency_code}] ` : ""}
+                        {selectedLesson.competency_statement}
+                      </div>
+                    </Field>
+                  );
+                }
+                return null;
+              })()}
 
 
 
@@ -880,13 +916,13 @@ export default function CreateClassworkModal({
               <div className={`grid gap-4 ${isReadingType(selectedType) ? "" : "sm:grid-cols-2"}`}>
                 {!isReadingType(selectedType) && (
                   <Field label="Due Date">
-                    <Input
-                      type="datetime-local"
+                    <DatePicker
+                      includeTime
                       value={draft.due_date}
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         setDraft((current) => ({
                           ...current,
-                          due_date: event.target.value,
+                          due_date: value,
                         }))
                       }
                       disabled={isCreating}
@@ -927,13 +963,13 @@ export default function CreateClassworkModal({
               </div>
 
               <Field label="Locked Until">
-                <Input
-                  type="datetime-local"
+                <DatePicker
+                  includeTime
                   value={draft.lock_date}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setDraft((current) => ({
                       ...current,
-                      lock_date: event.target.value,
+                      lock_date: value,
                     }))
                   }
                   disabled={isCreating || !draft.is_published}

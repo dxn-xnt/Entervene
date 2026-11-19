@@ -21,6 +21,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/student/button";
 import { Select } from "@/components/retroui/Select";
 import { StudentLessonMastery } from "@/components/student-lesson-mastery";
+import { mergeClassworkRecords } from "@/lib/student-lesson-mastery";
 import { LoadingPanel } from "@/components/loading-panel";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 import StudentClassworkDetailModal from "@/pages/student/forms/student-classwork-detail-modal";
@@ -65,10 +66,6 @@ function getStatusBadge(status?: string | null, dueDate?: string | null) {
 
 function isReadingType(value?: string | null) {
   return value?.toUpperCase() === "READING";
-}
-
-function isQuizType(value?: string | null) {
-  return value?.toUpperCase() === "QUIZ";
 }
 
 function withAcademicPeriod(path: string, academicPeriodId: number | null) {
@@ -439,6 +436,7 @@ export default function SubjectLessonTab({
       updateClassworkStatus(
         selectedClasswork.classwork_assignment_id,
         attempt.status,
+        attempt.grade,
       );
     } catch (err) {
       setQuizError(
@@ -496,6 +494,7 @@ export default function SubjectLessonTab({
       updateClassworkStatus(
         selectedClasswork.classwork_assignment_id,
         attempt.status,
+        attempt.grade,
       );
     } catch (err) {
       setQuizError(
@@ -580,18 +579,48 @@ export default function SubjectLessonTab({
     setDetailError("");
   };
 
-  const updateClassworkStatus = (assignmentId: number, status: string) => {
+  const updateClassworkStatus = (assignmentId: number, status: string, grade?: number | null) => {
+    const isCompleted = ["submitted", "graded", "late", "completed"].includes(status.toLowerCase());
     setClassworksByLesson((prev) => {
       const next = { ...prev };
       Object.keys(next).forEach((lid) => {
         next[Number(lid)] = next[Number(lid)].map((cw) =>
           cw.classwork_assignment_id === assignmentId
-            ? { ...cw, submission_status: status }
+            ? {
+                ...cw,
+                submission_status: status,
+                is_submitted: isCompleted,
+                ...(grade !== undefined ? { grade } : {}),
+              }
             : cw,
         );
       });
       return next;
     });
+    setStudentClassworks((prev) =>
+      prev.map((cw) =>
+        cw.assignment_id === assignmentId
+          ? {
+              ...cw,
+              submission_status: status,
+              is_submitted: isCompleted,
+              status: isCompleted ? "completed" : "pending",
+              ...(grade !== undefined ? { grade } : {}),
+            }
+          : cw,
+      ),
+    );
+    if (classId && subjectId) {
+      getStudentTodos(selectedPeriodId || undefined)
+        .then((data) => {
+          setStudentClassworks(
+            (data.all ?? []).filter(
+              (work) => work.class_id === classId && work.subject_id === subjectId,
+            ),
+          );
+        })
+        .catch(() => {});
+    }
   };
 
   const handleSubmit = async (assignmentId: number, files: File[]) => {
@@ -606,7 +635,7 @@ export default function SubjectLessonTab({
       if (!res.ok) throw new Error("Failed to submit.");
       const sub = (await res.json()) as Submission;
       setSelectedSubmission(sub);
-      updateClassworkStatus(assignmentId, sub.status);
+      updateClassworkStatus(assignmentId, sub.status, sub.grade);
     } finally {
       setSubmittingId(null);
     }
@@ -632,7 +661,7 @@ export default function SubjectLessonTab({
           }
           : null,
       );
-      updateClassworkStatus(assignmentId, sub.status);
+      updateClassworkStatus(assignmentId, sub.status, sub.grade);
     } finally {
       setIsMarkingRead(false);
     }
@@ -647,7 +676,7 @@ export default function SubjectLessonTab({
       );
       if (!res.ok) throw new Error("Failed to delete.");
       setSelectedSubmission(null);
-      updateClassworkStatus(assignmentId, "not_submitted_yet");
+      updateClassworkStatus(assignmentId, "not_submitted_yet", null);
     } finally {
       setDeletingId(null);
     }
@@ -683,26 +712,13 @@ export default function SubjectLessonTab({
     return sortAsc ? da - db : db - da;
   });
 
-  const classworkLessonCounts = allClassworks.reduce((counts, classwork) => {
-    counts.set(
-      classwork.classwork_assignment_id,
-      (counts.get(classwork.classwork_assignment_id) ?? 0) + 1,
-    );
-    return counts;
-  }, new Map<number, number>());
-
   const quarterlyAssessments = Array.from(
     new Map<number, ClassworkDetail | LessonClasswork>([
       ...subjectAssignments
         .filter((cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT")
         .map((cw) => [cw.classwork_assignment_id, cw] as const),
       ...allClassworks
-        .filter(
-          (cw) =>
-            cw.classwork_category === "QUARTERLY_ASSESSMENT" ||
-            (isQuizType(cw.classwork_type) &&
-              (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) > 1),
-        )
+        .filter((cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT")
         .map((cw) => [cw.classwork_assignment_id, cw] as const),
     ]).values(),
   );
@@ -710,6 +726,22 @@ export default function SubjectLessonTab({
   const quarterlyAssignmentIds = new Set(
     quarterlyAssessments.map((qa) => qa.classwork_assignment_id),
   );
+
+  const studentClassworksById = new Map(
+    studentClassworks.map((cw) => [cw.assignment_id, cw]),
+  );
+
+  const getLessonScopedClassworks = (lessonId: number) => {
+    const rawItems = (classworksByLesson[lessonId] ?? []).filter(
+      (cw) =>
+        cw.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+        !quarterlyAssignmentIds.has(cw.classwork_assignment_id),
+    );
+    return rawItems.map((cw) => {
+      const todo = studentClassworksById.get(cw.classwork_assignment_id);
+      return todo ? mergeClassworkRecords(todo, cw) : cw;
+    });
+  };
 
   const renderStudentLessonItem = (lesson: Lesson) => {
     return (
@@ -752,9 +784,7 @@ export default function SubjectLessonTab({
     const classworks = (classworksByLesson[lesson.lesson_id] ?? []).filter(
       (cw) =>
         cw.classwork_category !== "QUARTERLY_ASSESSMENT" &&
-        !quarterlyAssignmentIds.has(cw.classwork_assignment_id) &&
-        (!isQuizType(cw.classwork_type) ||
-          (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) <= 1),
+        !quarterlyAssignmentIds.has(cw.classwork_assignment_id),
     );
 
     if (classworkLoadingId === lesson.lesson_id || classworkLoadingIds.has(lesson.lesson_id) || classworksByLesson[lesson.lesson_id] === undefined && !classworkErrorIds.has(lesson.lesson_id)) {
@@ -855,6 +885,7 @@ export default function SubjectLessonTab({
           displaySubjectName={displaySubjectName}
           closeLessonDetail={closeLessonDetail}
           renderLessonClassworkCards={renderLessonClassworkCards}
+          lessonClassworks={getLessonScopedClassworks(selectedLessonDetail.lesson_id)}
           classId={classId}
           subjectId={subjectId}
           fmtDate={fmtDate}
@@ -1008,8 +1039,29 @@ export default function SubjectLessonTab({
               <div className="flex w-full min-w-0 flex-col gap-4">
                 <StudentLessonMastery
                   lessons={sortedLessons}
-                  assignmentIdsByLesson={Object.fromEntries(lessons.map((lesson) => [lesson.lesson_id, (classworksByLesson[lesson.lesson_id] ?? []).map((work) => work.classwork_assignment_id)]))}
+                  assignmentIdsByLesson={Object.fromEntries(
+                    lessons.map((lesson) => [
+                      lesson.lesson_id,
+                      (classworksByLesson[lesson.lesson_id] ?? [])
+                        .filter(
+                          (work) =>
+                            work.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+                            !quarterlyAssignmentIds.has(work.classwork_assignment_id),
+                        )
+                        .map((work) => work.classwork_assignment_id),
+                    ]),
+                  )}
                   classworks={studentClassworks}
+                  lessonClassworksByLesson={Object.fromEntries(
+                    lessons.map((lesson) => [
+                      lesson.lesson_id,
+                      (classworksByLesson[lesson.lesson_id] ?? []).filter(
+                        (work) =>
+                          work.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+                          !quarterlyAssignmentIds.has(work.classwork_assignment_id),
+                      ),
+                    ]),
+                  )}
                   onReview={(lesson) => void openLessonDetail(lesson)}
                 />
               </div>

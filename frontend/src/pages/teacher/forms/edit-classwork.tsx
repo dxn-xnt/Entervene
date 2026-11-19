@@ -1,5 +1,6 @@
 "use client";
 
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { unorderedValues, optionalNumber } from "@/lib/form-changes";
@@ -429,7 +430,7 @@ export default function EditClassworkModal({
       classes: unorderedValues([...new Set(classwork.assignments?.map(item => item.class_id) ?? [])]),
       lessons: unorderedValues(classwork.linked_lessons?.map(item => item.lesson_id) ?? []),
       files: [],
-      referenceLinks: editReferenceLinks(classwork),
+      referenceLinks: isQuizType(classwork.classwork_type) ? [] : editReferenceLinks(classwork),
     },
     values: {
       draft: draftValues(editDraft, rubricLevels),
@@ -437,7 +438,7 @@ export default function EditClassworkModal({
       classes: unorderedValues([...new Set(selectedClassIds)]),
       lessons: unorderedValues(selectedLessonIds),
       files: editMaterials.map(file => [file.name, file.size, file.lastModified, file.type]),
-      referenceLinks,
+      referenceLinks: isQuizType(editDraft.classwork_type) ? [] : referenceLinks,
     },
   });
   const saveClassworkEdit = async (
@@ -461,10 +462,12 @@ export default function EditClassworkModal({
       setFormError("Classwork title is required.");
       return;
     }
-    const linksError = validateReferenceLinks(referenceLinks);
-    if (linksError) {
-      setFormError(linksError);
-      return;
+    if (!isQuizType(editDraft.classwork_type)) {
+      const linksError = validateReferenceLinks(referenceLinks);
+      if (linksError) {
+        setFormError(linksError);
+        return;
+      }
     }
     if (
       totalPoints !== null &&
@@ -567,9 +570,11 @@ export default function EditClassworkModal({
             show_scores: isQuiz ? undefined : editDraft.show_scores,
             auto_ai_feedback_enabled: autoAiSupported ? editDraft.auto_ai_feedback_enabled : false,
             lesson_ids: selectedLessonIds,
-            reference_links: JSON.stringify(referenceLinks) === JSON.stringify(editReferenceLinks(currentClasswork))
+            reference_links: isQuizType(editDraft.classwork_type)
               ? undefined
-              : referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null })),
+              : JSON.stringify(referenceLinks) === JSON.stringify(editReferenceLinks(currentClasswork))
+                ? undefined
+                : referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null })),
           }),
         },
       );
@@ -948,7 +953,9 @@ export default function EditClassworkModal({
                   </div>
                 )}
 
-                <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isSavingEdit} />
+                {!isQuizType(editDraft.classwork_type) && (
+                  <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isSavingEdit} />
+                )}
 
                 <Field label="Upload Material">
                   {currentClasswork.attachments.length === 0 &&
@@ -1106,13 +1113,13 @@ export default function EditClassworkModal({
                 >
                   {!isReadingType(editDraft.classwork_type) && (
                     <Field label="Due Date">
-                      <Input
-                        type="datetime-local"
+                      <DatePicker
+                        includeTime
                         value={editDraft.due_date}
-                        onChange={(event) =>
+                        onValueChange={(value) =>
                           setEditDraft((current) => ({
                             ...current,
-                            due_date: event.target.value,
+                            due_date: value,
                           }))
                         }
                         disabled={isSavingEdit}
@@ -1150,13 +1157,13 @@ export default function EditClassworkModal({
                   </Field>
 
                   <Field label="Locked Until">
-                    <Input
-                      type="datetime-local"
+                    <DatePicker
+                      includeTime
                       value={editDraft.lock_date}
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         setEditDraft((current) => ({
                           ...current,
-                          lock_date: event.target.value,
+                          lock_date: value,
                         }))
                       }
                       disabled={isSavingEdit || !editDraft.is_published}
@@ -1214,14 +1221,14 @@ export default function EditClassworkModal({
 
                     {quizResultsDraft.summary_release_mode === "SCHEDULED" ? (
                       <Field label="Release Date & Time" isRequired>
-                        <Input
-                          type="datetime-local"
+                        <DatePicker
+                          includeTime
                           aria-label="Release Date & Time"
                           value={quizResultsDraft.summary_release_at}
-                          onChange={(event) =>
+                          onValueChange={(value) =>
                             setQuizResultsDraft((current) => ({
                               ...current,
-                              summary_release_at: event.target.value,
+                              summary_release_at: value,
                             }))
                           }
                           disabled={isSavingEdit || !quizResultsDraft.loaded}
@@ -1230,7 +1237,7 @@ export default function EditClassworkModal({
                       </Field>
                     ) : (
                       <div className="flex flex-col justify-end">
-                        <div className="rounded border-2 border-dashed border-gray-300 bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
+                        <div className="rounded! border-2 border-dashed bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
                           {quizResultsDraft.summary_release_mode === "AFTER_DUE_DATE"
                             ? "Summary unlocks automatically after the due date."
                             : quizResultsDraft.summary_release_mode === "NEVER"

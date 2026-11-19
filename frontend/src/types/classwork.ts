@@ -102,6 +102,9 @@ export type TeacherLesson = {
   is_archived?: boolean;
   is_locked?: boolean;
   subject_id: number;
+  competency_id?: number | null;
+  competency_code?: string | null;
+  competency_statement?: string | null;
 };
 
 export type TrackingStudent = {

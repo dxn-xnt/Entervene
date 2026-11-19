@@ -1108,7 +1108,7 @@ export default function AdminSystemSettings() {
                           <Dialog.Trigger>
                             <Button
                               variant="outline"
-                              className="bg-background"
+                              className="gap-2 bg-background"
                               size="sm"
                               disabled={!shsEnabled}
                             >

@@ -354,7 +354,7 @@ export function DynamicScheduleTable({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Section */}
               {selectedEntry?.section_name && (
-                <div className="flex flex-col gap-0.5 rounded border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
+                <div className="flex flex-col gap-0.5 rounded! border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                     Section
                   </span>
@@ -366,7 +366,7 @@ export function DynamicScheduleTable({
 
               {/* Assigned Teacher */}
               {selectedEntry?.teacher && (
-                <div className="flex flex-col gap-0.5 rounded border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
+                <div className="flex flex-col gap-0.5 rounded! border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                     Teacher
                   </span>
@@ -377,7 +377,7 @@ export function DynamicScheduleTable({
               )}
 
               {/* Time Slot */}
-              <div className="flex flex-col gap-0.5 rounded border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
+              <div className="flex flex-col gap-0.5 rounded! border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   Time Schedule
                 </span>
@@ -387,7 +387,7 @@ export function DynamicScheduleTable({
               </div>
 
               {/* Scheduled Days */}
-              <div className="flex flex-col gap-0.5 rounded border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
+              <div className="flex flex-col gap-0.5 rounded! border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
                 <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1.5">
                   Days
                 </span>

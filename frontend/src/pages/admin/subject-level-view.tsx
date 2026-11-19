@@ -296,7 +296,7 @@ export default function AdminSubjectLevel() {
         description="Archiving this subject will move it out of active use."
         options={{
           confirmLabel: "Archive",
-          confirmVariant: "default",
+          confirmVariant: "destructive",
           onConfirm: handleArchive,
           onCancel: () => setPendingArchive(null),
         }}

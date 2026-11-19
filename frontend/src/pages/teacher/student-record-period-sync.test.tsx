@@ -158,9 +158,10 @@ describe("StudentRecord Period Synchronization & Header Cleanup", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.queryByText(/Select period/i)).toBeNull();
 
-    // 2. Verify Suggest Material and View History buttons ARE preserved
-    expect(screen.getByRole("button", { name: /Suggest Material/i })).toBeTruthy();
-    // Initially View History is available or rendered in ManualSuggestionPanel
+    // 2. Verify Suggest Material and View History buttons are absent from Student Record
+    expect(screen.queryByRole("button", { name: /Suggest Material/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /View History/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Hide History/i })).toBeNull();
     expect(screen.getAllByText("Juan Dela Cruz").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Official Grade")).toBeTruthy();
     expect(screen.getByText("88")).toBeTruthy();

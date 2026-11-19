@@ -399,10 +399,9 @@ function TeacherCurrentTermSectionPredictions({ viewerRole }: { viewerRole: "adm
           </div>
           <Button
             variant="outline"
-            size="sm"
+            size="header"
             onClick={handleExportCsv}
             disabled={isExporting || !selectedPeriodId}
-            className="gap-1.5 shrink-0"
             data-testid="export-section-risk-summary-csv-button"
           >
             {isExporting ? (
