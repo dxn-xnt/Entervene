@@ -589,10 +589,6 @@ export default function EditClassworkModal({
       quizConfigurationDraft.loaded &&
       JSON.stringify(quizConfigurationComparable({ ...quizConfigurationDraft, max_attempts: editDraft.max_attempts })) !==
       JSON.stringify(quizConfigurationComparable(initialQuizConfiguration));
-    if (quizConfigurationChanged && quizConfigurationDraft.has_attempts) {
-      setFormError("Quiz duration, attempt limits, and question behavior cannot be changed after an attempt has started.");
-      return;
-    }
     const duration = quizConfigurationDraft.duration_minutes.trim() === ""
       ? null
       : Number(quizConfigurationDraft.duration_minutes);
@@ -635,6 +631,17 @@ export default function EditClassworkModal({
     }
     if (selectedClassIds.length === 0) {
       setFormError("Select at least one section to assign.");
+      return;
+    }
+    const isInterventionQuiz = isQuiz && classwork.assignments?.some(
+      (assignment) => assignment.source_intervention_id != null,
+    );
+    if (isInterventionQuiz && attempts > 3) {
+      setFormError("Study Support quizzes allow up to 3 attempts.");
+      return;
+    }
+    if (isInterventionQuiz && !editDraft.due_date) {
+      setFormError("A due date is required for a Study Support quiz.");
       return;
     }
 
@@ -729,7 +736,7 @@ export default function EditClassworkModal({
                 : null,
               allow_late_submissions: editDraft.allow_late_submissions,
               max_attempts: isQuiz
-                ? Number(initialQuizConfiguration.max_attempts || attempts)
+                ? attempts
                 : null,
               is_published: publishValue,
             }),
@@ -1303,7 +1310,10 @@ export default function EditClassworkModal({
                     }`}
                 >
                   {!isReadingType(editDraft.classwork_type) && (
-                    <Field label="Due Date">
+                    <Field
+                      label="Due Date"
+                      isRequired={Boolean(targetedAssignment) && isQuizType(editDraft.classwork_type)}
+                    >
                       <DatePicker
                         includeTime
                         value={editDraft.due_date}
@@ -1368,6 +1378,7 @@ export default function EditClassworkModal({
                         <Input
                           type="number"
                           min="1"
+                          max={targetedAssignment ? "3" : undefined}
                           step="1"
                           value={editDraft.max_attempts}
                           onChange={(event) =>
@@ -1376,15 +1387,10 @@ export default function EditClassworkModal({
                               max_attempts: event.target.value,
                             }))
                           }
-                          disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                          disabled={isSavingEdit || !quizConfigurationDraft.loaded}
                           className="w-full bg-white border-2 border-black rounded shadow-md"
                         />
                       </Field>
-                      {quizConfigurationDraft.has_attempts && (
-                        <p className="text-xs font-medium text-amber-700 mt-1">
-                          Locked because students have already attempted this quiz.
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -1394,7 +1400,7 @@ export default function EditClassworkModal({
                     {quizConfigurationDraft.has_attempts && (
                       <Alert status="warning">
                         <Alert.Description>
-                          Quiz duration, attempt limits, and question behavior are locked because a student has already started an attempt. Result-release settings remain editable.
+                          Quiz duration and question behavior are locked because a student has already started an attempt. Attempt limits and result-release settings remain editable.
                         </Alert.Description>
                       </Alert>
                     )}

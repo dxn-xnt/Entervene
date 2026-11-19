@@ -167,6 +167,8 @@ class QuizAttemptResponse(BaseModel):
     duration_minutes: Optional[int] = None
     max_attempts: int
     attempt_count: int
+    attempts_used: int
+    attempts_remaining: int
     status: str
     started_at: Optional[datetime] = None
     server_time: Optional[datetime] = None

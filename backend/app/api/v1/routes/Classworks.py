@@ -71,7 +71,7 @@ async def create_classwork_with_assignments(
     due_date: Optional[datetime] = Form(None),
     lock_date: Optional[datetime] = Form(None),
     allow_late_submissions: bool = Form(False),
-    max_attempts: Optional[int] = Form(1),
+    max_attempts: Optional[int] = Form(None),
     quiz_payload: Optional[str] = Form(None),
     rubric_payload: Optional[str] = Form(None),
     reference_links: Optional[str] = Form(None),

@@ -138,6 +138,8 @@ export interface QuizAttempt {
   duration_minutes?: number | null;
   max_attempts: number;
   attempt_count: number;
+  attempts_used?: number;
+  attempts_remaining?: number;
   status: string;
   started_at?: string | null;
   server_time?: string | null;

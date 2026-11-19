@@ -401,12 +401,7 @@ def _submission_for(
 
 
 def _max_attempts(db: Session, assignment: ClassworkAssignment, classwork: Classwork) -> int:
-    if assignment.original_exam_assignment_id is not None or assignment.source_intervention_id is not None:
-        return 1
-    from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
-    if db.query(RemediationAssignmentLink.remediation_link_id).filter_by(
-        remediation_assignment_id=assignment.classwork_assignment_id
-    ).first() is not None:
+    if assignment.original_exam_assignment_id is not None:
         return 1
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
     return assignment.max_attempts or (setting.max_attempts if setting else None) or 1
@@ -468,6 +463,8 @@ def _attempt_response(
         duration_minutes=quiz.duration_minutes,
         max_attempts=_max_attempts(db, assignment, classwork),
         attempt_count=submission.attempt_count if submission else 0,
+        attempts_used=submission.attempt_count if submission else 0,
+        attempts_remaining=max(0, _max_attempts(db, assignment, classwork) - (submission.attempt_count if submission else 0)),
         status=submission.status if submission else "not_started",
         started_at=submission.created_at if submission else None,
         server_time=datetime.now(timezone.utc),

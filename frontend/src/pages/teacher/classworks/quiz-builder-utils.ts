@@ -11,6 +11,27 @@ export const defaultQuizSettings: QuizSettingsDraft = {
   duration_minutes: "",
 };
 
+export function interventionQuizCreationDefaults(
+  isTargeted: boolean,
+  gradeTreatment:
+    | "PRACTICE_ONLY"
+    | "WRITTEN_WORK"
+    | "PERFORMANCE_TASK"
+    | "EXAMINATION"
+    | null
+    | undefined,
+) {
+  return {
+    maxAttempts:
+      gradeTreatment === "EXAMINATION"
+        ? "1"
+        : isTargeted
+          ? "3"
+          : defaultQuizSettings.max_attempts,
+    showScores: isTargeted ? true : defaultQuizSettings.show_correct_answers,
+  };
+}
+
 const quizQuestionId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()

@@ -451,8 +451,7 @@ export default function StudentClassworkDetailModal({
                                 {statusLabel(selectedQuizAttempt.status)}
                               </span>
                               <span className="font-semibold">
-                                Attempts {selectedQuizAttempt.attempt_count}/
-                                {selectedQuizAttempt.max_attempts}
+                                Attempts used {selectedQuizAttempt.attempts_used ?? selectedQuizAttempt.attempt_count} · Remaining {selectedQuizAttempt.attempts_remaining ?? Math.max(0, selectedQuizAttempt.max_attempts - selectedQuizAttempt.attempt_count)} · Total {selectedQuizAttempt.max_attempts}
                               </span>
                             </div>
                             <Card className="mt-2 flex w-full flex-wrap gap-2 border-black bg-white p-2 text-sm font-semibold text-gray-600 shadow-none hover:shadow-none">

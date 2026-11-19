@@ -829,7 +829,7 @@ export default function StudentClassworkView() {
                           Status: {statusLabel(quiz.status)}
                         </p>
                         <p>
-                          Attempts: {quiz.attempt_count}/{quiz.max_attempts}
+                          Attempts used: {quiz.attempts_used ?? quiz.attempt_count} · Remaining: {quiz.attempts_remaining ?? Math.max(0, quiz.max_attempts - quiz.attempt_count)} · Total: {quiz.max_attempts}
                         </p>
                         <p>
                           {quiz.questions.length} questions ·{" "}

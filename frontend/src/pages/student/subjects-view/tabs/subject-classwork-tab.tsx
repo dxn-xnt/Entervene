@@ -130,6 +130,8 @@ interface QuizAttempt {
   submission_id?: number;
   attempt_count: number;
   max_attempts: number;
+  attempts_used?: number;
+  attempts_remaining?: number;
   status: "not_started" | "pending" | "submitted" | "graded" | "late";
   started_at?: string;
   server_time?: string;
@@ -1499,8 +1501,7 @@ export default function SubjectClassworkTab({
                                   {statusLabel(selectedQuizAttempt.status)}
                                 </span>
                                 <span className="font-semibold">
-                                  Attempts {selectedQuizAttempt.attempt_count}/
-                                  {selectedQuizAttempt.max_attempts}
+                                  Attempts used {selectedQuizAttempt.attempt_count} · Remaining {Math.max(0, selectedQuizAttempt.max_attempts - selectedQuizAttempt.attempt_count)} · Total {selectedQuizAttempt.max_attempts}
                                 </span>
                               </div>
                               <div className="mt-2 flex flex-wrap gap-2 text-sm font-semibold text-gray-600">

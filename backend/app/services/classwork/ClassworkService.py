@@ -376,7 +376,12 @@ async def create_classwork_wizard_record(
     if rubric_levels:
         total_points = max(level.points for level in rubric_levels)
     total_points = None if is_reading_type(normalized_type) else total_points
-    max_attempts = max_attempts if is_quiz_type(normalized_type) else None
+    requested_max_attempts = max_attempts
+    max_attempts = _creation_max_attempts(
+        normalized_type=normalized_type,
+        requested=max_attempts,
+        intervention_id=intervention_id,
+    )
     selected_class_ids = parse_id_list(class_ids, "class_ids")
     selected_lesson_ids = parse_id_list(lesson_ids, "lesson_ids")
     validate_classwork_values(total_points=total_points, max_attempts=max_attempts)
@@ -408,6 +413,17 @@ async def create_classwork_wizard_record(
                 block_future_period_in_current_year=True,
             )
     quiz_builder = _parse_quiz_payload(quiz_payload, normalized_type)
+    quiz_payload_max_attempts = (
+        quiz_builder.settings.max_attempts if quiz_builder is not None else None
+    )
+    if quiz_payload_max_attempts is not None:
+        max_attempts = quiz_payload_max_attempts
+        validate_classwork_values(max_attempts=max_attempts)
+    if intervention_id is not None and is_quiz_type(normalized_type):
+        if due_date is None:
+            raise HTTPException(status_code=400, detail="A due date is required for a Study Support quiz")
+        if max_attempts is not None and max_attempts > 3:
+            raise HTTPException(status_code=400, detail="Study Support quizzes allow up to 3 attempts")
 
     intervention = None
     if intervention_id is not None:
@@ -451,8 +467,6 @@ async def create_classwork_wizard_record(
         if treatment in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
             if original_classwork_assignment_id is None:
                 raise HTTPException(status_code=400, detail="Select the original classwork assignment to link this remediation activity")
-            if is_quiz_type(normalized_type) and max_attempts != 1:
-                raise HTTPException(status_code=400, detail="Remedial classwork quiz permits one attempt per activity")
             if normalized_type in {"ACTIVITY", "ASSIGNMENT"}:
                 from app.services.intervention.RemediationRubricService import (
                     assert_remediation_rubric_compatible,
@@ -483,6 +497,12 @@ async def create_classwork_wizard_record(
                 raise HTTPException(status_code=400, detail="Select the original Examination assessment")
             if original_exam_assignment_id != (intervention.remediation_plan or {}).get("original_exam_assignment_id"):
                 raise HTTPException(status_code=400, detail="Original Examination must match the teacher's saved selection")
+            if (
+                is_quiz_type(normalized_type)
+                and requested_max_attempts is None
+                and quiz_payload_max_attempts is None
+            ):
+                max_attempts = 1
             if is_quiz_type(normalized_type) and max_attempts != 1:
                 raise HTTPException(status_code=400, detail="Remedial Examination quiz permits one attempt per activity")
             original = db.get(ClassworkAssignment, original_exam_assignment_id)
@@ -624,6 +644,8 @@ async def create_classwork_wizard_record(
                 assignment.max_attempts = None
 
         if quiz_builder:
+            if quiz_builder.settings.max_attempts is None and max_attempts is not None:
+                quiz_builder.settings.max_attempts = max_attempts
             # Save quiz builder rows before committing so classwork+quiz creation is atomic.
             upsert_quiz_builder(db, classwork, quiz_builder)
 
@@ -1155,6 +1177,19 @@ def update_classwork_record(
     return build_classwork_response(classwork)
 
 
+def _creation_max_attempts(
+    *,
+    normalized_type: str,
+    requested: int | None,
+    intervention_id: int | None,
+) -> int | None:
+    if not is_quiz_type(normalized_type):
+        return None
+    if requested is not None:
+        return requested
+    return 3 if intervention_id is not None else 1
+
+
 def archive_classwork_record(classwork_id: int, staff_id: str, db: Session) -> dict:
     classwork = db.query(Classwork).filter(
         Classwork.classwork_id == classwork_id,
@@ -1321,6 +1356,19 @@ def assign_classwork_to_classes(
     max_attempts = body.max_attempts if is_quiz_type(classwork.classwork_type) else None
     validate_classwork_values(max_attempts=max_attempts)
     validate_schedule(None, body.due_date, body.lock_date)
+    if targeted and is_quiz_type(classwork.classwork_type):
+        if body.due_date is None:
+            raise HTTPException(status_code=400, detail="A due date is required for a Study Support quiz")
+        if max_attempts is not None and max_attempts > 3:
+            raise HTTPException(status_code=400, detail="Study Support quizzes allow up to 3 attempts")
+    if (
+        targeted
+        and targeted.original_exam_assignment_id is not None
+        and is_quiz_type(classwork.classwork_type)
+        and max_attempts is not None
+        and max_attempts != 1
+    ):
+        raise HTTPException(status_code=400, detail="Remedial Examination quiz permits one attempt per activity")
 
     academic_period_id = body.academic_period_id
     if academic_period_id is None:
@@ -1391,6 +1439,11 @@ def assign_classwork_to_classes(
             db.add(assignment)
             new_assignments.append(assignment)
             created.append(class_id)
+        if is_quiz_type(classwork.classwork_type) and max_attempts is not None:
+            from app.models.quiz.QuizSetting import QuizSetting
+            setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork_id).first()
+            if setting is not None:
+                setting.max_attempts = max_attempts
         if not is_quiz_type(classwork.classwork_type) and new_assignments:
             db.flush()
             for assignment in new_assignments:

@@ -6,6 +6,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import CreateLessonModal from "./create-lesson";
 import CreateClassworkModal from "./create-classwork";
 import CreateClassworkQuizModal from "./create-classwork-quiz";
+import { interventionQuizCreationDefaults } from "../classworks/quiz-builder-utils";
 import EditClassworkModal from "./edit-classwork";
 import type { TeacherClassLoad, TeacherClasswork } from "@/types/classwork";
 
@@ -227,6 +228,29 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     expect(screen.queryByText("Add reference link")).toBeNull();
   });
 
+  it("defaults new Study Support quizzes to three attempts and visible results only for intervention quizzes", () => {
+    expect(interventionQuizCreationDefaults(true, "PRACTICE_ONLY")).toEqual({
+      maxAttempts: "3",
+      showScores: true,
+    });
+    expect(interventionQuizCreationDefaults(true, "WRITTEN_WORK")).toEqual({
+      maxAttempts: "3",
+      showScores: true,
+    });
+    expect(interventionQuizCreationDefaults(true, "PERFORMANCE_TASK")).toEqual({
+      maxAttempts: "3",
+      showScores: true,
+    });
+    expect(interventionQuizCreationDefaults(true, "EXAMINATION")).toEqual({
+      maxAttempts: "1",
+      showScores: true,
+    });
+    expect(interventionQuizCreationDefaults(false, null)).toEqual({
+      maxAttempts: "1",
+      showScores: false,
+    });
+  });
+
   it("Scenario 14: Create Assignment/Activity modal renders ReferenceLinkEditor", () => {
     render(
       <MemoryRouter>
@@ -436,11 +460,11 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
 
     // Question structure and scoring controls are locked
     expect(duration.disabled).toBe(true);
-    expect(attempts.disabled).toBe(true);
+    expect(attempts.disabled).toBe(false);
     expect(shuffleSwitch.disabled).toBe(true);
 
     // Clear explanation is displayed beside/under disabled controls
-    const lockedExplanations = screen.getAllByText("Locked because students have already attempted this quiz.");
+    const lockedExplanations = screen.getAllByText(/Quiz duration and question behavior are locked/i);
     expect(lockedExplanations.length).toBeGreaterThanOrEqual(1);
 
     // Result release controls remain editable

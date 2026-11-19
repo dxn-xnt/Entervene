@@ -25,6 +25,7 @@ from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.intervention.Intervention import Intervention
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.quiz.Question import Question
@@ -316,6 +317,47 @@ def test_student_can_start_resume_and_submit_quiz_with_server_scoring(quiz_attem
     assert body["attempt_count"] == 1
     assert body["grade"] == 6.0
     assert c["db"].query(QuizAnswer).count() == 2
+
+
+def test_targeted_quiz_reports_total_used_and_remaining_attempts(quiz_attempt_context, monkeypatch):
+    from app.services.quiz import QuizAttemptService
+
+    monkeypatch.setattr(QuizAttemptService, "require_remediation_prerequisite", lambda *_args: None)
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+    intervention = Intervention(
+        intervention_id=9999,
+        student_id=c["student"].student_id,
+        class_id=c["class"].class_id,
+        subject_id=c["subject"].subject_id,
+        academic_period_id=c["period"].academic_period_id,
+        source_prediction_id=9999,
+        status="ACTIVE",
+        activated_at=datetime.now(timezone.utc),
+        activated_by_staff_id=c["assignment"].assigned_by_staff_id,
+        diagnosis_snapshot={},
+        remediation_plan={"selected_resources": []},
+    )
+    c["db"].add(intervention)
+    c["db"].flush()
+    c["assignment"].source_intervention_id = intervention.intervention_id
+    c["assignment"].recipient_student_id = c["student"].student_id
+    c["assignment"].remediation_request_id = uuid.uuid4()
+    c["assignment"].max_attempts = 3
+    c["setting"].max_attempts = 3
+    c["db"].commit()
+
+    first = _submit_fixture_quiz(c)
+    assert first.status_code == 200, first.json()
+    assert first.json()["max_attempts"] == 3
+    assert first.json()["attempts_used"] == 1
+    assert first.json()["attempts_remaining"] == 2
+
+    retry = c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start")
+    assert retry.status_code == 200
+    assert retry.json()["attempt_count"] == 1
+    assert retry.json()["attempts_used"] == 1
+    assert retry.json()["attempts_remaining"] == 2
 
 
 def test_unfinished_attempt_never_exposes_evaluation_or_correct_answers(quiz_attempt_context):
@@ -1073,3 +1115,54 @@ def test_quiz_identification_spelling_auto_grading(quiz_attempt_context):
     data = res.json()
     assert data["status"] == "graded"
     assert float(data["grade"]) == 10.0
+
+
+def test_editing_intervention_quiz_attempt_limit_after_submission_updates_remaining_without_data_loss(
+    quiz_attempt_context,
+):
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+    classwork_id = c["classwork"].classwork_id
+    c["assignment"].max_attempts = 3
+    c["setting"].max_attempts = 3
+    c["db"].commit()
+
+    first = _submit_fixture_quiz(c)
+    assert first.status_code == 200, first.json()
+    assert first.json()["max_attempts"] == 3
+    assert first.json()["attempts_used"] == 1
+    assert first.json()["attempts_remaining"] == 2
+    saved_grade = first.json()["grade"]
+
+    from app.schemas.Quiz import QuizConfigurationUpdate
+    from app.services.quiz.QuizBuilderService import update_quiz_configuration
+
+    quiz = c["db"].query(Quiz).filter_by(classwork_id=classwork_id).one()
+    updated = update_quiz_configuration(
+        c["db"],
+        c["classwork"],
+        QuizConfigurationUpdate(
+            duration_minutes=quiz.duration_minutes,
+            is_shuffle_questions=c["setting"].is_shuffle_questions,
+            enable_per_question_scoring=c["setting"].enable_per_question_scoring,
+            enable_per_question_time_limits=c["setting"].enable_per_question_time_limits,
+            max_attempts=5,
+        ),
+    )
+    c["db"].commit()
+    assert updated.max_attempts == 5
+    assert updated.has_attempts is True
+    c["db"].refresh(c["assignment"])
+    c["db"].refresh(c["setting"])
+    assert c["assignment"].max_attempts == 5
+    assert c["setting"].max_attempts == 5
+
+    after_edit = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert after_edit.status_code == 200, after_edit.json()
+    body = after_edit.json()
+    assert body["max_attempts"] == 5
+    assert body["attempt_count"] == 1
+    assert body["attempts_used"] == 1
+    assert body["attempts_remaining"] == 4
+    assert body["grade"] == saved_grade
+    assert len(body["questions"]) == 2
