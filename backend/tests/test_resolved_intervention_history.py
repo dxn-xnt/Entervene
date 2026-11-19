@@ -1,9 +1,10 @@
 """Read-only resolved history reuses stored work and enforces exact scopes."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -13,14 +14,22 @@ from app.api.v1.routes.StudentInterventionReviewers import router as reviewer_ro
 from app.api.v1.routes.TeacherInterventions import router as teacher_router
 from app.db.Session import get_db
 from app.models.academic.StudentCLass import StudentClass
+from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.intervention.Intervention import Intervention
 from app.models.intervention.InterventionSupportMaterial import InterventionSupportMaterial
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.intervention.InterventionSupportMaterialService import create_material
-from app.services.intervention.TeacherInterventionService import activate_teacher_candidate
+from app.services.intervention.TeacherInterventionService import (
+    activate_teacher_candidate,
+    get_teacher_active,
+    get_teacher_resolved,
+    list_teacher_active,
+    list_teacher_resolved,
+)
 from tests.test_current_period_live_feature_builder import current_period_context
 from tests.test_teacher_intervention_review import candidate_context, _id, _other_staff, _staff
 
@@ -126,3 +135,192 @@ def test_resolved_history_is_scoped_read_only_and_preserves_stored_records(candi
     assert teacher.get(path).json()["sent_reviewer"]["body"] == "Practice ratios"
     assert row.diagnosis_snapshot == frozen and row.source_prediction_id == source_id
     assert db.get(StudentSubmission, submission.submission_id).grade == 8
+
+
+def _make_prediction(
+    ctx,
+    *,
+    revision: int,
+    raw_grade: float,
+    intervention_level: str,
+    generated_at: datetime,
+) -> DevelopmentCurrentTermPrediction:
+    return DevelopmentCurrentTermPrediction(
+        student_id=ctx["student"].student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        source_period_id=ctx["period"].academic_period_id,
+        target_period_id=ctx["period"].academic_period_id,
+        model_version_id=ctx["model_id"],
+        revision=revision,
+        predicted_period_grade=Decimal(f"{raw_grade:.2f}"),
+        intervention_level=intervention_level,
+        intervention_basis="DEVELOPMENT_CURRENT_TERM_PROJECTION",
+        evidence_snapshot={
+            "readiness": {"status": "READY"},
+            "projected_final_term_grade_raw": raw_grade,
+        },
+        generated_at=generated_at,
+    )
+
+
+def test_resolved_intervention_keeps_resolution_prediction_across_later_cycles(candidate_context):
+    ctx = candidate_context
+    db = ctx["db"]
+    staff_id = _staff(ctx)
+    ctx["template"].passing_threshold = Decimal("85.00")
+    base_time = datetime(2026, 11, 19, 1, 0, 0, tzinfo=timezone.utc)
+
+    cycle1 = ctx["candidate"]
+    source1 = db.get(DevelopmentCurrentTermPrediction, cycle1.source_prediction_id)
+    source1.predicted_period_grade = Decimal("82.55")
+    source1.evidence_snapshot = {
+        "readiness": {"status": "READY"},
+        "projected_final_term_grade_raw": 82.55,
+    }
+    source1.intervention_level = "MODERATE_RISK"
+    source1.generated_at = base_time
+
+    rev2 = _make_prediction(
+        ctx,
+        revision=2,
+        raw_grade=83.10,
+        intervention_level="MODERATE_RISK",
+        generated_at=base_time + timedelta(minutes=15),
+    )
+    rev3 = _make_prediction(
+        ctx,
+        revision=3,
+        raw_grade=85.35548749398748,
+        intervention_level="NEEDS_MONITORING",
+        generated_at=base_time + timedelta(minutes=34),
+    )
+    rev4 = _make_prediction(
+        ctx,
+        revision=4,
+        raw_grade=82.89,
+        intervention_level="MODERATE_RISK",
+        generated_at=base_time + timedelta(minutes=44),
+    )
+    rev8 = _make_prediction(
+        ctx,
+        revision=8,
+        raw_grade=82.7495322270322,
+        intervention_level="MODERATE_RISK",
+        generated_at=base_time + timedelta(hours=11),
+    )
+    db.add_all([rev2, rev3, rev4, rev8])
+    db.flush()
+
+    cycle1.status = "RESOLVED"
+    cycle1.activated_at = base_time + timedelta(minutes=5)
+    cycle1.activated_by_staff_id = staff_id
+    cycle1.resolution_reason = "IMPROVED_PREDICTION"
+    cycle1.resolved_at = base_time + timedelta(minutes=34, seconds=1)
+
+    cycle2 = Intervention(
+        student_id=ctx["student"].student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        source_prediction_id=rev4.prediction_id,
+        status="ACTIVE",
+        diagnosis_snapshot=cycle1.diagnosis_snapshot,
+        activated_at=base_time + timedelta(minutes=45),
+        activated_by_staff_id=staff_id,
+    )
+    db.add(cycle2)
+    db.commit()
+
+    resolved_list = list_teacher_resolved(db, staff_id)
+    assert resolved_list.total == 1
+    resolved_summary = resolved_list.items[0]
+    assert resolved_summary.intervention_id == cycle1.intervention_id
+    assert resolved_summary.source_prediction_revision == 1
+    assert resolved_summary.triggering_predicted_grade == pytest.approx(82.55)
+    assert resolved_summary.triggering_intervention_level == "MODERATE_RISK"
+    assert resolved_summary.current_prediction_revision == 3
+    assert resolved_summary.current_predicted_grade == pytest.approx(85.35548749398748)
+    assert resolved_summary.current_intervention_level == "NEEDS_MONITORING"
+
+    resolved_detail = get_teacher_resolved(db, staff_id, cycle1.intervention_id)
+    assert resolved_detail.current_prediction_revision == 3
+    assert resolved_detail.current_predicted_grade == pytest.approx(85.35548749398748)
+    assert resolved_detail.current_intervention_level == "NEEDS_MONITORING"
+    assert resolved_detail.resolution_projection == pytest.approx(85.35548749398748)
+
+    active_list = list_teacher_active(db, staff_id)
+    assert active_list.total == 1
+    active_summary = active_list.items[0]
+    assert active_summary.intervention_id == cycle2.intervention_id
+    assert active_summary.source_prediction_revision == 4
+    assert active_summary.triggering_predicted_grade == pytest.approx(82.89)
+    assert active_summary.current_prediction_revision == 8
+    assert active_summary.current_predicted_grade == pytest.approx(82.7495322270322)
+    assert active_summary.current_intervention_level == "MODERATE_RISK"
+
+    active_detail = get_teacher_active(db, staff_id, cycle2.intervention_id)
+    assert active_detail.current_prediction_revision == 8
+    assert active_detail.current_predicted_grade == pytest.approx(82.7495322270322)
+    assert active_detail.current_intervention_level == "MODERATE_RISK"
+
+    teacher = _client(ctx, teacher_router, "/teacher/interventions", "teacher", ctx["staff"].user_id)
+    http_resolved = teacher.get("/teacher/interventions/resolved").json()["items"][0]
+    assert round(http_resolved["current_predicted_grade"], 2) == 85.36
+    assert http_resolved["current_intervention_level"] == "NEEDS_MONITORING"
+    http_active = teacher.get("/teacher/interventions/active").json()["items"][0]
+    assert round(http_active["current_predicted_grade"], 2) == 82.75
+    assert http_active["current_intervention_level"] == "MODERATE_RISK"
+
+
+def test_resolved_intervention_excludes_next_cycle_even_at_identical_timestamp(candidate_context):
+    ctx = candidate_context
+    db = ctx["db"]
+    staff_id = _staff(ctx)
+    ctx["template"].passing_threshold = Decimal("85.00")
+    shared_ts = datetime(2026, 11, 19, 2, 0, 0, tzinfo=timezone.utc)
+
+    cycle1 = ctx["candidate"]
+    source1 = db.get(DevelopmentCurrentTermPrediction, cycle1.source_prediction_id)
+    source1.generated_at = shared_ts - timedelta(minutes=10)
+
+    rev2_resolved = _make_prediction(
+        ctx,
+        revision=2,
+        raw_grade=85.36,
+        intervention_level="NEEDS_MONITORING",
+        generated_at=shared_ts,
+    )
+    rev3_next_cycle = _make_prediction(
+        ctx,
+        revision=3,
+        raw_grade=82.75,
+        intervention_level="MODERATE_RISK",
+        generated_at=shared_ts,
+    )
+    db.add_all([rev2_resolved, rev3_next_cycle])
+    db.flush()
+
+    cycle1.status = "RESOLVED"
+    cycle1.resolution_reason = "IMPROVED_PREDICTION"
+    cycle1.resolved_at = shared_ts
+
+    cycle2 = Intervention(
+        student_id=ctx["student"].student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        source_prediction_id=rev3_next_cycle.prediction_id,
+        status="ACTIVE",
+        diagnosis_snapshot=cycle1.diagnosis_snapshot,
+        activated_at=shared_ts,
+        activated_by_staff_id=staff_id,
+    )
+    db.add(cycle2)
+    db.commit()
+
+    resolved_detail = get_teacher_resolved(db, staff_id, cycle1.intervention_id)
+    assert resolved_detail.current_prediction_revision == 2
+    assert resolved_detail.current_predicted_grade == pytest.approx(85.36)
+    assert resolved_detail.current_intervention_level == "NEEDS_MONITORING"
+    assert resolved_detail.resolution_projection == pytest.approx(85.36)

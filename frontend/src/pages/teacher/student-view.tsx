@@ -113,7 +113,7 @@ export function StudentRecordDetail({
             <Card.Title className="flex items-center gap-3 text-2xl sm:text-3xl">
               <Avatar variant="student" className="size-12 shrink-0">
                 <Avatar.Image
-                  src={(detail.student as any)?.avatar || "/avatars/student-avatars/1.svg"}
+                  src={(detail.student as { avatar?: string | null })?.avatar || "/avatars/student-avatars/1.svg"}
                   alt={detail.student.full_name}
                 />
                 <Avatar.Fallback>
@@ -467,28 +467,6 @@ export function TeacherStudentView({
                 </Breadcrumb.Item>
               </Breadcrumb.List>
             </Breadcrumb>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center justify-end">
-            {(student || studentDetail?.student) && subjectLoads && subjectLoads.length > 0 && (
-              <ManualSuggestionPanel
-                classId={Number(classId)}
-                student={
-                  student || {
-                    student_id: studentDetail?.student?.student_id || "",
-                    full_name: studentName,
-                    student_lrn: studentDetail?.student?.lrn || null,
-                    gender: studentDetail?.student?.gender || "",
-                    email: studentDetail?.student?.email || null,
-                    account_status: studentDetail?.student?.status || null,
-                    avatar_initial: studentName ? studentName.charAt(0) : "S",
-                  }
-                }
-                subjectLoads={subjectLoads}
-                displayMode="header"
-              />
-            )}
-
           </div>
         </header>
       </div>

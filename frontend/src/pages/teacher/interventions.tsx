@@ -62,6 +62,19 @@ const reason = (candidate: TeacherInterventionSummary) => {
     : "Component detail unavailable in saved diagnosis";
 };
 
+const RISK_DISPLAY_ORDER = [
+  "HIGH_RISK",
+  "MODERATE_RISK",
+  "ON_TRACK",
+  "INSUFFICIENT_DATA",
+  "NOT_ASSESSED",
+];
+
+const displayedRisk = (item: TeacherInterventionSummary) =>
+  getTeacherRiskDisplay(
+    item.current_intervention_level ?? item.triggering_intervention_level
+  );
+
 export default function TeacherInterventions() {
   const toast = useToast();
   const [params, setParams] = useSearchParams();
@@ -270,6 +283,7 @@ export default function TeacherInterventions() {
     } else {
       next.set("view", nextView);
     }
+    setRiskFilter("all");
     setParams(next);
     if (nextView === "resolved") {
       void refreshResolved();
@@ -375,13 +389,23 @@ export default function TeacherInterventions() {
   }, [rawList]);
 
   const availableRiskLevels = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     for (const item of rawList) {
-      if (item.triggering_intervention_level) {
-        set.add(item.triggering_intervention_level);
+      const risk = displayedRisk(item);
+      if (risk.level) {
+        map.set(risk.level, risk.label);
       }
     }
-    return Array.from(set);
+    return Array.from(map.entries())
+      .map(([value, text]) => ({ value, label: text }))
+      .sort((a, b) => {
+        const ai = RISK_DISPLAY_ORDER.indexOf(a.value);
+        const bi = RISK_DISPLAY_ORDER.indexOf(b.value);
+        if (ai === -1 && bi === -1) return a.label.localeCompare(b.label);
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      });
   }, [rawList]);
 
   const sorted = useMemo(() => {
@@ -436,7 +460,7 @@ export default function TeacherInterventions() {
         if (gl !== gradeFilter) return false;
       }
 
-      if (riskFilter !== "all" && candidate.triggering_intervention_level !== riskFilter) {
+      if (riskFilter !== "all" && displayedRisk(candidate).level !== riskFilter) {
         return false;
       }
 
@@ -625,8 +649,8 @@ export default function TeacherInterventions() {
                           <Select.Content>
                             <Select.Item value="all">All Risk Levels</Select.Item>
                             {availableRiskLevels.map((lvl) => (
-                              <Select.Item key={lvl} value={lvl}>
-                                {label(lvl)}
+                              <Select.Item key={lvl.value} value={lvl.value}>
+                                {lvl.label}
                               </Select.Item>
                             ))}
                           </Select.Content>
@@ -664,7 +688,9 @@ export default function TeacherInterventions() {
                         <Table.Row>
                           <Table.Head>Student</Table.Head>
                           <Table.Head>Subject</Table.Head>
-                          <Table.Head>Current prediction</Table.Head>
+                          <Table.Head>
+                            {resolvedView ? "Resolution prediction" : "Current prediction"}
+                          </Table.Head>
                           <Table.Head className="text-center">Status</Table.Head>
                           <Table.Head>Saved reason</Table.Head>
                           <Table.Head>
@@ -700,9 +726,7 @@ export default function TeacherInterventions() {
                         <Table.Cell className="text-center">
                           <div className="flex flex-col items-center justify-center gap-1">
                           {(() => {
-                            const risk = getTeacherRiskDisplay(
-                              candidate.current_intervention_level ?? candidate.triggering_intervention_level,
-                            );
+                            const risk = displayedRisk(candidate);
                             return (
                               <Badge size="sm" className={`shrink-0 whitespace-nowrap ${getRiskBadgeMeta(risk.level).bg}`}>
                                 {risk.label}

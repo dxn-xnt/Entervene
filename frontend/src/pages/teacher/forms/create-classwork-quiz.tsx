@@ -1267,7 +1267,6 @@ export default function CreateClassworkQuizModal({
                                     </Field>
                                 </div>
 
-                                <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isCreating} />
                                 {remediationFocus && (
                                     <p className="rounded border p-3 text-sm">
                                         Evidence focus: {focusGuidance(remediationFocus)}

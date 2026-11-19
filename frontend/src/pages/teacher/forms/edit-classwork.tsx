@@ -534,9 +534,16 @@ export default function EditClassworkModal({
       return;
     }
 
+    const isLinkedRemediationRubricLocked = Boolean(
+      classwork.is_graded !== false &&
+      classwork.rubric_levels?.length &&
+      classwork.assignments?.some((assignment) => assignment.source_intervention_id != null),
+    );
     const originalRubric = classwork.rubric_levels ?? [];
     const rubricChanged =
-      hasRubric && JSON.stringify(rubricLevels) !== JSON.stringify(originalRubric);
+      hasRubric &&
+      !isLinkedRemediationRubricLocked &&
+      JSON.stringify(rubricLevels) !== JSON.stringify(originalRubric);
     if (
       rubricChanged &&
       (currentClasswork.has_submissions || currentClasswork.has_graded_submissions)
@@ -1098,6 +1105,12 @@ export default function EditClassworkModal({
                       levels={rubricLevels}
                       onChange={setRubricLevels}
                       disabled={isSavingEdit}
+                      readOnly={Boolean(
+                        classwork.is_graded !== false &&
+                        classwork.rubric_levels?.length &&
+                        classwork.assignments?.some((assignment) => assignment.source_intervention_id != null),
+                      )}
+                      readOnlyMessage="Inherited from the linked original classwork. Instructions and tasks can be edited, while scoring standards remain aligned with the original classwork."
                     />
                   )}
               </div>

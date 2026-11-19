@@ -28,6 +28,7 @@ from app.services.intervention.InterventionSupportMaterialService import _basis
 from app.services.intervention.TeacherInterventionService import _eligible_scope, _source
 from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
 from app.services.intervention.RemediationGenerationEligibilityService import resolve_remediation_generation_eligibility
+from app.services.intervention.RemediationRubricService import serialize_classwork_rubric_levels
 from app.services.grading.ExaminationCalculator import EXAM_SUBTYPES, categorize_exam_subtype
 from app.services.grading.ComponentMapper import CanonicalGradingComponent, classify_classwork_component
 from app.services.grading.RemediationScoreAdjuster import (
@@ -357,9 +358,14 @@ def progress(db: Session, row: Intervention) -> dict:
 def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     row = _row(db, staff_id, intervention_id)
     stored_plan = dict(row.remediation_plan or {})
+    stored_treatment = stored_plan.get("grade_treatment")
+    orig_exam = (
+        stored_plan.get("original_exam_assignment_id")
+        if stored_treatment in (None, "EXAMINATION")
+        else None
+    )
     target_ids = stored_plan.get("target_assignment_ids")
     if target_ids is None:
-        orig_exam = stored_plan.get("original_exam_assignment_id")
         target_ids = [orig_exam] if orig_exam is not None else []
     cap = stored_plan.get("score_adjustment_cap")
     if cap is None:
@@ -371,6 +377,7 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
         "selected_resources": [],
         "ai_suggestion": None,
         **stored_plan,
+        "original_exam_assignment_id": orig_exam,
         "target_assignment_ids": target_ids,
         "score_adjustment_cap": cap,
     }
@@ -649,18 +656,58 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         current_treatment = "PRACTICE_ONLY"
     if existing_activity:
         current_targets = list(current_plan.get("target_assignment_ids", []))
+        linked_original_ids: list[int] = []
+        existing_assignments = (
+            db.query(ClassworkAssignment)
+            .filter_by(
+                source_intervention_id=row.intervention_id,
+                recipient_student_id=row.student_id,
+            )
+            .order_by(ClassworkAssignment.classwork_assignment_id)
+            .all()
+        )
+        for assignment in existing_assignments:
+            if assignment.original_exam_assignment_id is not None:
+                orig_id = assignment.original_exam_assignment_id
+            else:
+                link = (
+                    db.query(RemediationAssignmentLink)
+                    .filter_by(remediation_assignment_id=assignment.classwork_assignment_id)
+                    .first()
+                )
+                orig_id = link.original_assignment_id if link is not None else None
+            if orig_id is not None and orig_id not in linked_original_ids:
+                linked_original_ids.append(orig_id)
+
+        linked_set = set(linked_original_ids)
+        immutable_targets = [t for t in current_targets if t in linked_set]
+        for orig_id in linked_original_ids:
+            if orig_id not in immutable_targets:
+                immutable_targets.append(orig_id)
+
         targets_modified = (
             body.target_assignment_ids is not None
-            and target_ids[:len(current_targets)] != current_targets
+            and (
+                target_ids[:len(immutable_targets)] != immutable_targets
+                or any(t in linked_set for t in target_ids[len(immutable_targets):])
+            )
+        )
+        current_exam_id = (
+            current_plan.get("original_exam_assignment_id")
+            if current_treatment == "EXAMINATION"
+            else None
         )
         if (
             body.teacher_choice != current_plan.get("teacher_choice")
             or requested_treatment != current_treatment
-            or requested_exam_id != current_plan.get("original_exam_assignment_id")
+            or requested_exam_id != current_exam_id
             or targets_modified
             or (body.score_adjustment_cap is not None and resolved_cap != current_plan.get("score_adjustment_cap", float(DEFAULT_REMEDIATION_CAP_PERCENTAGE)))
         ):
             raise HTTPException(409, "Remediation format, grade treatment, and targeted classworks cannot change after a targeted activity is created")
+        if body.target_assignment_ids is not None and requested_treatment in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
+            unlinked_targets = [t for t in target_ids[len(immutable_targets):] if t not in linked_set]
+            target_ids = immutable_targets + (unlinked_targets[-1:] if unlinked_targets else [])
     _validate_grade_treatment_focus(row, requested_treatment)
 
     available = {
@@ -800,18 +847,26 @@ def preview_score_adjustment(
                 max_points = act.get("possible_score")
                 title = act.get("title")
 
-        if orig_score is None or max_points is None:
-            assignment = db.query(ClassworkAssignment).filter_by(classwork_assignment_id=target_id).first()
-            if not assignment:
-                assignment = (
-                    db.query(ClassworkAssignment)
-                    .filter_by(
-                        classwork_id=target_id,
-                        class_id=row.class_id,
-                        academic_period_id=row.academic_period_id,
-                    )
-                    .first()
+        assignment = db.query(ClassworkAssignment).filter_by(classwork_assignment_id=target_id).first()
+        if not assignment:
+            assignment = (
+                db.query(ClassworkAssignment)
+                .filter_by(
+                    classwork_id=target_id,
+                    class_id=row.class_id,
+                    academic_period_id=row.academic_period_id,
                 )
+                .first()
+            )
+        if assignment and (
+            assignment.class_id != row.class_id
+            or assignment.academic_period_id != row.academic_period_id
+            or assignment.classwork is None
+            or assignment.classwork.subject_id != row.subject_id
+        ):
+            assignment = None
+
+        if orig_score is None or max_points is None:
             if assignment and assignment.classwork:
                 max_points = (
                     float(assignment.classwork.total_points)
@@ -832,6 +887,7 @@ def preview_score_adjustment(
                 if sub and sub.grade is not None:
                     orig_score = float(sub.grade)
 
+        rubric_levels = serialize_classwork_rubric_levels(assignment.classwork if assignment else None)
         if orig_score is not None and max_points is not None and max_points > 0:
             adj = adjust_remediation_score(
                 original_score=orig_score,
@@ -849,6 +905,7 @@ def preview_score_adjustment(
                 "cap_percentage": float(adj.cap_percentage),
                 "was_adjusted": adj.was_adjusted,
                 "was_capped": adj.was_capped,
+                "rubric_levels": rubric_levels,
             })
 
     return {

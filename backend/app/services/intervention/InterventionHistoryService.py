@@ -12,17 +12,54 @@ from app.services.grading.PassingThresholdReader import require_subject_passing_
 from app.services.grading.RemedialExamination import effective_exam_score_for_change
 
 
-def resolution_projection(db: Session, row: Intervention) -> float | None:
+def resolution_prediction(
+    db: Session,
+    row: Intervention,
+    source: DevelopmentCurrentTermPrediction | None = None,
+) -> DevelopmentCurrentTermPrediction | None:
     if row.status != "RESOLVED" or row.resolved_at is None:
         return None
-    source = row.source_prediction
-    prediction = db.query(DevelopmentCurrentTermPrediction).filter_by(
+    resolved_source = (
+        source
+        or row.source_prediction
+        or db.get(DevelopmentCurrentTermPrediction, row.source_prediction_id)
+    )
+    if resolved_source is None:
+        return None
+    query = db.query(DevelopmentCurrentTermPrediction).filter_by(
         student_id=row.student_id, class_id=row.class_id, subject_id=row.subject_id,
         source_period_id=row.academic_period_id, target_period_id=row.academic_period_id,
-        model_version_id=source.model_version_id,
+        model_version_id=resolved_source.model_version_id,
     ).filter(
+        DevelopmentCurrentTermPrediction.revision >= resolved_source.revision,
         DevelopmentCurrentTermPrediction.generated_at <= row.resolved_at,
-    ).order_by(DevelopmentCurrentTermPrediction.revision.desc()).first()
+    )
+    next_cycle_revision = (
+        db.query(DevelopmentCurrentTermPrediction.revision)
+        .join(
+            Intervention,
+            Intervention.source_prediction_id == DevelopmentCurrentTermPrediction.prediction_id,
+        )
+        .filter(
+            Intervention.student_id == row.student_id,
+            Intervention.class_id == row.class_id,
+            Intervention.subject_id == row.subject_id,
+            Intervention.academic_period_id == row.academic_period_id,
+            Intervention.intervention_id != row.intervention_id,
+            DevelopmentCurrentTermPrediction.model_version_id == resolved_source.model_version_id,
+            DevelopmentCurrentTermPrediction.revision > resolved_source.revision,
+        )
+        .order_by(DevelopmentCurrentTermPrediction.revision.asc())
+        .limit(1)
+        .scalar()
+    )
+    if next_cycle_revision is not None:
+        query = query.filter(DevelopmentCurrentTermPrediction.revision < next_cycle_revision)
+    return query.order_by(DevelopmentCurrentTermPrediction.revision.desc()).first()
+
+
+def resolution_projection(db: Session, row: Intervention) -> float | None:
+    prediction = resolution_prediction(db, row)
     if prediction is None or not isinstance(prediction.evidence_snapshot, dict):
         return None
     readiness = prediction.evidence_snapshot.get("readiness")
@@ -60,10 +97,52 @@ def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -
         if not submission and (not assignment.is_published or not work.is_published or work.is_archived):
             continue
         visible_score = not student_view or work.show_scores
-        original = db.get(ClassworkAssignment, assignment.original_exam_assignment_id) if assignment.original_exam_assignment_id else None
+        original_assignment_id = assignment.original_exam_assignment_id
+        original = db.get(ClassworkAssignment, original_assignment_id) if original_assignment_id else None
         original_submission = db.query(StudentSubmission).filter_by(
             classwork_assignment_id=original.classwork_assignment_id, student_id=row.student_id,
         ).order_by(StudentSubmission.submission_id.desc()).first() if original else None
+        original_grade = (
+            float(original_submission.grade)
+            if original_submission and original_submission.grade is not None and visible_score
+            else None
+        )
+        rem_grade = float(submission.grade) if submission and submission.grade is not None else None
+        effective_grade = (
+            effective_exam_score_for_change(db, assignment, row.student_id, rem_grade)
+            if original and visible_score
+            else None
+        )
+        exam_subtype = work.exam_subtype if original else None
+        if original_assignment_id is None:
+            from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+            link = db.query(RemediationAssignmentLink).filter_by(
+                remediation_assignment_id=assignment.classwork_assignment_id,
+            ).first()
+            if link is not None:
+                original_assignment_id = link.original_assignment_id
+                original = db.get(ClassworkAssignment, link.original_assignment_id)
+                original_submission = db.query(StudentSubmission).filter_by(
+                    classwork_assignment_id=link.original_assignment_id, student_id=row.student_id,
+                ).order_by(StudentSubmission.submission_id.desc()).first() if original else None
+                raw_orig = (
+                    float(original_submission.grade)
+                    if original_submission and original_submission.grade is not None
+                    else None
+                )
+                original_grade = raw_orig if visible_score else None
+                if visible_score and raw_orig is not None:
+                    if rem_grade is not None and original and original.classwork and original.classwork.total_points:
+                        from app.services.grading.RemediationScoreAdjuster import adjust_remediation_score
+                        adj = adjust_remediation_score(
+                            original_score=raw_orig,
+                            remediation_score=rem_grade,
+                            max_points=float(original.classwork.total_points),
+                            cap_percentage=link.score_adjustment_cap,
+                        )
+                        effective_grade = float(adj.effective_score)
+                    else:
+                        effective_grade = raw_orig
         result.append({
             "assignment_id": assignment.classwork_assignment_id,
             "title": work.title,
@@ -71,12 +150,11 @@ def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -
             "submission_status": submission.status if submission else None,
             "grade": float(submission.grade) if submission and submission.grade is not None and visible_score else None,
             "total_points": float(work.total_points) if work.total_points is not None and visible_score else None,
-            "original_assignment_id": assignment.original_exam_assignment_id,
-            "original_title": original.classwork.title if original else None,
-            "exam_subtype": work.exam_subtype if original else None,
-            "original_grade": float(original_submission.grade) if original_submission and original_submission.grade is not None and visible_score else None,
-            "effective_grade": effective_exam_score_for_change(db, assignment, row.student_id,
-                float(submission.grade) if submission and submission.grade is not None else None) if original and visible_score else None,
+            "original_assignment_id": original_assignment_id,
+            "original_title": original.classwork.title if original and original.classwork else None,
+            "exam_subtype": exam_subtype,
+            "original_grade": original_grade,
+            "effective_grade": effective_grade,
         })
     return result
 

@@ -66,9 +66,9 @@ const unavailableProjection: SubjectGradeProjectionResponse = {
       {
         assignment_id: 7,
         maximum_hypothetical_effective_score: 42.5,
-        hypothetical_predicted_term_grade: 82.8,
-        step_estimated_difference: -0.1,
-        estimated_difference_from_baseline: -0.1,
+        hypothetical_predicted_term_grade: 88.3,
+        step_estimated_difference: 5.4,
+        estimated_difference_from_baseline: 5.4,
       },
     ],
     unavailable_reasons: [],
@@ -99,7 +99,7 @@ describe("SubjectGradeProjectionCard", () => {
     expect(screen.queryByText("Projected Subject Grade")).toBeNull();
   });
 
-  it("keeps a non-monotonic AI estimate secondary and explains that it cannot reduce the actual grade", () => {
+  it("displays the before/after provisional AI-assisted remediation estimate and explains it is not a raw model prediction or official grade", () => {
     render(
       <SubjectGradeProjectionCard
         projection={unavailableProjection}
@@ -109,13 +109,15 @@ describe("SubjectGradeProjectionCard", () => {
       />,
     );
 
-    expect(screen.getByText("Provisional AI Advisory")).toBeDefined();
+    expect(screen.getByText("Provisional AI-Assisted Remediation Estimate")).toBeDefined();
     expect(screen.getByText("Not an Official Grade")).toBeDefined();
+    expect(screen.getByText("AI baseline estimate")).toBeDefined();
+    expect(screen.getByText("AI-assisted what-if estimate")).toBeDefined();
     expect(screen.getByText("82.9%")).toBeDefined();
-    expect(screen.getByText("82.8%")).toBeDefined();
-    expect(screen.getByText("Model variation -0.1%")).toBeDefined();
-    expect(screen.getByText(/may increase or decrease/)).toBeDefined();
-    expect(screen.getByText(/does not calculate or reduce the student's actual grade/)).toBeDefined();
+    expect(screen.getByText("88.3%")).toBeDefined();
+    expect(screen.getByText("Estimated gain +5.4%")).toBeDefined();
+    expect(screen.getByText(/not a raw model prediction or an official or guaranteed subject grade/)).toBeDefined();
+    expect(screen.getByText(/cannot reduce the student's actual grade/)).toBeDefined();
   });
 
   it("normalizes negative zero in advisory differences", () => {
@@ -132,7 +134,7 @@ describe("SubjectGradeProjectionCard", () => {
       />,
     );
 
-    expect(screen.getByText("Model variation 0.0%")).toBeDefined();
+    expect(screen.getByText("Estimated gain 0.0%")).toBeDefined();
     expect(screen.queryByText(/-0\.0%/)).toBeNull();
   });
 
@@ -164,6 +166,6 @@ describe("SubjectGradeProjectionCard", () => {
     expect(screen.getAllByText("82.0%").length).toBeGreaterThan(0);
     expect(screen.getByText("86.0%")).toBeDefined();
     expect(screen.getByText("Reaches Passing")).toBeDefined();
-    expect(screen.getByText("Provisional AI Advisory")).toBeDefined();
+    expect(screen.getByText("Provisional AI-Assisted Remediation Estimate")).toBeDefined();
   });
 });

@@ -18,6 +18,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.intervention.Intervention import Intervention
 from app.schemas.RemediationDraft import (
     RemediationClassworkDraft,
@@ -40,6 +42,9 @@ from app.services.intervention.InterventionRemediationDraftValidationService imp
 from app.services.intervention.InterventionRemediationMaterialContextService import (
     RemediationMaterialContext,
     resolve_remediation_material_context,
+)
+from app.services.intervention.RemediationRubricService import (
+    serialize_classwork_rubric_levels,
 )
 from app.services.intervention.TeacherInterventionService import _eligible_scope
 
@@ -66,6 +71,7 @@ CRITICAL GROUNDING RULES:
      * IDENTIFICATION and SHORT_ANSWER: options must be an empty list [].
    - For CLASSWORK:
      * task_number must be 1, 2, 3...
+     * Tasks must NOT include a points field; only rubric_levels carry points.
      * supported_upload_formats must be chosen from: [".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".png", ".jpg", ".jpeg", ".zip"].
      * rubric_levels must have descending points, and the maximum rubric points must equal total_points.
 7. LEARNING MATERIALS & UNTRUSTED FILE HANDLING:
@@ -118,6 +124,7 @@ def build_remediation_draft_prompt(
     scope: dict[str, Any],
     request: RemediationDraftGenerationRequest,
     material_context: RemediationMaterialContext | dict[str, Any] | None = None,
+    inherited_rubric_levels: list[dict[str, Any]] | None = None,
 ) -> tuple[str, str, dict[str, Any]]:
     """Build grounded user and system prompts for remediation generation.
 
@@ -281,6 +288,8 @@ def build_remediation_draft_prompt(
         ],
         "custom_teacher_instructions": request.custom_teacher_instructions,
     }
+    if request.draft_format == "CLASSWORK" and inherited_rubric_levels:
+        grounding_data["locked_original_rubric_levels"] = inherited_rubric_levels
 
     if material_context is not None:
         reading_mats = getattr(material_context, "reading_materials", None)
@@ -385,10 +394,14 @@ def build_remediation_draft_prompt(
                 }
             ],
             "supported_upload_formats": [".pdf", ".docx"],
-            "rubric_levels": [
-                {"level_name": "Exemplary", "description": "Demonstrates thorough understanding", "points": request.total_points, "display_order": 0},
-                {"level_name": "Developing", "description": "Shows partial understanding", "points": round(request.total_points * 0.5, 1), "display_order": 1},
-            ],
+            "rubric_levels": (
+                [dict(level) for level in inherited_rubric_levels]
+                if inherited_rubric_levels
+                else [
+                    {"level_name": "Exemplary", "description": "Demonstrates thorough understanding", "points": request.total_points, "display_order": 0},
+                    {"level_name": "Developing", "description": "Shows partial understanding", "points": round(request.total_points * 0.5, 1), "display_order": 1},
+                ]
+            ),
             "teacher_guide": {
                 "exemplar_or_expected_response": "Teacher-only exemplar response.",
                 "evaluation_notes": "Scoring guidance for teachers.",
@@ -396,17 +409,50 @@ def build_remediation_draft_prompt(
             },
         }
 
+    generation_instruction = (
+        f"\n\nGenerate a complete QUIZ remediation draft containing exactly {request.item_count} "
+        f"items with points summing to exactly {request.total_points}. "
+        if request.draft_format == "QUIZ"
+        else (
+            f"\n\nGenerate a complete CLASSWORK remediation draft containing {request.item_count} "
+            f"tasks (do NOT include a points field on tasks). You may generate fresh remediation instructions, "
+            f"tasks, deliverables, and teacher_guide aligned to the student's weaknesses, but rubric_levels are "
+            f"LOCKED and inherited from the linked original classwork — return the exact locked_original_rubric_levels "
+            f"verbatim without modifying level names, criteria descriptions, points, or total_points ({request.total_points}). "
+            if inherited_rubric_levels
+            else f"\n\nGenerate a complete CLASSWORK remediation draft containing {request.item_count} "
+            f"tasks (do NOT include a points field on tasks) and rubric_levels with maximum points equal to exactly {request.total_points}. "
+        )
+    )
     user_prompt = (
         "Frozen Academic Evidence and Boundaries (JSON):\n"
         + json.dumps(grounding_data, ensure_ascii=False, indent=2)
         + "\n\nRequired JSON Output Format Example:\n"
         + json.dumps(sample_structure, ensure_ascii=False, indent=2)
-        + f"\n\nGenerate a complete {request.draft_format} remediation draft containing exactly {request.item_count} "
-        + f"items with points summing to exactly {request.total_points}. "
+        + generation_instruction
         + "Remember: Return ONLY the JSON object. Do not invent any lesson IDs or competency IDs."
     )
 
     return user_prompt, _SYSTEM_PROMPT, grounding_data
+
+
+def _sanitize_provider_draft_dict(parsed_dict: dict[str, Any]) -> dict[str, Any]:
+    """Strip common AI-hallucinated extra fields on CLASSWORK tasks/deliverables."""
+    if not isinstance(parsed_dict, dict):
+        return parsed_dict
+    if parsed_dict.get("draft_format") == "CLASSWORK":
+        tasks = parsed_dict.get("tasks")
+        if isinstance(tasks, list):
+            for task in tasks:
+                if isinstance(task, dict):
+                    task.pop("points", None)
+                    task.pop("targeted_quiz_question_id", None)
+        deliverables = parsed_dict.get("deliverables")
+        if isinstance(deliverables, list):
+            for deliverable in deliverables:
+                if isinstance(deliverable, dict):
+                    deliverable.pop("points", None)
+    return parsed_dict
 
 
 async def generate_remediation_draft_from_scope(
@@ -415,13 +461,17 @@ async def generate_remediation_draft_from_scope(
     *,
     staff_id: str | None = None,
     material_context: RemediationMaterialContext | dict[str, Any] | None = None,
+    inherited_rubric_levels: list[dict[str, Any]] | None = None,
 ) -> RemediationDraft:
     """Generate and validate a remediation draft from pre-resolved scope data.
 
     Returns a strictly validated RemediationDraft (QUIZ or CLASSWORK).
     """
     user_prompt, system_prompt, _ = build_remediation_draft_prompt(
-        scope, request, material_context=material_context
+        scope,
+        request,
+        material_context=material_context,
+        inherited_rubric_levels=inherited_rubric_levels,
     )
 
     token = None
@@ -449,7 +499,12 @@ async def generate_remediation_draft_from_scope(
             actor.reset(token)
 
     # Clean and parse JSON from raw response
-    parsed_dict = clean_and_parse_provider_json(raw)
+    parsed_dict = _sanitize_provider_draft_dict(clean_and_parse_provider_json(raw))
+
+    # Enforce inherited original scoring standards verbatim so AI cannot alter them
+    if request.draft_format == "CLASSWORK" and inherited_rubric_levels:
+        parsed_dict["rubric_levels"] = [dict(level) for level in inherited_rubric_levels]
+        parsed_dict["total_points"] = max(float(level["points"]) for level in inherited_rubric_levels)
 
     # Validate schema mechanics via Pydantic
     try:
@@ -474,6 +529,50 @@ async def generate_remediation_draft_from_scope(
         raise
 
     return validated_draft
+
+
+def _resolve_target_original_rubric(
+    db: Session,
+    intervention: Intervention,
+    request: RemediationDraftGenerationRequest,
+) -> list[dict[str, Any]] | None:
+    if request.draft_format != "CLASSWORK" or request.grade_treatment not in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
+        return None
+    target_id = request.target_assignment_id
+    if target_id is None:
+        plan = intervention.remediation_plan if isinstance(intervention.remediation_plan, dict) else {}
+        plan_targets = list(plan.get("target_assignment_ids") or [])
+        if plan_targets:
+            linked_ids = {
+                row[0]
+                for row in db.query(RemediationAssignmentLink.original_assignment_id)
+                .filter_by(student_id=intervention.student_id)
+                .all()
+            }
+            unlinked = [tid for tid in plan_targets if tid not in linked_ids]
+            target_id = unlinked[-1] if unlinked else (plan_targets[0] if len(plan_targets) == 1 else None)
+    if target_id is None:
+        return None
+    target_asgn = db.get(ClassworkAssignment, target_id)
+    if (
+        target_asgn is None
+        or target_asgn.classwork is None
+        or target_asgn.classwork.is_archived
+        or target_asgn.source_intervention_id is not None
+        or target_asgn.original_exam_assignment_id is not None
+        or target_asgn.class_id != intervention.class_id
+        or target_asgn.academic_period_id != intervention.academic_period_id
+        or target_asgn.classwork.subject_id != intervention.subject_id
+        or target_asgn.recipient_student_id not in (None, intervention.student_id)
+    ):
+        if request.target_assignment_id is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Target classwork assignment {target_id} is unavailable or outside this intervention scope",
+            )
+        return None
+    levels = serialize_classwork_rubric_levels(target_asgn.classwork)
+    return levels or None
 
 
 async def generate_remediation_draft(
@@ -502,12 +601,25 @@ async def generate_remediation_draft(
             detail="Intervention must be ACTIVE to generate remediation drafts",
         )
 
+    inherited_rubric = _resolve_target_original_rubric(db, intervention, request)
+    effective_request = (
+        request.model_copy(
+            update={"total_points": max(float(level["points"]) for level in inherited_rubric)}
+        )
+        if inherited_rubric
+        else request
+    )
+
     eligibility = resolve_remediation_generation_eligibility(db, intervention)
     scope = eligibility.pop("scope")
     scope["_generation_eligibility"] = eligibility
     material_context = resolve_remediation_material_context(
-        db, intervention, scope, selected_reading_ids=request.selected_reading_ids,
+        db, intervention, scope, selected_reading_ids=effective_request.selected_reading_ids,
     )
     return await generate_remediation_draft_from_scope(
-        scope, request, staff_id=staff_id, material_context=material_context
+        scope,
+        effective_request,
+        staff_id=staff_id,
+        material_context=material_context,
+        inherited_rubric_levels=inherited_rubric,
     )

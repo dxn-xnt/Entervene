@@ -11,7 +11,7 @@ import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Empty } from "@/components/retroui/Empty";
 import { Save, SlidersHorizontal } from "lucide-react";
-import { InterventionPredictionHistory } from "@/components/teacher/intervention-prediction-history";
+import { getTeacherRiskDisplay } from "@/components/predictions/teacher-risk-display";
 import InterventionSupportMaterials, {
   type InterventionSupportMaterialsHandle,
 } from "./intervention-support-materials";
@@ -288,6 +288,11 @@ export default function InterventionModal({
                 {detail.status === "RESOLVED" ? (
                   (() => {
                     const resolved = detail as TeacherResolvedInterventionDetail;
+                    const resolvedGrade =
+                      resolved.resolution_projection ?? resolved.current_predicted_grade;
+                    const resolutionRisk = getTeacherRiskDisplay(
+                      resolved.current_intervention_level ?? resolved.triggering_intervention_level
+                    );
                     return (
                       <>
                         <div className="flex flex-col gap-2">
@@ -312,6 +317,12 @@ export default function InterventionModal({
                                     <Badge variant="solid" size="md">
                                       Resolved
                                     </Badge>
+                                    <Badge
+                                      size="md"
+                                      className={getRiskBadgeMeta(resolutionRisk.level).bg}
+                                    >
+                                      {resolutionRisk.label}
+                                    </Badge>
                                     <Badge variant="outline" size="md">
                                       {label(resolved.resolution_reason || "Resolved")}
                                     </Badge>
@@ -330,14 +341,17 @@ export default function InterventionModal({
                                   <p>
                                     Resolution:{" "}
                                     <strong>
-                                      {resolved.resolution_projection != null
-                                        ? resolved.resolution_projection.toFixed(2)
+                                      {resolvedGrade != null
+                                        ? resolvedGrade.toFixed(2)
                                         : "Unavailable"}
                                     </strong>
                                   </p>
-                                  <div className="col-span-2 mt-1">
-                                    <InterventionPredictionHistory item={resolved} />
-                                  </div>
+                                  <p>
+                                    Trigger:{" "}
+                                    <strong>
+                                      {resolved.triggering_predicted_grade.toFixed(2)}
+                                    </strong>
+                                  </p>
                                 </div>
                               </div>
                             </div>

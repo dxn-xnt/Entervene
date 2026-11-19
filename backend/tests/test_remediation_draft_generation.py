@@ -426,6 +426,50 @@ async def test_generate_classwork_draft_success(monkeypatch):
     assert draft.teacher_guide.exemplar_or_expected_response is not None
 
 
+@pytest.mark.anyio
+async def test_generate_classwork_draft_strips_provider_hallucinated_task_points(monkeypatch):
+    scope = sample_scope()
+    req = RemediationDraftGenerationRequest(
+        draft_format="CLASSWORK",
+        target_component="PERFORMANCE_TASK",
+        grade_treatment="PERFORMANCE_TASK",
+        item_count=5,
+        total_points=50.0,
+    )
+
+    user_prompt, system_prompt, _ = build_remediation_draft_prompt(scope, req)
+    assert "do NOT include a points field on tasks" in user_prompt
+    assert "Tasks must NOT include a points field" in system_prompt
+
+    payload = sample_classwork_response_dict()
+    payload["total_points"] = 50.0
+    payload["tasks"] = [
+        {
+            **payload["tasks"][0],
+            "task_number": index + 1,
+            "title": f"Task {index + 1}",
+            "points": 10.0,
+            "targeted_quiz_question_id": 101,
+        }
+        for index in range(5)
+    ]
+    payload["deliverables"][0]["points"] = 50.0
+    payload["rubric_levels"][0]["points"] = 50.0
+    payload["rubric_levels"][1]["points"] = 25.0
+
+    mock_generate = AsyncMock(return_value=json.dumps(payload))
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", mock_generate)
+
+    draft = await generate_remediation_draft_from_scope(scope, req, staff_id="teacher-uuid")
+
+    assert isinstance(draft, RemediationClassworkDraft)
+    assert draft.total_points == 50.0
+    assert len(draft.tasks) == 5
+    assert [task.task_number for task in draft.tasks] == [1, 2, 3, 4, 5]
+    assert draft.rubric_levels[0].points == 50.0
+
+
+
 # ── Provider Error & Resiliency Tests ──
 
 @pytest.mark.anyio
