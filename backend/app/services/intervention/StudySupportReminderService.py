@@ -303,7 +303,7 @@ def scan_study_support_reminders(
                 .options(joinedload(ClassworkAssignment.classwork).joinedload(Classwork.subject))
                 .filter_by(classwork_assignment_id=assignment_id)
                 .populate_existing()
-                .with_for_update(skip_locked=True)
+                .with_for_update(of=ClassworkAssignment, skip_locked=True)
                 .one_or_none()
             )
             if assignment is None:
