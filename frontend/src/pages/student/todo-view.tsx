@@ -43,7 +43,7 @@ const topics: Topic[] = [
   {
     title: "Data Types and Variables",
     description:
-      "Spend extra time reviewing this topic before your intervention quiz.",
+      "Spend extra time reviewing this topic before your Study Support activity.",
     mastery: "Low",
     resources: [
       {

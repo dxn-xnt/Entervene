@@ -349,7 +349,7 @@ export default function StudentClassworkView() {
       }
       toast.success({
         title: "Reading reviewed",
-        description: "Your study support progress has been updated.",
+        description: "Your Study Support progress has been updated.",
       });
     } catch (cause) {
       toast.error({
@@ -709,7 +709,7 @@ export default function StudentClassworkView() {
                             Study Support Preparation
                           </h2>
                           <p className="text-xs text-muted-foreground">
-                            Required reading review for your intervention
+                            Required reading review for your Study Support
                           </p>
                         </div>
                       </div>
@@ -729,8 +729,8 @@ export default function StudentClassworkView() {
 
                     <p className="text-sm text-muted-foreground">
                       {interventionReviewed
-                        ? "You have acknowledged and reviewed this reading for your study support intervention."
-                        : "Review the material and acknowledge it below to update your study support progress."}
+                        ? "You have acknowledged and reviewed this reading for your Study Support."
+                        : "Review the material and acknowledge it below to update your Study Support progress."}
                     </p>
 
                     <div className="flex flex-wrap items-center gap-2 pt-1">

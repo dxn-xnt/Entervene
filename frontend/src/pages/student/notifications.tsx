@@ -83,7 +83,13 @@ const Notifications = () => {
     }
 
     // 3. Fallback based on notification role / type
-    if (item.notification_type === "risk_alert" || item.notification_type === "intervention_reviewer_available") {
+    if (
+      item.notification_type === "risk_alert" ||
+      item.notification_type === "intervention_reviewer_available" ||
+      item.notification_type === "study_support_available" ||
+      item.notification_type === "study_support_reminder" ||
+      item.notification_type === "study_support_final_reminder"
+    ) {
       navigate(routes.student.interventions);
       return;
     }
@@ -94,8 +100,14 @@ const Notifications = () => {
 
   const getNotificationType = (item: NotificationItem): string => {
     // 1. Explicit notification types
-    if (item.notification_type === "risk_alert") {
-      return "Intervention";
+    if (
+      item.notification_type === "risk_alert" ||
+      item.notification_type === "intervention_reviewer_available" ||
+      item.notification_type === "study_support_available" ||
+      item.notification_type === "study_support_reminder" ||
+      item.notification_type === "study_support_final_reminder"
+    ) {
+      return "Study Support";
     }
     if (item.notification_type === "announcement") {
       return "Announcement";

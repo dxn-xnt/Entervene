@@ -33,7 +33,7 @@ class GeneratedReviewer(BaseModel):
         return value
 
 
-_SYSTEM = """You write a concise, supportive study reviewer for a student. Return ONLY a JSON object with exactly three string fields: title, introduction, body. The body may use plain text headings, worked examples, brief practice, and a checklist. This is not a graded quiz. Use only the supplied frozen evidence. Do not invent scores, topics, competencies, causes, risk labels, or a new diagnosis. A covered topic is review context, NOT proof of weakness. Only measured scored competencies may be described as needing reinforcement. Question-level concepts may be focused only when a partly or incorrectly scored, mapped question is supplied. If evidence is component-only, give general preparation guidance for that component without naming a specific topic. Do not claim motivation, attendance, effort, behavior, disability, or knowledge gaps as causes. Do not mention prediction systems, internal IDs, or the evidence hierarchy to the student."""
+_SYSTEM = """You write a concise, supportive study reviewer for a student. Return ONLY a JSON object with exactly three string fields: title, introduction, body. The body may use plain text headings, worked examples, brief practice, and a checklist. This is not a graded quiz. Use only the supplied frozen evidence. Do not invent scores, topics, competencies, causes, risk labels, or a new diagnosis. A covered topic is review context, NOT proof of weakness. Only measured scored competencies may be described as needing reinforcement. Question-level concepts may be focused only when a partly or incorrectly scored, mapped question is supplied. If evidence is component-only, give general preparation guidance for that component without naming a specific topic. Do not claim motivation, attendance, effort, behavior, disability, or knowledge gaps as causes. Use \"Study Support\" for this student-facing experience. Never use the internal term \"Intervention\" or describe Study Support as an intervention. Do not mention prediction systems, internal IDs, or the evidence hierarchy to the student."""
 
 
 def _short(value: object, limit: int = 120) -> str:
@@ -126,6 +126,9 @@ def _validate_output(raw: str, grounding: dict) -> dict:
     except ValidationError as exc:
         fields = sorted({str(error["loc"][0]) for error in exc.errors() if error["loc"]})
         raise HTTPException(status_code=502, detail="AI returned invalid reviewer fields: " + ", ".join(fields[:4])) from None
+    student_text = "\n".join((value.title, value.introduction, value.body))
+    if re.search(r"\binterventions?\b", student_text, flags=re.IGNORECASE):
+        raise HTTPException(status_code=502, detail="AI used internal terminology in student reviewer")
     # Reject an explicit claim that an unscored covered competency is weak.
     measured = {item["competency"].lower() for item in grounding["measured_scored_competencies"]}
     text = "\n".join((value.title, value.introduction, value.body)).lower()

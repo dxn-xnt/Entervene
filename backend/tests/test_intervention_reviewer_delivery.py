@@ -85,7 +85,10 @@ def test_send_is_atomic_private_and_immutable(candidate_context, monkeypatch):
     alerts = db.query(Notification).filter_by(notification_type="intervention_reviewer_available").all()
     assert len(alerts) == 1
     assert alerts[0].user_id == student_account.user_id
-    assert alerts[0].action_url == f"/student/interventions?reviewer={material.material_id}"
+    assert alerts[0].title == "New Study Support Available"
+    assert alerts[0].body == f"Your teacher prepared new Study Support for {ctx['subject'].subject_name}."
+    assert "intervention" not in f"{alerts[0].title} {alerts[0].body}".lower()
+    assert alerts[0].action_url == f"/student/interventions/view?reviewer={material.material_id}"
     assert "risk" not in alerts[0].body.lower()
     inbox = get_notifications_for_user(db, student_account.user_id)
     assert [item.notification_type for item in inbox.notifications] == ["intervention_reviewer_available"]
