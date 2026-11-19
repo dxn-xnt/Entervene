@@ -31,6 +31,20 @@ def normalize_subject_status(value: Any) -> str:
     return status
 
 
+def ensure_standard_academic_levels(db: Session) -> list[AcademicLevel]:
+    existing = db.query(AcademicLevel).all()
+    existing_grades = {lvl.grade_level: lvl for lvl in existing}
+    created = False
+    for grade in (7, 8, 9, 10, 11, 12):
+        if grade not in existing_grades:
+            new_level = AcademicLevel(level_name=f"Grade {grade}", grade_level=grade)
+            db.add(new_level)
+            created = True
+    if created:
+        db.commit()
+    return db.query(AcademicLevel).order_by(AcademicLevel.grade_level.asc()).all()
+
+
 def get_academic_level_or_404(db: Session, academic_level_id: int) -> AcademicLevel:
     level = db.get(AcademicLevel, academic_level_id)
     if level is None:

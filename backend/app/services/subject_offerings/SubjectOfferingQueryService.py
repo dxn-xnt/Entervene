@@ -11,6 +11,7 @@ from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.core.pathways import canonicalize_pathway
+from app.services.subjects.SubjectShared import ensure_standard_academic_levels
 from app.services.subject_offerings.SubjectOfferingShared import (
     ALLOWED_OFFERING_STATUSES,
     DEFAULT_OFFERING_STATUS,
@@ -22,6 +23,7 @@ from app.services.subject_offerings.SubjectOfferingShared import (
 
 
 def get_subject_offering_form_options_data(db: Session) -> dict:
+    ensure_standard_academic_levels(db)
     academic_years = (
         db.query(AcademicYear)
         .order_by(AcademicYear.start_date.desc(), func.lower(AcademicYear.year_label))
