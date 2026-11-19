@@ -29,7 +29,11 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { routes } from "@/../routes";
 import { Avatar } from "./retroui/Avatar";
-import { colorThemes, isColorTheme, useColorTheme } from "@/context/ColorThemeContext";
+import {
+  colorThemes,
+  isColorTheme,
+  useColorTheme,
+} from "@/context/ColorThemeContext";
 import { RoleBadge } from "@/components/role-badge";
 
 export function NavUser() {
@@ -47,15 +51,15 @@ export function NavUser() {
 
   const initials = user?.fullName
     ? user.fullName
-      .split(" ")
-      .filter((part) => part.length > 0)
-      .map((part, index, array) => {
-        if (index === 0) return part[0];
-        if (index === array.length - 1) return part[0];
-        return "";
-      })
-      .join("")
-      .toUpperCase()
+        .split(" ")
+        .filter((part) => part.length > 0)
+        .map((part, index, array) => {
+          if (index === 0) return part[0];
+          if (index === array.length - 1) return part[0];
+          return "";
+        })
+        .join("")
+        .toUpperCase()
     : "?";
 
   const avatarVariant =
@@ -85,12 +89,15 @@ export function NavUser() {
               </Avatar>
               <div className="min-w-0 flex-1 text-left leading-tight">
                 <div className="flex min-w-0 items-center gap-1.5">
-                <span className="truncate text-sm font-semibold">
-                  {user?.fullName || "Loading…"}
-                </span>
+                  <span className="truncate text-sm font-semibold">
+                    {user?.fullName || "Loading…"}
+                  </span>
                   <RoleBadge role={user?.role} />
                 </div>
-                <span className="block w-full min-w-0 truncate text-xs text-muted-foreground" title={user?.email || undefined}>
+                <span
+                  className="block w-full min-w-0 truncate text-xs text-muted-foreground"
+                  title={user?.email || undefined}
+                >
                   {user?.email || ""}
                 </span>
               </div>
@@ -119,9 +126,7 @@ export function NavUser() {
                   <span className="truncate text-sm font-semibold">
                     {user?.fullName || "Loading…"}
                   </span>
-                  <span className="truncate text-xs">
-                    {user?.email || ""}
-                  </span>
+                  <span className="truncate text-xs">{user?.email || ""}</span>
                   <RoleBadge role={user?.role} className="mt-1" />
                 </div>
               </div>
@@ -130,7 +135,8 @@ export function NavUser() {
             <DropdownMenuSeparator className="bg-black" />
 
             <DropdownMenuGroup>
-              <DropdownMenuItem className="p-2"
+              <DropdownMenuItem
+                className="p-2"
                 onClick={() => {
                   if (user?.role === "student") {
                     navigate(routes.student.profile);
@@ -144,10 +150,21 @@ export function NavUser() {
                 <CircleUserRoundIcon />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem className="p-2">
-                <BellIcon />
-                Notifications
-              </DropdownMenuItem>
+              {user?.role !== "admin" && (
+                <DropdownMenuItem
+                  className="p-2"
+                  onClick={() =>
+                    navigate(
+                      user?.role === "teacher"
+                        ? routes.teacher.notifications
+                        : routes.student.notifications,
+                    )
+                  }
+                >
+                  <BellIcon />
+                  Notifications
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
 
             <DropdownMenuSeparator className="bg-black" />
@@ -204,7 +221,6 @@ export function NavUser() {
               disabled={loggingOut}
               className="p-2 text-destructive "
             >
-
               <LogOutIcon className="text-destructive" />
               Log out
             </DropdownMenuItem>

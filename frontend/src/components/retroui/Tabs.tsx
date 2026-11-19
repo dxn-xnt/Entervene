@@ -13,6 +13,7 @@ type TabsProps<T extends string = string> = {
   activeTab: T;
   onTabChange: (tab: T) => void;
   counts?: Partial<Record<T, number>>;
+  ariaLabel?: string;
   className?: string;
   tabClassName?: string;
   listClassName?: string;
@@ -32,6 +33,7 @@ export function Tabs<T extends string = string>({
   activeTab,
   onTabChange,
   counts = {},
+  ariaLabel = "Page sections",
   className = "",
   tabClassName = "",
   listClassName = "",
@@ -93,7 +95,7 @@ export function Tabs<T extends string = string>({
       >
         <div
           role="tablist"
-          aria-label="Page sections"
+          aria-label={ariaLabel}
           className={cn(
             "no-scrollbar flex w-full flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain px-3 pt-2 sm:gap-2 sm:px-3 md:px-4",
             listClassName,

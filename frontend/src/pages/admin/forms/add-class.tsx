@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAcademicPeriod, type AcademicYearItem } from "@/context/AcademicPeriodContext";
-import { isChronologicallyEarlierYear, checkYearHasReusableSetup } from "@/lib/academic-year-chronology";
+import {
+  useAcademicPeriod,
+  type AcademicYearItem,
+} from "@/context/AcademicPeriodContext";
+import {
+  isChronologicallyEarlierYear,
+  checkYearHasReusableSetup,
+} from "@/lib/academic-year-chronology";
 import { CalendarSync, Download, UserPlus } from "lucide-react";
 import { ApiRequestError, createClassesBatch } from "@/lib/api";
 import type {
@@ -17,7 +23,9 @@ import { buildBatchCreatePayload } from "./classes/build-batch-create-payload";
 import { sortAssignmentStudents } from "@/components/admin/classes/assignment/studentSorting";
 import ImportClassWizard from "@/pages/admin/forms/classes/import-class-wizard";
 import ManualClassWizard from "@/pages/admin/forms/classes/manual-class-wizard";
-import SetupYearWizard, { type SetupYearStep } from "@/pages/admin/forms/classes/setup-year-wizard";
+import SetupYearWizard, {
+  type SetupYearStep,
+} from "@/pages/admin/forms/classes/setup-year-wizard";
 import ClassCard from "@/components/admin/classes/class-card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
@@ -41,14 +49,16 @@ export default function AddClassModal({
   sourceYears: propSourceYears,
 }: AddClassModalProps) {
   const { selectedYear, academicYears } = useAcademicPeriod();
-  const [discoveredSourceYears, setDiscoveredSourceYears] = useState<AcademicYearItem[]>([]);
+  const [discoveredSourceYears, setDiscoveredSourceYears] = useState<
+    AcademicYearItem[]
+  >([]);
 
   useEffect(() => {
     if (propSourceYears !== undefined) return;
     if (!selectedYear) return;
 
     const earlierCandidates = (academicYears ?? []).filter((y) =>
-      isChronologicallyEarlierYear(y, selectedYear)
+      isChronologicallyEarlierYear(y, selectedYear),
     );
 
     let active = true;
@@ -56,12 +66,16 @@ export default function AddClassModal({
       try {
         const results = await Promise.all(
           earlierCandidates.map(async (candidate) => {
-            const hasSetup = await checkYearHasReusableSetup(candidate.academic_year_id);
+            const hasSetup = await checkYearHasReusableSetup(
+              candidate.academic_year_id,
+            );
             return { candidate, hasSetup };
-          })
+          }),
         );
         if (active) {
-          setDiscoveredSourceYears(results.filter((r) => r.hasSetup).map((r) => r.candidate));
+          setDiscoveredSourceYears(
+            results.filter((r) => r.hasSetup).map((r) => r.candidate),
+          );
         }
       } catch {
         if (active) {
@@ -75,18 +89,26 @@ export default function AddClassModal({
     };
   }, [academicYears, selectedYear, propSourceYears]);
 
-  const validSourceYears = propSourceYears ?? (selectedYear ? discoveredSourceYears : []);
+  const validSourceYears =
+    propSourceYears ?? (selectedYear ? discoveredSourceYears : []);
   const canSetupFromPreviousYear = validSourceYears.length > 0;
 
   const [mode, setMode] = useState<WizardMode>("choice");
   const [manualSetup, setManualSetup] = useState<ManualClassSetup | null>(null);
-  const [manualStep, setManualStep] = useState<"details" | "assignment" | "review">("details");
-  const [manualScreen, setManualScreen] = useState<"details" | "official-sections">("details");
+  const [manualStep, setManualStep] = useState<
+    "details" | "assignment" | "review"
+  >("details");
+  const [manualScreen, setManualScreen] = useState<
+    "details" | "official-sections"
+  >("details");
   const [skippedStudents, setSkippedStudents] = useState(false);
-  const [assignmentState, setAssignmentState] = useState<ManualAssignmentWorkspaceState | null>(null);
+  const [assignmentState, setAssignmentState] =
+    useState<ManualAssignmentWorkspaceState | null>(null);
   const [resetWarning, setResetWarning] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState<BatchCreateClassesResponse | null>(null);
-  const [setupYearStep, setSetupYearStep] = useState<SetupYearStep>("configure");
+  const [saveSuccess, setSaveSuccess] =
+    useState<BatchCreateClassesResponse | null>(null);
+  const [setupYearStep, setSetupYearStep] =
+    useState<SetupYearStep>("configure");
 
   function handleClose() {
     setMode("choice");
@@ -114,23 +136,36 @@ export default function AddClassModal({
       return;
     }
     if (!assignmentState) return;
-    if (assignmentState.academicLevelId !== setup.academicLevelId || manualSetup?.academicYear.academic_year_id !== setup.academicYear.academic_year_id) {
+    if (
+      assignmentState.academicLevelId !== setup.academicLevelId ||
+      manualSetup?.academicYear.academic_year_id !==
+        setup.academicYear.academic_year_id
+    ) {
       setAssignmentState(null);
-      setResetWarning("Student assignments were reset because the grade or academic year changed.");
+      setResetWarning(
+        "Student assignments were reset because the grade or academic year changed.",
+      );
       return;
     }
 
-    const currentSectionIds = new Set(setup.sections.map((section) => section.localId));
+    const currentSectionIds = new Set(
+      setup.sections.map((section) => section.localId),
+    );
     const removedStudents = Object.entries(assignmentState.assignmentsBySection)
       .filter(([sectionId]) => !currentSectionIds.has(sectionId))
       .flatMap(([, students]) => students);
     setAssignmentState({
       ...assignmentState,
-      unassignedStudents: sortAssignmentStudents([...assignmentState.unassignedStudents, ...removedStudents]),
-      assignmentsBySection: Object.fromEntries(setup.sections.map((section) => [
-        section.localId,
-        assignmentState.assignmentsBySection[section.localId] ?? [],
-      ])),
+      unassignedStudents: sortAssignmentStudents([
+        ...assignmentState.unassignedStudents,
+        ...removedStudents,
+      ]),
+      assignmentsBySection: Object.fromEntries(
+        setup.sections.map((section) => [
+          section.localId,
+          assignmentState.assignmentsBySection[section.localId] ?? [],
+        ]),
+      ),
     });
     setResetWarning("");
   }
@@ -142,7 +177,9 @@ export default function AddClassModal({
     setAssignmentState({
       academicLevelId: setup.academicLevelId,
       unassignedStudents: [],
-      assignmentsBySection: Object.fromEntries(setup.sections.map((section) => [section.localId, []])),
+      assignmentsBySection: Object.fromEntries(
+        setup.sections.map((section) => [section.localId, []]),
+      ),
       selectedStudentIds: new Set(),
     });
     setSkippedStudents(true);
@@ -158,11 +195,20 @@ export default function AddClassModal({
     setResetWarning("");
   }
 
-  function continueFromImport(setup: ManualClassSetup, hydratedAssignmentState: ManualAssignmentWorkspaceState, skipToReview = false) {
+  function continueFromImport(
+    setup: ManualClassSetup,
+    hydratedAssignmentState: ManualAssignmentWorkspaceState,
+    skipToReview = false,
+  ) {
     setSaveSuccess(null);
     setSetupYearStep("configure");
     setSkippedStudents(skipToReview);
-    if (!skipToReview && manualSetup && assignmentState && sameImportedSetup(manualSetup, setup)) {
+    if (
+      !skipToReview &&
+      manualSetup &&
+      assignmentState &&
+      sameImportedSetup(manualSetup, setup)
+    ) {
       setManualStep("assignment");
       return;
     }
@@ -184,11 +230,15 @@ export default function AddClassModal({
       <Dialog.Content size="2xl">
         <Dialog.Header asChild>
           <div className="flex items-center justify-between w-full">
-            <Text as="h5" className="font-sans text-xl font-bold">Add New Classes</Text>
+            <Text as="h5" className="font-sans text-xl font-bold">
+              Add New Classes
+            </Text>
           </div>
         </Dialog.Header>
 
-        <section className={`grid gap-4 p-4 ${canSetupFromPreviousYear ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+        <section
+          className={`grid gap-4 p-4 ${canSetupFromPreviousYear ? "md:grid-cols-3" : "md:grid-cols-2"}`}
+        >
           {canSetupFromPreviousYear && (
             <DialogueSelect
               className="shadow-none hover:shadow-none active:shadow-none"
@@ -217,45 +267,70 @@ export default function AddClassModal({
 
         <Dialog.Footer>
           <Dialog.Close>
-            <Button variant={"outline"} autoIcon={false} onClick={handleClose}>Cancel</Button>
+            <Button variant={"outline"} autoIcon={false} onClick={handleClose}>
+              Cancel
+            </Button>
           </Dialog.Close>
         </Dialog.Footer>
       </Dialog.Content>
     );
   }
 
-  const stepIndex = manualStep === "details" ? 1 : manualStep === "assignment" ? 2 : 3;
+  const stepIndex =
+    manualStep === "details" ? 1 : manualStep === "assignment" ? 2 : 3;
 
-  const dialogTitle = saveSuccess || (mode === "setup_year" && setupYearStep === "success")
-    ? (mode === "setup_year" ? "Academic Year Setup Completed" : "Class Created Successfully")
-    : mode === "setup_year"
-      ? (setupYearStep === "confirm" ? "Confirm Academic-Year Setup" : "Set Up from Previous Year")
-      : manualStep === "details"
-        ? mode === "manual" ? manualScreen === "official-sections" ? "Manage Official Sections" : "Add Class Details" : "Import Class Details"
-        : manualStep === "assignment"
-          ? "Assign Students"
-          : "Review Class Setup";
+  const dialogTitle =
+    saveSuccess || (mode === "setup_year" && setupYearStep === "success")
+      ? mode === "setup_year"
+        ? "Academic Year Setup Completed"
+        : "Class Created Successfully"
+      : mode === "setup_year"
+        ? setupYearStep === "confirm"
+          ? "Confirm Academic-Year Setup"
+          : "Set Up from Previous Year"
+        : manualStep === "details"
+          ? mode === "manual"
+            ? manualScreen === "official-sections"
+              ? "Manage Official Sections"
+              : "Add Class Details"
+            : "Import Class Details"
+          : manualStep === "assignment"
+            ? "Assign Students"
+            : "Review Class Setup";
 
-  const stepCountText = (saveSuccess || (mode === "setup_year" && setupYearStep === "success"))
-    ? null
-    : mode === "manual" && manualScreen === "official-sections"
+  const stepCountText =
+    saveSuccess || (mode === "setup_year" && setupYearStep === "success")
       ? null
-    : mode === "setup_year"
-      ? (setupYearStep === "confirm" ? "Step 2 of 2" : "Step 1 of 2")
-      : `Step ${stepIndex} of 3`;
+      : mode === "manual" && manualScreen === "official-sections"
+        ? null
+        : mode === "setup_year"
+          ? setupYearStep === "confirm"
+            ? "Step 2 of 2"
+            : "Step 1 of 2"
+          : `Step ${stepIndex} of 3`;
 
   return (
     <Dialog.Content size="xl">
       <Dialog.Header asChild>
         <div className="flex items-center justify-between w-full">
-          <Text as="h5" className="font-sans text-xl font-bold">{dialogTitle}</Text>
+          <Text as="h5" className="font-sans text-xl font-bold">
+            {dialogTitle}
+          </Text>
           {stepCountText && (
-            <Text as="p" className="font-sans text-sm font-bold">{stepCountText}</Text>
+            <Text as="p" className="font-sans text-sm font-bold">
+              {stepCountText}
+            </Text>
           )}
         </div>
       </Dialog.Header>
 
-      <section className={mode === "setup_year" ? "contents" : "flex flex-col gap-4 p-4"}>
+      <section
+        className={
+          mode === "setup_year"
+            ? "contents"
+            : `flex flex-col ${manualStep === "assignment" ? "h-full min-h-0 gap-0 p-0" : "gap-4 p-4"}`
+        }
+      >
         {saveSuccess ? (
           <ManualSaveSuccess
             result={saveSuccess}
@@ -277,7 +352,9 @@ export default function AddClassModal({
             onClassesCreated={onClassesCreated}
           />
         ) : mode === "manual" ? (
-          <div className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}>
+          <div
+            className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}
+          >
             {manualStep === "details" ? (
               <ManualClassWizard
                 initialSetup={manualSetup}
@@ -302,7 +379,9 @@ export default function AddClassModal({
                 setup={manualSetup}
                 assignmentState={assignmentState}
                 skippedStudents={skippedStudents}
-                onBack={() => setManualStep(skippedStudents ? "details" : "assignment")}
+                onBack={() =>
+                  setManualStep(skippedStudents ? "details" : "assignment")
+                }
                 onClose={handleClose}
                 onSaved={(result) => {
                   resetManualState();
@@ -312,7 +391,9 @@ export default function AddClassModal({
             ) : null}
           </div>
         ) : (
-          <div className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}>
+          <div
+            className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}
+          >
             <div className={manualStep === "details" ? "" : "hidden"}>
               <ImportClassWizard
                 existingClasses={classes}
@@ -337,7 +418,9 @@ export default function AddClassModal({
                 setup={manualSetup}
                 assignmentState={assignmentState}
                 skippedStudents={skippedStudents}
-                onBack={() => setManualStep(skippedStudents ? "details" : "assignment")}
+                onBack={() =>
+                  setManualStep(skippedStudents ? "details" : "assignment")
+                }
                 onClose={handleClose}
                 onSaved={(result) => {
                   resetManualState();
@@ -353,17 +436,29 @@ export default function AddClassModal({
 }
 
 function sameImportedSetup(current: ManualClassSetup, next: ManualClassSetup) {
-  return current.academicLevelId === next.academicLevelId
-    && current.academicYear.academic_year_id === next.academicYear.academic_year_id
-    && current.sections.length === next.sections.length
-    && current.sections.every((section, index) => {
+  return (
+    current.academicLevelId === next.academicLevelId &&
+    current.academicYear.academic_year_id ===
+      next.academicYear.academic_year_id &&
+    current.sections.length === next.sections.length &&
+    current.sections.every((section, index) => {
       const nextSection = next.sections[index];
-      return section.sectionName === nextSection.sectionName
-        && section.adviserStaffId === nextSection.adviserStaffId;
-    });
+      return (
+        section.sectionName === nextSection.sectionName &&
+        section.adviserStaffId === nextSection.adviserStaffId
+      );
+    })
+  );
 }
 
-function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack, onClose }: {
+function ManualReview({
+  setup,
+  assignmentState,
+  skippedStudents,
+  onSaved,
+  onBack,
+  onClose,
+}: {
   setup: ManualClassSetup;
   assignmentState: ManualAssignmentWorkspaceState;
   skippedStudents?: boolean;
@@ -403,21 +498,40 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
   return (
     <div className="grid gap-4">
       <div>
-        <Text as="p" className="text-sm"><b>Academic Level:</b> {setup.academicLevelName}</Text>
-        <Text as="p" className="text-sm"><b>Academic Year:</b> {setup.academicYear.year_label}</Text>
+        <Text as="p" className="text-sm">
+          <b>Academic Level:</b> {setup.academicLevelName}
+        </Text>
+        <Text as="p" className="text-sm">
+          <b>Academic Year:</b> {setup.academicYear.year_label}
+        </Text>
       </div>
-      <AdminValidationAlert message={saveError?.message === "Review the class setup before saving." ? null : saveError?.message} attempt={validationAttempt} />
+      <AdminValidationAlert
+        message={
+          saveError?.message === "Review the class setup before saving."
+            ? null
+            : saveError?.message
+        }
+        attempt={validationAttempt}
+      />
 
-      <div className={`grid gap-3 ${setup.sections.length > 1 ? "sm:grid-cols-2" : "grid-cols-1"}`}>
+      <div
+        className={`grid gap-3 ${setup.sections.length > 1 ? "sm:grid-cols-2" : "grid-cols-1"}`}
+      >
         {setup.sections.map((section) => {
-          const students = assignmentState.assignmentsBySection[section.localId] ?? [];
+          const students =
+            assignmentState.assignmentsBySection[section.localId] ?? [];
           const femaleCount = students.filter(
-            (s) => s.gender?.toLowerCase() === "female" || s.gender?.toLowerCase() === "f"
+            (s) =>
+              s.gender?.toLowerCase() === "female" ||
+              s.gender?.toLowerCase() === "f",
           ).length;
           const maleCount = students.filter(
-            (s) => s.gender?.toLowerCase() === "male" || s.gender?.toLowerCase() === "m"
+            (s) =>
+              s.gender?.toLowerCase() === "male" ||
+              s.gender?.toLowerCase() === "m",
           ).length;
-          const gradeLevel = parseInt(setup.academicLevelName.replace(/\D/g, ""), 10) || 7;
+          const gradeLevel =
+            parseInt(setup.academicLevelName.replace(/\D/g, ""), 10) || 7;
 
           const previewClass: ClassListItem = {
             class_id: 0,
@@ -431,24 +545,25 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
               requires_pathway: gradeLevel >= 11,
             },
             pathway_id: null,
-            pathway: section.pathway && section.pathway !== "general"
-              ? {
-                id: 0,
-                code: section.pathway,
-                name: section.pathway,
-                is_enabled: true,
-                sort_order: 1,
-              }
-              : null,
+            pathway:
+              section.pathway && section.pathway !== "general"
+                ? {
+                    id: 0,
+                    code: section.pathway,
+                    name: section.pathway,
+                    is_enabled: true,
+                    sort_order: 1,
+                  }
+                : null,
             adviser: section.adviserName
               ? {
-                staff_id: section.adviserStaffId,
-                first_name: section.adviserName,
-                middle_name: null,
-                last_name: "",
-                suffix: null,
-                avatar: null,
-              }
+                  staff_id: section.adviserStaffId,
+                  first_name: section.adviserName,
+                  middle_name: null,
+                  last_name: "",
+                  suffix: null,
+                  avatar: null,
+                }
               : null,
             student_count: students.length,
             female_count: femaleCount,
@@ -457,36 +572,50 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
           };
 
           return (
-            <ClassCard
-              key={section.localId}
-              item={previewClass}
-              preview
-            />
+            <ClassCard key={section.localId} item={previewClass} preview />
           );
         })}
       </div>
 
       <Text as="p" className="text-sm font-bold">
-        {skippedStudents ? "Students can be assigned after the classes are saved." : `Remaining Unassigned Students: ${assignmentState.unassignedStudents.length}`}
+        {skippedStudents
+          ? "Students can be assigned after the classes are saved."
+          : `Remaining Unassigned Students: ${assignmentState.unassignedStudents.length}`}
       </Text>
 
       {saveError && (
         <div className="grid gap-1">
-          {saveError.backendMessage && saveError.backendMessage !== saveError.message && <FormMessage>{saveError.backendMessage}</FormMessage>}
+          {saveError.backendMessage &&
+            saveError.backendMessage !== saveError.message && (
+              <FormMessage>{saveError.backendMessage}</FormMessage>
+            )}
           {!!saveError.details.length && (
             <ul className="grid gap-1 text-xs text-destructive" role="alert">
-              {saveError.details.map((detail) => <li key={detail}>- {detail}</li>)}
+              {saveError.details.map((detail) => (
+                <li key={detail}>- {detail}</li>
+              ))}
             </ul>
           )}
         </div>
       )}
 
-      <Dialog.Footer position="static" className="-mx-4 -mb-4 mt-0 w-[calc(100%+2rem)] justify-between">
-        <Button variant="outline" autoIcon={false} onClick={onClose}>Close</Button>
+      <Dialog.Footer
+        position="static"
+        className="-mx-4 -mb-4 mt-0 w-[calc(100%+2rem)] justify-between px-4 py-3"
+      >
+        <Button variant="outline" autoIcon={false} onClick={onClose}>
+          Close
+        </Button>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={onBack}>Back</Button>
+          <Button variant="outline" onClick={onBack}>
+            Back
+          </Button>
           <Button variant="default" disabled={isSaving} onClick={saveClasses}>
-            {isSaving ? "Saving classes..." : saveError?.retryable ? "Retry Save Classes" : "Save Classes"}
+            {isSaving
+              ? "Saving classes..."
+              : saveError?.retryable
+                ? "Retry Save Classes"
+                : "Save Classes"}
           </Button>
         </div>
       </Dialog.Footer>
@@ -501,13 +630,27 @@ type SaveErrorState = {
   retryable: boolean;
 };
 
-function ManualSaveSuccess({ result, onDone }: { result: BatchCreateClassesResponse; onDone: () => void }) {
+function ManualSaveSuccess({
+  result,
+  onDone,
+}: {
+  result: BatchCreateClassesResponse;
+  onDone: () => void;
+}) {
   return (
     <div className="grid gap-4">
       <Card className="bg-primary/10 border-primary p-4">
-        <Text as="h6" className="text-base font-bold text-primary">Classes created successfully.</Text>
-        <Text as="p" className="text-sm">{result.summary.class_count} class{result.summary.class_count !== 1 ? "es" : ""} created.</Text>
-        <Text as="p" className="text-sm">{result.summary.student_assignment_count} student{result.summary.student_assignment_count !== 1 ? "s" : ""} assigned.</Text>
+        <Text as="h6" className="text-base font-bold text-primary">
+          Classes created successfully.
+        </Text>
+        <Text as="p" className="text-sm">
+          {result.summary.class_count} class
+          {result.summary.class_count !== 1 ? "es" : ""} created.
+        </Text>
+        <Text as="p" className="text-sm">
+          {result.summary.student_assignment_count} student
+          {result.summary.student_assignment_count !== 1 ? "s" : ""} assigned.
+        </Text>
       </Card>
 
       {!!result.classes.length && (
@@ -522,7 +665,9 @@ function ManualSaveSuccess({ result, onDone }: { result: BatchCreateClassesRespo
       )}
 
       <div className="flex justify-end pt-2">
-        <Button variant={"default"} onClick={onDone}>Done</Button>
+        <Button variant={"default"} onClick={onDone}>
+          Done
+        </Button>
       </div>
     </div>
   );
@@ -547,25 +692,56 @@ function errorToSaveError(error: unknown): SaveErrorState {
 }
 
 function mappedBackendError(error: ApiRequestError): { message: string } {
-  if (error.status === 401) return { message: "Your session has expired. Please sign in again." };
-  if (error.status === 403) return { message: "You do not have permission to create classes." };
+  if (error.status === 401)
+    return { message: "Your session has expired. Please sign in again." };
+  if (error.status === 403)
+    return { message: "You do not have permission to create classes." };
 
   const codes = backendErrorCodes(error.data);
-  if (codes.has("section_already_exists")) return { message: "A section with this name already exists for the active academic year." };
-  if (codes.has("adviser_already_assigned") || codes.has("duplicate_adviser_assignment")) return { message: "This adviser is already assigned to another class section." };
-  if (codes.has("student_already_assigned")) return { message: "One or more students were already assigned to a class. Review the assignments and try again." };
-  if (codes.has("active_academic_year_missing")) return { message: "No active academic year is configured. Please configure an active academic year first." };
-  if (codes.has("active_academic_year_multiple")) return { message: "Multiple active academic years were detected. Please resolve the academic-year configuration." };
-  return { message: error.message || "Unable to save classes. Please try again." };
+  if (codes.has("section_already_exists"))
+    return {
+      message:
+        "A section with this name already exists for the active academic year.",
+    };
+  if (
+    codes.has("adviser_already_assigned") ||
+    codes.has("duplicate_adviser_assignment")
+  )
+    return {
+      message: "This adviser is already assigned to another class section.",
+    };
+  if (codes.has("student_already_assigned"))
+    return {
+      message:
+        "One or more students were already assigned to a class. Review the assignments and try again.",
+    };
+  if (codes.has("active_academic_year_missing"))
+    return {
+      message:
+        "No active academic year is configured. Please configure an active academic year first.",
+    };
+  if (codes.has("active_academic_year_multiple"))
+    return {
+      message:
+        "Multiple active academic years were detected. Please resolve the academic-year configuration.",
+    };
+  return {
+    message: error.message || "Unable to save classes. Please try again.",
+  };
 }
 
 function backendErrorCodes(data: unknown): Set<string> {
-  return new Set(backendErrorItems(data).map((item) => item.code).filter((code): code is string => Boolean(code)));
+  return new Set(
+    backendErrorItems(data)
+      .map((item) => item.code)
+      .filter((code): code is string => Boolean(code)),
+  );
 }
 
 function safeBackendMessage(data: unknown): string | undefined {
   if (!data || typeof data !== "object") return undefined;
-  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("message" in data && typeof data.message === "string")
+    return data.message;
   if ("detail" in data && typeof data.detail === "string") return data.detail;
   return undefined;
 }
@@ -574,25 +750,39 @@ function safeErrorDetails(data: unknown): string[] {
   return backendErrorItems(data)
     .map((item) => item.message)
     .filter((message): message is string => Boolean(message))
-    .filter((message) => !/stack|traceback|sql|constraint|\/app\/|\\app\\/i.test(message))
+    .filter(
+      (message) =>
+        !/stack|traceback|sql|constraint|\/app\/|\\app\\/i.test(message),
+    )
     .slice(0, 6);
 }
 
-function backendErrorItems(data: unknown): Array<{ code?: string; message?: string }> {
+function backendErrorItems(
+  data: unknown,
+): Array<{ code?: string; message?: string }> {
   if (!data || typeof data !== "object") return [];
   const detail = "detail" in data ? data.detail : undefined;
   const errors = "errors" in data ? data.errors : undefined;
   if (Array.isArray(errors)) return errors.filter(isBackendErrorItem);
-  if (detail && typeof detail === "object" && "errors" in detail && Array.isArray(detail.errors)) {
+  if (
+    detail &&
+    typeof detail === "object" &&
+    "errors" in detail &&
+    Array.isArray(detail.errors)
+  ) {
     return detail.errors.filter(isBackendErrorItem);
   }
   if (Array.isArray(detail)) return detail.filter(isBackendErrorItem);
   return isBackendErrorItem(data) ? [data] : [];
 }
 
-function isBackendErrorItem(value: unknown): value is { code?: string; message?: string } {
-  return Boolean(value && typeof value === "object" && (
-    ("code" in value && typeof value.code === "string")
-    || ("message" in value && typeof value.message === "string")
-  ));
+function isBackendErrorItem(
+  value: unknown,
+): value is { code?: string; message?: string } {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (("code" in value && typeof value.code === "string") ||
+      ("message" in value && typeof value.message === "string")),
+  );
 }

@@ -27,6 +27,7 @@ from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
 from app.services.lesson.LessonDeliveryService import get_delivered_lesson_ids_as_of
 
 
@@ -233,7 +234,8 @@ def resolve_generation_evidence_scope(
     db: Session, row: Intervention, *, teaching_as_of: datetime | None = None,
 ) -> dict[str, Any]:
     """Resolve the maximum evidence scope available to a future AI generator."""
-    diagnosis, source, period, cutoff = _require_frozen_scope(db, row)
+    _raw_diagnosis, source, period, cutoff = _require_frozen_scope(db, row)
+    diagnosis = effective_diagnosis_snapshot(db, row)
     activities = _verified_activities(db, row, diagnosis)
     component_evidence = diagnosis.get("components") or {}
     weakest = sorted({

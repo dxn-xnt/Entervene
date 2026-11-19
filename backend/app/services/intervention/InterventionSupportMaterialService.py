@@ -42,8 +42,8 @@ def _read(row: InterventionSupportMaterial) -> MaterialRead:
     return MaterialRead.model_validate({key: getattr(row, key) for key in MaterialRead.model_fields})
 
 
-def _basis(row: Intervention) -> dict:
-    diagnosis = row.diagnosis_snapshot
+def _basis(row: Intervention, diagnosis_override: dict | None = None) -> dict:
+    diagnosis = diagnosis_override if isinstance(diagnosis_override, dict) else row.diagnosis_snapshot
     if not isinstance(diagnosis, dict):
         raise HTTPException(status_code=409, detail="Frozen intervention diagnosis is unavailable")
     canonical = json.dumps(diagnosis, sort_keys=True, separators=(",", ":"), ensure_ascii=False)

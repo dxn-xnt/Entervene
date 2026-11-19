@@ -10,6 +10,9 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 NotificationType = Literal[
     "assignment_due",
+    "classwork_due_soon",
+    "classwork_due_today",
+    "classwork_overdue",
     "risk_alert",
     "announcement",
     "grade_released",
@@ -19,6 +22,12 @@ NotificationType = Literal[
     "intervention_candidate",
     "intervention_resolved",
     "intervention_reviewer_available",
+    "intervention_assessment_submitted",
+    "intervention_passed",
+    "intervention_assessment_not_passed",
+    "study_support_available",
+    "study_support_reminder",
+    "study_support_final_reminder",
     "repost_request_received",
     "repost_package_ready",
     "repost_request_declined",

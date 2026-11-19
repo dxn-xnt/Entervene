@@ -24,6 +24,8 @@ class StudentActivityScoreItem(BaseModel):
     name: str
     score: Optional[float] = None
     assigned: bool = True
+    can_enter_score: bool = True
+    score_entry_reason: Optional[str] = None
 
 
 class ActivityScoresResponse(BaseModel):

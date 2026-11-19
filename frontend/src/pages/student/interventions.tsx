@@ -81,7 +81,7 @@ export default function StudentInterventions() {
         activeRes.status === "rejected" ||
         resolvedRes.status === "rejected"
       ) {
-        setLoadError("Some study support could not be loaded. Please try again later.");
+        setLoadError("Some Study Support could not be loaded. Please try again later.");
       }
     } catch (err) {
       console.warn("Unable to load live interventions", err);
@@ -89,7 +89,7 @@ export default function StudentInterventions() {
       setResolvedInterventions([]);
       setActiveLoadFailed(true);
       setResolvedLoadFailed(true);
-      setLoadError("Study support could not be loaded. Please try again later.");
+      setLoadError("Study Support could not be loaded. Please try again later.");
     } finally {
       setLoading(false);
     }
@@ -123,6 +123,10 @@ export default function StudentInterventions() {
               const finished = ["submitted", "graded", "completed"].includes(
                 activity.submission_status?.toLowerCase() ?? ""
               );
+              const canReviewResolvedCompleted =
+                historical &&
+                finished &&
+                activity.prerequisite_code === "INTERVENTION_RESOLVED";
               const orderedReadings = [...(activity.readings ?? [])].sort(
                 (left, right) => left.order - right.order
               );
@@ -161,7 +165,15 @@ export default function StudentInterventions() {
                         </Badge>
                       )}
                       <Badge
-                        variant={historical ? "default" : locked ? "outline" : "success"}
+                        variant={
+                          canReviewResolvedCompleted
+                            ? "outline"
+                            : historical
+                              ? "default"
+                              : locked
+                                ? "outline"
+                                : "success"
+                        }
                         size="sm"
                         className="gap-1"
                       >
@@ -172,7 +184,13 @@ export default function StudentInterventions() {
                         ) : (
                           <CheckCircle2 className="size-3.5" />
                         )}
-                        {historical ? "Unavailable" : locked ? "Locked" : "Ready"}
+                        {canReviewResolvedCompleted
+                          ? "Review"
+                          : historical
+                            ? "Unavailable"
+                            : locked
+                              ? "Locked"
+                              : "Ready"}
                       </Badge>
                     </div>
                   </div>
@@ -249,6 +267,22 @@ export default function StudentInterventions() {
                       <LockKeyhole className="mt-0.5 size-4 shrink-0" />
                       Complete all Supporting Readings before opening this activity.
                     </p>
+                  ) : canReviewResolvedCompleted ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        This support has ended. Your saved result remains available for review.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        autoIcon={false}
+                        className="gap-2"
+                        onClick={() => navigate(classworkLink(activity.assignment_id, interventionId))}
+                      >
+                        <ExternalLink className="size-4" />
+                        View Results
+                      </Button>
+                    </div>
                   ) : historical ? (
                     <p className="text-sm text-muted-foreground">
                       {activity.prerequisite_message || "This activity is no longer available."}
@@ -419,7 +453,7 @@ export default function StudentInterventions() {
                     <StudentEmptyState
                       icon={<Shield />}
                       title="No active support"
-                      description="You don't have any active intervention support right now."
+                      description="You don't have any active Study Support right now."
                     />
                   ) : (
                     <div className="flex flex-col gap-4">

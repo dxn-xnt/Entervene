@@ -133,6 +133,7 @@ export function ConfirmDialog({
         <Dialog.Footer position="static">
           <Button
             variant="outline"
+            autoIcon={false}
             onClick={handleCancel}
             disabled={isLoading}
           >

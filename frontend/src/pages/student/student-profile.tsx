@@ -14,10 +14,24 @@ import {
 } from "@/lib/api";
 import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
 import StudentQRBadgeModal from "@/components/StudentQRBadgeModal";
-import { QrCode } from "lucide-react";
+import { Pencil, QrCode } from "lucide-react";
 import { RoleBadge } from "@/components/role-badge";
+import { Dialog } from "@/components/retroui/Dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/retroui/Tooltip";
+import { useToast } from "@/components/retroui/Toast";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 
 const weekDayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+const STUDENT_AVATARS = Array.from(
+  { length: 11 },
+  (_, index) => `/avatars/student-avatars/${index + 1}.svg`,
+);
 
 type CalendarDay = {
   date: number;
@@ -92,7 +106,8 @@ function buildCalendar(reference: Date) {
 }
 
 const StudentProfile = () => {
-  const { user } = useAuth();
+  const toast = useToast();
+  const { user, updateAvatar } = useAuth();
   const { weeks, currentWeekIndex, monthLabel } = useMemo(
     () => buildCalendar(new Date()),
     [],
@@ -104,6 +119,21 @@ const StudentProfile = () => {
   const [studentProfile, setStudentProfile] =
     useState<MyStudentProfileResponse | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [tempSelectedAvatar, setTempSelectedAvatar] = useState(
+    user?.avatar || "/avatars/student-avatars/1.svg",
+  );
+  const avatarChanges = useEditFormChanges({
+    initialValues: user?.avatar || "/avatars/student-avatars/1.svg",
+    values: tempSelectedAvatar,
+    resetKey: String(isEditProfileOpen),
+  });
+
+  useEffect(() => {
+    if (isEditProfileOpen) {
+      setTempSelectedAvatar(user?.avatar || "/avatars/student-avatars/1.svg");
+    }
+  }, [isEditProfileOpen, user?.avatar]);
 
   useEffect(() => {
     let isMounted = true;
@@ -140,21 +170,35 @@ const StudentProfile = () => {
       <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center gap-2 bg-background justify-between px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
-              <SidebarTrigger className="shrink-0 md:hidden" />
-              <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
-                Profile
-              </h1>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setQrOpen(true)}
-                disabled={!studentProfile}
-                className="gap-2 shrink-0"
-              >
-                <QrCode className="size-4" />
-                View QR Badge
-              </Button>
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
+                  Profile
+                </h1>
+              </div>
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+                <Button
+                  type="button"
+                  size="header"
+                  onClick={() => setIsEditProfileOpen(true)}
+                  className="flex-1 whitespace-nowrap sm:flex-none"
+                >
+                  <Pencil className="size-4" />
+                  Edit Profile
+                </Button>
+                <Button
+                  type="button"
+                  size="header"
+                  variant="outline"
+                  onClick={() => setQrOpen(true)}
+                  disabled={!studentProfile}
+                  className="flex-1 whitespace-nowrap sm:flex-none"
+                >
+                  <QrCode className="size-4" />
+                  View QR Badge
+                </Button>
+              </div>
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
@@ -217,9 +261,7 @@ const StudentProfile = () => {
 
               <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
                 <div className="flex flex-col gap-3 flex-1">
-                  <p className="text-2xl md:text-3xl font-bold">
-                    My Schedule
-                  </p>
+                  <p className="text-2xl md:text-3xl font-bold">My Schedule</p>
                   <DynamicScheduleTable
                     schedule={scheduleData?.schedule || []}
                     isPublished={scheduleData?.is_published}
@@ -234,16 +276,12 @@ const StudentProfile = () => {
                     </p>
                   </div>
 
-                  <Card className="flex flex-col gap-3 border-black bg-white p-4 shadow-md hover:shadow-none">
+                  <Card className="flex flex-col gap-3 p-4">
                     <div className="flex flex-row items-center justify-between">
                       <p className="font-semibold">{monthLabel}</p>
-                      <Badge
-                        variant="secondary"
-                        size="sm"
-                        className="rounded border border-black bg-primary text-sm font-bold text-black"
-                      >
+                      <button className="rounded border px-2 py-1 text-xs text-muted-foreground">
                         Today
-                      </Badge>
+                      </button>
                     </div>
 
                     <div className="grid grid-cols-7 gap-1 text-center text-sm text-muted-foreground">
@@ -261,9 +299,9 @@ const StudentProfile = () => {
                           {week.map((day) => (
                             <span
                               key={day.key}
-                              className={`flex items-center justify-center py-1 ${
+                              className={`flex items-center justify-center rounded py-1 ${
                                 weekIdx === currentWeekIndex
-                                  ? "bg-black font-semibold text-white"
+                                  ? "bg-green-400 font-semibold"
                                   : ""
                               } ${
                                 !day.isCurrentMonth &&
@@ -285,6 +323,85 @@ const StudentProfile = () => {
           </div>
         </div>
       </div>
+
+      <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
+        <Dialog.Content size="md">
+          <Dialog.Header>
+            <Dialog.Title className="font-sans text-xl font-bold">
+              Edit Profile Avatar
+            </Dialog.Title>
+          </Dialog.Header>
+
+          <div className="min-h-0 overflow-y-auto px-5 py-4">
+            <p className="mb-3 text-sm font-semibold">
+              Select your profile picture:
+            </p>
+            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+              {STUDENT_AVATARS.map((avatarPath, index) => {
+                const isSelected = tempSelectedAvatar === avatarPath;
+                return (
+                  <Tooltip key={avatarPath}>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          type="button"
+                          aria-label={`Select student avatar ${index + 1}`}
+                          aria-pressed={isSelected}
+                          onClick={() => setTempSelectedAvatar(avatarPath)}
+                          className={`aspect-square cursor-pointer rounded border-2 p-2 transition-colors ${
+                            isSelected
+                              ? "border-primary bg-primary/20 ring-2 ring-primary ring-offset-2 ring-offset-background"
+                              : "border-border bg-card hover:bg-accent"
+                          }`}
+                        >
+                          <img
+                            src={avatarPath}
+                            alt=""
+                            className="h-full w-full object-contain"
+                          />
+                        </button>
+                      }
+                    />
+                    <TooltipContent>Select avatar {index + 1}</TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          </div>
+
+          <Dialog.Footer className="mt-0">
+            <NoChangesMessage message={avatarChanges.noChangesMessage} />
+            <Button
+              type="button"
+              variant="outline"
+              autoIcon={false}
+              onClick={() => setIsEditProfileOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!avatarChanges.hasChanges}
+              onClick={async () => {
+                if (!avatarChanges.guardChanges()) return;
+                try {
+                  await updateAvatar(tempSelectedAvatar);
+                  toast.success({ title: "Avatar updated" });
+                  setIsEditProfileOpen(false);
+                } catch (error) {
+                  toast.error({
+                    title: "Unable to save avatar",
+                    description:
+                      error instanceof Error ? error.message : undefined,
+                  });
+                }
+              }}
+            >
+              Save
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
 
       <StudentQRBadgeModal
         isOpen={qrOpen}

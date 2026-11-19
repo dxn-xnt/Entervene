@@ -375,6 +375,7 @@ def test_resources_includes_lessons_and_readings_and_excludes_graded_assessments
         "teacher_choice": "CLASSWORK",
         "grade_treatment": "PRACTICE_ONLY",
         "selected_resources": legacy_resources,
+        "unrelated_metadata": {"keep": True},
     }
     db.commit()
     assert get_workspace(db, staff_id, _id(ctx))["plan"]["selected_resources"] == legacy_resources
@@ -412,6 +413,25 @@ def test_resources_includes_lessons_and_readings_and_excludes_graded_assessments
     assert saved["plan"]["selected_resources"] == expected_resources
     assert get_workspace(db, staff_id, _id(ctx))["plan"]["selected_resources"] == expected_resources
 
+    removed = save_plan(
+        db,
+        staff_id,
+        _id(ctx),
+        PlanUpdate(
+            teacher_choice="CLASSWORK",
+            grade_treatment="PRACTICE_ONLY",
+            selected_resources=[],
+        ),
+    )
+    assert removed["plan"]["selected_resources"] == []
+    assert removed["plan"]["teacher_choice"] == "CLASSWORK"
+    assert removed["plan"]["grade_treatment"] == "PRACTICE_ONLY"
+    assert removed["plan"]["unrelated_metadata"] == {"keep": True}
+    db.expire_all()
+    persisted = db.get(Intervention, _id(ctx)).remediation_plan
+    assert persisted["selected_resources"] == []
+    assert persisted["unrelated_metadata"] == {"keep": True}
+
 
 def test_plan_rejects_evidence_only_and_graded_resources(candidate_context):
     ctx = candidate_context
@@ -445,3 +465,214 @@ def test_plan_rejects_evidence_only_and_graded_resources(candidate_context):
                 )
         assert denied.value.status_code == 422
         assert denied.value.detail == "Selected material is unavailable in this teaching scope"
+
+
+def test_save_plan_examination_validates_target_assignment_ids_against_original_exams(candidate_context):
+    ctx = candidate_context
+    db = ctx["db"]
+    _activate(ctx)
+
+    row = ctx["candidate"]
+    row.diagnosis_snapshot = {
+        **(row.diagnosis_snapshot or {}),
+        "weakest_supported_components": ["EXAMINATION"],
+    }
+    db.commit()
+
+    # An ASSESSMENT classwork without a supported EXAM_SUBTYPES subtype is not in original_exams()
+    untyped_exam = Classwork(
+        title="Custom Assessment",
+        classwork_type="EXAM",
+        classwork_category="EXAMS",
+        exam_subtype=None,
+        is_graded=True,
+        total_points=50,
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=_staff(ctx),
+        is_published=True,
+        is_archived=False,
+    )
+    db.add(untyped_exam)
+    db.flush()
+    untyped_asgn = ClassworkAssignment(
+        classwork_id=untyped_exam.classwork_id,
+        class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        assigned_by_staff_id=_staff(ctx),
+        is_published=True,
+    )
+    db.add(untyped_asgn)
+    db.flush()
+    from app.models.submissions.StudentSubmission import StudentSubmission
+    db.add(StudentSubmission(
+        classwork_assignment_id=untyped_asgn.classwork_assignment_id,
+        student_id=ctx["student"].student_id,
+        grade=25,
+        status="graded",
+    ))
+    db.commit()
+
+    with pytest.raises(HTTPException) as denied:
+        save_plan(
+            db,
+            _staff(ctx),
+            _id(ctx),
+            PlanUpdate(
+                teacher_choice="QUIZ",
+                grade_treatment="EXAMINATION",
+                original_exam_assignment_id=None,
+                target_assignment_ids=[untyped_asgn.classwork_assignment_id],
+                selected_resources=[],
+            ),
+        )
+    assert denied.value.status_code == 422
+    assert "Select a scored original Examination" in denied.value.detail
+
+
+def test_single_lesson_quiz_written_work_recommends_matching_readings_and_passes_activity_types_to_advisory(
+    candidate_context, monkeypatch,
+):
+    from copy import deepcopy
+    from decimal import Decimal
+    from app.models.academic.Competency import Competency
+    from app.models.academic.Lesson import Lesson
+    from app.models.classwork.ClassworkLesson import ClassworkLesson
+    from app.models.quiz.Question import Question
+    from app.models.quiz.Quiz import Quiz
+    from app.models.quiz.QuizQuestion import QuizQuestion
+
+    ctx = candidate_context
+    db = ctx["db"]
+    _activate(ctx)
+    row = ctx["candidate"]
+
+    # Pick the Written Work supporting activity from the frozen diagnosis
+    ww_act = next(
+        act for act in row.diagnosis_snapshot["supporting_activities"]
+        if act["component"] == "WRITTEN_WORK"
+    )
+    ww_cw = db.get(Classwork, ww_act["classwork_id"])
+    ww_cw.classwork_type = "QUIZ"
+    ww_cw.activity_mode = "ONLINE"
+
+    comp = Competency(statement="Measurement and Geometry", subject_id=ctx["subject"].subject_id)
+    other_comp = Competency(statement="Statistics", subject_id=ctx["subject"].subject_id)
+    db.add_all([comp, other_comp])
+    db.flush()
+    lesson = Lesson(
+        title="Basic Geometric Figures",
+        subject_id=ctx["subject"].subject_id,
+        competency_id=comp.competency_id,
+        created_by_staff_id=_staff(ctx),
+        is_published=True,
+    )
+    other_lesson = Lesson(
+        title="Data Graphs",
+        subject_id=ctx["subject"].subject_id,
+        competency_id=other_comp.competency_id,
+        created_by_staff_id=_staff(ctx),
+        is_published=True,
+    )
+    db.add_all([lesson, other_lesson])
+    db.flush()
+
+    db.query(ClassworkLesson).filter_by(classwork_id=ww_cw.classwork_id).delete()
+    db.add(ClassworkLesson(classwork_id=ww_cw.classwork_id, lesson_id=lesson.lesson_id))
+
+    quiz = Quiz(classwork_id=ww_cw.classwork_id, total_items=1, status="PUBLISHED")
+    db.add(quiz)
+    db.flush()
+    q = Question(
+        question_text="Identify a ray.",
+        question_type="MULTIPLE_CHOICE",
+        points=Decimal(str(ww_cw.total_points)),
+        lesson_id=lesson.lesson_id,
+    )
+    db.add(q)
+    db.flush()
+    db.add(QuizQuestion(quiz_id=quiz.quiz_id, question_id=q.question_id, display_order=1))
+
+    matching_reading = Classwork(
+        title="Geometry Figures Reading",
+        classwork_type="READING",
+        is_graded=False,
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=_staff(ctx),
+        is_published=True,
+    )
+    matching_reading.lessons.append(lesson)
+    unrelated_reading = Classwork(
+        title="Statistics Reading",
+        classwork_type="READING",
+        is_graded=False,
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=_staff(ctx),
+        is_published=True,
+    )
+    unrelated_reading.lessons.append(other_lesson)
+    db.add_all([matching_reading, unrelated_reading])
+
+    # Simulate legacy frozen COMPONENT_ONLY snapshot with stale CLASSWORK ai_suggestion
+    snapshot = deepcopy(row.diagnosis_snapshot)
+    snapshot["weakest_supported_components"] = ["WRITTEN_WORK"]
+    snapshot["lowest_supported_competencies"] = []
+    snapshot["manual_assessment_coverage"] = []
+    snapshot["competency_detail_status"] = "UNAVAILABLE_NO_TRACEABLE_SCORES"
+    row.diagnosis_snapshot = snapshot
+    row.remediation_plan = {
+        "teacher_choice": None,
+        "selected_resources": [],
+        "ai_suggestion": {
+            "recommended_format": "CLASSWORK",
+            "recommended_grade_treatment": "WRITTEN_WORK",
+            "reason": "supports the verified WRITTEN_WORK focus",
+            "focus": [],
+            "evidence_used": {"has_scored_competency_evidence": False},
+        },
+    }
+    db.commit()
+    frozen_before = deepcopy(row.diagnosis_snapshot)
+
+    ws = get_workspace(db, _staff(ctx), _id(ctx))
+    # Never mutates frozen snapshot
+    assert row.diagnosis_snapshot == frozen_before
+    # Hydrates verified single-lesson quiz evidence & recommends matching reading only
+    assert ws["focus"]["evidence_level"] == "SCORED_COMPETENCY"
+    assert ws["focus"]["competency_ids"] == [comp.competency_id]
+    assert ws["focus"]["lesson_ids"] == [lesson.lesson_id]
+    by_title = {item["title"]: item for item in ws["resources"]}
+    assert by_title["Geometry Figures Reading"]["recommended"] is True
+    assert by_title["Geometry Figures Reading"]["match_level"] == "COMPETENCY"
+    assert by_title["Statistics Reading"]["recommended"] is False
+    # Stale COMPONENT_ONLY ai_suggestion is invalidated so fresh advisory can run
+    assert ws["plan"]["ai_suggestion"] is None
+    assert ws["plan"]["selected_resources"] == []
+
+    # Verify generate_advisory receives classwork_type="QUIZ" and weakest_component_activity_types=["QUIZ"]
+    captured_payloads = []
+
+    async def fake_advisory(prompt, _system, **_kwargs):
+        captured_payloads.append(json.loads(prompt))
+        return json.dumps({
+            "recommended_format": "QUIZ",
+            "recommended_grade_treatment": "WRITTEN_WORK",
+            "reason": "A focused quiz supports the verified Written Work focus.",
+        })
+
+    monkeypatch.setattr(settings, "groq_api_key", "test-key")
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", fake_advisory)
+    refreshed = asyncio.run(generate_advisory(db, _staff(ctx), _id(ctx)))
+    assert len(captured_payloads) == 1
+    payload = captured_payloads[0]
+    assert set(payload) == {"evidence", "deterministic_focus", "eligible_recommendations"}
+    assert payload["evidence"]["weakest_component_activity_types"] == ["QUIZ"]
+    assert any(
+        act.get("classwork_type") == "QUIZ"
+        for act in payload["evidence"]["supporting_scored_activities"]
+    )
+    assert refreshed["plan"]["ai_suggestion"]["recommended_format"] == "QUIZ"
+    assert refreshed["plan"]["ai_suggestion"]["evidence_used"]["has_scored_competency_evidence"] is True
+    # Subsequent workspace loads keep the refreshed recommendation
+    assert get_workspace(db, _staff(ctx), _id(ctx))["plan"]["ai_suggestion"]["recommended_format"] == "QUIZ"
+
+

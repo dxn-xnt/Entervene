@@ -58,9 +58,9 @@ def send_reviewer(db: Session, staff_id: str, intervention_id: int, material_id:
         stage_notification(db, NotificationCreate(
             user_id=student_user_id,
             notification_type="intervention_reviewer_available",
-            title="A reviewer is ready for you",
-            body=f"Your teacher prepared a {intervention.subject.subject_name} reviewer to support your study.",
-            action_url=f"/student/interventions?reviewer={material.material_id}",
+            title="New Study Support Available",
+            body=f"Your teacher prepared new Study Support for {intervention.subject.subject_name}.",
+            action_url=f"/student/interventions/view?reviewer={material.material_id}",
         ))
         db.commit()
     except BaseException:

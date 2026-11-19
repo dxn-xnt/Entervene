@@ -162,11 +162,26 @@ def test_targeted_assignment_is_private_across_existing_student_surfaces(authz_c
     assert tracking["missing_count"] == 0
     aggregate = c["client"].get(f"/api/v1/submissions/classwork/{classwork_id}/tracking").json()
     assert aggregate["total_students"] == 1
+    c["assignment"].is_published = False
+    _stage_targeted_assignment_notification(c["db"], c["assignment"], c["classwork"], c["subject"].subject_id)
+    assert c["db"].query(Notification).filter_by(notification_type="study_support_available").count() == 0
+    c["assignment"].is_published = True
+    _stage_targeted_assignment_notification(c["db"], c["assignment"], c["classwork"], c["subject"].subject_id)
     _stage_targeted_assignment_notification(c["db"], c["assignment"], c["classwork"], c["subject"].subject_id)
     c["db"].commit()
-    recipients = {row.user_id for row in c["db"].query(Notification).all()}
-    assert c["accounts"]["student"].user_id in recipients
-    assert c["accounts"]["other_student"].user_id not in recipients
+    notifications = c["db"].query(Notification).filter_by(
+        notification_type="study_support_available",
+    ).all()
+    assert len(notifications) == 1
+    assert notifications[0].user_id == c["accounts"]["student"].user_id
+    assert notifications[0].title == "New Study Support Available"
+    assert notifications[0].body == f"New Study Support for {c['subject'].subject_name} is ready for you."
+    assert "intervention" not in f"{notifications[0].title} {notifications[0].body}".lower()
+    assert c["assignment"].publish_date is not None
+    assert notifications[0].action_url == (
+        "/student/interventions/view?intervention=9999"
+        f"&activity={assignment_id}"
+    )
 
 
 def test_intervention_publication_scope_and_retry(candidate_context):

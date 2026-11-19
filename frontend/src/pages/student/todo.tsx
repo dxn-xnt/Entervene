@@ -134,7 +134,7 @@ export default function ToDo() {
                       {interventionItems.length > 0 && (
                         <section className="flex flex-col gap-4">
                           <h3 className="text-xl md:text-3xl font-semibold">
-                            Intervention
+                            Study Support
                           </h3>
                           {interventionItems.map((item) => (
                             <ToDoItem

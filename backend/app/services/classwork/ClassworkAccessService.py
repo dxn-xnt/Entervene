@@ -101,7 +101,12 @@ def authorize_classwork_access(
                     None,
                 )
                 if remedial_assignment is not None:
-                    require_remediation_prerequisite(db, remedial_assignment, student)
+                    require_remediation_prerequisite(
+                        db,
+                        remedial_assignment,
+                        student,
+                        allow_completed_resolved_review=True,
+                    )
                 return
     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -149,7 +154,9 @@ def authorize_assignment_access(
         ):
             if assignment_is_locked(assignment):
                 raise HTTPException(status_code=403, detail="This assignment is locked")
-            require_remediation_prerequisite(db, assignment, student)
+            require_remediation_prerequisite(
+                db, assignment, student, allow_completed_resolved_review=True,
+            )
             return
     raise HTTPException(status_code=403, detail="Access denied")
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Text } from "@/components/retroui/Text";
@@ -26,7 +26,11 @@ interface ViewGradeScoreModalProps {
     scores: (number | null)[];
     gender?: string | null;
   }[];
-  onEnterScores?: (item: { id: number; title: string; maxScore: number }) => void;
+  onEnterScores?: (
+    item: { id: number; title: string; maxScore: number },
+    triggerElement?: HTMLElement | null,
+  ) => void;
+  nestedModal?: ReactNode;
 }
 
 const ITEMS_PER_PAGE = 4;
@@ -36,6 +40,7 @@ export default function ViewGradeScoreModal({
   items,
   studentGrades,
   onEnterScores,
+  nestedModal,
 }: ViewGradeScoreModalProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
@@ -76,21 +81,21 @@ export default function ViewGradeScoreModal({
             {label}
           </Table.Cell>
         </Table.Row>
-        {group.map((student, idx) => {
+        {group.map((student) => {
           const orderedScores = [...student.scores].reverse();
           const studentPaginatedScores = orderedScores.slice(startIndex, endIndex);
           const totalScore = student.scores.reduce<number>((sum, score) => sum + (score ?? 0), 0);
 
           return (
-            <Table.Row key={student.name} className="border-b border-black/10 hover:bg-primary/50">
+            <Table.Row key={student.student_id} className="border-b border-black/10 hover:bg-primary/50">
               <Table.Cell className="whitespace-nowrap text-sm font-extrabold text-black">
-                {idx + 1}. {student.name}
+                {student.name}
               </Table.Cell>
               {paginatedItems.map((activity, i) => {
                 const score = studentPaginatedScores[i];
                 const assigned = !activity.recipientStudentId || activity.recipientStudentId === student.student_id;
                 return (
-                  <Table.Cell key={i} className="text-center font-semibold tabular-nums">
+                  <Table.Cell key={activity.id} className="text-center font-semibold tabular-nums">
                     {!assigned ? <Tooltip><TooltipTrigger render={<span className="text-gray-500" tabIndex={0}>N/A</span>} /><TooltipContent>Not assigned</TooltipContent></Tooltip> : score !== null && score !== undefined ? score : "—"}
                   </Table.Cell>
                 );
@@ -150,9 +155,9 @@ export default function ViewGradeScoreModal({
                           <Tooltip>
                             <TooltipTrigger render={<button
                               type="button"
-                              aria-label="Enter or edit scores"
+                              aria-label={`Enter or edit scores for ${item.title}`}
                               className="border border-transparent p-1 text-black transition-colors hover:border-black hover:bg-yellow-200"
-                              onClick={() => onEnterScores(item)}
+                              onClick={(e) => onEnterScores(item, e.currentTarget)}
                             >
                               <Edit3 className="size-3.5" />
                             </button>} />
@@ -229,6 +234,7 @@ export default function ViewGradeScoreModal({
           <Button variant={"outline"}>Close</Button>
         </Dialog.Close>
       </Dialog.Footer>
+      {nestedModal}
     </Dialog.Content>
   );
 }

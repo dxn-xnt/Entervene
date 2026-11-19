@@ -14,6 +14,7 @@ from app.models.intervention.InterventionSupportMaterial import InterventionSupp
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.schemas.InterventionSupportMaterial import MaterialRead
 from app.services.ai import Provider
+from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
 from app.services.intervention.InterventionSupportMaterialService import _basis, _read
 from app.services.intervention.TeacherInterventionService import _eligible_scope, _source
 
@@ -33,16 +34,20 @@ class GeneratedReviewer(BaseModel):
         return value
 
 
-_SYSTEM = """You write a concise, supportive study reviewer for a student. Return ONLY a JSON object with exactly three string fields: title, introduction, body. The body may use plain text headings, worked examples, brief practice, and a checklist. This is not a graded quiz. Use only the supplied frozen evidence. Do not invent scores, topics, competencies, causes, risk labels, or a new diagnosis. A covered topic is review context, NOT proof of weakness. Only measured scored competencies may be described as needing reinforcement. Question-level concepts may be focused only when a partly or incorrectly scored, mapped question is supplied. If evidence is component-only, give general preparation guidance for that component without naming a specific topic. Do not claim motivation, attendance, effort, behavior, disability, or knowledge gaps as causes. Do not mention prediction systems, internal IDs, or the evidence hierarchy to the student."""
+_SYSTEM = """You write a concise, supportive study reviewer for a student. Return ONLY a JSON object with exactly three string fields: title, introduction, body. The body may use plain text headings, worked examples, brief practice, and a checklist. This is not a graded quiz. Use only the supplied frozen evidence. Do not invent scores, topics, competencies, causes, risk labels, or a new diagnosis. A covered topic is review context, NOT proof of weakness. Only measured scored competencies may be described as needing reinforcement. Question-level concepts may be focused only when a partly or incorrectly scored, mapped question is supplied. If evidence is component-only, give general preparation guidance for that component without naming a specific topic. Do not claim motivation, attendance, effort, behavior, disability, or knowledge gaps as causes. Use \"Study Support\" for this student-facing experience. Never use the internal term \"Intervention\" or describe Study Support as an intervention. Do not mention prediction systems, internal IDs, or the evidence hierarchy to the student."""
 
 
 def _short(value: object, limit: int = 120) -> str:
     return str(value or "").strip()[:limit]
 
 
-def build_grounding(row: Intervention, source: DevelopmentCurrentTermPrediction) -> dict:
+def build_grounding(
+    row: Intervention,
+    source: DevelopmentCurrentTermPrediction,
+    db: Session | None = None,
+) -> dict:
     """Select only verified, bounded educational facts; never infer weakness from coverage."""
-    diagnosis = row.diagnosis_snapshot
+    diagnosis = effective_diagnosis_snapshot(db, row) if db is not None else row.diagnosis_snapshot
     scored = diagnosis.get("lowest_supported_competencies") or []
     question_scores = [
         {
@@ -87,6 +92,8 @@ def build_grounding(row: Intervention, source: DevelopmentCurrentTermPrediction)
         "component_performance": components,
         "supporting_scored_activities": [
             {"title": _short(item.get("title")), "component": item.get("component"),
+             "classwork_type": item.get("classwork_type"),
+             "activity_mode": item.get("activity_mode"),
              "score": item.get("score"), "possible_score": item.get("possible_score"),
              "evidence_meaning": "activity total; not an individual topic or competency score"}
             for item in (diagnosis.get("supporting_activities") or [])[:6]
@@ -126,6 +133,9 @@ def _validate_output(raw: str, grounding: dict) -> dict:
     except ValidationError as exc:
         fields = sorted({str(error["loc"][0]) for error in exc.errors() if error["loc"]})
         raise HTTPException(status_code=502, detail="AI returned invalid reviewer fields: " + ", ".join(fields[:4])) from None
+    student_text = "\n".join((value.title, value.introduction, value.body))
+    if re.search(r"\binterventions?\b", student_text, flags=re.IGNORECASE):
+        raise HTTPException(status_code=502, detail="AI used internal terminology in student reviewer")
     # Reject an explicit claim that an unscored covered competency is weak.
     measured = {item["competency"].lower() for item in grounding["measured_scored_competencies"]}
     text = "\n".join((value.title, value.introduction, value.body)).lower()

@@ -24,6 +24,7 @@ from app.services.intervention.InterventionCandidateService import (
     AUTOMATIC_CANDIDATE_LEVEL,
     sync_intervention_for_persisted_prediction,
 )
+from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
 from app.services.intervention.InterventionHistoryService import (
     resolution_prediction,
     resolution_projection,
@@ -107,7 +108,7 @@ def _current_candidate_status(
 
 def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
     source = _source(db, row)
-    diagnosis = row.diagnosis_snapshot if isinstance(row.diagnosis_snapshot, dict) else {}
+    diagnosis = effective_diagnosis_snapshot(db, row)
     grade = source.evidence_snapshot.get("projected_final_term_grade_raw") if isinstance(source.evidence_snapshot, dict) else None
     threshold_val = None
     try:
@@ -192,7 +193,7 @@ def list_teacher_resolved(db: Session, staff_id: str) -> TeacherInterventionList
 def _detail(db: Session, row: Intervention) -> TeacherInterventionDetail:
     return TeacherInterventionDetail(
         **_summary(db, row).model_dump(),
-        diagnosis_snapshot=row.diagnosis_snapshot,
+        diagnosis_snapshot=effective_diagnosis_snapshot(db, row),
         activated_by_staff_id=row.activated_by_staff_id,
     )
 
@@ -311,6 +312,10 @@ def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int)
         row.activated_at = datetime.now(timezone.utc)
         row.activated_by_staff_id = staff_id
         transaction.flush()
+        from app.services.intervention.StudySupportReminderService import (
+            stage_intervention_study_support_available,
+        )
+        stage_intervention_study_support_available(transaction, row)
 
     try:
         generate_and_persist_development_current_term(

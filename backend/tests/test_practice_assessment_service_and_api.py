@@ -26,6 +26,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import create_engine, func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.Base import Base
@@ -54,6 +55,7 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.PracticeAssessment import (
     AIGeneratePracticeQuestionsRequest,
     PracticeAssessmentCreate,
+    PracticeAssessmentSaveRequest,
     PracticeAssessmentUpdate,
     PracticeAttemptAnswerSubmission,
     PracticeAttemptSubmitRequest,
@@ -403,6 +405,296 @@ class TestTeacherAssessmentLifecycle:
         created = PracticeAssessmentService.batch_save_questions(db, staff_id, intervention_id, batch)
         assert len(created) == 3
         assert [q.display_order for q in created] == [1, 2, 3]
+
+    def test_batch_replace_synchronizes_edit_delete_reorder_and_repeated_save(self, db_env):
+        db = db_env["db"]
+        staff_id = db_env["staff"].staff_id
+        intervention_id = db_env["intervention"].intervention_id
+        assessment = PracticeAssessmentService.get_or_create_assessment(db, staff_id, intervention_id)
+
+        def payload(prompts):
+            return PracticeQuestionBatchSave(
+                questions=[
+                    PracticeQuestionCreate(
+                        question_text=prompt,
+                        display_order=index,
+                        options=[
+                            PracticeOptionIn(option_text="Correct", is_correct=True, option_order=1),
+                            PracticeOptionIn(option_text="Wrong", is_correct=False, option_order=2),
+                        ],
+                    )
+                    for index, prompt in enumerate(prompts, start=1)
+                ],
+                replace_existing=True,
+            )
+
+        first = PracticeAssessmentService.batch_save_questions(
+            db, staff_id, intervention_id, payload(["First", "Second", "Third"])
+        )
+        assessment_id = assessment.practice_assessment_id
+        assert [q.question_text for q in first] == ["First", "Second", "Third"]
+
+        synchronized = PracticeAssessmentService.batch_save_questions(
+            db, staff_id, intervention_id, payload(["Third", "Edited First"])
+        )
+        synchronized_prompts = [q.question_text for q in synchronized]
+        repeated = PracticeAssessmentService.batch_save_questions(
+            db, staff_id, intervention_id, payload(["Third", "Edited First"])
+        )
+        repeated_prompts = [q.question_text for q in repeated]
+        db.expire_all()
+
+        reopened = PracticeAssessmentService.get_assessment(db, staff_id, intervention_id)
+        persisted = sorted(reopened.questions, key=lambda question: question.display_order)
+        assert reopened.practice_assessment_id == assessment_id
+        assert synchronized_prompts == ["Third", "Edited First"]
+        assert repeated_prompts == ["Third", "Edited First"]
+        assert [q.question_text for q in persisted] == ["Third", "Edited First"]
+        assert [q.display_order for q in persisted] == [1, 2]
+        assert db.query(PracticeQuestion).filter_by(
+            practice_assessment_id=assessment_id
+        ).count() == 2
+
+    def test_batch_replace_rejects_existing_attempt_without_mutation(self, db_env):
+        db = db_env["db"]
+        staff_id = db_env["staff"].staff_id
+        student_id = db_env["student"].student_id
+        intervention_id = db_env["intervention"].intervention_id
+        assessment = PracticeAssessmentService.get_or_create_assessment(db, staff_id, intervention_id)
+        original = PracticeAssessmentService.add_question(
+            db,
+            staff_id,
+            intervention_id,
+            PracticeQuestionCreate(
+                question_text="Attempted question",
+                options=[
+                    PracticeOptionIn(option_text="Correct", is_correct=True, option_order=1),
+                    PracticeOptionIn(option_text="Wrong", is_correct=False, option_order=2),
+                ],
+            ),
+        )
+        PracticeAssessmentService.publish_assessment(db, staff_id, intervention_id)
+        attempt = PracticeAssessmentService.start_or_resume_attempt(db, student_id, intervention_id)
+        snapshot_before = db.get(PracticeAttempt, attempt.attempt_id).attempt_snapshot
+
+        replacement = PracticeQuestionBatchSave(
+            questions=[
+                PracticeQuestionCreate(
+                    question_text="Replacement question",
+                    options=[
+                        PracticeOptionIn(option_text="Yes", is_correct=True, option_order=1),
+                        PracticeOptionIn(option_text="No", is_correct=False, option_order=2),
+                    ],
+                )
+            ],
+            replace_existing=True,
+        )
+        with pytest.raises(HTTPException) as exc:
+            PracticeAssessmentService.batch_save_questions(
+                db, staff_id, intervention_id, replacement
+            )
+
+        assert exc.value.status_code == 409
+        db.expire_all()
+        unchanged = db.query(PracticeQuestion).filter_by(
+            practice_assessment_id=assessment.practice_assessment_id
+        ).all()
+        assert [(q.practice_question_id, q.question_text) for q in unchanged] == [
+            (original.practice_question_id, "Attempted question")
+        ]
+        assert db.get(PracticeAttempt, attempt.attempt_id).attempt_snapshot == snapshot_before
+
+    @staticmethod
+    def _atomic_save_payload(title, questions, *, publish=False):
+        return PracticeAssessmentSaveRequest(
+            title=title,
+            passing_percentage=Decimal("82.00"),
+            gatekeeper_policy="REQUIRE_ATTEMPT",
+            questions=questions,
+            publish=publish,
+        )
+
+    def test_atomic_save_persists_settings_questions_and_publish_on_reopen(self, db_env):
+        db = db_env["db"]
+        staff_id = db_env["staff"].staff_id
+        intervention_id = db_env["intervention"].intervention_id
+        existing = PracticeAssessmentService.get_or_create_assessment(
+            db,
+            staff_id,
+            intervention_id,
+            PracticeAssessmentCreate(title="Existing draft"),
+        )
+        existing_id = existing.practice_assessment_id
+        questions = [PracticeQuestionCreate(
+            question_text="Atomic question",
+            options=[
+                PracticeOptionIn(option_text="Correct", is_correct=True, option_order=1),
+                PracticeOptionIn(option_text="Wrong", is_correct=False, option_order=2),
+            ],
+        )]
+
+        saved = PracticeAssessmentService.save_assessment(
+            db,
+            staff_id,
+            intervention_id,
+            self._atomic_save_payload("Atomic assessment", questions, publish=True),
+        )
+        assessment_id = saved.practice_assessment_id
+        assert assessment_id == existing_id
+        db.expire_all()
+
+        reopened = PracticeAssessmentService.get_assessment(db, staff_id, intervention_id)
+        assert reopened.practice_assessment_id == assessment_id
+        assert reopened.title == "Atomic assessment"
+        assert reopened.passing_percentage == Decimal("82.00")
+        assert reopened.gatekeeper_policy == "REQUIRE_ATTEMPT"
+        assert reopened.status == "PUBLISHED"
+        assert [question.question_text for question in reopened.questions] == ["Atomic question"]
+
+    def test_atomic_save_validation_failure_changes_nothing(self, db_env):
+        db = db_env["db"]
+        staff_id = db_env["staff"].staff_id
+        intervention_id = db_env["intervention"].intervention_id
+        original = PracticeAssessmentService.get_or_create_assessment(
+            db,
+            staff_id,
+            intervention_id,
+            PracticeAssessmentCreate(title="Original assessment"),
+        )
+        PracticeAssessmentService.add_question(
+            db,
+            staff_id,
+            intervention_id,
+            PracticeQuestionCreate(
+                question_text="Original question",
+                options=[
+                    PracticeOptionIn(option_text="Correct", is_correct=True, option_order=1),
+                    PracticeOptionIn(option_text="Wrong", is_correct=False, option_order=2),
+                ],
+            ),
+        )
+        invalid_questions = [PracticeQuestionCreate(
+            question_text="Invalid replacement",
+            options=[
+                PracticeOptionIn(option_text="Both", is_correct=True, option_order=1),
+                PracticeOptionIn(option_text="Correct", is_correct=True, option_order=2),
+            ],
+        )]
+
+        with patch.object(db, "rollback", wraps=db.rollback) as rollback:
+            with pytest.raises(HTTPException) as exc:
+                PracticeAssessmentService.save_assessment(
+                    db,
+                    staff_id,
+                    intervention_id,
+                    self._atomic_save_payload("Partially saved title", invalid_questions),
+                )
+
+        assert exc.value.status_code == 422
+        rollback.assert_called_once()
+        db.expire_all()
+        reopened = PracticeAssessmentService.get_assessment(db, staff_id, intervention_id)
+        assert reopened.practice_assessment_id == original.practice_assessment_id
+        assert reopened.title == "Original assessment"
+        assert [question.question_text for question in reopened.questions] == ["Original question"]
+
+    def test_atomic_save_database_failure_rolls_back_settings_and_questions(self, db_env):
+        db = db_env["db"]
+        staff_id = db_env["staff"].staff_id
+        intervention_id = db_env["intervention"].intervention_id
+        original = PracticeAssessmentService.get_or_create_assessment(
+            db,
+            staff_id,
+            intervention_id,
+            PracticeAssessmentCreate(title="Original assessment"),
+        )
+        PracticeAssessmentService.add_question(
+            db,
+            staff_id,
+            intervention_id,
+            PracticeQuestionCreate(
+                question_text="Original question",
+                options=[
+                    PracticeOptionIn(option_text="Correct", is_correct=True, option_order=1),
+                    PracticeOptionIn(option_text="Wrong", is_correct=False, option_order=2),
+                ],
+            ),
+        )
+        replacement = [PracticeQuestionCreate(
+            question_text="Replacement question",
+            options=[
+                PracticeOptionIn(option_text="Yes", is_correct=True, option_order=1),
+                PracticeOptionIn(option_text="No", is_correct=False, option_order=2),
+            ],
+        )]
+
+        with patch.object(db, "rollback", wraps=db.rollback) as rollback:
+            with patch.object(db, "commit", side_effect=SQLAlchemyError("commit failed")):
+                with pytest.raises(SQLAlchemyError, match="commit failed"):
+                    PracticeAssessmentService.save_assessment(
+                        db,
+                        staff_id,
+                        intervention_id,
+                        self._atomic_save_payload("Partially saved title", replacement),
+                    )
+
+        rollback.assert_called_once()
+        db.expire_all()
+        reopened = PracticeAssessmentService.get_assessment(db, staff_id, intervention_id)
+        assert reopened.practice_assessment_id == original.practice_assessment_id
+        assert reopened.title == "Original assessment"
+        assert [question.question_text for question in reopened.questions] == ["Original question"]
+
+    def test_atomic_save_existing_attempt_rolls_back_all_teacher_changes(self, db_env):
+        db = db_env["db"]
+        staff_id = db_env["staff"].staff_id
+        student_id = db_env["student"].student_id
+        intervention_id = db_env["intervention"].intervention_id
+        assessment = PracticeAssessmentService.get_or_create_assessment(
+            db,
+            staff_id,
+            intervention_id,
+            PracticeAssessmentCreate(title="Published original"),
+        )
+        PracticeAssessmentService.add_question(
+            db,
+            staff_id,
+            intervention_id,
+            PracticeQuestionCreate(
+                question_text="Attempted question",
+                options=[
+                    PracticeOptionIn(option_text="Correct", is_correct=True, option_order=1),
+                    PracticeOptionIn(option_text="Wrong", is_correct=False, option_order=2),
+                ],
+            ),
+        )
+        PracticeAssessmentService.publish_assessment(db, staff_id, intervention_id)
+        attempt = PracticeAssessmentService.start_or_resume_attempt(db, student_id, intervention_id)
+        snapshot_before = db.get(PracticeAttempt, attempt.attempt_id).attempt_snapshot
+        replacement = [PracticeQuestionCreate(
+            question_text="Unsafe replacement",
+            options=[
+                PracticeOptionIn(option_text="Yes", is_correct=True, option_order=1),
+                PracticeOptionIn(option_text="No", is_correct=False, option_order=2),
+            ],
+        )]
+
+        with pytest.raises(HTTPException) as exc:
+            PracticeAssessmentService.save_assessment(
+                db,
+                staff_id,
+                intervention_id,
+                self._atomic_save_payload("Unsafe title", replacement, publish=True),
+            )
+
+        assert exc.value.status_code == 409
+        db.expire_all()
+        reopened = PracticeAssessmentService.get_assessment(db, staff_id, intervention_id)
+        assert reopened.practice_assessment_id == assessment.practice_assessment_id
+        assert reopened.title == "Published original"
+        assert reopened.status == "PUBLISHED"
+        assert [question.question_text for question in reopened.questions] == ["Attempted question"]
+        assert db.get(PracticeAttempt, attempt.attempt_id).attempt_snapshot == snapshot_before
 
     def test_publish_validation(self, db_env):
         db = db_env["db"]
