@@ -30,6 +30,7 @@ import {
   Upload,
 } from "lucide-react";
 import AddSubjectModal from "./forms/add-subject";
+import ImportCatalogSubjectsDialog from "./forms/import-catalog-subjects-modal";
 import {
   ALL_VALUE,
   CopyPreviousYearSetupModal,
@@ -73,9 +74,7 @@ import {
   uploadSubjectImportCsv,
   uploadSubjectOfferingImportCsv,
   type GradingTemplateListItem,
-  type SubjectImportResult,
   type SubjectOfferingCopyAcademicYearResult,
-  type SubjectOfferingImportResult,
   type SubjectListItem,
   type SubjectOfferingFormOptions,
   type SubjectOfferingListItem,
@@ -130,8 +129,6 @@ export default function AdminSubjects() {
   const setNotice = (message: string) => {
     toast.success({ title: message });
   };
-  const [catalogImportResult, setCatalogImportResult] = useState<SubjectImportResult | null>(null);
-  const [offeringImportResult, setOfferingImportResult] = useState<SubjectOfferingImportResult | null>(null);
   const [copyResult, setCopyResult] = useState<SubjectOfferingCopyAcademicYearResult | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isOfferingModalOpen, setIsOfferingModalOpen] = useState(false);
@@ -471,22 +468,42 @@ export default function AdminSubjects() {
   const handleOfferingImport = async (file: File | undefined) => {
     if (!file) return;
     if (isViewingInactiveAcademicYear) {
-      setError(readOnlyReason ?? "Historical academic years are locked in the UI to protect historical records.");
+      toast.error({
+        title: "Read-only academic year",
+        description: readOnlyReason ?? "Historical academic years are locked in the UI to protect historical records.",
+      });
       if (offeringImportInputRef.current) offeringImportInputRef.current.value = "";
       return;
     }
     setError(null);
-    setOfferingImportResult(null);
     setIsImportingOfferings(true);
     try {
       const result = await uploadSubjectOfferingImportCsv(file);
-      setOfferingImportResult(result);
+      const errorDetails = result.errors
+        .map((item) => `Row ${item.row ?? "-"}: ${item.message}`)
+        .join(" ");
       if (result.created_count > 0) {
-        setNotice(`${result.created_count} subject offerings imported.`);
         await loadOfferings();
       }
+      if (result.created_count > 0 && result.error_count > 0) {
+        toast.warning({
+          title: `${result.created_count} subject offering${result.created_count === 1 ? "" : "s"} imported (${result.error_count} failed)`,
+          description: errorDetails || `${result.skipped_count} skipped from ${result.total_rows} rows.`,
+        });
+      } else if (result.error_count > 0) {
+        toast.error({
+          title: "Offering import failed",
+          description: errorDetails || `${result.error_count} errors from ${result.total_rows} rows.`,
+        });
+      } else if (result.created_count > 0) {
+        setNotice(`${result.created_count} subject offering${result.created_count === 1 ? "" : "s"} imported.`);
+      } else {
+        toast.warning({
+          title: "No subject offerings imported",
+          description: `${result.skipped_count} skipped from ${result.total_rows} rows.`,
+        });
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to import subject offerings.");
       toast.error({ title: "Unable to import subject offerings", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsImportingOfferings(false);
@@ -527,17 +544,34 @@ export default function AdminSubjects() {
   const handleCatalogImport = async (file: File | undefined) => {
     if (!file) return;
     setError(null);
-    setCatalogImportResult(null);
     setIsImportingCatalog(true);
     try {
       const result = await uploadSubjectImportCsv(file);
-      setCatalogImportResult(result);
+      const errorDetails = result.errors
+        .map((item) => `Row ${item.row ?? "-"}: ${item.message}`)
+        .join(" ");
       if (result.created_count > 0) {
-        setNotice(`${result.created_count} catalog subjects imported.`);
         await loadSubjects();
       }
+      if (result.created_count > 0 && result.error_count > 0) {
+        toast.warning({
+          title: `${result.created_count} catalog subject${result.created_count === 1 ? "" : "s"} imported (${result.error_count} failed)`,
+          description: errorDetails || `${result.skipped_count} skipped from ${result.total_rows} rows.`,
+        });
+      } else if (result.error_count > 0) {
+        toast.error({
+          title: "Catalog import failed",
+          description: errorDetails || `${result.error_count} errors from ${result.total_rows} rows.`,
+        });
+      } else if (result.created_count > 0) {
+        setNotice(`${result.created_count} catalog subject${result.created_count === 1 ? "" : "s"} imported.`);
+      } else {
+        toast.warning({
+          title: "No catalog subjects imported",
+          description: `${result.skipped_count} skipped from ${result.total_rows} rows.`,
+        });
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to import catalog subjects.");
       toast.error({ title: "Unable to import catalog subjects", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsImportingCatalog(false);
@@ -783,32 +817,6 @@ export default function AdminSubjects() {
                     </Select>
                   </div>
 
-                  {catalogImportResult ? (
-                    <RetroCard className="p-3 text-sm">
-                      <p className="font-bold">Catalog Import Summary</p>
-                      <p>
-                        {catalogImportResult.created_count} created, {catalogImportResult.skipped_count} skipped, {catalogImportResult.error_count} errors from {catalogImportResult.total_rows} rows.
-                      </p>
-                      {catalogImportResult.warnings?.length ? (
-                        <div className="mt-2 max-h-32 overflow-y-auto rounded border border-amber-300 bg-amber-50 p-2 text-amber-900">
-                          <p className="font-semibold">Needs Review / Notes ({catalogImportResult.warnings.length}):</p>
-                          {catalogImportResult.warnings.map((warn, index) => (
-                            <p key={`warn-${index}`}>{warn}</p>
-                          ))}
-                        </div>
-                      ) : null}
-                      {catalogImportResult.errors.length ? (
-                        <div className="mt-2 max-h-32 overflow-y-auto">
-                          {catalogImportResult.errors.map((item, index) => (
-                            <p key={`${item.row ?? "file"}-${index}`}>
-                              Row {item.row ?? "-"}: {item.message}
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
-                    </RetroCard>
-                  ) : null}
-
                   {isLoadingCatalog ? (
                     <LoadingCard label="Loading subjects..." />
                   ) : gradeGroups.length === 0 ? (
@@ -871,24 +879,6 @@ export default function AdminSubjects() {
                     onStatusChange={setOfferingStatus}
                     onReset={resetOfferingFilters}
                   />
-
-                  {offeringImportResult ? (
-                    <RetroCard className="p-3 text-sm">
-                      <p className="font-bold">Offering Import Summary</p>
-                      <p>
-                        {offeringImportResult.created_count} created, {offeringImportResult.skipped_count} skipped, {offeringImportResult.error_count} errors from {offeringImportResult.total_rows} rows.
-                      </p>
-                      {offeringImportResult.errors.length ? (
-                        <div className="mt-2 max-h-32 overflow-y-auto">
-                          {offeringImportResult.errors.map((item, index) => (
-                            <p key={`${item.row ?? "file"}-${index}`}>
-                              Row {item.row ?? "-"}: {item.message}
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
-                    </RetroCard>
-                  ) : null}
 
                   {copyResult ? (
                     <RetroCard className="p-3 text-sm">
@@ -1125,24 +1115,27 @@ export default function AdminSubjects() {
         onCopied={handleCopySetupComplete}
       />
 
-      <ConfirmDialog
-        open={Boolean(pendingImport)}
-        onOpenChange={(open) => {
-          if (!open && !isImportingCatalog && !isImportingOfferings) setPendingImport(null);
+      <ImportCatalogSubjectsDialog
+        key={pendingImport ? `${pendingImport.kind}:${pendingImport.file.name}:${pendingImport.file.lastModified}` : "closed"}
+        pendingImport={pendingImport}
+        isImportingCatalog={isImportingCatalog}
+        isImportingOfferings={isImportingOfferings}
+        gradingTemplates={gradingTemplates}
+        academicLevels={offeringOptions?.academic_levels ?? []}
+        onClose={() => {
+          if (!isImportingCatalog && !isImportingOfferings) setPendingImport(null);
         }}
-        title={pendingImport?.kind === "offerings" ? "Import Subject Offerings" : "Import Catalog Subjects"}
-        description="Confirm the selected CSV file before importing."
-        confirmLabel={isImportingCatalog || isImportingOfferings ? "Importing..." : "Import"}
-        isLoading={isImportingCatalog || isImportingOfferings}
-        onConfirm={async () => {
-          if (!pendingImport || isImportingCatalog || isImportingOfferings) return;
-          if (pendingImport.kind === "catalog") await handleCatalogImport(pendingImport.file);
-          else await handleOfferingImport(pendingImport.file);
+        onConfirmCatalog={async (file) => {
+          if (isImportingCatalog) return;
+          await handleCatalogImport(file);
           setPendingImport(null);
         }}
-      >
-        <p className="break-words font-medium">{pendingImport?.file.name}</p>
-      </ConfirmDialog>
+        onConfirmOfferings={async (file) => {
+          if (isImportingOfferings) return;
+          await handleOfferingImport(file);
+          setPendingImport(null);
+        }}
+      />
 
       <ConfirmDialog
         open={Boolean(pendingAction)}

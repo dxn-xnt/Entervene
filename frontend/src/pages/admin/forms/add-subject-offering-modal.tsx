@@ -26,7 +26,7 @@ import {
   type SubjectOfferingPathway,
   type SubjectStatus,
 } from "@/lib/api";
-import { SubjectPicker } from "./subject-picker";
+import { SubjectPicker } from "../subjects/components/subject-picker";
 import {
   FALLBACK_PERIODS,
   isJuniorHighGrade,
@@ -34,7 +34,7 @@ import {
   pathwayLabel,
   targetLevels,
   type OfferingFormState,
-} from "./subject-utils";
+} from "../subjects/components/subject-utils";
 
 const COMMON_DURATIONS = [45, 60, 72, 96] as const;
 
@@ -165,12 +165,6 @@ export function OfferingModal({
   const selectedPeriodIds = new Set(form.academic_period_ids);
   const isCreateMode = !offering;
   const allTermsSelected = periods.length > 0 && periods.every((period) => selectedPeriodIds.has(String(period.academic_period_id)));
-  const contextPeriod = periods.find((period) => form.academic_period_ids.includes(String(period.academic_period_id)))
-    ?? periods.find((period) => String(period.academic_period_id) === form.academic_period_id)
-    ?? periods[0];
-  const contextLabel = selectedYear?.year_label && contextPeriod
-    ? `${selectedYear.year_label} - ${formatPeriodLabel(contextPeriod)}`
-    : selectedYear?.year_label ?? "Current setup context unavailable";
 
   const effectivePathwayForSubject = useCallback(
     (subject: SubjectListItem): SubjectOfferingPathway =>
@@ -340,10 +334,10 @@ export function OfferingModal({
     const initialPathway: SubjectOfferingPathway = isLevelJhs
       ? "general"
       : activePathwayCount > 1
-      ? "both"
-      : activePathwayCount === 1
-      ? ((options?.pathways[0].code as SubjectOfferingPathway) ?? "general")
-      : "general";
+        ? "both"
+        : activePathwayCount === 1
+          ? ((options?.pathways[0].code as SubjectOfferingPathway) ?? "general")
+          : "general";
 
     setForm({
       subject_id: "",
@@ -358,7 +352,7 @@ export function OfferingModal({
       minutes: "",
       status: options?.default_status ?? "active",
       grading_template_id: "",
-      });
+    });
   }, [catalogSubjects, defaultAcademicYearId, gradeLevels, offering, open, options]);
 
   // In create mode, fetch active offerings for the selected year and grade.
@@ -425,10 +419,10 @@ export function OfferingModal({
     const nextDefaultPathway: SubjectOfferingPathway = isNextJhs
       ? "general"
       : activePathwayCount > 1
-      ? "both"
-      : activePathwayCount === 1
-      ? ((options?.pathways[0].code as SubjectOfferingPathway) ?? "general")
-      : "general";
+        ? "both"
+        : activePathwayCount === 1
+          ? ((options?.pathways[0].code as SubjectOfferingPathway) ?? "general")
+          : "general";
 
     const nextPeriods = (options?.academic_periods ?? []).filter(
       (period) => period.academic_year_id === Number(form.academic_year_id)
@@ -492,8 +486,8 @@ export function OfferingModal({
       String(offering.subject.grading_template_id),
     ] : null,
     values: [form.subject_id, form.academic_year_id, form.academic_level_id,
-      unorderedValues(form.academic_period_ids), requiresPathway ? form.pathway : "general",
-      optionalNumber(form.minutes), form.status, form.grading_template_id],
+    unorderedValues(form.academic_period_ids), requiresPathway ? form.pathway : "general",
+    optionalNumber(form.minutes), form.status, form.grading_template_id],
   });
   const handleSubmit = async () => {
     if (!changes.guardChanges()) return;
@@ -612,7 +606,7 @@ export function OfferingModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content size="3xl" className="max-h-[90vh]">
+      <Dialog.Content size="md" className="max-h-[90vh]">
         <Dialog.Header asChild>
           <div className="flex items-center justify-between w-full">
             <Text as="h5" className="font-sans text-xl font-bold">
@@ -623,8 +617,6 @@ export function OfferingModal({
         <section className="p-4">
           <div className="flex flex-col gap-4">
             <div className="space-y-1 text-muted-foreground">
-              <p className="text-sm">Current setup context</p>
-              <p className="text-sm">{contextLabel}</p>
               <p className="text-xs">
                 This offering will be added to the selected academic year. Use the year selector or the advanced option below to change context.
               </p>
@@ -637,9 +629,28 @@ export function OfferingModal({
               </div>
             ) : null}
 
-            <div className="rounded! border-2 border-black p-3 shadow-[3px_3px_0_#000]">
-              <h6 className="mb-3 font-bold">Offering Setup</h6>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-semibold" htmlFor="offering-context-year">Academic Year</label>
+                  <Select
+                    value={selectedYear ? String(selectedYear.academic_year_id) : undefined}
+                    disabled
+                  >
+                    <Select.Trigger id="offering-context-year" className="w-full">
+                      <Select.Value placeholder={selectedYear?.year_label ?? "Current academic year"} />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        {selectedYear ? (
+                          <Select.Item value={String(selectedYear.academic_year_id)}>
+                            {selectedYear.year_label}
+                          </Select.Item>
+                        ) : null}
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+                </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-sm font-semibold" htmlFor="offering-level">Grade Level</label>
                   <Select
@@ -674,7 +685,7 @@ export function OfferingModal({
                       value={form.pathway}
                       onValueChange={(value) => setField("pathway", value as SubjectOfferingPathway)}
                     >
-                    <Select.Trigger id="offering-pathway" aria-invalid={error === "Select a valid pathway for the selected grade level."} aria-describedby={error === "Select a valid pathway for the selected grade level." ? "offering-pathway-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
+                      <Select.Trigger id="offering-pathway" aria-invalid={error === "Select a valid pathway for the selected grade level."} aria-describedby={error === "Select a valid pathway for the selected grade level." ? "offering-pathway-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                         <Select.Value placeholder="Select pathway" />
                       </Select.Trigger>
                       <Select.Content>
@@ -696,7 +707,7 @@ export function OfferingModal({
                 ) : null}
                 {isCreateMode ? (
                   <div className="flex flex-col gap-1">
-                    <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (Minutes) <span className="text-red-500">*</span></label>
+                    <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (minutes) <span className="text-red-500">*</span></label>
                     <DurationSelect
                       id="create-offering-minutes"
                       value={form.minutes}
@@ -705,10 +716,9 @@ export function OfferingModal({
                       describedBy={error === "Minutes must be a positive whole number." ? "create-offering-minutes-error" : undefined}
                     />
                     {error === "Minutes must be a positive whole number." && <FormMessage id="create-offering-minutes-error">{error}</FormMessage>}
-                    <p className="text-xs text-muted-foreground">Minutes per class period for all selected terms. Required for scheduling.</p>
                   </div>
                 ) : null}
-                <div className="flex flex-col gap-2 md:col-span-2">
+                <div className="col-span-full flex flex-col gap-2">
                   <label className="flex cursor-pointer items-start gap-3 rounded! border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[2px_2px_0_#000]">
                     <Checkbox
                       checked={showAdvancedYear}
@@ -743,20 +753,14 @@ export function OfferingModal({
                     </div>
                   ) : null}
                 </div>
-                <div className="flex flex-col gap-2 md:col-span-2">
+                <div className="col-span-full flex flex-col gap-2">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
+                    <div className="-mb-3">
                       <p className="text-sm font-semibold">Term(s)</p>
-                      {isJhsSelection ? (
-                        <p className="text-xs text-muted-foreground">Junior High subjects usually continue across terms. Adjust if needed.</p>
-                      ) : null}
-                      {isShsSelection ? (
-                        <p className="text-xs text-muted-foreground">Senior High subjects may be offered in selected term(s) depending on hours and curriculum mapping.</p>
-                      ) : null}
                     </div>
                     {periods.length ? (
-                      <Button type="button" size="sm" variant="outline" className="gap-2" onClick={toggleAllTerms}>
-                        {allTermsSelected ? "Clear terms" : "Select all terms"}
+                      <Button type="button" size="sm" variant="secondary" className="gap-2 shadow-none" onClick={toggleAllTerms}>
+                        {allTermsSelected ? "Clear Selected" : "Select All"}
                       </Button>
                     ) : null}
                   </div>
@@ -776,7 +780,7 @@ export function OfferingModal({
                             className="shrink-0"
                             disabled={isFallback}
                           />
-                          <span className="font-semibold">{formatPeriodLabel(period)}</span>
+                          <span className="font-semibold text-base">{formatPeriodLabel(period)}</span>
                         </label>
                       );
                     })}
@@ -878,31 +882,31 @@ export function OfferingModal({
                   </Accordion.Header>
                   <Accordion.Content>
                     <p className="mb-3 text-sm text-muted-foreground">Catalog subjects are filtered by the selected grade level.</p>
-                {duplicateCatalogLabels.length ? (
-                  <Alert status="warning" className="mb-3 py-3">
-                    <Alert.Title className="font-bold">Possible duplicate catalog subjects</Alert.Title>
-                    <Alert.Description className="text-sm">
-                      Review these separate catalog records before assigning offerings: {duplicateCatalogLabels.join(", ")}.
-                    </Alert.Description>
-                  </Alert>
-                ) : null}
-                {eligibilityError ? (
-                  <Alert status="error">
-                    <Alert.Title className="font-bold">Unable to check offering availability</Alert.Title>
-                    <Alert.Description>{eligibilityError}</Alert.Description>
-                  </Alert>
-                ) : isLoadingEligibility ? (
-                  <LoadingPanel label="Checking existing offerings..." className="w-full" />
-                ) : (
-                  <SubjectPicker
-                    showSelectedChips={false}
-                    subjects={subjects}
-                    selectedSubjectIds={form.subject_ids}
-                    onChange={handleSubjectSelectionChange}
-                    searchPlaceholder="Search subjects for this grade"
-                    availabilityBySubjectId={availabilityBySubjectId}
-                  />
-                )}
+                    {duplicateCatalogLabels.length ? (
+                      <Alert status="warning" className="mb-3 py-3">
+                        <Alert.Title className="font-bold">Possible duplicate catalog subjects</Alert.Title>
+                        <Alert.Description className="text-sm">
+                          Review these separate catalog records before assigning offerings: {duplicateCatalogLabels.join(", ")}.
+                        </Alert.Description>
+                      </Alert>
+                    ) : null}
+                    {eligibilityError ? (
+                      <Alert status="error">
+                        <Alert.Title className="font-bold">Unable to check offering availability</Alert.Title>
+                        <Alert.Description>{eligibilityError}</Alert.Description>
+                      </Alert>
+                    ) : isLoadingEligibility ? (
+                      <LoadingPanel label="Checking existing offerings..." className="w-full" />
+                    ) : (
+                      <SubjectPicker
+                        showSelectedChips={false}
+                        subjects={subjects}
+                        selectedSubjectIds={form.subject_ids}
+                        onChange={handleSubjectSelectionChange}
+                        searchPlaceholder="Search subjects for this grade"
+                        availabilityBySubjectId={availabilityBySubjectId}
+                      />
+                    )}
                   </Accordion.Content>
                 </Accordion.Item>
                 {error === "Select setup details, at least one term, and at least one subject." && !form.subject_ids.length && <FormMessage>Select at least one subject.</FormMessage>}
