@@ -66,6 +66,7 @@ class PracticeAttempt(Base):
         server_default="STARTED",
     )
     assessment_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    reading_review_cycle: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     total_score: Mapped[Decimal] = mapped_column(
         Numeric(8, 2),
         nullable=False,

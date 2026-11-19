@@ -29,6 +29,7 @@ from app.services.classwork.ClassworkShared import (
     assignment_is_locked,
     is_reading_type,
 )
+from app.services.intervention.PracticeReadingCycleService import current_practice_reading_cycle
 
 
 def _owned_intervention(
@@ -54,9 +55,11 @@ def intervention_reading_reviews(
 ) -> list[InterventionReadingReview]:
     """Return only the authenticated student's reviews for one intervention."""
     _owned_intervention(db, intervention_id=intervention_id, student=student)
+    cycle = current_practice_reading_cycle(db, intervention_id=intervention_id, student_id=student.student_id)
     return db.query(InterventionReadingReview).filter_by(
         intervention_id=intervention_id,
         student_id=student.student_id,
+        review_cycle=cycle,
     ).order_by(
         InterventionReadingReview.acknowledged_at,
         InterventionReadingReview.review_id,
@@ -82,6 +85,29 @@ def _require_snapshot_membership(
         == reading_assignment_id,
     ).first()
     if membership is None:
+        from app.models.intervention.PracticeAssessment import PracticeAssessment
+        from app.services.intervention.StudentPersistentInterventionService import (
+            resolve_required_readings,
+        )
+
+        published_practice = db.query(PracticeAssessment.practice_assessment_id).filter_by(
+            intervention_id=intervention_id,
+            status="PUBLISHED",
+        ).first()
+        intervention = db.get(Intervention, intervention_id)
+        if published_practice is not None and intervention is not None:
+            readings, _issues, _prep = resolve_required_readings(
+                db, intervention, student.student_id,
+            )
+            if any(item.assignment_id == reading_assignment_id for item in readings):
+                reading_assignment = db.get(ClassworkAssignment, reading_assignment_id)
+                if (
+                    reading_assignment is not None
+                    and assignment_is_available(reading_assignment)
+                    and not assignment_is_locked(reading_assignment)
+                    and assignment_allows_student(reading_assignment, student.student_id)
+                ):
+                    return
         raise HTTPException(
             status_code=404,
             detail="Reading is not required by a published remediation activity for this intervention",
@@ -211,9 +237,16 @@ def acknowledge_intervention_reading_review(
         student=student,
     )
 
+    cycle = current_practice_reading_cycle(
+        db,
+        intervention_id=intervention_id,
+        student_id=student.student_id,
+    )
+
     existing = db.scalar(select(InterventionReadingReview).where(
         InterventionReadingReview.intervention_id == intervention_id,
         InterventionReadingReview.reading_assignment_id == reading_assignment_id,
+        InterventionReadingReview.review_cycle == cycle,
     ))
     if existing is not None:
         return existing
@@ -222,6 +255,7 @@ def acknowledge_intervention_reading_review(
         "intervention_id": intervention_id,
         "reading_assignment_id": reading_assignment_id,
         "student_id": student.student_id,
+        "review_cycle": cycle,
     }
     dialect = db.get_bind().dialect.name
     if dialect == "postgresql":
@@ -234,7 +268,7 @@ def acknowledge_intervention_reading_review(
         )
     review_id = db.execute(
         statement.values(**values).on_conflict_do_nothing(
-            index_elements=["intervention_id", "reading_assignment_id"],
+            index_elements=["intervention_id", "reading_assignment_id", "review_cycle"],
         ).returning(InterventionReadingReview.review_id)
     ).scalar_one_or_none()
     db.commit()
@@ -245,6 +279,7 @@ def acknowledge_intervention_reading_review(
         review = db.scalar(select(InterventionReadingReview).where(
             InterventionReadingReview.intervention_id == intervention_id,
             InterventionReadingReview.reading_assignment_id == reading_assignment_id,
+            InterventionReadingReview.review_cycle == cycle,
         ))
     if review is None:
         raise RuntimeError("Intervention Reading review was not persisted")

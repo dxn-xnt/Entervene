@@ -13,6 +13,7 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.classwork.ClassworkShared import assignment_is_locked
 from app.services.intervention.InterventionHistoryService import sent_reviewer, targeted_activities
+from app.services.intervention.PracticeReadingCycleService import current_practice_reading_cycle
 from app.schemas.StudentPersistentIntervention import (
     StudentPersistentIntervention, StudentPersistentInterventionList,
     StudentPreparationProgress, StudentRequiredReading,
@@ -48,9 +49,13 @@ def resolve_required_readings(
         enrollment_status="enrolled",
     ).first() is not None
 
+    review_cycle = current_practice_reading_cycle(
+        db, intervention_id=row.intervention_id, student_id=student_id,
+    )
     reviews = db.query(InterventionReadingReview).filter_by(
         intervention_id=row.intervention_id,
         student_id=student_id,
+        review_cycle=review_cycle,
     ).all()
     reviews_by_assignment = {
         r.reading_assignment_id: r.acknowledged_at for r in reviews

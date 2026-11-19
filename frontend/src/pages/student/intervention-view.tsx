@@ -605,6 +605,8 @@ export default function StudentInterventionView() {
                               <Button
                                 size="sm"
                                 variant="default"
+                                disabled={practiceMeta.can_start_attempt === false}
+                                title={practiceMeta.practice_lock_reason ?? undefined}
                                 onClick={() => {
                                   setPracticeModalMode("taking");
                                   setIsPracticeModalOpen(true);
@@ -624,16 +626,20 @@ export default function StudentInterventionView() {
                                 >
                                   Review Results
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  onClick={() => {
-                                    setPracticeModalMode("taking");
-                                    setIsPracticeModalOpen(true);
-                                  }}
-                                >
-                                  Try Again
-                                </Button>
+                                {!practiceMeta.has_passed && (
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    disabled={practiceMeta.can_start_attempt === false}
+                                    title={practiceMeta.practice_lock_reason ?? undefined}
+                                    onClick={() => {
+                                      setPracticeModalMode("taking");
+                                      setIsPracticeModalOpen(true);
+                                    }}
+                                  >
+                                    Try Again
+                                  </Button>
+                                )}
                               </>
                             )}
                           </div>
@@ -641,10 +647,12 @@ export default function StudentInterventionView() {
 
                         {/* Helpful context text */}
                         <p className="text-xs sm:text-sm text-muted-foreground px-1 -mt-1">
-                          {practiceMeta.gatekeeper_policy === "REQUIRE_PASS"
-                            ? `Earn at least ${practiceMeta.passing_percentage}% on this practice assessment to unlock your curated remediation activity.`
+                          {practiceMeta.practice_lock_reason && !practiceMeta.has_active_attempt
+                            ? practiceMeta.practice_lock_reason
+                            : practiceMeta.gatekeeper_policy === "REQUIRE_PASS"
+                            ? `Earn at least ${practiceMeta.passing_percentage}% on this practice assessment to unlock your Study Support activity.`
                             : practiceMeta.gatekeeper_policy === "REQUIRE_ATTEMPT"
-                              ? "Complete at least one practice attempt to unlock your curated remediation activity. You may proceed even if below passing."
+                              ? "Complete at least one practice attempt to unlock your Study Support activity. You may proceed even if below passing."
                               : "Practice questions are optional and help you prepare before beginning the remediation activity."}
                         </p>
                       </Card>

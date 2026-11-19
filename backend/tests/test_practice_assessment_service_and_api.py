@@ -44,6 +44,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.intervention.Intervention import Intervention
+from app.models.intervention.InterventionReadingReview import InterventionReadingReview
 from app.models.intervention.PracticeAssessment import PracticeAssessment
 from app.models.intervention.PracticeAttempt import PracticeAttempt
 from app.models.intervention.PracticeAttemptAnswer import PracticeAttemptAnswer
@@ -857,6 +858,307 @@ class TestStudentAttemptExecution:
             # Option level check
             for opt in q.options:
                 assert not hasattr(opt, "is_correct")  # Answer keys strictly omitted!
+
+    def test_each_failed_attempt_requires_a_new_reading_review_cycle(self, db_env):
+        db = db_env["db"]
+        student = db_env["student"]
+        intervention = db_env["intervention"]
+        reading = Classwork(
+            title="Study Support Reading",
+            classwork_type="READING",
+            is_graded=False,
+            is_published=True,
+            is_archived=False,
+            subject_id=db_env["subject"].subject_id,
+            created_by_staff_id=db_env["staff"].staff_id,
+        )
+        db.add(reading)
+        db.flush()
+        reading_assignment = ClassworkAssignment(
+            classwork_id=reading.classwork_id,
+            class_id=db_env["class"].class_id,
+            academic_period_id=db_env["period"].academic_period_id,
+            assigned_by_staff_id=db_env["staff"].staff_id,
+            is_published=True,
+        )
+        db.add(reading_assignment)
+        intervention.remediation_plan = {
+            "selected_resources": [{"kind": "CLASSWORK", "id": reading.classwork_id}],
+        }
+        db.commit()
+
+        meta = PracticeAssessmentService.get_student_assessment_metadata(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert meta["reading_review_cycle"] == 1
+        assert meta["required_readings_count"] == 1
+        assert meta["reviewed_readings_count"] == 0
+        assert meta["can_start_attempt"] is False
+        with pytest.raises(HTTPException) as blocked_first:
+            PracticeAssessmentService.start_or_resume_attempt(
+                db, student.student_id, intervention.intervention_id,
+            )
+        assert blocked_first.value.status_code == 409
+
+        def review(cycle: int) -> None:
+            db.add(InterventionReadingReview(
+                intervention_id=intervention.intervention_id,
+                reading_assignment_id=reading_assignment.classwork_assignment_id,
+                student_id=student.student_id,
+                review_cycle=cycle,
+                acknowledged_at=datetime.now(timezone.utc),
+            ))
+            db.commit()
+
+        review(1)
+        first = PracticeAssessmentService.start_or_resume_attempt(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert first.reading_review_cycle == 1
+        PracticeAssessmentService.submit_attempt(
+            db,
+            student.student_id,
+            intervention.intervention_id,
+            first.attempt_id,
+            PracticeAttemptSubmitRequest(answers=[]),
+        )
+
+        after_first_failure = PracticeAssessmentService.get_student_assessment_metadata(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert after_first_failure["reading_review_cycle"] == 2
+        assert after_first_failure["reviewed_readings_count"] == 0
+        assert after_first_failure["can_start_attempt"] is False
+        with pytest.raises(HTTPException):
+            PracticeAssessmentService.start_or_resume_attempt(
+                db, student.student_id, intervention.intervention_id,
+            )
+
+        review(2)
+        second = PracticeAssessmentService.start_or_resume_attempt(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert second.attempt_number == 2
+        assert second.reading_review_cycle == 2
+        PracticeAssessmentService.submit_attempt(
+            db,
+            student.student_id,
+            intervention.intervention_id,
+            second.attempt_id,
+            PracticeAttemptSubmitRequest(answers=[]),
+        )
+        assert PracticeAssessmentService.get_student_assessment_metadata(
+            db, student.student_id, intervention.intervention_id,
+        )["reading_review_cycle"] == 3
+
+        review(3)
+        third = PracticeAssessmentService.start_or_resume_attempt(
+            db, student.student_id, intervention.intervention_id,
+        )
+        correct_answers = []
+        for question in (self.q1, self.q2):
+            correct_answers.append(PracticeAttemptAnswerSubmission(
+                practice_question_id=question.practice_question_id,
+                selected_option_id=next(option.option_id for option in question.options if option.is_correct),
+            ))
+        correct_answers.append(PracticeAttemptAnswerSubmission(
+            practice_question_id=self.q3.practice_question_id,
+            student_answer_text="mitochondria",
+        ))
+        passed = PracticeAssessmentService.submit_attempt(
+            db,
+            student.student_id,
+            intervention.intervention_id,
+            third.attempt_id,
+            PracticeAttemptSubmitRequest(answers=correct_answers),
+        )
+        assert passed.is_passed is True
+        final_meta = PracticeAssessmentService.get_student_assessment_metadata(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert final_meta["has_passed"] is True
+        assert final_meta["attempts_count"] == 3
+
+    def test_multi_reading_review_cycles_via_service_preserve_history_and_passing_completion(self, db_env):
+        """End-to-end check across 2 required readings using acknowledge_intervention_reading_review."""
+        from app.services.intervention.InterventionReadingReviewService import (
+            acknowledge_intervention_reading_review,
+        )
+
+        db = db_env["db"]
+        student = db_env["student"]
+        intervention = db_env["intervention"]
+
+        reading_assignments = []
+        reading_ids = []
+        for idx in (1, 2):
+            reading = Classwork(
+                title=f"Study Support Reading {idx}",
+                classwork_type="READING",
+                is_graded=False,
+                is_published=True,
+                is_archived=False,
+                subject_id=db_env["subject"].subject_id,
+                created_by_staff_id=db_env["staff"].staff_id,
+            )
+            db.add(reading)
+            db.flush()
+            assignment = ClassworkAssignment(
+                classwork_id=reading.classwork_id,
+                class_id=db_env["class"].class_id,
+                academic_period_id=db_env["period"].academic_period_id,
+                assigned_by_staff_id=db_env["staff"].staff_id,
+                is_published=True,
+            )
+            db.add(assignment)
+            db.flush()
+            reading_ids.append(reading.classwork_id)
+            reading_assignments.append(assignment)
+
+        intervention.remediation_plan = {
+            "selected_resources": [{"kind": "CLASSWORK", "id": rid} for rid in reading_ids],
+        }
+        db.commit()
+
+        # Cycle 1: reviewing only reading 1 keeps Practice Assessment locked
+        r1_c1 = acknowledge_intervention_reading_review(
+            db,
+            intervention_id=intervention.intervention_id,
+            reading_assignment_id=reading_assignments[0].classwork_assignment_id,
+            student=student,
+        )
+        assert r1_c1.review_cycle == 1
+        # Duplicate acknowledgment in same cycle is idempotent
+        r1_c1_dup = acknowledge_intervention_reading_review(
+            db,
+            intervention_id=intervention.intervention_id,
+            reading_assignment_id=reading_assignments[0].classwork_assignment_id,
+            student=student,
+        )
+        assert r1_c1_dup.review_id == r1_c1.review_id
+
+        partial_meta = PracticeAssessmentService.get_student_assessment_metadata(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert partial_meta["required_readings_count"] == 2
+        assert partial_meta["reviewed_readings_count"] == 1
+        assert partial_meta["can_start_attempt"] is False
+        with pytest.raises(HTTPException) as partial_blocked:
+            PracticeAssessmentService.start_or_resume_attempt(
+                db, student.student_id, intervention.intervention_id,
+            )
+        assert partial_blocked.value.status_code == 409
+
+        # Review reading 2 -> cycle 1 unlocked
+        r2_c1 = acknowledge_intervention_reading_review(
+            db,
+            intervention_id=intervention.intervention_id,
+            reading_assignment_id=reading_assignments[1].classwork_assignment_id,
+            student=student,
+        )
+        assert r2_c1.review_cycle == 1
+
+        att1 = PracticeAssessmentService.start_or_resume_attempt(
+            db, student.student_id, intervention.intervention_id,
+        )
+        # Refresh/resume keeps the same active attempt
+        att1_resumed = PracticeAssessmentService.start_or_resume_attempt(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert att1_resumed.attempt_id == att1.attempt_id
+        assert att1.reading_review_cycle == 1
+
+        # Fail attempt 1 -> cycle 2 required; cycle 1 reviews cannot unlock cycle 2
+        PracticeAssessmentService.submit_attempt(
+            db,
+            student.student_id,
+            intervention.intervention_id,
+            att1.attempt_id,
+            PracticeAttemptSubmitRequest(answers=[]),
+        )
+        c2_meta = PracticeAssessmentService.get_student_assessment_metadata(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert c2_meta["reading_review_cycle"] == 2
+        assert c2_meta["reviewed_readings_count"] == 0
+        assert c2_meta["can_start_attempt"] is False
+
+        # Review only reading 1 in cycle 2 -> still locked
+        r1_c2 = acknowledge_intervention_reading_review(
+            db,
+            intervention_id=intervention.intervention_id,
+            reading_assignment_id=reading_assignments[0].classwork_assignment_id,
+            student=student,
+        )
+        assert r1_c2.review_cycle == 2
+        assert r1_c2.review_id != r1_c1.review_id
+        with pytest.raises(HTTPException) as c2_partial_blocked:
+            PracticeAssessmentService.start_or_resume_attempt(
+                db, student.student_id, intervention.intervention_id,
+            )
+        assert c2_partial_blocked.value.status_code == 409
+
+        # Review reading 2 in cycle 2 -> unlocked for attempt 2
+        r2_c2 = acknowledge_intervention_reading_review(
+            db,
+            intervention_id=intervention.intervention_id,
+            reading_assignment_id=reading_assignments[1].classwork_assignment_id,
+            student=student,
+        )
+        assert r2_c2.review_cycle == 2
+
+        att2 = PracticeAssessmentService.start_or_resume_attempt(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert att2.attempt_number == 2
+        assert att2.reading_review_cycle == 2
+
+        correct_answers = [
+            PracticeAttemptAnswerSubmission(
+                practice_question_id=self.q1.practice_question_id,
+                selected_option_id=next(o.option_id for o in self.q1.options if o.is_correct),
+            ),
+            PracticeAttemptAnswerSubmission(
+                practice_question_id=self.q2.practice_question_id,
+                selected_option_id=next(o.option_id for o in self.q2.options if o.is_correct),
+            ),
+            PracticeAttemptAnswerSubmission(
+                practice_question_id=self.q3.practice_question_id,
+                student_answer_text="mitochondria",
+            ),
+        ]
+        passed = PracticeAssessmentService.submit_attempt(
+            db,
+            student.student_id,
+            intervention.intervention_id,
+            att2.attempt_id,
+            PracticeAttemptSubmitRequest(answers=correct_answers),
+        )
+        assert passed.is_passed is True
+
+        # Passing preserves completion, historical reviews, historical attempts, and zero official grades
+        passed_meta = PracticeAssessmentService.get_student_assessment_metadata(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert passed_meta["has_passed"] is True
+        assert passed_meta["reading_review_cycle"] == 2
+        assert passed_meta["reviewed_readings_count"] == 2
+        assert passed_meta["reading_prerequisite_met"] is True
+        assert passed_meta["can_start_attempt"] is False
+
+        all_reviews = (
+            db.query(InterventionReadingReview)
+            .filter_by(intervention_id=intervention.intervention_id, student_id=student.student_id)
+            .all()
+        )
+        assert len(all_reviews) == 4
+        assert sorted(r.review_cycle for r in all_reviews) == [1, 1, 2, 2]
+        all_attempts = PracticeAssessmentService.list_student_attempts(
+            db, student.student_id, intervention.intervention_id,
+        )
+        assert len(all_attempts) == 2
+        assert sorted(a.reading_review_cycle for a in all_attempts) == [1, 2]
+        assert db.query(StudentSubmission).count() == 0
 
     def test_idempotent_resume(self, db_env):
         db = db_env["db"]

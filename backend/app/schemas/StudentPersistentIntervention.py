@@ -31,6 +31,7 @@ class StudentReadingReviewResponse(BaseModel):
     reading_assignment_id: int
     assignment_id: int | None = None
     student_id: UUID
+    review_cycle: int = 1
     review_status: Literal["NOT_REVIEWED", "REVIEWED"] = "REVIEWED"
     reviewed_at: datetime | None = None
     acknowledged_at: datetime

@@ -39,6 +39,7 @@ export interface PracticeAttemptSummary {
   practice_assessment_id: number;
   student_id: string;
   attempt_number: number;
+  reading_review_cycle?: number;
   status: string;
   total_score: number;
   max_score: number;
@@ -78,6 +79,12 @@ export interface StudentPracticeAssessmentMetadata {
   best_score_percentage?: number | null;
   latest_score_percentage?: number | null;
   latest_attempt_number?: number | null;
+  reading_review_cycle: number;
+  required_readings_count: number;
+  reviewed_readings_count: number;
+  reading_prerequisite_met: boolean;
+  can_start_attempt: boolean;
+  practice_lock_reason?: string | null;
 }
 
 export interface PracticeAttemptActiveOption {
@@ -98,6 +105,7 @@ export interface PracticeAttemptActiveQuestion {
 export interface PracticeAttemptStartResponse {
   attempt_id: number;
   attempt_number: number;
+  reading_review_cycle: number;
   status: string;
   passing_percentage: number;
   total_questions: number;

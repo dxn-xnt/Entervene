@@ -213,6 +213,10 @@ def evaluate_remediation_prerequisite(
     reviews = db.query(InterventionReadingReview).filter_by(
         intervention_id=intervention.intervention_id,
         student_id=student.student_id,
+    ).order_by(
+        InterventionReadingReview.review_cycle.asc(),
+        InterventionReadingReview.acknowledged_at.asc(),
+        InterventionReadingReview.review_id.asc(),
     ).all()
     reviews_by_assignment = {
         r.reading_assignment_id: r.acknowledged_at for r in reviews
