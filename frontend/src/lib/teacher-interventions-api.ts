@@ -140,12 +140,18 @@ async function readTeacherInterventionList(path: string): Promise<TeacherInterve
   }
 }
 
-export const listTeacherCandidates = () => readTeacherInterventionList(`${base}/candidates`);
+const periodQuery = (academicPeriodId?: number | null) =>
+  academicPeriodId ? `?academic_period_id=${encodeURIComponent(String(academicPeriodId))}` : "";
+
+export const listTeacherCandidates = (academicPeriodId?: number | null) =>
+  readTeacherInterventionList(`${base}/candidates${periodQuery(academicPeriodId)}`);
 export const getTeacherCandidate = (id: number) => read<TeacherInterventionDetail>(`${base}/candidates/${id}`);
 export const activateTeacherCandidate = (id: number) => read<TeacherInterventionDetail>(`${base}/candidates/${id}/activate`, "POST");
-export const listTeacherActive = () => readTeacherInterventionList(`${base}/active`);
+export const listTeacherActive = (academicPeriodId?: number | null) =>
+  readTeacherInterventionList(`${base}/active${periodQuery(academicPeriodId)}`);
 export const getTeacherActive = (id: number) => read<TeacherInterventionDetail>(`${base}/active/${id}`);
-export const listTeacherResolved = () => readTeacherInterventionList(`${base}/resolved`);
+export const listTeacherResolved = (academicPeriodId?: number | null) =>
+  readTeacherInterventionList(`${base}/resolved${periodQuery(academicPeriodId)}`);
 export const getTeacherResolved = (id: number) => read<TeacherResolvedInterventionDetail>(`${base}/resolved/${id}`);
 
 export type MaterialKind = "STUDENT_REVIEWER" | "REMEDIAL_ASSESSMENT";

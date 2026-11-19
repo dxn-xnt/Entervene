@@ -67,6 +67,7 @@ import {
 export interface TOSGeneratorScreenProps {
   modalMode?: boolean;
   initialTitle?: string;
+  initialQuarter?: string;
   subjectId?: number;
   subjectName?: string;
   competencies?: CompetencyItem[];
@@ -90,6 +91,7 @@ type WizardStep =
 export function TOSGeneratorScreen({
   modalMode = false,
   initialTitle,
+  initialQuarter = "Term 1",
   subjectId = 0,
   subjectName = "",
   competencies = [],
@@ -121,7 +123,7 @@ export function TOSGeneratorScreen({
 
   // Step 1: Exam Info & Test Parts
   const [title, setTitle] = useState(initialTitle || "Summative Assessment 1");
-  const [quarter, setQuarter] = useState("Term 1");
+  const [quarter, setQuarter] = useState(initialQuarter);
   const [testParts, setTestParts] = useState<TestPart[]>([
     { type: "MULTIPLE_CHOICE", count: 15 },
   ]);
@@ -364,7 +366,7 @@ export function TOSGeneratorScreen({
     setSaveError(null);
     setExamId(null);
     setTitle(`Summative Assessment ${savedExams.length + 1}`);
-    setQuarter("Term 1");
+    setQuarter(initialQuarter);
     setTestParts([{ type: "MULTIPLE_CHOICE", count: 15 }]);
     setLanguage("English");
     if (!subjectId) {
