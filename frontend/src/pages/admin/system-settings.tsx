@@ -125,6 +125,7 @@ export default function AdminSystemSettings() {
   const [pendingPeriodId, setPendingPeriodId] = React.useState<string | null>(
     null,
   );
+  const [pendingYearId, setPendingYearId] = React.useState<string | null>(null);
 
   // Academic Levels
   const [academicLevels, setAcademicLevels] = React.useState<
@@ -539,30 +540,39 @@ export default function AdminSystemSettings() {
     }
   };
 
-  const handleYearChange = async (yearIdStr: string) => {
-    const yearId = Number(yearIdStr);
-    setSelectedYearId(yearIdStr);
-    try {
-      await setActiveAcademicYear(yearId);
-      const selectedYear = academicYears.find(
-        (y) => y.academic_year_id === yearId,
-      );
-      setAcademicYears((prev) =>
-        prev.map((y) => ({
-          ...y,
-          is_active: y.academic_year_id === yearId,
-        })),
-      );
-      await loadAcademicPeriodsForYear(yearId);
-      setScopeConfigYearId(yearIdStr);
-      await loadPathwayScopes(yearId);
-      showToast(
-        `Active academic year changed to ${selectedYear?.year_label || yearIdStr}`,
-      );
-    } catch (err) {
-      console.error("Failed to change academic year", err);
-      showToast("Failed to change academic year.", "error");
+  const handleYearSelect = (yearIdStr: string) => {
+    if (yearIdStr === selectedYearId) return;
+    setPendingYearId(yearIdStr);
+  };
+
+  const confirmYearChange = async () => {
+    if (pendingYearId) {
+      const yearId = Number(pendingYearId);
+      try {
+        await setActiveAcademicYear(yearId);
+        setSelectedYearId(pendingYearId);
+        const selectedYear = academicYears.find(
+          (y) => y.academic_year_id === yearId,
+        );
+        setAcademicYears((prev) =>
+          prev.map((y) => ({
+            ...y,
+            is_active: y.academic_year_id === yearId,
+          })),
+        );
+        await loadAcademicPeriodsForYear(yearId);
+        setScopeConfigYearId(pendingYearId);
+        await loadPathwayScopes(yearId);
+        await refetchGlobalSettings();
+        showToast(
+          `Active academic year changed to ${selectedYear?.year_label || pendingYearId}`,
+        );
+      } catch (err) {
+        console.error("Failed to change academic year", err);
+        showToast(err instanceof Error ? err.message : "Failed to change academic year.", "error");
+      }
     }
+    setPendingYearId(null);
   };
 
   const handlePeriodSelect = (periodIdStr: string) => {
@@ -960,7 +970,7 @@ export default function AdminSystemSettings() {
                       </Text>
                       <Select
                         value={selectedYearId}
-                        onValueChange={handleYearChange}
+                        onValueChange={handleYearSelect}
                       >
                         <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
                           <Select.Value placeholder="Select Academic Year" />
@@ -1525,6 +1535,39 @@ export default function AdminSystemSettings() {
             )}
             <Button variant="outline" onClick={() => setPendingPeriodId(null)}>
               {isOngoingPolicyBlocked ? "Close" : "Cancel"}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+
+      {/* Confirm academic year change */}
+      <Dialog
+        open={pendingYearId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingYearId(null);
+        }}
+      >
+        <Dialog.Content size="md">
+          <Dialog.Header position="static">
+            <Text as="h5" className="font-sans text-xl font-bold">
+              Confirm Academic Year Change
+            </Text>
+          </Dialog.Header>
+          <section className="flex flex-col gap-4 p-4 text-sm">
+            <p>
+              Change the active academic year to{" "}
+              <strong>
+                {academicYears.find((y) => String(y.academic_year_id) === pendingYearId)
+                  ?.year_label || "selected academic year"}
+              </strong>
+              ? This will update the active school year system-wide across all student,
+              teacher, and admin views.
+            </p>
+          </section>
+          <Dialog.Footer position="static">
+            <Button onClick={confirmYearChange}>Confirm</Button>
+            <Button variant="outline" onClick={() => setPendingYearId(null)}>
+              Cancel
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
