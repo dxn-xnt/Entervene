@@ -5,11 +5,25 @@ import { activeFirst } from "@/lib/active-first";
 import { Plus, Settings, Trash2, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchPathways, getClassFormOptions, type AcademicPathwayRead } from "@/lib/api";
-import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft, OfficialSectionOption } from "@/types/adminClasses";
+import {
+  fetchPathways,
+  getClassFormOptions,
+  type AcademicPathwayRead,
+} from "@/lib/api";
+import type {
+  AdviserOption,
+  ClassFormOptions,
+  ManualClassSetup,
+  ManualSectionDraft,
+  OfficialSectionOption,
+} from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/retroui/Tooltip";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
@@ -23,11 +37,18 @@ import OfficialSectionsSettings from "@/pages/admin/official-sections-settings";
 type SetupErrors = {
   academicLevel?: string;
   sections?: string;
-  sectionRows: Record<string, { sectionName?: string; adviserStaffId?: string }>;
+  sectionRows: Record<
+    string,
+    { sectionName?: string; adviserStaffId?: string }
+  >;
   configuredRows: Record<number, { adviserStaffId?: string }>;
 };
 
-function createSectionDraft(sectionName = "", adviserStaffId = "", pathway = "general"): ManualSectionDraft {
+function createSectionDraft(
+  sectionName = "",
+  adviserStaffId = "",
+  pathway = "general",
+): ManualSectionDraft {
   return {
     localId: crypto.randomUUID(),
     sectionName,
@@ -38,10 +59,24 @@ function createSectionDraft(sectionName = "", adviserStaffId = "", pathway = "ge
 
 function adviserName(adviser?: AdviserOption) {
   if (!adviser) return "";
-  return [adviser.first_name, adviser.middle_name, adviser.last_name, adviser.suffix].filter(Boolean).join(" ");
+  return [
+    adviser.first_name,
+    adviser.middle_name,
+    adviser.last_name,
+    adviser.suffix,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
-export default function ManualClassWizard({ initialSetup, onComplete, onSkipStudents, onBack, onClose, onScreenChange }: {
+export default function ManualClassWizard({
+  initialSetup,
+  onComplete,
+  onSkipStudents,
+  onBack,
+  onClose,
+  onScreenChange,
+}: {
   initialSetup: ManualClassSetup | null;
   onComplete: (setup: ManualClassSetup) => void;
   onSkipStudents: (setup: ManualClassSetup) => void;
@@ -53,22 +88,43 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [academicLevelId, setAcademicLevelId] = useState(initialSetup?.academicLevelId ? String(initialSetup.academicLevelId) : "");
-  const [selectedYearId, setSelectedYearId] = useState(initialSetup?.academicYear.academic_year_id ? String(initialSetup.academicYear.academic_year_id) : "");
-  const [sections, setSections] = useState<ManualSectionDraft[]>(initialSetup?.sections ?? [createSectionDraft()]);
-  const [errors, setErrors] = useState<SetupErrors>({ sectionRows: {}, configuredRows: {} });
-  const [configuredAdvisers, setConfiguredAdvisers] = useState<Record<number, string>>({});
-  const [screen, setScreen] = useState<"details" | "official-sections">("details");
+  const [academicLevelId, setAcademicLevelId] = useState(
+    initialSetup?.academicLevelId ? String(initialSetup.academicLevelId) : "",
+  );
+  const [selectedYearId, setSelectedYearId] = useState(
+    initialSetup?.academicYear.academic_year_id
+      ? String(initialSetup.academicYear.academic_year_id)
+      : "",
+  );
+  const [sections, setSections] = useState<ManualSectionDraft[]>(
+    initialSetup?.sections ?? [createSectionDraft()],
+  );
+  const [errors, setErrors] = useState<SetupErrors>({
+    sectionRows: {},
+    configuredRows: {},
+  });
+  const [configuredAdvisers, setConfiguredAdvisers] = useState<
+    Record<number, string>
+  >({});
+  const [screen, setScreen] = useState<"details" | "official-sections">(
+    "details",
+  );
   const [managerError, setManagerError] = useState("");
   const [returningToDetails, setReturningToDetails] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
-  const [availablePathways, setAvailablePathways] = useState<AcademicPathwayRead[]>([]);
+  const [availablePathways, setAvailablePathways] = useState<
+    AcademicPathwayRead[]
+  >([]);
   const loadedYearIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    if (loadedYearIdRef.current && loadedYearIdRef.current === selectedYearId && options) {
+    if (
+      loadedYearIdRef.current &&
+      loadedYearIdRef.current === selectedYearId &&
+      options
+    ) {
       return;
     }
 
@@ -79,7 +135,9 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         const resolvedYearId = String(classData.academic_year.academic_year_id);
         loadedYearIdRef.current = resolvedYearId;
         if (!selectedYearId) setSelectedYearId(resolvedYearId);
-        const defaultLevelId = initialSetup?.academicLevelId ? String(initialSetup.academicLevelId) : String(classData.academic_levels[0]?.academic_level_id ?? "");
+        const defaultLevelId = initialSetup?.academicLevelId
+          ? String(initialSetup.academicLevelId)
+          : String(classData.academic_levels[0]?.academic_level_id ?? "");
         setAcademicLevelId((current) => current || defaultLevelId);
 
         if (!initialSetup?.sections) {
@@ -87,7 +145,12 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         }
       })
       .catch((error: unknown) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Unable to load class options.");
+        if (!cancelled)
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load class options.",
+          );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -96,7 +159,13 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
     return () => {
       cancelled = true;
     };
-  }, [initialSetup?.academicLevelId, initialSetup?.sections, options, retryKey, selectedYearId]);
+  }, [
+    initialSetup?.academicLevelId,
+    initialSetup?.sections,
+    options,
+    retryKey,
+    selectedYearId,
+  ]);
 
   useEffect(() => {
     fetchPathways(true)
@@ -119,54 +188,86 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
     setErrors({ sectionRows: {}, configuredRows: {} });
   }
 
-  const selectedLevel = options?.academic_levels.find((item) => String(item.academic_level_id) === academicLevelId);
+  const selectedLevel = options?.academic_levels.find(
+    (item) => String(item.academic_level_id) === academicLevelId,
+  );
   const isSeniorHigh = selectedLevel ? selectedLevel.grade_level >= 11 : false;
-  const needsPathway = isSeniorHigh && (selectedLevel?.requires_pathway ?? false);
+  const needsPathway =
+    isSeniorHigh && (selectedLevel?.requires_pathway ?? false);
   const showPathwayColumn = needsPathway;
 
   // Existing sections for this grade level in the active academic year
   const existingGradeSections = (options?.official_sections ?? []).filter(
-    (sec) => sec.academic_level_id === Number(academicLevelId) && sec.is_active
+    (sec) => sec.academic_level_id === Number(academicLevelId) && sec.is_active,
   );
-  const existingClassSections = existingGradeSections.filter((section) => section.has_class);
-  const selectedSectionNames = new Set(sections.map((section) => section.sectionName.trim().toLocaleLowerCase()).filter(Boolean));
+  const existingClassSections = existingGradeSections.filter(
+    (section) => section.has_class,
+  );
+  const selectedSectionNames = new Set(
+    sections
+      .map((section) => section.sectionName.trim().toLocaleLowerCase())
+      .filter(Boolean),
+  );
   const availableConfiguredSections = existingGradeSections.filter(
-    (section) => !section.has_class && !selectedSectionNames.has(section.section_name.trim().toLocaleLowerCase())
+    (section) =>
+      !section.has_class &&
+      !selectedSectionNames.has(
+        section.section_name.trim().toLocaleLowerCase(),
+      ),
   );
 
   // Pathway options for senior high
-  const pathwayOptions = availablePathways.length > 0
-    ? availablePathways
-    : (options?.official_sections ?? [])
-        .filter((sec) => sec.pathway_code && sec.pathway_name)
-        .map((sec) => ({
-          id: sec.pathway_id || 0,
-          code: sec.pathway_code || "",
-          name: sec.pathway_name || "",
-          is_enabled: true,
-          sort_order: 0,
-        }));
+  const pathwayOptions =
+    availablePathways.length > 0
+      ? availablePathways
+      : (options?.official_sections ?? [])
+          .filter((sec) => sec.pathway_code && sec.pathway_name)
+          .map((sec) => ({
+            id: sec.pathway_id || 0,
+            code: sec.pathway_code || "",
+            name: sec.pathway_name || "",
+            is_enabled: true,
+            sort_order: 0,
+          }));
 
-  const canAddSection = sections.every((section) => Boolean(section.sectionName.trim()));
+  const canAddSection = sections.every((section) =>
+    Boolean(section.sectionName.trim()),
+  );
 
   function addSection() {
     setSections((current) => {
-      if (current.some((section) => !section.sectionName.trim())) return current;
-      const defaultPathway = showPathwayColumn && pathwayOptions[0] ? pathwayOptions[0].code : "general";
+      if (current.some((section) => !section.sectionName.trim()))
+        return current;
+      const defaultPathway =
+        showPathwayColumn && pathwayOptions[0]
+          ? pathwayOptions[0].code
+          : "general";
       return [...current, createSectionDraft("", "", defaultPathway)];
     });
   }
 
-  function updateSection(localId: string, changes: Partial<ManualSectionDraft>) {
-    setSections((current) => current.map((section) => section.localId === localId ? { ...section, ...changes } : section));
+  function updateSection(
+    localId: string,
+    changes: Partial<ManualSectionDraft>,
+  ) {
+    setSections((current) =>
+      current.map((section) =>
+        section.localId === localId ? { ...section, ...changes } : section,
+      ),
+    );
     setErrors((current) => {
       const row = { ...current.sectionRows[localId] };
-      if (changes.sectionName && changes.sectionName.trim()) delete row.sectionName;
+      if (changes.sectionName && changes.sectionName.trim())
+        delete row.sectionName;
       if (changes.adviserStaffId) delete row.adviserStaffId;
       const sectionRows = { ...current.sectionRows };
       if (Object.keys(row).length) sectionRows[localId] = row;
       else delete sectionRows[localId];
-      return { ...current, sections: sections.length ? undefined : current.sections, sectionRows };
+      return {
+        ...current,
+        sections: sections.length ? undefined : current.sections,
+        sectionRows,
+      };
     });
   }
 
@@ -175,14 +276,25 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
     if (!adviserStaffId) {
       setErrors((current) => ({
         ...current,
-        configuredRows: { ...current.configuredRows, [section.id]: { adviserStaffId: "Select an adviser before adding this section." } },
+        configuredRows: {
+          ...current.configuredRows,
+          [section.id]: {
+            adviserStaffId: "Select an adviser before adding this section.",
+          },
+        },
       }));
       return;
     }
     if (sections.some((draft) => draft.adviserStaffId === adviserStaffId)) {
       setErrors((current) => ({
         ...current,
-        configuredRows: { ...current.configuredRows, [section.id]: { adviserStaffId: "This adviser is already assigned to another section." } },
+        configuredRows: {
+          ...current.configuredRows,
+          [section.id]: {
+            adviserStaffId:
+              "This adviser is already assigned to another section.",
+          },
+        },
       }));
       return;
     }
@@ -194,9 +306,13 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
       adviserStaffId,
       pathway: section.pathway_code || "general",
     };
-    setSections((current) => current.length === 1 && !current[0].sectionName.trim() && !current[0].adviserStaffId
-      ? [draft]
-      : [...current, draft]);
+    setSections((current) =>
+      current.length === 1 &&
+      !current[0].sectionName.trim() &&
+      !current[0].adviserStaffId
+        ? [draft]
+        : [...current, draft],
+    );
     setConfiguredAdvisers((current) => {
       const next = { ...current };
       delete next[section.id];
@@ -211,7 +327,9 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
 
   function removeSection(localId: string) {
     setSections((current) => {
-      const remaining = current.filter((section) => section.localId !== localId);
+      const remaining = current.filter(
+        (section) => section.localId !== localId,
+      );
       return remaining.length ? remaining : [createSectionDraft()];
     });
   }
@@ -219,10 +337,13 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
   function manageClass(section: OfficialSectionOption) {
     if (section.class_id == null) return;
     onClose();
-    const isArchived = (section.class_status ?? "active").toLocaleLowerCase() === "archived";
-    navigate(isArchived
-      ? `/admin/classes/${section.class_id}?tab=students`
-      : `/admin/classes/${section.class_id}?tab=students&action=manage-students`);
+    const isArchived =
+      (section.class_status ?? "active").toLocaleLowerCase() === "archived";
+    navigate(
+      isArchived
+        ? `/admin/classes/${section.class_id}?tab=students`
+        : `/admin/classes/${section.class_id}?tab=students&action=manage-students`,
+    );
   }
 
   function manageOfficialSections() {
@@ -236,13 +357,21 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
     setReturningToDetails(true);
     setManagerError("");
     try {
-      const classData = await getClassFormOptions(selectedYearId ? Number(selectedYearId) : undefined);
+      const classData = await getClassFormOptions(
+        selectedYearId ? Number(selectedYearId) : undefined,
+      );
       setOptions(classData);
-      loadedYearIdRef.current = String(classData.academic_year.academic_year_id);
+      loadedYearIdRef.current = String(
+        classData.academic_year.academic_year_id,
+      );
       setScreen("details");
       onScreenChange?.("details");
     } catch (error: unknown) {
-      setManagerError(error instanceof Error ? error.message : "Unable to refresh configured sections.");
+      setManagerError(
+        error instanceof Error
+          ? error.message
+          : "Unable to refresh configured sections.",
+      );
     } finally {
       setReturningToDetails(false);
     }
@@ -250,13 +379,14 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
 
   function validate() {
     const nextErrors: SetupErrors = { sectionRows: {}, configuredRows: {} };
-    if (!academicLevelId) nextErrors.academicLevel = "Select an academic level.";
+    if (!academicLevelId)
+      nextErrors.academicLevel = "Select an academic level.";
     if (!sections.length) nextErrors.sections = "Add at least one section.";
 
     const existingClassNames = new Set(
       existingGradeSections
         .filter((sec) => sec.has_class)
-        .map((sec) => sec.section_name.trim().toLowerCase())
+        .map((sec) => sec.section_name.trim().toLowerCase()),
     );
 
     const names = new Map<string, string>();
@@ -279,37 +409,54 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
       if (!section.adviserStaffId) {
         rowErrors.adviserStaffId = "Select an adviser.";
       } else if (advisers.has(section.adviserStaffId)) {
-        rowErrors.adviserStaffId = "Each adviser can only be assigned to one section per academic year.";
+        rowErrors.adviserStaffId =
+          "Each adviser can only be assigned to one section per academic year.";
       } else {
         advisers.add(section.adviserStaffId);
       }
 
-      if (Object.keys(rowErrors).length) nextErrors.sectionRows[section.localId] = rowErrors;
+      if (Object.keys(rowErrors).length)
+        nextErrors.sectionRows[section.localId] = rowErrors;
     });
 
     setErrors(nextErrors);
-    return !nextErrors.academicLevel && !nextErrors.sections && Object.keys(nextErrors.sectionRows).length === 0;
+    return (
+      !nextErrors.academicLevel &&
+      !nextErrors.sections &&
+      Object.keys(nextErrors.sectionRows).length === 0
+    );
   }
 
   function completeDetails(next: (setup: ManualClassSetup) => void) {
     if (!options || !validate()) return;
-    const level = options.academic_levels.find((item) => item.academic_level_id === Number(academicLevelId));
+    const level = options.academic_levels.find(
+      (item) => item.academic_level_id === Number(academicLevelId),
+    );
     if (!level) return;
     next({
       academicLevelId: level.academic_level_id,
       academicLevelName: level.level_name,
       academicYear: options.academic_year,
       sections: sections.map((section) => {
-        const officialSection = existingGradeSections.find((official) => !official.has_class && (
-          official.id === section.officialSectionId
-          || official.section_name.trim().toLocaleLowerCase() === section.sectionName.trim().toLocaleLowerCase()
-        ));
+        const officialSection = existingGradeSections.find(
+          (official) =>
+            !official.has_class &&
+            (official.id === section.officialSectionId ||
+              official.section_name.trim().toLocaleLowerCase() ===
+                section.sectionName.trim().toLocaleLowerCase()),
+        );
         return {
           ...section,
           officialSectionId: officialSection?.id ?? section.officialSectionId,
-          sectionName: officialSection?.section_name ?? section.sectionName.trim(),
-          pathway: officialSection?.pathway_code || section.pathway || "general",
-          adviserName: adviserName(options.eligible_advisers.find((adviser) => adviser.staff_id === section.adviserStaffId)),
+          sectionName:
+            officialSection?.section_name ?? section.sectionName.trim(),
+          pathway:
+            officialSection?.pathway_code || section.pathway || "general",
+          adviserName: adviserName(
+            options.eligible_advisers.find(
+              (adviser) => adviser.staff_id === section.adviserStaffId,
+            ),
+          ),
         };
       }),
     });
@@ -322,7 +469,9 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
   if (loadError || !options) {
     return (
       <StatePanel message={loadError || "Unable to load class options."}>
-        <Button variant={"outline"} onClick={retryLoading}>Retry</Button>
+        <Button variant={"outline"} onClick={retryLoading}>
+          Retry
+        </Button>
       </StatePanel>
     );
   }
@@ -347,8 +496,14 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           pathwayScopes={[]}
         />
         <Dialog.Footer className="-mx-4 -mb-4 w-[calc(100%+2rem)] justify-between border-t-2 px-4 py-4">
-          <Button variant="outline" onClick={onClose}>Close</Button>
-          <Button variant="default" disabled={returningToDetails} onClick={() => void returnToDetails()}>
+          <Button variant="outline" autoIcon={false} onClick={onClose}>
+            Close
+          </Button>
+          <Button
+            variant="default"
+            disabled={returningToDetails}
+            onClick={() => void returnToDetails()}
+          >
             {returningToDetails ? "Refreshing..." : "Back to New Class"}
           </Button>
         </Dialog.Footer>
@@ -361,18 +516,34 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
       <div className="grid grid-cols-2 gap-4 -mb-3">
         <div className="flex flex-col gap-1">
           <Field label="Academic Year" isRequired>
-            <Select value={selectedYearId} onValueChange={(value) => {
-              setSelectedYearId(value);
-              setOptions(null);
-              setLoading(true);
-              setSections([createSectionDraft()]);
-              setConfiguredAdvisers({});
-              setErrors({ sectionRows: {}, configuredRows: {} });
-            }}>
-              <Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger>
-              <Select.Content><Select.Group>
-                {activeFirst(options.academic_years ?? [options.academic_year]).map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}
-              </Select.Group></Select.Content>
+            <Select
+              value={selectedYearId}
+              onValueChange={(value) => {
+                setSelectedYearId(value);
+                setOptions(null);
+                setLoading(true);
+                setSections([createSectionDraft()]);
+                setConfiguredAdvisers({});
+                setErrors({ sectionRows: {}, configuredRows: {} });
+              }}
+            >
+              <Select.Trigger className="w-full">
+                <Select.Value placeholder="Select academic year" />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Group>
+                  {activeFirst(
+                    options.academic_years ?? [options.academic_year],
+                  ).map((year) => (
+                    <Select.Item
+                      key={year.academic_year_id}
+                      value={String(year.academic_year_id)}
+                    >
+                      {year.year_label}
+                    </Select.Item>
+                  ))}
+                </Select.Group>
+              </Select.Content>
             </Select>
           </Field>
           {noAdvisers && (
@@ -394,21 +565,33 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
                 id="new-class-academic-level"
                 className="w-full aria-[invalid=true]:border-destructive"
                 aria-invalid={!!errors.academicLevel}
-                aria-describedby={errors.academicLevel ? "new-class-academic-level-error" : undefined}
+                aria-describedby={
+                  errors.academicLevel
+                    ? "new-class-academic-level-error"
+                    : undefined
+                }
               >
                 <Select.Value placeholder="Select level" />
               </Select.Trigger>
               <Select.Content>
                 <Select.Group>
                   {options.academic_levels.map((level) => (
-                    <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
+                    <Select.Item
+                      key={level.academic_level_id}
+                      value={String(level.academic_level_id)}
+                    >
                       {level.level_name}
                     </Select.Item>
                   ))}
                 </Select.Group>
               </Select.Content>
             </Select>
-            {errors.academicLevel && <InlineError id="new-class-academic-level-error" message={errors.academicLevel} />}
+            {errors.academicLevel && (
+              <InlineError
+                id="new-class-academic-level-error"
+                message={errors.academicLevel}
+              />
+            )}
           </Field>
         </div>
       </div>
@@ -417,54 +600,119 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         <section className="grid gap-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <Text className="text-sm font-semibold">Available configured sections</Text>
-              <Text as="p" className="text-xs text-muted-foreground">Assign an adviser to include an official section in this class setup.</Text>
+              <Text className="text-sm font-semibold">
+                Available configured sections
+              </Text>
+              <Text as="p" className="text-xs text-muted-foreground">
+                Assign an adviser to include an official section in this class
+                setup.
+              </Text>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={manageOfficialSections}>
-              <Settings className="mr-2 size-4" />Manage official sections
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={manageOfficialSections}
+            >
+              <Settings className="mr-2 size-4" />
+              Manage official sections
             </Button>
           </div>
           <div className="grid gap-2">
             {availableConfiguredSections.map((section) => {
-              const adviserError = errors.configuredRows[section.id]?.adviserStaffId;
+              const adviserError =
+                errors.configuredRows[section.id]?.adviserStaffId;
               const selectedAdviser = configuredAdvisers[section.id] ?? "";
-              const assignedAdvisers = new Set(sections.map((draft) => draft.adviserStaffId).filter(Boolean));
+              const assignedAdvisers = new Set(
+                sections.map((draft) => draft.adviserStaffId).filter(Boolean),
+              );
               return (
-                <div key={section.id} className="grid gap-2 rounded border-2 border-border bg-card p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-start">
+                <div
+                  key={section.id}
+                  className="grid gap-2 rounded border-2 border-border bg-card p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-start"
+                >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Text className="font-semibold">{section.section_name}</Text>
-                      <Badge variant="outline" size="sm">Configured</Badge>
+                      <Text className="font-semibold">
+                        {section.section_name}
+                      </Text>
+                      <Badge variant="outline" size="sm">
+                        Configured
+                      </Badge>
                     </div>
-                    {section.pathway_name && <Text as="p" className="text-xs text-muted-foreground">{section.pathway_name}</Text>}
+                    {section.pathway_name && (
+                      <Text as="p" className="text-xs text-muted-foreground">
+                        {section.pathway_name}
+                      </Text>
+                    )}
                   </div>
                   <div>
                     <Select
                       value={selectedAdviser}
                       onValueChange={(value) => {
-                        setConfiguredAdvisers((current) => ({ ...current, [section.id]: value }));
+                        setConfiguredAdvisers((current) => ({
+                          ...current,
+                          [section.id]: value,
+                        }));
                         setErrors((current) => {
                           const configuredRows = { ...current.configuredRows };
                           delete configuredRows[section.id];
                           return { ...current, configuredRows };
                         });
                       }}
-                      onChange={(event) => setConfiguredAdvisers((current) => ({ ...current, [section.id]: event.target.value }))}
+                      onChange={(event) =>
+                        setConfiguredAdvisers((current) => ({
+                          ...current,
+                          [section.id]: event.target.value,
+                        }))
+                      }
                       disabled={noAdvisers}
                     >
-                      <Select.Trigger aria-label={`Adviser for ${section.section_name}`} aria-invalid={!!adviserError} aria-describedby={adviserError ? `configured-section-error-${section.id}` : undefined} className="w-full aria-[invalid=true]:border-destructive">
+                      <Select.Trigger
+                        aria-label={`Adviser for ${section.section_name}`}
+                        aria-invalid={!!adviserError}
+                        aria-describedby={
+                          adviserError
+                            ? `configured-section-error-${section.id}`
+                            : undefined
+                        }
+                        className="w-full aria-[invalid=true]:border-destructive"
+                      >
                         <Select.Value placeholder="Select adviser" />
                       </Select.Trigger>
-                      <Select.Content><Select.Group>
-                        {options.eligible_advisers
-                          .filter((adviser) => adviser.staff_id === selectedAdviser || !assignedAdvisers.has(adviser.staff_id))
-                          .map((adviser) => <Select.Item key={adviser.staff_id} value={adviser.staff_id}>{adviserName(adviser)}</Select.Item>)}
-                      </Select.Group></Select.Content>
+                      <Select.Content>
+                        <Select.Group>
+                          {options.eligible_advisers
+                            .filter(
+                              (adviser) =>
+                                adviser.staff_id === selectedAdviser ||
+                                !assignedAdvisers.has(adviser.staff_id),
+                            )
+                            .map((adviser) => (
+                              <Select.Item
+                                key={adviser.staff_id}
+                                value={adviser.staff_id}
+                              >
+                                {adviserName(adviser)}
+                              </Select.Item>
+                            ))}
+                        </Select.Group>
+                      </Select.Content>
                     </Select>
-                    {adviserError && <InlineError id={`configured-section-error-${section.id}`} message={adviserError} />}
+                    {adviserError && (
+                      <InlineError
+                        id={`configured-section-error-${section.id}`}
+                        message={adviserError}
+                      />
+                    )}
                   </div>
-                  <Button type="button" variant="outline" onClick={() => addConfiguredSection(section)}>
-                    <Plus className="mr-2 size-4" />Add section
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => addConfiguredSection(section)}
+                  >
+                    <Plus className="mr-2 size-4" />
+                    Add section
                   </Button>
                 </div>
               );
@@ -477,22 +725,41 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         <section className="grid gap-3">
           <div>
             <Text className="text-sm font-semibold">Existing classes</Text>
-            <Text as="p" className="text-xs text-muted-foreground">These official sections already have classes and cannot be added again.</Text>
+            <Text as="p" className="text-xs text-muted-foreground">
+              These official sections already have classes and cannot be added
+              again.
+            </Text>
           </div>
           <div className="grid gap-2">
             {existingClassSections.map((section) => (
-              <div key={section.id} className="flex flex-wrap items-center justify-between gap-3 rounded border-2 border-border bg-muted/20 p-3">
+              <div
+                key={section.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded! border-2 border-border bg-muted/20 p-3"
+              >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Text className="font-semibold">{section.section_name}</Text>
-                    <Badge variant="secondary" size="sm">In use</Badge>
+                    <Text className="font-semibold">
+                      {section.section_name}
+                    </Text>
+                    <Badge variant="secondary" size="sm">
+                      In use
+                    </Badge>
                   </div>
                   <Text as="p" className="text-xs text-muted-foreground">
-                    {section.adviser_name || "No adviser assigned"}{section.pathway_name ? ` · ${section.pathway_name}` : ""}
+                    {section.adviser_name || "No adviser assigned"}
+                    {section.pathway_name ? ` · ${section.pathway_name}` : ""}
                   </Text>
                 </div>
-                <Button type="button" variant="outline" size="sm" disabled={section.class_id == null} onClick={() => manageClass(section)}>
-                  <Users className="mr-2 size-4" />Manage Class
+                <Button
+                  className="shadow-none"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={section.class_id == null}
+                  onClick={() => manageClass(section)}
+                >
+                  <Users className="mr-2 size-4" />
+                  Manage Class
                 </Button>
               </div>
             ))}
@@ -505,32 +772,46 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         <div className="flex items-center justify-between">
           <div>
             <Text className="text-sm font-semibold">Class sections</Text>
-            <Text as="p" className="text-xs text-muted-foreground">Review configured sections or create a new section below.</Text>
+            <Text as="p" className="text-xs text-muted-foreground">
+              Review configured sections or create a new section below.
+            </Text>
           </div>
           {errors.sections && <InlineError message={errors.sections} />}
         </div>
 
-        <div className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 px-1 text-sm font-medium text-foreground -mb-2`}>
-          <span>Section Name <span className="text-red-500">*</span></span>
+        <div
+          className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 px-1 text-sm font-medium text-foreground -mb-2`}
+        >
+          <span>
+            Section Name <span className="text-red-500">*</span>
+          </span>
           {showPathwayColumn && <span>Strand / Pathway</span>}
-          <span>Adviser <span className="text-red-500">*</span></span>
+          <span>
+            Adviser <span className="text-red-500">*</span>
+          </span>
           <span />
         </div>
 
         {sections.map((section) => {
           const rowErrors = errors.sectionRows[section.localId];
-          const configuredSection = existingGradeSections.find((official) => !official.has_class && (
-            official.id === section.officialSectionId
-            || official.section_name.trim().toLocaleLowerCase() === section.sectionName.trim().toLocaleLowerCase()
-          ));
+          const configuredSection = existingGradeSections.find(
+            (official) =>
+              !official.has_class &&
+              (official.id === section.officialSectionId ||
+                official.section_name.trim().toLocaleLowerCase() ===
+                  section.sectionName.trim().toLocaleLowerCase()),
+          );
           const selectedByOtherRows = new Set(
             sections
               .filter((item) => item.localId !== section.localId)
               .map((item) => item.adviserStaffId)
-              .filter(Boolean)
+              .filter(Boolean),
           );
           return (
-            <div key={section.localId} className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} items-start gap-2`}>
+            <div
+              key={section.localId}
+              className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} items-start gap-2`}
+            >
               <div className="relative">
                 <Input
                   id={`new-class-section-${section.localId}`}
@@ -540,54 +821,103 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
                   readOnly={!!configuredSection}
                   className={`w-full h-10 aria-[invalid=true]:border-destructive ${configuredSection ? "bg-muted/30 pr-24 font-semibold" : ""}`}
                   aria-invalid={!!rowErrors?.sectionName}
-                  aria-describedby={rowErrors?.sectionName ? `new-class-section-error-${section.localId}` : undefined}
-                  onChange={(e) => updateSection(section.localId, { sectionName: e.target.value })}
+                  aria-describedby={
+                    rowErrors?.sectionName
+                      ? `new-class-section-error-${section.localId}`
+                      : undefined
+                  }
+                  onChange={(e) =>
+                    updateSection(section.localId, {
+                      sectionName: e.target.value,
+                    })
+                  }
                 />
-                {configuredSection && <Badge variant="outline" size="sm" className="pointer-events-none absolute right-2 top-2 select-none">Configured</Badge>}
+                {configuredSection && (
+                  <Badge
+                    variant="outline"
+                    size="sm"
+                    className="pointer-events-none absolute right-2 top-2 select-none"
+                  >
+                    Configured
+                  </Badge>
+                )}
                 {rowErrors?.sectionName && (
-                  <InlineError id={`new-class-section-error-${section.localId}`} message={rowErrors.sectionName} />
+                  <InlineError
+                    id={`new-class-section-error-${section.localId}`}
+                    message={rowErrors.sectionName}
+                  />
                 )}
               </div>
               {showPathwayColumn && (
                 <div>
                   {configuredSection ? (
-                    <Input disabled readOnly value={configuredSection.pathway_name || "General"} className="h-10 bg-muted/30 text-muted-foreground" />
-                  ) : <Select
-                    value={section.pathway || ""}
-                    onValueChange={(val) => updateSection(section.localId, { pathway: val })}
-                  >
-                    <Select.Trigger className="w-full">
-                      <Select.Value placeholder="Select pathway" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        {pathwayOptions.map((pw) => (
-                          <Select.Item key={pw.code} value={pw.code}>
-                            {pw.name}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>}
+                    <Input
+                      disabled
+                      readOnly
+                      value={configuredSection.pathway_name || "General"}
+                      className="h-10 bg-muted/30 text-muted-foreground"
+                    />
+                  ) : (
+                    <Select
+                      value={section.pathway || ""}
+                      onValueChange={(val) =>
+                        updateSection(section.localId, { pathway: val })
+                      }
+                    >
+                      <Select.Trigger className="w-full">
+                        <Select.Value placeholder="Select pathway" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          {pathwayOptions.map((pw) => (
+                            <Select.Item key={pw.code} value={pw.code}>
+                              {pw.name}
+                            </Select.Item>
+                          ))}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  )}
                 </div>
               )}
               <div>
                 <Select
                   disabled={noAdvisers}
                   value={section.adviserStaffId}
-                  onChange={(e) => updateSection(section.localId, { adviserStaffId: e.target.value })}
+                  onChange={(e) =>
+                    updateSection(section.localId, {
+                      adviserStaffId: e.target.value,
+                    })
+                  }
                 >
-                  <Select.Trigger className="w-full aria-[invalid=true]:border-destructive" aria-invalid={!!rowErrors?.adviserStaffId} aria-describedby={rowErrors?.adviserStaffId ? `new-class-adviser-error-${section.localId}` : undefined}>
+                  <Select.Trigger
+                    className="w-full aria-[invalid=true]:border-destructive"
+                    aria-invalid={!!rowErrors?.adviserStaffId}
+                    aria-describedby={
+                      rowErrors?.adviserStaffId
+                        ? `new-class-adviser-error-${section.localId}`
+                        : undefined
+                    }
+                  >
                     <Select.Value placeholder="Select adviser" />
                   </Select.Trigger>
                   <Select.Content>
                     <Select.Group>
                       {options.eligible_advisers
-                        .filter((adviser) => adviser.staff_id === section.adviserStaffId || !selectedByOtherRows.has(adviser.staff_id))
+                        .filter(
+                          (adviser) =>
+                            adviser.staff_id === section.adviserStaffId ||
+                            !selectedByOtherRows.has(adviser.staff_id),
+                        )
                         .map((adviser) => (
-                          <Select.Item key={adviser.staff_id} value={adviser.staff_id}>
+                          <Select.Item
+                            key={adviser.staff_id}
+                            value={adviser.staff_id}
+                          >
                             <span className="flex items-center gap-2">
-                              <span className="truncate">{adviserName(adviser)}</span>
+                              <span className="truncate">
+                                {adviserName(adviser)}
+                              </span>
                               <RoleBadge role="teacher" />
                             </span>
                           </Select.Item>
@@ -595,17 +925,28 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
                     </Select.Group>
                   </Select.Content>
                 </Select>
-                {rowErrors?.adviserStaffId && <InlineError id={`new-class-adviser-error-${section.localId}`} message={rowErrors.adviserStaffId} />}
+                {rowErrors?.adviserStaffId && (
+                  <InlineError
+                    id={`new-class-adviser-error-${section.localId}`}
+                    message={rowErrors.adviserStaffId}
+                  />
+                )}
               </div>
               <Tooltip>
-                <TooltipTrigger render={<span className="inline-flex"><Button
-                  aria-label="Remove section"
-                  variant={"outline"}
-                  size={"icon"}
-                  onClick={() => removeSection(section.localId)}
-                >
-                  <Trash2 className="size-4 text-destructive" />
-                </Button></span>} />
+                <TooltipTrigger
+                  render={
+                    <span className="inline-flex">
+                      <Button
+                        aria-label="Remove section"
+                        variant={"outline"}
+                        size={"icon"}
+                        onClick={() => removeSection(section.localId)}
+                      >
+                        <Trash2 className="size-4 text-destructive" />
+                      </Button>
+                    </span>
+                  }
+                />
                 <TooltipContent>Remove section</TooltipContent>
               </Tooltip>
             </div>
@@ -617,14 +958,19 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           disabled={!canAddSection}
           onClick={addSection}
         >
-          <Plus className="size-4 mr-2" />Add Another Section
+          <Plus className="size-4 mr-2" />
+          Add Another Section
         </Button>
       </section>
 
       <Dialog.Footer className="-mx-4 -mb-4 w-[calc(100%+2rem)] justify-between border-t-2 px-4 py-4">
-        <Button variant="outline" onClick={onClose}>Close</Button>
+        <Button variant="outline" autoIcon={false} onClick={onClose}>
+          Close
+        </Button>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={onBack}>Back</Button>
+          <Button variant="outline" onClick={onBack}>
+            Back
+          </Button>
           <Button
             variant="outline"
             disabled={noLevels || noAdvisers || !sections.length}
@@ -646,14 +992,28 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
 }
 
 function InlineError({ message, id }: { message: string; id?: string }) {
-  return <FormMessage id={id} className="mt-1 text-xs">{message}</FormMessage>;
+  return (
+    <FormMessage id={id} className="mt-1 text-xs">
+      {message}
+    </FormMessage>
+  );
 }
 
-function StatePanel({ message, detail, children }: { message: string; detail?: string; children?: React.ReactNode }) {
+function StatePanel({
+  message,
+  detail,
+  children,
+}: {
+  message: string;
+  detail?: string;
+  children?: React.ReactNode;
+}) {
   return (
     <div className="grid gap-3 rounded border-2 border-border bg-card p-5 text-sm">
       <p className="font-bold">{message}</p>
-      {detail && detail !== message && <p className="text-xs text-muted-foreground">{detail}</p>}
+      {detail && detail !== message && (
+        <p className="text-xs text-muted-foreground">{detail}</p>
+      )}
       {children && <div className="flex gap-2">{children}</div>}
     </div>
   );

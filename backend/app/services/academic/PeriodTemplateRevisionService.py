@@ -453,6 +453,13 @@ class PeriodTemplateRevisionService:
         if staff_ids:
             db.query(AcademicStaff).filter(AcademicStaff.staff_id.in_(staff_ids)).order_by(AcademicStaff.staff_id).with_for_update().all()
 
+        if immediate and all_current:
+            for old in all_current:
+                old.effective_to = effective_date - timedelta(days=1)
+                old.is_active_version = False
+                old.status = "archived"
+            db.flush()
+
         created: list[SubjectLoad] = []
         for old in all_current:
             replacement = changes_by_id.get(old.slot_id)
@@ -483,10 +490,8 @@ class PeriodTemplateRevisionService:
             )
             db.add(new_load)
             created.append(new_load)
-            old.effective_to = effective_date - timedelta(days=1)
-            if immediate:
-                old.is_active_version = False
-                old.status = "archived"
+            if not immediate:
+                old.effective_to = effective_date - timedelta(days=1)
 
         db.flush()
         if immediate:
@@ -527,18 +532,33 @@ class PeriodTemplateRevisionService:
                 SubjectLoad.status == "scheduled",
             ).order_by(SubjectLoad.class_id, SubjectLoad.subject_load_id).with_for_update().all()
             for new_load in scheduled:
-                current = db.query(SubjectLoad).filter(
-                    SubjectLoad.class_id == new_load.class_id,
-                    SubjectLoad.subject_id == new_load.subject_id,
-                    SubjectLoad.academic_period_id == new_load.academic_period_id,
-                    SubjectLoad.is_active_version.is_(True),
-                    SubjectLoad.status.in_(("published", "active")),
-                ).with_for_update().first()
+                current = None
+                if new_load.continued_from_load_id is not None:
+                    current = db.query(SubjectLoad).filter(
+                        SubjectLoad.subject_load_id == new_load.continued_from_load_id,
+                        SubjectLoad.is_active_version.is_(True),
+                        SubjectLoad.status.in_(("published", "active")),
+                    ).with_for_update().first()
+                if current is None and new_load.logical_load_id:
+                    current = db.query(SubjectLoad).filter(
+                        SubjectLoad.logical_load_id == new_load.logical_load_id,
+                        SubjectLoad.is_active_version.is_(True),
+                        SubjectLoad.status.in_(("published", "active")),
+                    ).with_for_update().first()
+                if current is None:
+                    current = db.query(SubjectLoad).filter(
+                        SubjectLoad.class_id == new_load.class_id,
+                        SubjectLoad.subject_id == new_load.subject_id,
+                        SubjectLoad.academic_period_id == new_load.academic_period_id,
+                        SubjectLoad.is_active_version.is_(True),
+                        SubjectLoad.status.in_(("published", "active")),
+                    ).with_for_update().first()
                 if current:
                     current.is_active_version = False
                     current.status = "archived"
                     current.effective_to = revision.effective_from - timedelta(days=1)
                     new_load.continued_from_load_id = current.subject_load_id
+                    db.flush()
                 new_load.status = "published"
                 new_load.is_active_version = True
                 new_load.published_at = datetime.now(timezone.utc)

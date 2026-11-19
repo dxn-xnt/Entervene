@@ -649,7 +649,7 @@ export default function ImportClassWizard({
       )}
 
       <Dialog.Footer className="-mx-4 -mb-4 w-[calc(100%+2rem)] justify-between border-t-2 px-4 py-4">
-        <Button variant="outline" onClick={onClose}>Close</Button>
+        <Button variant="outline" autoIcon={false} onClick={onClose}>Close</Button>
         <div className="flex flex-wrap gap-2">
           {onBack && <Button variant={"outline"} onClick={onBack}>Back</Button>}
           {!isImportBlocked && (

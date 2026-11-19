@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
-import { Progress } from "@/components/retroui/Progress";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useToast } from "@/components/retroui/Toast";
 import { QuizTextAnswerInput } from "@/components/quiz/student-quiz-answer";
 import {
@@ -12,12 +13,10 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
-  HelpCircle,
   Lightbulb,
   Loader2,
   RotateCcw,
   Save,
-  Send,
   XCircle,
 } from "lucide-react";
 import {
@@ -77,7 +76,7 @@ export default function StudentPracticeAssessmentModal({
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [, setHasUnsavedChanges] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Feedback State
@@ -224,7 +223,7 @@ export default function StudentPracticeAssessmentModal({
 
   // Safe closing handler
   const handleCloseRequest = () => {
-    if (viewMode === "taking" && hasUnsavedChanges) {
+    if (viewMode === "taking" && activeAttempt) {
       setShowCloseConfirm(true);
     } else {
       setShowCloseConfirm(false);
@@ -345,51 +344,75 @@ export default function StudentPracticeAssessmentModal({
   }).length;
   const unansweredCount = Math.max(0, questions.length - answeredCount);
 
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleCloseRequest()}>
-      <Dialog.Content
-        size="screen"
-        className="w-[calc(100vw-1.5rem)] sm:w-[calc(100vw-2.5rem)] max-w-[1700px] h-[calc(100dvh-1.5rem)] max-h-[calc(100dvh-2rem)] flex flex-col p-0 overflow-hidden border-2 border-black bg-background shadow-[6px_6px_0_#000]"
-      >
-        {/* Modal Header */}
-        <Dialog.Header className="px-5 py-4 border-b-2 border-border bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <Dialog.Title className="text-xl font-black truncate">
-                  {metadata?.title || "Practice Assessment"}
-                </Dialog.Title>
-                <Badge variant="surface" size="sm">
-                  Ungraded Practice
-                </Badge>
-              </div>
-              <Dialog.Description className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                {viewMode === "taking"
-                  ? `Attempt #${activeAttempt?.attempt_number || 1} • Questions do not affect your grade`
-                  : `Results Review • Required to Pass: ${feedback?.passing_percentage ?? metadata?.passing_percentage ?? 75}%`}
-              </Dialog.Description>
-            </div>
+  if (!isOpen) return null;
 
-            <div className="flex items-center gap-2">
-              {metadata?.gatekeeper_policy === "REQUIRE_PASS" ? (
-                <Badge variant="solid" size="sm">
-                  Require Passing ({metadata.passing_percentage}%)
-                </Badge>
-              ) : metadata?.gatekeeper_policy === "REQUIRE_ATTEMPT" ? (
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[99999] flex flex-col bg-background">
+        <header className="shrink-0 border-b-2 border-black bg-card px-4 py-3 sm:px-6">
+          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+            <Button
+              type="button"
+              size="headerIcon"
+              variant="outline"
+              onClick={handleCloseRequest}
+              className="rounded-full"
+              aria-label="Exit practice assessment"
+            >
+              <ArrowLeft className="size-5" />
+            </Button>
+
+            <div className="min-w-0 text-center">
+              <h1 className="truncate text-xl font-black">
+                {metadata?.title || "Practice Assessment"}
+              </h1>
+              <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+                <Badge variant="surface" size="sm">Ungraded Practice</Badge>
                 <Badge variant="outline" size="sm">
-                  Require 1 Attempt
+                  Attempt #{viewMode === "taking" ? activeAttempt?.attempt_number || 1 : feedback?.attempt_number || 1}
                 </Badge>
-              ) : metadata?.gatekeeper_policy === "OPTIONAL" ? (
-                <Badge variant="surface" size="sm">
-                  Optional Practice
-                </Badge>
-              ) : null}
+                {metadata?.gatekeeper_policy === "REQUIRE_PASS" ? (
+                  <Badge variant="solid" size="sm">
+                    Require Passing ({metadata.passing_percentage}%)
+                  </Badge>
+                ) : metadata?.gatekeeper_policy === "REQUIRE_ATTEMPT" ? (
+                  <Badge variant="outline" size="sm">
+                    Require 1 Attempt
+                  </Badge>
+                ) : metadata?.gatekeeper_policy === "OPTIONAL" ? (
+                  <Badge variant="surface" size="sm">
+                    Optional Practice
+                  </Badge>
+                ) : null}
+              </div>
             </div>
-          </div>
-        </Dialog.Header>
 
-        {/* Modal Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+            {viewMode === "taking" && activeAttempt && currentQuestion ? (
+              <Button
+                type="button"
+                size="header"
+                variant="default"
+                autoIcon={false}
+                disabled={isSubmitting || isSavingDraft}
+                onClick={() => setShowConfirmSubmit(true)}
+              >
+                Finish Practice
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="header"
+                variant="default"
+                onClick={handleTryAgain}
+              >
+                <RotateCcw className="size-4" /> Try Again
+              </Button>
+            )}
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="mx-auto max-w-7xl space-y-4">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Loader2 className="size-8 animate-spin text-primary" />
@@ -406,75 +429,11 @@ export default function StudentPracticeAssessmentModal({
             /* VIEW MODE: TAKING ACTIVE ATTEMPT                            */
             /* ============================================================ */
             <div className="space-y-5">
-              {/* Unsaved Changes Confirmation Prompt */}
-              {showCloseConfirm && (
-                <Alert status="warning" className="border-2 border-amber-600 bg-amber-50 p-4 space-y-3 shadow-xs">
-                  <div className="flex items-start gap-2">
-                    <HelpCircle className="size-5 shrink-0 mt-0.5 text-amber-800" />
-                    <div className="space-y-1">
-                      <Alert.Title className="font-bold text-sm text-amber-950">
-                        Unsaved Practice Answers
-                      </Alert.Title>
-                      <Alert.Description className="text-xs text-amber-900 leading-relaxed">
-                        You have answers that have not been saved yet. Would you like to save your draft to resume later, discard your changes, or continue answering?
-                      </Alert.Description>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowCloseConfirm(false)}
-                    >
-                      Continue Answering
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive border-destructive hover:bg-destructive/10"
-                      onClick={() => {
-                        setHasUnsavedChanges(false);
-                        setShowCloseConfirm(false);
-                        onClose();
-                      }}
-                    >
-                      Discard & Exit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      disabled={isSavingDraft}
-                      onClick={handleSaveDraftAndExit}
-                    >
-                      {isSavingDraft ? (
-                        <>
-                          <Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="size-3.5 mr-1.5" /> Save Draft & Exit
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </Alert>
-              )}
-
-              {/* Top Progress & Question Navigator */}
+              {/* Question Navigator */}
               <div className="space-y-2.5 bg-muted/30 p-3 sm:p-4 rounded border-2 border-border">
-                <div className="flex flex-wrap items-center justify-between text-xs font-semibold text-muted-foreground">
-                  <span>
-                    Question {currentQuestionIndex + 1} of {questions.length}
-                  </span>
-                  <span>
-                    {answeredCount} of {questions.length} answered
-                    {unansweredCount > 0 && ` (${unansweredCount} remaining)`}
-                  </span>
+                <div className="text-xs font-semibold text-muted-foreground">
+                  Question {currentQuestionIndex + 1} of {questions.length}
                 </div>
-                <Progress
-                  value={questions.length > 0 ? (answeredCount / questions.length) * 100 : 0}
-                  className="h-2"
-                />
 
                 {/* Question Bubbles Navigator */}
                 <div className="flex flex-wrap items-center justify-center gap-2 pt-1 max-h-28 overflow-y-auto p-1">
@@ -506,6 +465,30 @@ export default function StudentPracticeAssessmentModal({
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Previous and Next Question Controls */}
+              <div className="flex items-center justify-between gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={currentQuestionIndex === 0 || isSubmitting}
+                  onClick={() => setCurrentQuestionIndex((prev) => Math.max(0, prev - 1))}
+                  className="size-11 rounded-full p-0"
+                  aria-label="Previous question"
+                >
+                  <ArrowLeft className="size-5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={currentQuestionIndex === questions.length - 1 || isSubmitting}
+                  onClick={() => setCurrentQuestionIndex((prev) => Math.min(questions.length - 1, prev + 1))}
+                  className="size-11 rounded-full p-0"
+                  aria-label="Next question"
+                >
+                  <ArrowRight className="size-5" />
+                </Button>
               </div>
 
               {/* Active Question Display */}
@@ -596,87 +579,23 @@ export default function StudentPracticeAssessmentModal({
                 </div>
               )}
 
-              {/* Confirm Submission Dialog/Notice */}
-              {showConfirmSubmit && (
-                <Alert
-                  status={unansweredCount > 0 ? "warning" : "info"}
-                  className="border-2 border-border bg-card p-4 space-y-3"
-                >
-                  <div className="flex items-start gap-2">
-                    <HelpCircle className="size-5 shrink-0 mt-0.5 text-primary" />
-                    <div>
-                      <Alert.Title className="font-bold text-sm">
-                        {unansweredCount > 0
-                          ? `Submit with ${unansweredCount} Unanswered Question(s)?`
-                          : "Ready to Submit Practice Assessment?"}
-                      </Alert.Title>
-                      <Alert.Description className="text-xs text-muted-foreground mt-1">
-                        {unansweredCount > 0
-                          ? `You have answered ${answeredCount} of ${questions.length} questions. Unanswered questions will receive 0 points. You will see full feedback and correct answers immediately after submitting.`
-                          : "All questions answered. Once submitted, you will immediately see your score, complete feedback, and full answer explanations."}
-                      </Alert.Description>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2 border-t border-border">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isSubmitting}
-                      onClick={() => setShowConfirmSubmit(false)}
-                    >
-                      Back to Questions
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      disabled={isSubmitting}
-                      onClick={handleSubmit}
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="size-3.5 mr-1.5 animate-spin" /> Submitting...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="size-3.5 mr-1.5" /> Confirm & Submit
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </Alert>
-              )}
             </div>
           ) : viewMode === "feedback" && feedback ? (
             /* ============================================================ */
             /* VIEW MODE: COMPREHENSIVE SUBMITTED FEEDBACK & DIAGNOSTICS   */
             /* ============================================================ */
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Top Score & Result Banner */}
               <Card
-                className={`border-2 p-5 space-y-3 ${feedback.is_passed
-                    ? "border-success/40 bg-success/10"
-                    : "border-destructive/40 bg-destructive/10"
-                  }`}
+                className="block w-full border-2 border-border bg-card p-5 space-y-4"
               >
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    {feedback.is_passed ? (
-                      <CheckCircle2 className="size-8 text-success shrink-0" />
-                    ) : (
-                      <XCircle className="size-8 text-destructive shrink-0" />
-                    )}
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-2xl font-black">
                           {feedback.total_score} / {feedback.max_score} pts
                         </h2>
-                        <Badge
-                          variant={feedback.is_passed ? "success" : "destructive"}
-                          size="md"
-                        >
-                          {feedback.is_passed ? "PASSED" : "BELOW PASSING"}
-                        </Badge>
                       </div>
                       <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
                         Score: <strong>{Number(feedback.score_percentage).toFixed(1)}%</strong> • Required Passing:{" "}
@@ -685,58 +604,64 @@ export default function StudentPracticeAssessmentModal({
                       </p>
                     </div>
                   </div>
+                  <Badge
+                    variant={feedback.is_passed ? "success" : "destructive"}
+                    size="sm"
+                    className="shrink-0"
+                  >
+                    {feedback.is_passed ? "PASSED" : "BELOW PASSING"}
+                  </Badge>
 
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={handleTryAgain}
-                    >
-                      <RotateCcw className="size-3.5 mr-1.5" /> Try Again
-                    </Button>
-                  </div>
                 </div>
 
                 {/* Eligibility Explanatory Box */}
-                <div className="text-xs sm:text-sm rounded border border-border bg-card p-3">
-                  {feedback.eligible_for_remediation ? (
-                    <p className="text-success font-semibold flex items-center gap-1.5">
-                      <CheckCircle2 className="size-4 shrink-0" />
-                      Remediation activity requirement satisfied! You are now eligible to open the curated remediation activity.
-                    </p>
-                  ) : (
-                    <p className="text-destructive font-semibold flex items-center gap-1.5">
-                      <AlertTriangle className="size-4 shrink-0" />
-                      A score of at least {feedback.passing_percentage}% is required before the curated remediation activity unlocks. Review your mistakes below and click "Try Again" to retake.
-                    </p>
-                  )}
-                </div>
+                <Alert status={feedback.eligible_for_remediation ? "success" : "warning"} className="p-3">
+                  <div className="flex items-start gap-2">
+                    {feedback.eligible_for_remediation ? (
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    )}
+                    <div>
+                      <Alert.Title className="text-sm font-bold">
+                        {feedback.eligible_for_remediation
+                          ? "Remediation activity unlocked"
+                          : "Passing score still required"}
+                      </Alert.Title>
+                      <Alert.Description className="mt-0.5 text-xs sm:text-sm text-current/80">
+                        {feedback.eligible_for_remediation
+                          ? "You have satisfied the practice requirement and can now open the curated remediation activity."
+                          : `Earn at least ${feedback.passing_percentage}% to unlock the curated remediation activity. Review your answers below, then try again.`}
+                      </Alert.Description>
+                    </div>
+                  </div>
+                </Alert>
               </Card>
 
               {/* Historical Attempt Selector */}
               {allAttempts.filter((a) => a.status === "SUBMITTED").length > 1 && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-muted-foreground">
+                <div className="space-y-2">
+                  <p className="text-sm font-bold text-foreground">
                     Review Previous Attempt Feedback:
-                  </label>
+                  </p>
                   <div className="flex flex-wrap items-center gap-2">
                     {allAttempts
                       .filter((a) => a.status === "SUBMITTED")
                       .map((att) => {
                         const isSelected = (selectedAttemptId ?? feedback.attempt_id) === att.attempt_id;
                         return (
-                          <button
+                          <Button
+                            autoIcon={false}
                             key={att.attempt_id}
                             type="button"
                             onClick={() => handleSelectHistoricalAttempt(att.attempt_id)}
-                            className={`px-3 py-1.5 rounded font-mono text-xs font-bold border-2 transition-all ${isSelected
-                                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                                : "border-border bg-card text-foreground hover:bg-muted/40"
-                              }`}
+                            size="sm"
+                            variant={isSelected ? "default" : "outline"}
+                            className="font-mono text-xs font-bold shadow-none hover:shadow-none"
                           >
                             Attempt #{att.attempt_number} ({Number(att.score_percentage).toFixed(0)}%)
                             {att.is_passed ? " ✓" : ""}
-                          </button>
+                          </Button>
                         );
                       })}
                   </div>
@@ -745,7 +670,7 @@ export default function StudentPracticeAssessmentModal({
 
               {/* Diagnostic Question List with Mandatory Complete Correct Answers */}
               <div className="space-y-4">
-                <div className="flex items-center justify-between border-b-2 border-border pb-2">
+                <div className="flex items-center justify-between">
                   <h3 className="text-base font-bold">Diagnostic Review & Answers</h3>
                   <span className="text-xs text-muted-foreground">
                     {feedback.items.length} Questions Reviewed
@@ -764,8 +689,7 @@ export default function StudentPracticeAssessmentModal({
                     return (
                       <Card
                         key={item.practice_question_id ?? idx}
-                        className={`border-2 p-4 space-y-3.5 ${isCorrect ? "border-success/30 bg-card" : "border-destructive/30 bg-card"
-                          }`}
+                        className="block w-full border-2 border-border bg-card p-4 space-y-3.5"
                       >
                         {/* Question Header */}
                         <div className="flex items-center justify-between gap-2">
@@ -891,86 +815,107 @@ export default function StudentPracticeAssessmentModal({
               </div>
             </div>
           ) : null}
-        </div>
+          </div>
+        </main>
 
-        {/* Modal Footer */}
-        <Dialog.Footer className="px-5 py-3 border-t-2 border-border bg-card flex flex-wrap items-center justify-between gap-2">
-          {viewMode === "taking" && activeAttempt && currentQuestion ? (
-            <>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={currentQuestionIndex === 0 || isSubmitting}
-                  onClick={() => setCurrentQuestionIndex((prev) => Math.max(0, prev - 1))}
-                >
-                  <ArrowLeft className="size-3.5 mr-1" /> Previous
-                </Button>
-                {currentQuestionIndex < questions.length - 1 && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={isSubmitting}
-                    onClick={() => setCurrentQuestionIndex((prev) => Math.min(questions.length - 1, prev + 1))}
-                  >
-                    Next <ArrowRight className="size-3.5 ml-1" />
-                  </Button>
-                )}
-              </div>
+      </div>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSaveDraftAndExit}
-                  disabled={isSubmitting || isSavingDraft}
-                >
-                  {isSavingDraft ? (
-                    <>
-                      <Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="size-3.5 mr-1.5" /> Save Draft & Exit
-                    </>
-                  )}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="default"
-                  disabled={isSubmitting || isSavingDraft}
-                  onClick={() => setShowConfirmSubmit(true)}
-                >
-                  <Send className="size-3.5 mr-1.5" /> Submit Practice
-                </Button>
-              </div>
-            </>
-          ) : (
-            /* Mode: Feedback Footer */
-            <>
-              <div className="text-xs text-muted-foreground font-medium">
-                Attempts are independent and your best passing qualification is preserved.
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={onClose}
-                >
-                  Close
-                </Button>
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={handleTryAgain}
-                >
-                  <RotateCcw className="size-3.5 mr-1.5" /> Try Again
-                </Button>
-              </div>
-            </>
-          )}
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
+      <Dialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
+        <Dialog.Content
+          size="md"
+          style={{ zIndex: 100001 }}
+          overlay={{
+            forceRender: true,
+            style: {
+              zIndex: 100000,
+              backgroundColor: "rgb(0 0 0 / 0.6)",
+              pointerEvents: "auto",
+            },
+          }}
+        >
+          <Dialog.Header position="static">
+            <Dialog.Title className="font-sans text-xl font-bold">
+              Leave Practice Assessment?
+            </Dialog.Title>
+          </Dialog.Header>
+          <div className="space-y-3 px-5 pb-2 pt-5">
+            <div className="space-y-1">
+              <p className="text-base font-bold">Save your practice progress?</p>
+              <p className="text-sm text-muted-foreground">
+                Save your answers to resume later, or discard them and leave this attempt.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                autoIcon={false}
+                onClick={() => setShowCloseConfirm(false)}
+                disabled={isSavingDraft}
+              >
+                Continue Practice
+              </Button>
+            </div>
+          </div>
+          <Dialog.Footer position="static" className="flex-wrap justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="text-destructive"
+              disabled={isSavingDraft}
+              onClick={() => {
+                setHasUnsavedChanges(false);
+                setShowCloseConfirm(false);
+                onClose();
+              }}
+            >
+              Discard & Exit
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              disabled={isSavingDraft}
+              onClick={handleSaveDraftAndExit}
+            >
+              {isSavingDraft ? (
+                <><Loader2 className="size-4 mr-1.5 animate-spin" /> Saving...</>
+              ) : (
+                <><Save className="size-4 mr-1.5" /> Save Draft & Exit</>
+              )}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+
+      <ConfirmDialog
+        open={showConfirmSubmit}
+        onOpenChange={setShowConfirmSubmit}
+        style={{ zIndex: 100001 }}
+        overlay={{
+          style: {
+            zIndex: 100000,
+            backgroundColor: "rgb(0 0 0 / 0.6)",
+            pointerEvents: "auto",
+          },
+        }}
+        title="Submit Practice Assessment?"
+        confirmationTitle={
+          unansweredCount > 0
+            ? `${unansweredCount} unanswered question${unansweredCount === 1 ? "" : "s"}`
+            : "All questions answered"
+        }
+        description={
+          unansweredCount > 0
+            ? `You have answered ${answeredCount} of ${questions.length} questions. Unanswered questions will receive 0 points. You cannot change your answers after submitting.`
+            : "Your answers will be submitted for scoring. You cannot change them after submitting."
+        }
+        confirmLabel={isSubmitting ? "Submitting..." : "Confirm & Submit"}
+        cancelLabel="Back to Questions"
+        confirmVariant="default"
+        isLoading={isSubmitting}
+        onConfirm={handleSubmit}
+      />
+    </>,
+    document.body,
   );
 }

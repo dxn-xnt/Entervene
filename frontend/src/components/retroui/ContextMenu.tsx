@@ -23,23 +23,21 @@ function ContextMenuTrigger({
 function ContextMenuGroup({
   ...props
 }: React.ComponentProps<typeof BaseContextMenu.Group>) {
-  return (
-    <BaseContextMenu.Group data-slot="context-menu-group" {...props} />
-  );
+  return <BaseContextMenu.Group data-slot="context-menu-group" {...props} />;
 }
 
 function ContextMenuPortal({
   ...props
 }: React.ComponentProps<typeof BaseContextMenu.Portal>) {
-  return (
-    <BaseContextMenu.Portal data-slot="context-menu-portal" {...props} />
-  );
+  return <BaseContextMenu.Portal data-slot="context-menu-portal" {...props} />;
 }
 
 function ContextMenuSub({
   ...props
 }: React.ComponentProps<typeof BaseContextMenu.SubmenuTrigger>) {
-  return <BaseContextMenu.SubmenuTrigger data-slot="context-menu-sub" {...props} />;
+  return (
+    <BaseContextMenu.SubmenuTrigger data-slot="context-menu-sub" {...props} />
+  );
 }
 
 function ContextMenuRadioGroup({
@@ -250,4 +248,10 @@ const ContextMenuComponent = Object.assign(ContextMenu, {
   RadioGroup: ContextMenuRadioGroup,
 });
 
-export { ContextMenuComponent as ContextMenu, ContextMenuSeparator, ContextMenuTrigger, ContextMenuContent, ContextMenuItem };
+export {
+  ContextMenuComponent as ContextMenu,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+};

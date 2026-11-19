@@ -962,7 +962,7 @@ def test_mixed_save_is_atomic_and_other_section_stays_editable(test_setup):
     assert (locked_baseline.start_time, locked_baseline.section_revision) == ("08:00", 1)
 
 
-def test_auto_generation_preserves_locked_baseline_and_unauthorized_unlock(test_setup):
+def test_auto_schedule_endpoint_removed_and_unauthorized_unlock_denied(test_setup):
     request, load, headers = _publish_locked_fixture(test_setup)
     teacher_token = create_access_token(str(test_setup["staff_a"].user_id), "teacher")
     denied = test_setup["client"].post(
@@ -971,13 +971,18 @@ def test_auto_generation_preserves_locked_baseline_and_unauthorized_unlock(test_
         headers={"Authorization": f"Bearer {teacher_token}"},
     )
     assert denied.status_code == 403
-    scheduled = test_setup["client"].post(
+    removed = test_setup["client"].post(
         "/api/v1/subject-loads/auto-schedule",
         json={"academic_period_id": request["academic_period_id"], "loads": [{**load, "start_time": "10:00", "end_time": "11:00"}]},
         headers=headers,
     )
-    assert scheduled.status_code == 200, scheduled.text
-    assert scheduled.json()["scheduled_loads"][0]["start_time"] == "08:00"
+    assert removed.status_code == 404
+    baseline = test_setup["db"].query(SubjectLoad).filter(
+        SubjectLoad.class_id == load["class_id"],
+        SubjectLoad.is_active_version.is_(True),
+    ).one()
+    assert baseline.start_time == "08:00"
+    assert baseline.end_time == "09:00"
     assert test_setup["db"].query(SubjectLoad).filter(SubjectLoad.status == "draft").count() == 0
 
 
@@ -1888,3 +1893,201 @@ def test_subject_load_publish_does_not_swallow_offering_lookup_failure(test_setu
         )
 
     assert original_query(SubjectLoad).count() == 0
+
+
+def test_studio_data_leaves_fresh_sections_unscheduled_and_preserves_existing_schedules(test_setup):
+    db = test_setup["db"]
+    client = test_setup["client"]
+    headers = {"Authorization": f"Bearer {test_setup['token']}"}
+    period = test_setup["period"]
+    published_cls = test_setup["class"]
+    math_sub = test_setup["math_sub"]
+    staff_a = test_setup["staff_a"]
+    staff_b = test_setup["staff_b"]
+
+    draft_cls = Class(
+        section_name="Draft-Section",
+        academic_level_id=test_setup["level"].academic_level_id,
+        academic_year_id=period.academic_year_id,
+        class_status="active",
+        period_template_group="JHS_45MIN",
+    )
+    fresh_cls = Class(
+        section_name="Fresh-Section",
+        academic_level_id=test_setup["level"].academic_level_id,
+        academic_year_id=period.academic_year_id,
+        class_status="active",
+        period_template_group="JHS_45MIN",
+    )
+    db.add_all([draft_cls, fresh_cls])
+    db.commit()
+
+    # Seed one locked published section and one existing scheduled draft section; leave fresh_cls empty.
+    pub_res = client.post(
+        "/api/v1/subject-loads/batch-save",
+        json={
+            "academic_period_id": period.academic_period_id,
+            "academic_level_id": test_setup["level"].academic_level_id,
+            "action": "publish",
+            "publish_scope": "section",
+            "target_class_id": published_cls.class_id,
+            "loads": [{
+                "class_id": published_cls.class_id,
+                "subject_id": math_sub.subject_id,
+                "staff_id": staff_a.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "start_time": "13:00",
+                "end_time": "14:00",
+                "days_of_week": ["MON", "TUE", "WED", "THU", "FRI"],
+            }],
+        },
+        headers=headers,
+    )
+    assert pub_res.status_code == 200, pub_res.text
+
+    draft_res = client.post(
+        "/api/v1/subject-loads/batch-save",
+        json={
+            "academic_period_id": period.academic_period_id,
+            "academic_level_id": test_setup["level"].academic_level_id,
+            "action": "draft",
+            "loads": [{
+                "class_id": draft_cls.class_id,
+                "subject_id": math_sub.subject_id,
+                "staff_id": staff_b.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "start_time": "14:00",
+                "end_time": "15:00",
+                "days_of_week": ["MON", "WED", "FRI"],
+            }],
+        },
+        headers=headers,
+    )
+    assert draft_res.status_code == 200, draft_res.text
+
+    studio_res = client.get(
+        f"/api/v1/subject-loads/studio-data?academic_period_id={period.academic_period_id}",
+        headers=headers,
+    )
+    assert studio_res.status_code == 200, studio_res.text
+    payload = studio_res.json()
+
+    # Fresh section must have zero auto-created DB rows or studio existing_loads.
+    assert not any(row["class_id"] == fresh_cls.class_id for row in payload["existing_loads"])
+    assert db.query(SubjectLoad).filter(SubjectLoad.class_id == fresh_cls.class_id).count() == 0
+
+    # Existing published and draft schedules must remain completely untouched.
+    pub_row = next(row for row in payload["existing_loads"] if row["class_id"] == published_cls.class_id)
+    assert (pub_row["start_time"], pub_row["end_time"], pub_row["status"], pub_row["is_locked"]) == (
+        "13:00", "14:00", "published", True
+    )
+    draft_row = next(row for row in payload["existing_loads"] if row["class_id"] == draft_cls.class_id)
+    assert (draft_row["start_time"], draft_row["end_time"], draft_row["days_of_week"], draft_row["status"]) == (
+        "14:00", "15:00", ["MON", "WED", "FRI"], "draft"
+    )
+
+
+def test_unscheduled_draft_save_teacher_assignment_and_manual_placement_publish(test_setup):
+    db = test_setup["db"]
+    client = test_setup["client"]
+    headers = {"Authorization": f"Bearer {test_setup['token']}"}
+    period = test_setup["period"]
+    cls = test_setup["class"]
+    math_sub = test_setup["math_sub"]
+    staff_a = test_setup["staff_a"]
+
+    # 1. Saving an unscheduled draft with an assigned teacher succeeds.
+    draft_res = client.post(
+        "/api/v1/subject-loads/batch-save",
+        json={
+            "academic_period_id": period.academic_period_id,
+            "academic_level_id": test_setup["level"].academic_level_id,
+            "action": "draft",
+            "loads": [{
+                "class_id": cls.class_id,
+                "subject_id": math_sub.subject_id,
+                "staff_id": staff_a.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "slot_id": None,
+                "start_time": None,
+                "end_time": None,
+                "days_of_week": [],
+                "status": "draft",
+            }],
+        },
+        headers=headers,
+    )
+    assert draft_res.status_code == 200, draft_res.text
+    saved_draft = db.query(SubjectLoad).filter(SubjectLoad.class_id == cls.class_id).one()
+    assert saved_draft.start_time is None
+    assert saved_draft.end_time is None
+    assert saved_draft.days_of_week == []
+    assert saved_draft.staff_id == staff_a.staff_id
+
+    # 2. Publishing while still unscheduled is blocked.
+    blocked_pub = client.post(
+        "/api/v1/subject-loads/batch-save",
+        json={
+            "academic_period_id": period.academic_period_id,
+            "academic_level_id": test_setup["level"].academic_level_id,
+            "action": "publish",
+            "publish_scope": "section",
+            "target_class_id": cls.class_id,
+            "loads": [{
+                "subject_load_id": saved_draft.subject_load_id,
+                "class_id": cls.class_id,
+                "subject_id": math_sub.subject_id,
+                "staff_id": staff_a.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "slot_id": None,
+                "start_time": None,
+                "end_time": None,
+                "days_of_week": [],
+                "status": "draft",
+            }],
+        },
+        headers=headers,
+    )
+    assert blocked_pub.status_code == 400
+    assert "valid time and at least one meeting day" in blocked_pub.text
+
+    # 3. After manual placement on a matching 60-minute JHS slot, publishing succeeds.
+    from app.api.v1.routes.SubjectLoads import ensure_default_period_templates
+    ensure_default_period_templates(db)
+    enhanced_slot = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN",
+        PeriodTemplateSlot.slot_name == "Enhanced Period 1",
+    ).one()
+
+    pub_res = client.post(
+        "/api/v1/subject-loads/batch-save",
+        json={
+            "academic_period_id": period.academic_period_id,
+            "academic_level_id": test_setup["level"].academic_level_id,
+            "action": "publish",
+            "publish_scope": "section",
+            "target_class_id": cls.class_id,
+            "loads": [{
+                "subject_load_id": saved_draft.subject_load_id,
+                "class_id": cls.class_id,
+                "subject_id": math_sub.subject_id,
+                "staff_id": staff_a.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "slot_id": enhanced_slot.slot_id,
+                "start_time": enhanced_slot.start_time,
+                "end_time": enhanced_slot.end_time,
+                "days_of_week": ["MON", "TUE", "WED", "THU", "FRI"],
+                "status": "draft",
+            }],
+        },
+        headers=headers,
+    )
+    assert pub_res.status_code == 200, pub_res.text
+    published = db.query(SubjectLoad).filter(
+        SubjectLoad.class_id == cls.class_id,
+        SubjectLoad.is_active_version.is_(True),
+    ).one()
+    assert published.status == "published"
+    assert published.is_locked is True
+    assert published.slot_id == enhanced_slot.slot_id
+    assert (published.start_time, published.end_time) == ("13:00", "14:00")

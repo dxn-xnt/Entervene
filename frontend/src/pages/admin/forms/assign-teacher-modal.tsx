@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -8,9 +9,15 @@ import { Input } from "@/components/retroui/Input";
 import { Progress } from "@/components/retroui/Progress";
 import { Table } from "@/components/retroui/Table";
 import { Text } from "@/components/retroui/Text";
-import { AlertTriangle, Check, Search, Send, Trash2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, Check, Search, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SubjectLoadItem, TeacherWorkloadItem } from "@/lib/api";
+import {
+  describeConflictForAdmin,
+  formatConflictScheduleContext,
+  type LoadConflictSummary,
+  type SlotMatchTarget,
+} from "@/pages/admin/subject-load-conflicts";
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 
 export interface TeacherModalTarget {
@@ -19,6 +26,8 @@ export interface TeacherModalTarget {
   subjectId: number;
   subjectName: string;
   currentStaffId?: string | null;
+  slot?: SlotMatchTarget;
+  slotLabel?: string;
 }
 
 export interface StudioTeacher {
@@ -34,6 +43,9 @@ interface AssignTeacherModalProps {
   teacherWorkloads: TeacherWorkloadItem[];
   loads?: SubjectLoadItem[];
   targetSubjectHours?: number;
+  conflictSummary?: LoadConflictSummary;
+  sectionLocked?: boolean;
+  onEditInListView?: () => void;
   getTeacherAvailabilityStatus: (
     staffId: string,
     classId: number,
@@ -49,6 +61,9 @@ export default function AssignTeacherModal({
   teacherWorkloads,
   loads,
   targetSubjectHours,
+  conflictSummary,
+  sectionLocked = false,
+  onEditInListView,
   getTeacherAvailabilityStatus,
   onAssign,
   onClose,
@@ -113,17 +128,94 @@ export default function AssignTeacherModal({
       });
   }, [teachers, q, target.currentStaffId, target.classId, target.subjectId, getTeacherAvailabilityStatus]);
 
+  const needsScheduleFix = Boolean(
+    conflictSummary?.errors.some((item) => !describeConflictForAdmin(item).canFixByTeacherChange)
+  );
+
   return (
     <Dialog.Content size="xl" className="max-w-3xl">
       <Dialog.Header position="static">
         <div className="flex flex-col text-left">
           <Text as="h4" className="font-bold text-lg text-primary-foreground">
-            Assign Teacher to {target.subjectName} <span className="font-normal">({target.className})</span>
+            {sectionLocked ? "Schedule Conflict Details:" : "Assign Teacher to"} {target.subjectName}{" "}
+            <span className="font-normal">({target.className})</span>
           </Text>
+          {target.slotLabel && (
+            <span className="text-xs font-medium text-primary-foreground/85">
+              Slot: {target.slotLabel}
+            </span>
+          )}
         </div>
       </Dialog.Header>
 
       <div className="p-4 flex flex-col gap-3 min-h-0 flex-1 overflow-hidden">
+        {/* Active Conflict Diagnosis Banner */}
+        {conflictSummary && (
+          <Alert
+            status={conflictSummary.primary.severity === "error" ? "error" : "warning"}
+            className="p-3 text-xs"
+          >
+            <div className="flex flex-col gap-2">
+              {conflictSummary.all.map((item, idx) => {
+                const guidance = describeConflictForAdmin(item);
+                const contextLabel = formatConflictScheduleContext(item);
+                const isError = item.severity === "error";
+                return (
+                  <div
+                    key={`${item.rule}-${idx}`}
+                    className={cn(
+                      "flex items-start gap-2",
+                      idx > 0 && "border-t border-black/15 pt-2"
+                    )}
+                  >
+                    {isError ? (
+                      <AlertCircle className="size-4 shrink-0 mt-0.5" aria-hidden="true" />
+                    ) : (
+                      <AlertTriangle className="size-4 shrink-0 mt-0.5" aria-hidden="true" />
+                    )}
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 font-bold">
+                        <span>
+                          {isError ? "Conflict" : "Warning"}: {guidance.label}
+                        </span>
+                        {contextLabel && (
+                          <span className="rounded border border-current/40 bg-white/60 px-1.5 py-0.25 text-[10px] font-semibold">
+                            {contextLabel}
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-medium leading-snug">{item.message}</p>
+                      <p className="text-[11px] opacity-90 leading-snug">
+                        <strong>How to fix:</strong> {guidance.nextStep}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {sectionLocked ? (
+                <p className="text-[11px] font-semibold border-t border-black/15 pt-2">
+                  This section is published and locked. Click &ldquo;Unlock Section&rdquo; before changing its teacher or schedule.
+                </p>
+              ) : (
+                needsScheduleFix &&
+                onEditInListView && (
+                  <div className="pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 bg-white text-xs text-black font-bold rounded! shadow-none cursor-pointer"
+                      onClick={onEditInListView}
+                    >
+                      Edit schedule in List View
+                    </Button>
+                  </div>
+                )
+              )}
+            </div>
+          </Alert>
+        )}
+
         {/* Search and Quick Unassign Bar */}
         <div className="flex items-center justify-between gap-3">
           <label className="relative flex-1">
@@ -137,7 +229,7 @@ export default function AssignTeacherModal({
             />
           </label>
 
-          {target.currentStaffId && (
+          {target.currentStaffId && !sectionLocked && (
             <Button
               variant="destructive"
               className="text-xs cursor-pointer"
@@ -300,10 +392,16 @@ export default function AssignTeacherModal({
                                 ? "border-destructive text-destructive disabled:cursor-not-allowed disabled:opacity-60"
                                 : "cursor-pointer"
                             )}
-                            disabled={hasConflict}
-                            title={hasConflict ? statusText : `Assign ${t.name}`}
+                            disabled={hasConflict || sectionLocked}
+                            title={
+                              sectionLocked
+                                ? "Unlock section to reassign teacher"
+                                : hasConflict
+                                  ? statusText
+                                  : `Assign ${t.name}`
+                            }
                             aria-describedby={`teacher-status-${t.staff_id}`}
-                            onClick={hasConflict ? undefined : () => {
+                            onClick={hasConflict || sectionLocked ? undefined : () => {
                               onAssign(target.classId, target.subjectId, t.staff_id);
                             }}
                           >

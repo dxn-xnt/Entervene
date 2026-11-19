@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
 from pydantic import BaseModel, Field
 
 
@@ -42,11 +41,20 @@ class ConflictItem(BaseModel):
     subject_id: int | None = None
     staff_id: str | None = None
     day: str | None = None
+    days: list[str] = Field(default_factory=list)
+    start_time: str | None = None
+    end_time: str | None = None
+    slot_id: int | None = None
+    subject_load_id: int | None = None
     affected_key: str | None = None
     affected_keys: list[str] = Field(default_factory=list)
     related_class_id: int | None = None
     related_subject_id: int | None = None
     related_affected_key: str | None = None
+    related_start_time: str | None = None
+    related_end_time: str | None = None
+    related_slot_id: int | None = None
+    related_subject_load_id: int | None = None
 
 
 class TeacherWorkloadItem(BaseModel):
@@ -66,14 +74,6 @@ class ValidationResultResponse(BaseModel):
     passed_checks_count: int = 8
     total_checks_count: int = 8
     can_publish: bool = True
-
-
-class AutoScheduleResponse(BaseModel):
-    is_valid: bool
-    conflicts: list[ConflictItem]
-    teacher_workloads: list[TeacherWorkloadItem]
-    scheduled_loads: list[SubjectLoadItem]
-    unscheduled_loads: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ValidateSubjectLoadRequest(BaseModel):

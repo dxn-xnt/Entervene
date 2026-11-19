@@ -4,6 +4,8 @@ import type { ClassAssignmentStudent } from "@/types/adminClasses";
 import { matchesStudentSearch, sortAssignmentStudents } from "./studentSorting";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
+import { Progress } from "@/components/retroui/Progress";
+import { CheckCheck } from "lucide-react";
 import GenderStudentTable from "./GenderStudentTable";
 
 export default function AvailableStudentsPanel({
@@ -19,7 +21,7 @@ export default function AvailableStudentsPanel({
   totalStudentCount: number;
   selectedIds: Set<string>;
   onSelect: (studentId: string, selected: boolean) => void;
-  onSelectVisible: (studentIds: string[]) => void;
+  onSelectVisible: (studentIds: string[], selected: boolean) => void;
 }) {
   const [search, setSearch] = useState("");
   const { setNodeRef, isOver } = useDroppable({
@@ -37,7 +39,7 @@ export default function AvailableStudentsPanel({
   return (
     <section
       ref={setNodeRef}
-      className={`grid min-h-0 grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-2 border-2 border-black p-3 ${isOver ? "bg-[#d8efca]" : "bg-white"}`}
+      className={`grid min-h-0 grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-2 rounded! border-2 border-black p-3 ${isOver ? "bg-[#d8efca]" : "bg-white"}`}
     >
       <div className="flex items-start justify-between gap-3">
         <h3 className="font-bold">Unassigned Students</h3>
@@ -53,14 +55,20 @@ export default function AvailableStudentsPanel({
           className="min-w-52 flex-1 shadow-none"
         />
         <Button
+          type="button"
           size="sm"
           variant="outline"
+          autoIcon={false}
           disabled={!visible.length}
           onClick={() =>
-            onSelectVisible(visible.map((student) => student.student_id))
+            onSelectVisible(
+              visible.map((student) => student.student_id),
+              true,
+            )
           }
-          className="text-xs shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+          className=" shadow-none gap-2 bg-white hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
         >
+          <CheckCheck className="size-4" />
           Select All Visible
         </Button>
       </div>
@@ -76,14 +84,11 @@ export default function AvailableStudentsPanel({
             %
           </span>
         </div>
-        <div className="mt-1 h-2 overflow-hidden rounded-full border border-black bg-white">
-          <div
-            className="h-full bg-[#79bd80]"
-            style={{
-              width: `${totalStudentCount ? (assignedCount / totalStudentCount) * 100 : 0}%`,
-            }}
-          />
-        </div>
+        <Progress
+          value={totalStudentCount ? (assignedCount / totalStudentCount) * 100 : 0}
+          className="mt-1 h-2"
+          indicatorClassName="bg-success"
+        />
       </div>
       <div className="min-h-0 overflow-y-auto pr-1">
         {!students.length && (

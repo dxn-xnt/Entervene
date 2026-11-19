@@ -11,17 +11,27 @@ type StudentEmptyStateProps = {
   className?: string;
   embedded?: boolean;
   cardless?: boolean;
+  compact?: boolean;
 };
 
-export function StudentEmptyState({ icon, title, description, action, className, embedded = false, cardless = false }: StudentEmptyStateProps) {
+export function StudentEmptyState({ icon, title, description, action, className, embedded = false, cardless = false, compact = false }: StudentEmptyStateProps) {
   const content = (
-      <Card.Content className="mx-auto flex w-full max-w-sm flex-col items-center gap-2 text-balance">
-        <div className="mb-2 flex size-10 shrink-0 items-center justify-center border-2 border-border bg-primary text-foreground [&_svg]:size-5 [&_svg]:stroke-2">
+      <Card.Content className={cn(
+        "mx-auto flex w-full max-w-sm items-center gap-2 text-balance",
+        compact ? "flex-row justify-start text-left" : "flex-col text-center",
+      )}>
+        <div className={cn(
+          "grid size-10 shrink-0 place-items-center border-2 border-border bg-primary text-foreground [&_svg]:size-5 [&_svg]:stroke-2",
+          compact && "rounded-lg",
+          !compact && "mb-2",
+        )}>
           {icon}
         </div>
-        <Card.Title className="text-base font-bold tracking-tight">{title}</Card.Title>
-        <p className="text-sm/relaxed font-normal text-muted-foreground">{description}</p>
-        {action && <Button size="sm" className="mt-2" onClick={action.onClick}>{action.label}</Button>}
+        <div className={cn("min-w-0", !compact && "contents")}>
+          <Card.Title className="text-base font-bold tracking-tight">{title}</Card.Title>
+          <p className="text-sm/relaxed font-normal text-muted-foreground">{description}</p>
+          {action && <Button size="sm" className="mt-2" onClick={action.onClick}>{action.label}</Button>}
+        </div>
       </Card.Content>
   );
 
@@ -30,7 +40,12 @@ export function StudentEmptyState({ icon, title, description, action, className,
   }
 
   return (
-    <Card className={cn("block w-full min-w-0 rounded! border-border bg-card px-6 py-12 text-center text-balance shadow-md", embedded && "p-4", className)}>
+    <Card className={cn(
+      "block w-full min-w-0 rounded! border-border bg-card px-6 py-12 text-center text-balance shadow-md",
+      embedded && "p-4",
+      compact && "flex items-center",
+      className,
+    )}>
       {content}
     </Card>
   );

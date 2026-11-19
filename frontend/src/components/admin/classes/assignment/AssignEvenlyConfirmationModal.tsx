@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/retroui/Button";
+import { Dialog } from "@/components/retroui/Dialog";
 import type { DistributionMode } from "@/types/adminClasses";
 
 export default function AssignEvenlyConfirmationModal({
@@ -12,22 +13,26 @@ export default function AssignEvenlyConfirmationModal({
   const [mode, setMode] = useState<DistributionMode>("alphabetical");
 
   return (
-    <div className="fixed inset-0 z-[70] grid place-items-center bg-black/50 p-4">
-      <div className="grid w-full max-w-md gap-4 rounded border-2 border-border bg-background p-5 text-foreground shadow-[4px_4px_0_#000]">
-        <div>
-          <h3 className="font-bold text-base">Assign Students Evenly</h3>
-          <p className="mt-1.5 text-xs text-black/80">
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <Dialog.Content size="md">
+        <Dialog.Header position="static">
+          <Dialog.Title className="font-sans text-xl font-bold">
+            Assign Students Evenly
+          </Dialog.Title>
+        </Dialog.Header>
+
+        <div className="grid gap-4 p-5">
+          <p className="text-sm text-muted-foreground">
             Assign all remaining unassigned students evenly across the configured sections while preserving existing manual assignments.
           </p>
-        </div>
 
-        <div className="grid gap-2 border-y border-black/20 py-3">
+        <div className="grid gap-2">
           <label className="text-xs font-bold uppercase tracking-wider text-black/70">
             Distribution Mode
           </label>
           <div className="grid gap-2">
             <label
-              className={`flex items-start gap-2.5 rounded border-2 p-2.5 text-xs cursor-pointer transition-colors ${
+              className={`flex cursor-pointer items-start gap-2.5 rounded-lg border-2 p-3 text-xs transition-colors ${
                 mode === "alphabetical"
                   ? "border-black bg-[#d8efca] font-semibold"
                   : "border-black/30 bg-white hover:bg-black/5"
@@ -50,7 +55,7 @@ export default function AssignEvenlyConfirmationModal({
             </label>
 
             <label
-              className={`flex items-start gap-2.5 rounded border-2 p-2.5 text-xs cursor-pointer transition-colors ${
+              className={`flex cursor-pointer items-start gap-2.5 rounded-lg border-2 p-3 text-xs transition-colors ${
                 mode === "gwa"
                   ? "border-black bg-[#d8efca] font-semibold"
                   : "border-black/30 bg-white hover:bg-black/5"
@@ -73,9 +78,10 @@ export default function AssignEvenlyConfirmationModal({
             </label>
           </div>
         </div>
+        </div>
 
-        <div data-slot="dialog-footer" className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onCancel}>
+        <Dialog.Footer position="static">
+          <Button type="button" variant="outline" autoIcon={false} onClick={onCancel}>
             Cancel
           </Button>
           <Button
@@ -84,8 +90,8 @@ export default function AssignEvenlyConfirmationModal({
           >
             Assign Evenly
           </Button>
-        </div>
-      </div>
-    </div>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }

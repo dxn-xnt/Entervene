@@ -346,3 +346,121 @@ def test_authorized_current_period_grading_still_succeeds(quiz_api_context):
     assert response.status_code == 200
     assert response.json()["grade"] == 10
     assert response.json()["status"] == "graded"
+
+
+def test_quiz_analysis_filters_participation_scores_and_questions_by_section_assignment(quiz_api_context):
+    import uuid
+    from decimal import Decimal
+    from app.models.academic.Class_ import Class
+    from app.models.academic.StudentCLass import StudentClass
+    from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+    from app.models.people.Student import Student
+
+    c = quiz_api_context
+    db = c["db"]
+    submission1, _, links = _create_submission(c)
+    assert c["client"].put(
+        f"/api/v1/quizzes/submission/{submission1.submission_id}/grade",
+        json=_grade_payload(links, first_points=6, second_points=4),
+    ).status_code == 200
+
+    # Add a second section ("Copernicus") assigned to the same quiz with 2 students (0 submitted)
+    second_class = Class(
+        section_name="Copernicus",
+        academic_year_id=c["year"].academic_year_id,
+        academic_level_id=c["class"].academic_level_id,
+    )
+    db.add(second_class)
+    db.flush()
+    db.add(
+        SubjectLoad(
+            class_id=second_class.class_id,
+            subject_id=c["subject"].subject_id,
+            staff_id=c["owner"].staff_id,
+            academic_period_id=c["period"].academic_period_id,
+            status="published",
+            is_active_version=True,
+            is_locked=True,
+        )
+    )
+    sec2_students = [
+        Student(
+            student_id=uuid.uuid4(),
+            student_lrn="223456789011",
+            first_name="Dan",
+            last_name="Copernicus",
+            academic_level_id=c["class"].academic_level_id,
+        ),
+        Student(
+            student_id=uuid.uuid4(),
+            student_lrn="223456789012",
+            first_name="Eva",
+            last_name="Copernicus",
+            academic_level_id=c["class"].academic_level_id,
+        ),
+    ]
+    db.add_all(sec2_students)
+    db.flush()
+    db.add_all([
+        StudentClass(
+            student_id=st.student_id,
+            class_id=second_class.class_id,
+            academic_year_id=c["year"].academic_year_id,
+            enrollment_status="enrolled",
+        )
+        for st in sec2_students
+    ])
+    second_assignment = ClassworkAssignment(
+        classwork_id=c["quiz_classwork"].classwork_id,
+        class_id=second_class.class_id,
+        academic_period_id=c["period"].academic_period_id,
+        assigned_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+        max_attempts=1,
+    )
+    db.add(second_assignment)
+    db.commit()
+
+    base_url = f"/api/v1/quizzes/classwork/{c['quiz_classwork'].classwork_id}/analysis"
+
+    # 1. All sections combined: 3 students total (1 + 2), 1 submitted
+    all_res = c["client"].get(base_url)
+    assert all_res.status_code == 200, all_res.text
+    assert all_res.json()["total_students"] == 3
+    assert all_res.json()["submitted_count"] == 1
+
+    # 2. First section only: 1 student total, 1 submitted, 100% accuracy
+    sec1_res = c["client"].get(
+        f"{base_url}?assignment_id={c['assignment'].classwork_assignment_id}"
+    )
+    assert sec1_res.status_code == 200, sec1_res.text
+    sec1 = sec1_res.json()
+    assert sec1["total_students"] == 1
+    assert sec1["submitted_count"] == 1
+    assert sec1["class_accuracy_percent"] == 100.0
+    assert len(sec1["students"]) == 1
+    assert sec1["questions"][0]["answered_count"] == 1
+
+    # 3. Second section only ("Copernicus"): 2 students total, 0 submitted, no results yet
+    sec2_res = c["client"].get(
+        f"{base_url}?assignment_id={second_assignment.classwork_assignment_id}"
+    )
+    assert sec2_res.status_code == 200, sec2_res.text
+    sec2 = sec2_res.json()
+    assert sec2["total_students"] == 2
+    assert sec2["submitted_count"] == 0
+    assert sec2["missing_count"] == 2
+    assert sec2["class_accuracy_percent"] is None
+    assert {s["first_name"] for s in sec2["students"]} == {"Dan", "Eva"}
+    assert sec2["questions"][0]["answered_count"] == 0
+
+    # 4. Non-existent assignment_id returns 404
+    invalid_res = c["client"].get(f"{base_url}?assignment_id=999999")
+    assert invalid_res.status_code == 404
+
+    # 5. Unauthorized teacher cannot query a section assignment
+    _act_as(c, "other_teacher")
+    unauth_res = c["client"].get(
+        f"{base_url}?assignment_id={second_assignment.classwork_assignment_id}"
+    )
+    assert unauth_res.status_code == 403

@@ -107,6 +107,11 @@ class ConflictDetectorService:
                         message=f"Subject '{s_name}' in section '{c_name}' has no assigned teacher.",
                         class_id=load.class_id,
                         subject_id=load.subject_id,
+                        days=list(dict.fromkeys(load.days_of_week or [])),
+                        start_time=load.start_time,
+                        end_time=load.end_time,
+                        slot_id=load.slot_id,
+                        subject_load_id=load.subject_load_id,
                         affected_key=f"{load.class_id}_{load.subject_id}",
                     )
                 )
@@ -124,6 +129,11 @@ class ConflictDetectorService:
                         message=f"Subject '{s_name}' in section '{c_name}' must have a valid time and at least one meeting day.",
                         class_id=load.class_id,
                         subject_id=load.subject_id,
+                        days=list(dict.fromkeys(load.days_of_week or [])),
+                        start_time=load.start_time,
+                        end_time=load.end_time,
+                        slot_id=load.slot_id,
+                        subject_load_id=load.subject_load_id,
                         affected_key=f"{load.class_id}_{load.subject_id}",
                     )
                 )
@@ -147,7 +157,8 @@ class ConflictDetectorService:
                     continue
 
                 if times_overlap(load1.start_time, load1.end_time, load2.start_time, load2.end_time):
-                    day_list_str = ", ".join(sorted(list(common_days)))
+                    sorted_common_days = sorted(common_days)
+                    day_list_str = ", ".join(sorted_common_days)
 
                     # Rule 1: Teacher Time Overlap
                     if load1.staff_id and load2.staff_id and load1.staff_id == load2.staff_id:
@@ -162,12 +173,21 @@ class ConflictDetectorService:
                                 class_id=load1.class_id,
                                 subject_id=load1.subject_id,
                                 staff_id=load1.staff_id,
-                                day=list(common_days)[0],
+                                day=sorted_common_days[0],
+                                days=sorted_common_days,
+                                start_time=load1.start_time,
+                                end_time=load1.end_time,
+                                slot_id=load1.slot_id,
+                                subject_load_id=load1.subject_load_id,
                                 affected_key=key1,
                                 affected_keys=list(dict.fromkeys([key1, key2])),
                                 related_class_id=load2.class_id,
                                 related_subject_id=load2.subject_id,
                                 related_affected_key=key2,
+                                related_start_time=load2.start_time,
+                                related_end_time=load2.end_time,
+                                related_slot_id=load2.slot_id,
+                                related_subject_load_id=load2.subject_load_id,
                             )
                         )
 
@@ -183,12 +203,21 @@ class ConflictDetectorService:
                                 class_id=load1.class_id,
                                 subject_id=load1.subject_id,
                                 staff_id=load1.staff_id,
-                                day=list(common_days)[0],
+                                day=sorted_common_days[0],
+                                days=sorted_common_days,
+                                start_time=load1.start_time,
+                                end_time=load1.end_time,
+                                slot_id=load1.slot_id,
+                                subject_load_id=load1.subject_load_id,
                                 affected_key=key1,
                                 affected_keys=list(dict.fromkeys([key1, key2])),
                                 related_class_id=load2.class_id,
                                 related_subject_id=load2.subject_id,
                                 related_affected_key=key2,
+                                related_start_time=load2.start_time,
+                                related_end_time=load2.end_time,
+                                related_slot_id=load2.slot_id,
+                                related_subject_load_id=load2.subject_load_id,
                             )
                         )
 
@@ -196,7 +225,7 @@ class ConflictDetectorService:
         # 3. Daily Workload Capacity (Strict) & Teacher Tracker
         # ---------------------------------------------------------
         teacher_daily_hours: dict[str, dict[str, float]] = {}
-        teacher_daily_subjects: dict[str, dict[str, set[int]]] = {}
+        teacher_daily_subjects: dict[str, dict[str, set[tuple[int, int]]]] = {}
 
         for load in loads:
             if not load.staff_id or not load.days_of_week or not load.start_time or not load.end_time:
@@ -209,11 +238,11 @@ class ConflictDetectorService:
                 teacher_daily_hours[staff_id] = {}
                 teacher_daily_subjects[staff_id] = {}
 
-            for day in load.days_of_week:
+            for day in dict.fromkeys(load.days_of_week):
                 teacher_daily_hours[staff_id][day] = teacher_daily_hours[staff_id].get(day, 0.0) + duration
                 if day not in teacher_daily_subjects[staff_id]:
                     teacher_daily_subjects[staff_id][day] = set()
-                teacher_daily_subjects[staff_id][day].add(load.subject_id)
+                teacher_daily_subjects[staff_id][day].add((load.class_id, load.subject_id))
 
         teacher_workloads: list[TeacherWorkloadItem] = []
         caps = get_teacher_workload_settings(db)
@@ -232,6 +261,10 @@ class ConflictDetectorService:
             for day, hrs in daily_hrs.items():
                 if hrs > max_hrs:
                     has_warning = True
+                    day_keys = sorted(
+                        f"{cid}_{sid}"
+                        for cid, sid in teacher_daily_subjects.get(staff_id, {}).get(day, set())
+                    )
                     conflicts.append(
                         ConflictItem(
                             rule="DAILY_WORKLOAD_EXCEEDED",
@@ -239,12 +272,18 @@ class ConflictDetectorService:
                             message=f"Teacher {staff_name} exceeds max {max_hrs} hours/day on {day} ({hrs:.1f} hrs scheduled).",
                             staff_id=staff_id,
                             day=day,
+                            days=[day],
+                            affected_keys=day_keys,
                         )
                     )
 
             for day, count in daily_sub_counts.items():
                 if count > max_sub:
                     has_warning = True
+                    day_keys = sorted(
+                        f"{cid}_{sid}"
+                        for cid, sid in teacher_daily_subjects.get(staff_id, {}).get(day, set())
+                    )
                     conflicts.append(
                         ConflictItem(
                             rule="DAILY_WORKLOAD_EXCEEDED",
@@ -252,6 +291,8 @@ class ConflictDetectorService:
                             message=f"Teacher {staff_name} exceeds max {max_sub} subjects/day on {day} ({count} subjects scheduled).",
                             staff_id=staff_id,
                             day=day,
+                            days=[day],
+                            affected_keys=day_keys,
                         )
                     )
                 elif count > 0 and count < min_sub:
@@ -263,6 +304,7 @@ class ConflictDetectorService:
                             message=f"Teacher {staff_name} has only {count} subjects on {day} (minimum is {min_sub}).",
                             staff_id=staff_id,
                             day=day,
+                            days=[day],
                         )
                     )
 
@@ -306,6 +348,7 @@ class ConflictDetectorService:
                     academic_period_id=load.academic_period_id,
                 )
 
+                load_days = list(dict.fromkeys(load.days_of_week or []))
                 if offering is None:
                     conflicts.append(
                         ConflictItem(
@@ -318,6 +361,11 @@ class ConflictDetectorService:
                             ),
                             class_id=load.class_id,
                             subject_id=load.subject_id,
+                            days=load_days,
+                            start_time=load.start_time,
+                            end_time=load.end_time,
+                            slot_id=load.slot_id,
+                            subject_load_id=load.subject_load_id,
                             affected_key=f"{load.class_id}_{load.subject_id}",
                         )
                     )
@@ -329,6 +377,11 @@ class ConflictDetectorService:
                             message=f"Subject offering for '{s_name}' in section '{c_name}' has no period duration set (minutes is null). Please set the period minutes in Subject Offerings before publishing.",
                             class_id=load.class_id,
                             subject_id=load.subject_id,
+                            days=load_days,
+                            start_time=load.start_time,
+                            end_time=load.end_time,
+                            slot_id=load.slot_id,
+                            subject_load_id=load.subject_load_id,
                             affected_key=f"{load.class_id}_{load.subject_id}",
                         )
                     )
@@ -348,6 +401,11 @@ class ConflictDetectorService:
                             ),
                             class_id=load.class_id,
                             subject_id=load.subject_id,
+                            days=load_days,
+                            start_time=load.start_time,
+                            end_time=load.end_time,
+                            slot_id=load.slot_id,
+                            subject_load_id=load.subject_load_id,
                             affected_key=f"{load.class_id}_{load.subject_id}",
                         )
                     )
@@ -365,6 +423,11 @@ class ConflictDetectorService:
                                 ),
                                 class_id=load.class_id,
                                 subject_id=load.subject_id,
+                                days=load_days,
+                                start_time=load.start_time,
+                                end_time=load.end_time,
+                                slot_id=load.slot_id,
+                                subject_load_id=load.subject_load_id,
                                 affected_key=f"{load.class_id}_{load.subject_id}",
                             )
                         )
@@ -372,14 +435,19 @@ class ConflictDetectorService:
         # ---------------------------------------------------------
         # 5b. Core Subject Split Schedule Warning Check (JHS)
         # ---------------------------------------------------------
+        levels_map = {lvl.academic_level_id: lvl for lvl in db.query(AcademicLevel).all()}
         for load in loads:
             subject_obj = subjects_map.get(load.subject_id)
             class_obj = classes_map.get(load.class_id)
             if subject_obj and class_obj:
                 s_name = subject_obj.subject_name or ""
                 c_name = class_obj.section_name or ""
-                c_group = getattr(class_obj, "period_template_group", None) or "JHS_45MIN"
-                is_jhs = c_group == "JHS_45MIN"
+                lvl = levels_map.get(class_obj.academic_level_id)
+                c_group = getattr(class_obj, "period_template_group", None)
+                is_jhs = (
+                    (lvl is not None and 7 <= lvl.grade_level <= 10)
+                    or (lvl is None and (c_group or "JHS_45MIN") == "JHS_45MIN")
+                )
                 is_core = getattr(subject_obj, "is_core", False)
 
                 if is_jhs and is_core and load.days_of_week and len(load.days_of_week) < 5:
@@ -390,6 +458,11 @@ class ConflictDetectorService:
                             message=f"Core subject '{s_name}' in section '{c_name}' is scheduled for only {len(load.days_of_week)} days ({', '.join(load.days_of_week)}) instead of standard 5-day daily schedule.",
                             class_id=load.class_id,
                             subject_id=load.subject_id,
+                            days=list(dict.fromkeys(load.days_of_week or [])),
+                            start_time=load.start_time,
+                            end_time=load.end_time,
+                            slot_id=load.slot_id,
+                            subject_load_id=load.subject_load_id,
                             affected_key=f"{load.class_id}_{load.subject_id}",
                         )
                     )
@@ -412,7 +485,6 @@ class ConflictDetectorService:
                 continue
 
             c_name = class_obj.section_name or ""
-            grp = getattr(class_obj, "period_template_group", None) or "JHS_45MIN"
 
             group_breaks = break_map.get(load.class_id, [])
             for bslot in group_breaks:
@@ -426,6 +498,11 @@ class ConflictDetectorService:
                             message=f"Subject '{s_name}' in section '{c_name}' overlaps with {bslot.slot_name} ({bslot.start_time}-{bslot.end_time}).",
                             class_id=load.class_id,
                             subject_id=load.subject_id,
+                            days=list(dict.fromkeys(load.days_of_week or [])),
+                            start_time=load.start_time,
+                            end_time=load.end_time,
+                            slot_id=load.slot_id,
+                            subject_load_id=load.subject_load_id,
                             affected_key=f"{load.class_id}_{load.subject_id}",
                         )
                     )
@@ -434,7 +511,6 @@ class ConflictDetectorService:
         # 7. Pre-flight Diagnostic: Bell Schedule Configuration Check
         # ---------------------------------------------------------
         checked_class_ids = set()
-        levels_map = {lvl.academic_level_id: lvl for lvl in db.query(AcademicLevel).all()}
         for load in loads:
             if load.class_id in checked_class_ids:
                 continue
