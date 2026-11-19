@@ -4,16 +4,19 @@ import { Badge } from "@/components/retroui/Badge";
 import { getRiskBadgeMeta } from "@/lib/formatters";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
+import { Empty } from "@/components/retroui/Empty";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
+import { cn } from "@/lib/utils";
 import { GradeCard } from "./grade-card";
 import { getTeacherRiskPercentage } from "./teacher-risk-display";
 import type { AdminPredictionGradeSummary } from "./current-term-dashboard-adapter";
 
 interface AdminPredictionGradeCardProps {
   group: AdminPredictionGradeSummary;
+  className?: string;
 }
 
-export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProps) {
+export function AdminPredictionGradeCard({ group, className }: AdminPredictionGradeCardProps) {
   if (!group.sections.length) return null;
 
   const uniqueStudents = new Set(
@@ -24,7 +27,7 @@ export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProp
   const gradePath = `/admin/predictions/${group.grade_level}`;
 
   return (
-    <Card className="flex min-w-0 flex-col bg-background">
+    <Card className={cn("flex min-w-0 flex-col bg-background", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
           to={gradePath}
@@ -58,7 +61,7 @@ export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProp
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 pt-2">
+      <div className="flex flex-row flex-wrap gap-3 pt-2">
         {group.sections.length ? group.sections.map((section) => (
           <GradeCard
             key={section.class_id}
@@ -73,7 +76,16 @@ export function AdminPredictionGradeCard({ group }: AdminPredictionGradeCardProp
             emptyLabel={section.prediction_count === 0 ? "No Predictions Yet" : undefined}
           />
         )) : (
-          <p className="py-2 text-xs italic text-muted-foreground">No sections assigned in this grade.</p>
+          <Empty className="w-full border-2 border-black bg-white py-4 px-3 shadow-none hover:shadow-none justify-center">
+            <Empty.Content className="gap-1">
+              <Empty.Title className="text-sm font-bold text-foreground">
+                No sections assigned
+              </Empty.Title>
+              <Empty.Description className="text-xs text-muted-foreground">
+                No sections assigned in this grade.
+              </Empty.Description>
+            </Empty.Content>
+          </Empty>
         )}
       </div>
     </Card>

@@ -12,7 +12,9 @@ function resolveAvatarUrl(src?: string) {
   return `${API_URL}/${src.replace(/^\//, "")}`;
 }
 
-const AvatarContext = React.createContext<{ variant: "teacher" | "student" | "default" }>({
+const AvatarContext = React.createContext<{
+  variant: "teacher" | "student" | "default";
+}>({
   variant: "default",
 });
 
@@ -27,7 +29,9 @@ const Avatar = React.forwardRef<
       ref={ref}
       className={cn(
         "relative flex h-14 w-14 rounded-full",
-        variant === "student" ? "border-0 overflow-visible" : "border-2 overflow-hidden",
+        variant === "student"
+          ? "border-0 overflow-visible"
+          : "border-2 overflow-hidden",
         className,
       )}
       {...props}

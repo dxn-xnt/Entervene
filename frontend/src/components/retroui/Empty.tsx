@@ -51,7 +51,13 @@ const EmptyTitle = ({ className, ...props }: IEmptyProps) => {
 EmptyTitle.displayName = "Empty.Title";
 
 const EmptySeparator = ({ className, ...props }: IEmptyProps) => {
-  return <div role="separator" className={cn("w-full h-1 bg-primary", className)} {...props} />;
+  return (
+    <div
+      role="separator"
+      className={cn("w-full h-1 bg-primary", className)}
+      {...props}
+    />
+  );
 };
 EmptySeparator.displayName = "Empty.Separator";
 
@@ -59,10 +65,7 @@ const EmptyDescription = ({
   className,
   ...props
 }: HTMLAttributes<HTMLParagraphElement>) => (
-  <p
-    className={cn("text-muted-foreground", className)}
-    {...props}
-  />
+  <p className={cn("text-muted-foreground", className)} {...props} />
 );
 EmptyDescription.displayName = "Empty.Description";
 

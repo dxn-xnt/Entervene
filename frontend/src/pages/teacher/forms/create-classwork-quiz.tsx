@@ -54,6 +54,7 @@ import type {
 import { Badge } from "@/components/retroui/Badge";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
+import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
 
 interface CreateClassworkQuizModalProps {
     draftOnly?: boolean;
@@ -105,6 +106,7 @@ export default function CreateClassworkQuizModal({
     const [createStep, setCreateStep] = useState<
         "quiz-source" | "details" | "quiz" | "assign"
     >("quiz-source");
+    const [referenceLinks] = useState<ReferenceLinkDraft[]>([]);
 
     const isSubjectLocked = Boolean(initialSubjectId) || Boolean(remediationTarget);
     const isLessonLocked = Boolean(initialLessonId);
@@ -494,6 +496,8 @@ export default function CreateClassworkQuizModal({
     };
 
     const validateDetails = () => {
+        const linksError = validateReferenceLinks(referenceLinks);
+        if (linksError) return linksError;
         if (!draft.subject_id) return "Choose a subject.";
         if (!draft.title.trim()) return "Topic title is required.";
         if ((draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
@@ -856,6 +860,7 @@ export default function CreateClassworkQuizModal({
             }
             formData.append("max_attempts", String(Number(draft.max_attempts)));
             formData.append("quiz_payload", JSON.stringify(buildQuizPayload()));
+            formData.append("reference_links", JSON.stringify(referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null }))));
 
             const selectedLoad = loads.find(
                 (l) =>
@@ -1669,7 +1674,7 @@ export default function CreateClassworkQuizModal({
                                 </div>
 
                                 {/* ── Export Questionnaire Card (Post-Review Snapshot) ── */}
-                                <div className="rounded border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
+                                <div className="rounded! border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
                                     <div>
                                         <div className="flex items-center gap-1.5 font-black text-sm text-black">
                                             <FileDown className="w-4 h-4 text-black" />

@@ -13,9 +13,12 @@ export const cardVariants = cva(
         primary: "bg-primary text-primary-foreground",
         secondary: "bg-secondary text-secondary-foreground",
         muted: "bg-muted text-muted-foreground",
-        squares: "bg-card text-card-foreground retro-card-squares overflow-hidden",
-        pattern: "bg-card text-card-foreground retro-card-squares overflow-hidden",
-        retro: "bg-card text-card-foreground border-black shadow-black hover:shadow-sm hover:shadow-black overflow-hidden",
+        squares:
+          "bg-card text-card-foreground retro-card-squares overflow-hidden",
+        pattern:
+          "bg-card text-card-foreground retro-card-squares overflow-hidden",
+        retro:
+          "bg-card text-card-foreground border-black shadow-black hover:shadow-sm hover:shadow-black overflow-hidden",
       },
     },
     defaultVariants: {
@@ -25,14 +28,19 @@ export const cardVariants = cva(
 );
 
 interface ICardProps
-  extends HTMLAttributes<HTMLDivElement>,
-  VariantProps<typeof cardVariants> {
+  extends HTMLAttributes<HTMLDivElement>, VariantProps<typeof cardVariants> {
   className?: string;
   squares?: boolean;
   pattern?: boolean;
 }
 
-const Card = ({ className, variant, squares, pattern, ...props }: ICardProps) => {
+const Card = ({
+  className,
+  variant,
+  squares,
+  pattern,
+  ...props
+}: ICardProps) => {
   return (
     <div
       data-slot="card"
@@ -57,15 +65,27 @@ const CardHeader = ({ className, ...props }: ICardProps) => {
 };
 
 const CardTitle = ({ className, ...props }: ICardProps) => {
-  return <h3 data-slot="card-title" className={cn("text-3xl font-bold", className)} {...props} />;
+  return (
+    <h3
+      data-slot="card-title"
+      className={cn("text-3xl font-bold", className)}
+      {...props}
+    />
+  );
 };
 
 const CardDescription = ({ className, ...props }: ICardProps) => (
-  <p data-slot="card-description" className={cn("text-2xl font-medium text-foreground", className)} {...props} />
+  <p
+    data-slot="card-description"
+    className={cn("text-2xl font-medium text-foreground", className)}
+    {...props}
+  />
 );
 
 const CardContent = ({ className, ...props }: ICardProps) => {
-  return <div data-slot="card-content" className={cn("", className)} {...props} />;
+  return (
+    <div data-slot="card-content" className={cn("", className)} {...props} />
+  );
 };
 
 const CardComponent = Object.assign(Card, {

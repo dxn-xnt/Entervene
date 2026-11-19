@@ -41,14 +41,23 @@ export function Tabs<T extends string = string>({
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
-    if (!sentinel || typeof window.matchMedia !== "function" || typeof IntersectionObserver === "undefined") return;
+    if (
+      !sentinel ||
+      typeof window.matchMedia !== "function" ||
+      typeof IntersectionObserver === "undefined"
+    )
+      return;
 
     const mobileQuery = window.matchMedia("(max-width: 639px)");
 
     const updatePinnedState = () => {
-      setIsPinned(mobileQuery.matches && sentinel.getBoundingClientRect().top < 0);
+      setIsPinned(
+        mobileQuery.matches && sentinel.getBoundingClientRect().top < 0,
+      );
     };
-    const observer = new IntersectionObserver(updatePinnedState, { threshold: 0 });
+    const observer = new IntersectionObserver(updatePinnedState, {
+      threshold: 0,
+    });
 
     observer.observe(sentinel);
     mobileQuery.addEventListener?.("change", updatePinnedState);
@@ -66,13 +75,20 @@ export function Tabs<T extends string = string>({
 
   return (
     <>
-      <div ref={sentinelRef} data-tabs-sentinel aria-hidden="true" className="h-px w-full" />
-      {isPinned ? <div aria-hidden="true" className="h-[50px] sm:hidden" /> : null}
+      <div
+        ref={sentinelRef}
+        data-tabs-sentinel
+        aria-hidden="true"
+        className="h-px w-full"
+      />
+      {isPinned ? (
+        <div aria-hidden="true" className="h-[50px] sm:hidden" />
+      ) : null}
       <div
         className={cn(
           isPinned ? "fixed inset-x-0 top-0 z-50 mx-0" : "-mx-3",
           "min-w-0 border-b-2 border-border bg-background sm:static sm:-mx-4 md:-mx-6",
-          className
+          className,
         )}
       >
         <div
@@ -80,7 +96,7 @@ export function Tabs<T extends string = string>({
           aria-label="Page sections"
           className={cn(
             "no-scrollbar flex w-full flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain px-3 pt-2 sm:gap-2 sm:px-3 md:px-4",
-            listClassName
+            listClassName,
           )}
         >
           {tabs.map((tab) => {
@@ -99,7 +115,7 @@ export function Tabs<T extends string = string>({
                   tabClassName,
                   isActive
                     ? "bg-primary text-primary-foreground"
-                    : "bg-background text-foreground hover:bg-accent"
+                    : "bg-background text-foreground hover:bg-accent",
                 )}
               >
                 {tab.icon && <tab.icon size={16} className="shrink-0" />}

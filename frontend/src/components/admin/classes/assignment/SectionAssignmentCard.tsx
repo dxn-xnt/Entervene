@@ -1,5 +1,5 @@
 import { useDroppable } from "@dnd-kit/core";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import type {
   ClassAssignmentStudent,
@@ -8,6 +8,7 @@ import type {
 import GenderStudentTable from "./GenderStudentTable";
 import { assignmentGenderGroup } from "./studentSorting";
 import { Button } from "@/components/retroui/Button";
+import { Progress } from "@/components/retroui/Progress";
 
 export default function SectionAssignmentCard({
   section,
@@ -48,32 +49,31 @@ export default function SectionAssignmentCard({
   return (
     <section
       ref={setNodeRef}
-      className={`grid content-start gap-2 border-2 p-3 ${isOver ? "border-black bg-[#d8efca]" : showEmptyError ? "border-red-600 bg-red-50" : "border-black bg-white"}`}
+      className={`grid content-start gap-2 rounded! border-2 p-3 ${isOver ? "border-black bg-[#d8efca]" : showEmptyError ? "border-red-600 bg-red-50" : "border-black bg-white"}`}
     >
       <div>
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-bold">{section.sectionName}</h3>
-          <span className="text-xs font-bold">
+          <h3 className="text-lg font-bold leading-tight">{section.sectionName}</h3>
+          <span className="text-sm font-bold">
             {students.length} / {recommendedTarget}
           </span>
         </div>
-        <p className="text-xs">
+        <p className="text-sm text-foreground">
           Adviser: {section.adviserName || "Not available"}
         </p>
-        <p className="text-[11px]">Recommended: {recommendedTarget}</p>
-        <div className="mt-1 h-2 overflow-hidden rounded-full border border-black bg-white">
-          <div
-            className="h-full bg-[#79bd80]"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+        <p className="text-xs text-muted-foreground">Recommended: {recommendedTarget}</p>
+        <Progress
+          value={progress}
+          className="mt-1 h-2"
+          indicatorClassName="bg-success"
+        />
       </div>
-      <div className="grid grid-cols-2 gap-1 text-[10px]">
+      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
         <span>Male: {counts.male}</span>
         <span>Female: {counts.female}</span>
       </div>
       {!students.length && (
-        <p className="py-2 text-center text-xs font-semibold">
+        <p className="py-3 text-center text-sm font-semibold">
           Drop students here
         </p>
       )}
@@ -110,9 +110,12 @@ export default function SectionAssignmentCard({
       <div className="flex justify-end">
         <Button
           size="sm"
-          className="bg-white hover:bg-white shadow-none"
+          variant="outline"
+          autoIcon={false}
+          className="gap-2 bg-white text-sm font-semibold shadow-none hover:bg-white"
           onClick={onViewDetails}
         >
+          <ExternalLink className="size-4" />
           View Details
         </Button>
       </div>

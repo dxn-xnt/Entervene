@@ -61,6 +61,7 @@ interface QuizAnalysisViewProps {
   isQuizAnalysisLoading: boolean;
   quizAnalysisError: string;
   selected: TeacherClasswork;
+  selectedAssignmentId?: number | "all";
   setSelectedGradingSubmissionId: (id: number) => void;
 }
 
@@ -69,6 +70,7 @@ export default function QuizAnalysisView({
   isQuizAnalysisLoading,
   quizAnalysisError,
   selected,
+  selectedAssignmentId = "all",
   setSelectedGradingSubmissionId,
 }: QuizAnalysisViewProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "questions">("overview");
@@ -104,7 +106,14 @@ export default function QuizAnalysisView({
     );
   }
 
+  const selectedAssignment =
+    selectedAssignmentId !== "all"
+      ? selected.assignments?.find(
+          (assignment) => assignment.classwork_assignment_id === selectedAssignmentId,
+        )
+      : undefined;
   const dueDate =
+    selectedAssignment?.due_date ??
     selected.assignments?.find((assignment) => assignment.due_date)?.due_date ??
     selected.due_date;
   const getQuizSubmissionStatus = (student: QuizStudentScore): QuizSubmissionStatus => {

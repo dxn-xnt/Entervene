@@ -20,10 +20,13 @@ interface ToggleSwitchContextValue<T extends string = string> {
   activeClassName?: string;
 }
 
-const ToggleSwitchContext = React.createContext<ToggleSwitchContextValue<any> | null>(null);
+const ToggleSwitchContext =
+  React.createContext<ToggleSwitchContextValue<any> | null>(null);
 
-export interface ToggleSwitchProps<T extends string = string>
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "onChange"> {
+export interface ToggleSwitchProps<T extends string = string> extends Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "onChange"
+> {
   value?: T;
   defaultValue?: T;
   onValueChange?: (value: T) => void;
@@ -50,7 +53,9 @@ export function ToggleSwitch<T extends string = string>({
   children,
   ...props
 }: ToggleSwitchProps<T>) {
-  const [uncontrolledValue, setUncontrolledValue] = React.useState<T | undefined>(defaultValue);
+  const [uncontrolledValue, setUncontrolledValue] = React.useState<
+    T | undefined
+  >(defaultValue);
   const isControlled = controlledValue !== undefined;
   const activeValue = isControlled ? controlledValue : uncontrolledValue;
 
@@ -61,7 +66,7 @@ export function ToggleSwitch<T extends string = string>({
       }
       onValueChange?.(newValue);
     },
-    [isControlled, onValueChange]
+    [isControlled, onValueChange],
   );
 
   const sizeContainerClasses = {
@@ -95,31 +100,30 @@ export function ToggleSwitch<T extends string = string>({
           fullWidth && "w-full flex",
           sizeContainerClasses,
           variantContainerClasses,
-          className
+          className,
         )}
         {...props}
       >
         {options
           ? options.map((opt) => (
-            <ToggleSwitchItem
-              key={opt.value}
-              value={opt.value}
-              disabled={opt.disabled}
-              title={opt.title}
-            >
-              {opt.icon && <span className="shrink-0">{opt.icon}</span>}
-              <span>{opt.label}</span>
-              {opt.badge && <span className="shrink-0">{opt.badge}</span>}
-            </ToggleSwitchItem>
-          ))
+              <ToggleSwitchItem
+                key={opt.value}
+                value={opt.value}
+                disabled={opt.disabled}
+                title={opt.title}
+              >
+                {opt.icon && <span className="shrink-0">{opt.icon}</span>}
+                <span>{opt.label}</span>
+                {opt.badge && <span className="shrink-0">{opt.badge}</span>}
+              </ToggleSwitchItem>
+            ))
           : children}
       </div>
     </ToggleSwitchContext.Provider>
   );
 }
 
-export interface ToggleSwitchItemProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ToggleSwitchItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   value: string;
   children: React.ReactNode;
 }
@@ -159,15 +163,15 @@ export function ToggleSwitchItem({
         sizeItemClasses,
         isSelected
           ? cn(
-            "bg-primary text-foreground font-bold border-2 border-border",
-            context.activeClassName
-          )
+              "bg-primary text-foreground font-bold border-2 border-border",
+              context.activeClassName,
+            )
           : cn(
-            "text-muted-foreground hover:text-foreground hover:bg-background/40 border-2 border-transparent",
-            context.itemClassName
-          ),
+              "text-muted-foreground hover:text-foreground hover:bg-background/40 border-2 border-transparent",
+              context.itemClassName,
+            ),
         disabled && "opacity-50 cursor-not-allowed",
-        className
+        className,
       )}
       {...props}
     >

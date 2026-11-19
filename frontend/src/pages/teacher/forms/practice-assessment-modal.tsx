@@ -42,6 +42,7 @@ import {
   archiveTeacherPracticeAssessment,
   updateTeacherPracticeAssessment,
 } from "@/lib/practice-assessment-api";
+import { getRemediationWorkspace } from "@/lib/teacher-interventions-api";
 
 interface PracticeAssessmentModalProps {
   isOpen: boolean;
@@ -92,7 +93,8 @@ export default function PracticeAssessmentModal({
   const loadedInterventionRef = useRef<number | null>(null);
   const hasLocalDraftRef = useRef(false);
 
-  const effectiveApprovedReadings = selectedReadingIds ?? savedReadingIds ?? [];
+  const [loadedReadingIds, setLoadedReadingIds] = useState<number[]>([]);
+  const effectiveApprovedReadings = selectedReadingIds ?? savedReadingIds ?? loadedReadingIds;
   const currentReadingSignature = [...effectiveApprovedReadings]
     .sort((a, b) => a - b)
     .join(",");
@@ -123,7 +125,6 @@ export default function PracticeAssessmentModal({
 
   // Import State
   const [isImporting, setIsImporting] = useState(false);
-  const [importWarnings, setImportWarnings] = useState<string[]>([]);
 
   // Questions are locked if student attempts exist
   const isLocked = attempts.length > 0;
@@ -147,7 +148,6 @@ export default function PracticeAssessmentModal({
     const load = async () => {
       setIsLoading(true);
       setErrorMessage(null);
-      setImportWarnings([]);
       setShowAiDrawer(false);
       try {
         const existing = await getTeacherPracticeAssessment(interventionId);
@@ -174,6 +174,20 @@ export default function PracticeAssessmentModal({
           setGatekeeperPolicy("REQUIRE_PASS");
           setQuestions([]);
           setAttempts([]);
+        }
+
+        if (selectedReadingIds == null && savedReadingIds == null) {
+          try {
+            const workspace = await getRemediationWorkspace(interventionId);
+            if (mounted && workspace?.plan?.selected_resources) {
+              const readingIds = workspace.plan.selected_resources
+                .filter((r) => r.kind === "CLASSWORK")
+                .map((r) => r.id);
+              setLoadedReadingIds(readingIds);
+            }
+          } catch {
+            // non-fatal if workspace cannot be fetched
+          }
         }
       } catch (err) {
         if (mounted) {
@@ -304,19 +318,27 @@ export default function PracticeAssessmentModal({
 
     setIsImporting(true);
     setErrorMessage(null);
-    setImportWarnings([]);
     try {
       const preview = await importPracticeQuestionsPreview(interventionId, file);
       if (preview.questions.length > 0) {
         setQuestions((prev) => [...prev, ...preview.questions]);
         hasLocalDraftRef.current = true;
-        toast.success({
-          title: "Questions Imported",
-          description: `Imported ${preview.questions.length} questions from ${file.name}. Review and save draft.`,
+        if (preview.warnings && preview.warnings.length > 0) {
+          toast.warning({
+            title: "Import Warnings",
+            description: `Imported ${preview.questions.length} questions with ${preview.warnings.length} warning(s).`,
+          });
+        } else {
+          toast.success({
+            title: "Questions Imported",
+            description: `Imported ${preview.questions.length} questions from ${file.name}.`,
+          });
+        }
+      } else if (preview.warnings && preview.warnings.length > 0) {
+        toast.warning({
+          title: "Import Warnings",
+          description: `${preview.warnings.length} warning(s) found during import.`,
         });
-      }
-      if (preview.warnings && preview.warnings.length > 0) {
-        setImportWarnings(preview.warnings);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to import questions from file.";
@@ -732,20 +754,7 @@ export default function PracticeAssessmentModal({
                     </div>
                   )}
 
-                  {/* Import Warnings */}
-                  {importWarnings.length > 0 && (
-                    <Alert status="warning" className="border-2 border-amber-400 bg-amber-50">
-                      <AlertTriangle className="size-4 text-amber-600" />
-                      <Alert.Title className="text-amber-900 font-bold">Import Warnings</Alert.Title>
-                      <Alert.Description>
-                        <ul className="list-disc pl-4 text-sm space-y-1 text-amber-800">
-                          {importWarnings.map((w, idx) => (
-                            <li key={idx}>{w}</li>
-                          ))}
-                        </ul>
-                      </Alert.Description>
-                    </Alert>
-                  )}
+
 
                   {generatedSourcesAreStale && (
                     <Alert status="warning" className="border-2 border-amber-400 bg-amber-50">

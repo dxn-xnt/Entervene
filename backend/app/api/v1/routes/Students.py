@@ -410,7 +410,16 @@ def get_my_subjects(
     if academic_period_id is not None:
         rows = rows.filter(SubjectLoad.academic_period_id == academic_period_id)
 
-    rows = rows.all()
+    rows = rows.order_by(SubjectLoad.subject_load_id.asc()).all()
+
+    seen_subjects: set[tuple[int, int, int]] = set()
+    unique_rows = []
+    for row in rows:
+        key = (row.class_id, row.subject_id, row.academic_period_id)
+        if key in seen_subjects:
+            continue
+        seen_subjects.add(key)
+        unique_rows.append(row)
 
     return [
         {
@@ -428,7 +437,7 @@ def get_my_subjects(
             "section_name":       row.section_name,
             "year_label":         row.year_label,
         }
-        for row in rows
+        for row in unique_rows
     ]
 
 

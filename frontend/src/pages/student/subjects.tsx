@@ -90,7 +90,7 @@ const Subjects = () => {
               ) : subjects.length === 0 ? (
                 <StudentEmptyState icon={<BookOpen />} title="No subjects yet" description="Your assigned subjects will appear here once your enrollment is available." />
               ) : (
-                <div className="grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {subjects.map((subject) => (
                     <StudentSubjectSectionCard
                       key={subject.subject_load_id}

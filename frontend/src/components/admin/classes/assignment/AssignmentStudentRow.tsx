@@ -1,5 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { GripVertical } from "lucide-react";
+import { Checkbox } from "@/components/retroui/Checkbox";
 import type { ClassAssignmentStudent } from "@/types/adminClasses";
 import { assignmentStudentName, compactAssignmentStudentName } from "./studentSorting";
 
@@ -23,11 +24,11 @@ export default function AssignmentStudentRow({ student, location, number, select
       style={{ transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined }}
       className={`flex min-h-8 items-center gap-1.5 border-b border-black/15 px-1 py-1 text-[11px] last:border-b-0 ${selected ? "bg-[#fff8d7]" : ""} ${isDragging ? "z-20 opacity-60" : ""}`}
     >
-      <input
+      <Checkbox
         aria-label={`Select ${assignmentStudentName(student)}`}
-        type="checkbox"
         checked={selected}
-        onChange={(event) => onSelect(student.student_id, event.target.checked)}
+        onCheckedChange={(checked) => onSelect(student.student_id, checked === true)}
+        size="sm"
         className="shrink-0"
       />
       <span className="w-5 shrink-0 text-right font-semibold">{number}.</span>

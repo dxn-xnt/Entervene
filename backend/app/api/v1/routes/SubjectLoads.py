@@ -16,6 +16,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
+from app.models.academic.PeriodTemplateRevision import PeriodTemplateRevision
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.SubjectLoadAssignmentLog import SubjectLoadAssignmentLog
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
@@ -23,7 +24,6 @@ from app.services.academic.SubjectLoadDependencyService import SubjectLoadDepend
 from app.schemas.SubjectLoad import (
     ValidateSubjectLoadRequest,
     ValidationResultResponse,
-    AutoScheduleResponse,
     BatchSaveSubjectLoadRequest,
     BatchSaveSubjectLoadResponse,
     SubjectLoadItem,
@@ -39,7 +39,6 @@ from app.services.academic.TeacherAcademicScopeService import get_teacher_academ
 from pydantic import BaseModel
 from sqlalchemy import text
 from app.services.academic.ConflictDetectorService import ConflictDetectorService
-from app.services.academic.AutoSchedulerService import AutoSchedulerService
 from app.services.classes.ClassQueryService import class_pathway_code
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 from app.services.academic.SubstitutionService import SubstitutionService
@@ -87,20 +86,63 @@ def _effective_period_template_payload(
     classes: list[Class] | None = None,
 ) -> list[dict[str, Any]]:
     base_groups = {"JHS_45MIN", "SHS_CAMPOS_ZARA", "SHS_DELMUNDO_REYES"}
-    base_groups.update(
-        (class_.period_template_group or JHS_TEMPLATE_GROUP)
-        for class_ in (classes or [])
-    )
-    result: list[dict[str, Any]] = []
-    representative_by_group = {
-        (class_.period_template_group or JHS_TEMPLATE_GROUP): class_
-        for class_ in (classes or [])
+    try:
+        revision_groups = {
+            row[0] for row in db.query(PeriodTemplateRevision.version_template_group).all()
+        }
+    except Exception:
+        revision_groups = set()
+    for (template_group,) in db.query(PeriodTemplateSlot.template_group).distinct().all():
+        if template_group and template_group not in revision_groups:
+            base_groups.add(template_group)
+
+    levels_by_id = {
+        lvl.academic_level_id: lvl.grade_level
+        for lvl in db.query(AcademicLevel).all()
     }
+    representative_by_group: dict[str, Class] = {}
+    for class_ in (classes or []):
+        grp = class_.period_template_group
+        grade = levels_by_id.get(class_.academic_level_id)
+        if not grp:
+            if grade is not None and grade >= 11:
+                continue
+            grp = JHS_TEMPLATE_GROUP
+        base_groups.add(grp)
+        existing_rep = representative_by_group.get(grp)
+        if existing_rep is None:
+            representative_by_group[grp] = class_
+        elif grp != JHS_TEMPLATE_GROUP:
+            existing_grade = levels_by_id.get(existing_rep.academic_level_id)
+            if (
+                existing_grade is not None
+                and 7 <= existing_grade <= 10
+                and grade is not None
+                and grade >= 11
+            ):
+                representative_by_group[grp] = class_
+
+    result: list[dict[str, Any]] = []
     for base_group in sorted(base_groups):
         representative = representative_by_group.get(base_group)
+        rep_grade = (
+            levels_by_id.get(representative.academic_level_id)
+            if representative is not None
+            else None
+        )
+        # Never resolve JHS_45MIN through a misassigned SHS class (which would
+        # return [] from PeriodTemplateResolver.slots_for_class).
+        use_representative = (
+            representative is not None
+            and not (
+                base_group == JHS_TEMPLATE_GROUP
+                and rep_grade is not None
+                and rep_grade >= 11
+            )
+        )
         resolved_slots = (
             PeriodTemplateResolver.slots_for_class(db, representative)
-            if representative is not None
+            if use_representative and representative is not None
             else PeriodTemplateResolver.slots_for_group(
                 db,
                 base_group=base_group,
@@ -265,7 +307,8 @@ def _normalize_jhs_load_slots(
     db: Session,
     loads: list[SubjectLoadItem],
 ) -> list[SubjectLoadItem]:
-    """Derive JHS times from slot_id and reject client-authored bell times."""
+    """Derive JHS (Grades 7-10) and SHS (Grades 11-12) times from slot_id while
+    preserving saved legacy/custom schedules that do not specify a slot_id."""
     ensure_default_period_templates(db)
     class_ids = {item.class_id for item in loads}
     classes = {
@@ -292,18 +335,18 @@ def _normalize_jhs_load_slots(
     normalized: list[SubjectLoadItem] = []
     for item in loads:
         cls = classes.get(item.class_id)
-        is_jhs = (
-            cls is not None
-            and grades.get(cls.academic_level_id) in range(7, 11)
-        )
-        if not is_jhs:
+        grade = grades.get(cls.academic_level_id) if cls is not None else None
+        is_jhs = cls is not None and grade in range(7, 11)
+        is_shs = cls is not None and grade is not None and grade >= 11
+        if not is_jhs and not is_shs:
             normalized.append(item)
             continue
 
         slot = slots.get(item.slot_id) if item.slot_id is not None else None
-        # Preserve immutable legacy publications in validation requests by
-        # resolving an exact match in memory. Draft/client edits must send ID.
-        if slot is None and item.status in ("published", "active") and item.start_time and item.end_time:
+        # Preserve immutable legacy JHS publications in validation requests by
+        # resolving an exact match in memory. For SHS, never silently overwrite
+        # existing custom saved schedules that have slot_id=None.
+        if is_jhs and slot is None and item.status in ("published", "active") and item.start_time and item.end_time:
             matches = [
                 candidate for candidate in exact_slots_by_class.get(item.class_id, [])
                 if candidate.start_time == item.start_time and candidate.end_time == item.end_time
@@ -314,13 +357,20 @@ def _normalize_jhs_load_slots(
                 normalized.append(item)
                 continue
             if item.slot_id is not None:
+                if is_jhs:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Grade 7-10 load {item.class_id}_{item.subject_id} must select a valid JHS timetable slot.",
+                    )
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Grade 7-10 load {item.class_id}_{item.subject_id} must select a valid JHS timetable slot.",
+                    detail=(
+                        f"Grade 11-12 load {item.class_id}_{item.subject_id} must select a valid "
+                        f"timetable slot from section '{cls.section_name}'."
+                    ),
                 )
-            # Legacy API clients may still submit explicit times without a
-            # slot_id. Preserve that existing contract; Studio-generated
-            # schedules use slot IDs and are resolved authoritatively above.
+            # Legacy API clients and existing custom saved schedules may omit
+            # slot_id. Preserve those saved times verbatim without overwriting.
             normalized.append(item)
             continue
         allowed_slot_ids = {candidate.slot_id for candidate in exact_slots_by_class.get(item.class_id, [])}
@@ -329,9 +379,20 @@ def _normalize_jhs_load_slots(
             or slot.slot_type != "CLASS"
             or slot.is_locked_break
         ):
+            if is_shs and item.status in ("published", "active") and item.is_locked:
+                normalized.append(item)
+                continue
+            if is_jhs:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Slot {slot.slot_id} is not an assignable Grade 7-10 class period.",
+                )
             raise HTTPException(
                 status_code=422,
-                detail=f"Slot {slot.slot_id} is not an assignable Grade 7-10 class period.",
+                detail=(
+                    f"Slot {slot.slot_id} is not an assignable Grade 11-12 class period "
+                    f"for section '{cls.section_name}'."
+                ),
             )
         normalized.append(item.model_copy(update={
             "slot_id": slot.slot_id,
@@ -339,42 +400,6 @@ def _normalize_jhs_load_slots(
             "end_time": slot.end_time,
         }))
     return normalized
-
-
-def _attach_server_generated_slot_ids(
-    db: Session,
-    loads: list[SubjectLoadItem],
-) -> list[SubjectLoadItem]:
-    """Attach the unique CLASS slot matching server-generated schedule times."""
-    class_ids = {item.class_id for item in loads}
-    classes = {
-        cls.class_id: cls
-        for cls in db.query(Class).filter(Class.class_id.in_(class_ids)).all()
-    } if class_ids else {}
-    candidates: list[PeriodTemplateSlot] = []
-    for class_ in classes.values():
-        candidates.extend(
-            slot for slot in PeriodTemplateResolver.slots_for_class(db, class_)
-            if slot.slot_type == "CLASS" and not slot.is_locked_break
-        )
-    by_key: dict[tuple[str, str, str], list[PeriodTemplateSlot]] = {}
-    for slot in candidates:
-        by_key.setdefault((slot.template_group, slot.start_time, slot.end_time), []).append(slot)
-
-    result: list[SubjectLoadItem] = []
-    for item in loads:
-        cls = classes.get(item.class_id)
-        if not cls or not item.start_time or not item.end_time:
-            result.append(item.model_copy(update={"slot_id": None}) if not item.start_time else item)
-            continue
-        group = PeriodTemplateResolver.effective_group(
-            db,
-            base_group=cls.period_template_group or JHS_TEMPLATE_GROUP,
-            academic_year_id=cls.academic_year_id,
-        )
-        matches = by_key.get((group, item.start_time, item.end_time), [])
-        result.append(item.model_copy(update={"slot_id": matches[0].slot_id if len(matches) == 1 else None}))
-    return result
 
 
 def ensure_shs_template_groups_backfilled(db: Session):
@@ -1057,86 +1082,6 @@ def validate_subject_loads(
     )
 
 
-@router.post("/auto-schedule", response_model=AutoScheduleResponse)
-def auto_schedule_subject_loads(
-    payload: ValidateSubjectLoadRequest,
-    mode: str = Query("standard"),
-    current_user: dict = Depends(require_role("admin")),
-    db: Session = Depends(get_db),
-):
-    period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == payload.academic_period_id).first()
-    normalized_payload_loads = _normalize_jhs_load_slots(db, payload.loads)
-    class_ids = {item.class_id for item in normalized_payload_loads}
-    published = db.query(SubjectLoad).filter(
-        SubjectLoad.class_id.in_(class_ids),
-        SubjectLoad.academic_period_id == payload.academic_period_id,
-        SubjectLoad.is_active_version.is_(True),
-        SubjectLoad.status.in_(["published", "active"]),
-    ).all() if class_ids else []
-    draft_class_ids = {row[0] for row in db.query(SubjectLoad.class_id).filter(
-        SubjectLoad.class_id.in_(class_ids),
-        SubjectLoad.academic_period_id == payload.academic_period_id,
-        SubjectLoad.status == "draft",
-    ).distinct().all()} if class_ids else set()
-    locked_class_ids = {load.class_id for load in published} - draft_class_ids
-    protected_loads = [SubjectLoadItem(
-        subject_load_id=load.subject_load_id,
-        class_id=load.class_id,
-        subject_id=load.subject_id,
-        staff_id=load.staff_id,
-        academic_period_id=load.academic_period_id,
-        slot_id=load.slot_id,
-        start_time=load.start_time,
-        end_time=load.end_time,
-        days_of_week=load.days_of_week or [],
-        status=load.status,
-        is_locked=True,
-        section_revision=load.section_revision or 1,
-    ) for load in published if load.class_id in locked_class_ids]
-    scheduling_input = [item.model_copy(deep=True) for item in normalized_payload_loads if item.class_id not in locked_class_ids]
-    scheduling_input.extend(item.model_copy(deep=True) for item in protected_loads)
-    if not any(item.class_id not in locked_class_ids for item in scheduling_input):
-        auto_scheduled_loads = protected_loads
-    elif mode == "teacher_swap":
-        auto_scheduled_loads = AutoSchedulerService.auto_schedule_paired_swap(db=db, loads=scheduling_input, academic_period=period)
-    else:
-        auto_scheduled_loads = AutoSchedulerService.auto_schedule_loads(db=db, loads=scheduling_input, academic_period=period)
-
-    auto_scheduled_loads = [item for item in auto_scheduled_loads if item.class_id not in locked_class_ids]
-    auto_scheduled_loads.extend(protected_loads)
-    auto_scheduled_loads = _attach_server_generated_slot_ids(db, auto_scheduled_loads)
-
-    validation_res = ConflictDetectorService.validate_loads(
-        db=db, loads=auto_scheduled_loads, academic_period=period, require_complete_schedule=True
-    )
-    unscheduled_loads = [
-        {
-            "class_id": item.class_id,
-            "subject_id": item.subject_id,
-            "staff_id": item.staff_id,
-            "reason": next(
-                (
-                    conflict.message for conflict in validation_res.conflicts
-                    if conflict.class_id == item.class_id
-                    and conflict.subject_id == item.subject_id
-                    and conflict.rule in {"NO_MATCHING_DURATION_SLOT", "MISSING_OFFERING_DURATION", "SUBJECT_NOT_OFFERED_IN_PERIOD"}
-                ),
-                "No conflict-free timetable slot is available.",
-            ),
-        }
-        for item in auto_scheduled_loads
-        if not item.start_time or not item.end_time or not item.days_of_week
-    ]
-    
-    return AutoScheduleResponse(
-        is_valid=validation_res.is_valid,
-        conflicts=validation_res.conflicts,
-        teacher_workloads=validation_res.teacher_workloads,
-        scheduled_loads=auto_scheduled_loads,
-        unscheduled_loads=unscheduled_loads,
-    )
-
-
 @router.post("/unlock-section", response_model=SectionDraftResponse)
 def unlock_section(
     payload: UnlockSectionRequest,
@@ -1190,15 +1135,19 @@ def unlock_section(
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["published", "active"]),
         )
+        .order_by(SubjectLoad.subject_load_id.asc())
         .all()
     )
 
     base_rev = max((sl.section_revision or 1 for sl in published_loads), default=1)
     draft_rev = base_rev + 1
     cloned_drafts: list[SubjectLoad] = []
+    allocated_draft_logical_ids = SubjectLoadDependencyService.allocate_logical_load_ids(
+        published_loads,
+        academic_period_id=payload.academic_period_id,
+    )
 
-    for pub in published_loads:
-        logical_id = pub.logical_load_id or f"LL_{pub.class_id}_{pub.subject_id}_{pub.academic_period_id}"
+    for pub, logical_id in zip(published_loads, allocated_draft_logical_ids):
         draft_load = SubjectLoad(
             class_id=pub.class_id,
             subject_id=pub.subject_id,
@@ -1496,13 +1445,13 @@ def batch_save_subject_loads(
     now_time = datetime.now()
 
     if not is_publishing:
-        # ACTION == DRAFT: Save only working draft loads for target sections
-        for cid in target_class_ids:
+        # ACTION == DRAFT: Validate all target sections before mutating, then save atomically
+        draft_plans: list[dict[str, Any]] = []
+        for cid in sorted(target_class_ids):
             cls_items = [item for item in payload.loads if item.class_id == cid]
             if not cls_items:
                 continue
             db.query(Class).filter(Class.class_id == cid).with_for_update().first()
-            # Fetch existing draft rows for this class
             existing_drafts = (
                 db.query(SubjectLoad)
                 .filter(
@@ -1510,6 +1459,7 @@ def batch_save_subject_loads(
                     SubjectLoad.academic_period_id == payload.academic_period_id,
                     SubjectLoad.status == "draft",
                 )
+                .order_by(SubjectLoad.subject_load_id.asc())
                 .all()
             )
             if not existing_drafts and all(
@@ -1524,6 +1474,7 @@ def batch_save_subject_loads(
                     SubjectLoad.is_active_version.is_(True),
                     SubjectLoad.status.in_(["published", "active"]),
                 )
+                .order_by(SubjectLoad.subject_load_id.asc())
                 .all()
             )
             current_base = max((load.section_revision or 1 for load in published_loads), default=0)
@@ -1539,52 +1490,103 @@ def batch_save_subject_loads(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Section revision conflict for class {cid}: your edit is based on an older revision than published Revision {current_base}. Reload the section before saving.",
                 )
-            draft_map = {d.subject_load_id: d for d in existing_drafts}
-            incoming_ids = {item.subject_load_id for item in cls_items if item.subject_load_id is not None}
 
-            # Delete removed draft rows
-            for d_id, d_obj in draft_map.items():
-                if d_id not in incoming_ids:
-                    db.delete(d_obj)
+            matched_drafts = SubjectLoadDependencyService.match_loads_to_drafts(
+                cls_items,
+                existing_drafts,
+                academic_period_id=payload.academic_period_id,
+                allow_single_slot_stateless_fallback=False,
+            )
+            allocated_logical_ids = SubjectLoadDependencyService.allocate_logical_load_ids(
+                cls_items,
+                academic_period_id=payload.academic_period_id,
+                matched_drafts=matched_drafts,
+            )
+            draft_plans.append({
+                "cid": cid,
+                "cls_items": cls_items,
+                "existing_drafts": existing_drafts,
+                "published_loads": published_loads,
+                "current_base": current_base,
+                "matched_drafts": matched_drafts,
+                "allocated_logical_ids": allocated_logical_ids,
+            })
 
-            for item in cls_items:
-                logical_id = item.logical_load_id or f"LL_{item.class_id}_{item.subject_id}_{payload.academic_period_id}"
-                if item.subject_load_id and item.subject_load_id in draft_map:
-                    d_load = draft_map[item.subject_load_id]
-                else:
-                    d_load = SubjectLoad(
-                        class_id=item.class_id,
-                        subject_id=item.subject_id,
-                        academic_period_id=payload.academic_period_id,
-                        logical_load_id=logical_id,
+        try:
+            for plan in draft_plans:
+                cls_items = plan["cls_items"]
+                existing_drafts = plan["existing_drafts"]
+                published_loads = plan["published_loads"]
+                current_base = plan["current_base"]
+                matched_drafts: dict[int, SubjectLoad] = plan["matched_drafts"]
+                allocated_logical_ids: list[str] = plan["allocated_logical_ids"]
+
+                matched_draft_ids = {d.subject_load_id for d in matched_drafts.values()}
+                removed_drafts = [d for d in existing_drafts if d.subject_load_id not in matched_draft_ids]
+                if removed_drafts:
+                    for d_obj in removed_drafts:
+                        db.delete(d_obj)
+                    db.flush()
+
+                # Reserve continued_from_load_id on matched drafts first so split-off
+                # copies cannot duplicate or steal an existing slot's lineage pointer.
+                used_continued_from_ids: set[int] = set()
+                resolved_cont_ids: list[int | None] = [None] * len(cls_items)
+                for idx in sorted(range(len(cls_items)), key=lambda i: (0 if i in matched_drafts else 1, i)):
+                    item = cls_items[idx]
+                    d_existing = matched_drafts.get(idx)
+                    cand_cont = (
+                        item.continued_from_load_id
+                        if item.continued_from_load_id is not None
+                        else (d_existing.continued_from_load_id if d_existing is not None else None)
                     )
-                    db.add(d_load)
+                    if cand_cont is not None and cand_cont not in used_continued_from_ids:
+                        resolved_cont_ids[idx] = cand_cont
+                        used_continued_from_ids.add(cand_cont)
 
-                d_load.staff_id = item.staff_id
-                d_load.start_time = item.start_time
-                d_load.end_time = item.end_time
-                d_load.days_of_week = item.days_of_week
-                d_load.slot_id = item.slot_id
-                d_load.status = "draft"
-                d_load.is_active_version = False
-                d_load.is_locked = False
-                d_load.last_modified_by = user_email
-                d_load.section_revision = current_base + 1 if published_loads else (item.section_revision or 1)
-                d_load.base_revision = current_base if published_loads else item.base_revision
-                d_load.continued_from_load_id = item.continued_from_load_id
-                saved_count += 1
+                for idx, item in enumerate(cls_items):
+                    logical_id = allocated_logical_ids[idx]
+                    if idx in matched_drafts:
+                        d_load = matched_drafts[idx]
+                        d_load.logical_load_id = logical_id
+                    else:
+                        d_load = SubjectLoad(
+                            class_id=item.class_id,
+                            subject_id=item.subject_id,
+                            academic_period_id=payload.academic_period_id,
+                            logical_load_id=logical_id,
+                        )
+                        db.add(d_load)
 
-        db.commit()
+                    d_load.staff_id = item.staff_id
+                    d_load.start_time = item.start_time
+                    d_load.end_time = item.end_time
+                    d_load.days_of_week = item.days_of_week
+                    d_load.slot_id = item.slot_id
+                    d_load.status = "draft"
+                    d_load.is_active_version = False
+                    d_load.is_locked = False
+                    d_load.last_modified_by = user_email
+                    d_load.section_revision = current_base + 1 if published_loads else (item.section_revision or 1)
+                    d_load.base_revision = current_base if published_loads else item.base_revision
+                    d_load.continued_from_load_id = resolved_cont_ids[idx]
+                    saved_count += 1
+
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
     else:
         # ACTION == PUBLISH: Staged Publishing with concurrency protection, deletion guard, and atomic promotion
         today_date = SubstitutionService.get_academic_date()
 
-        for cid in target_class_ids:
-            # Row lock Class section
+        # Phase 1: Validate concurrency, identity, and deletion guards for ALL target sections before any writes
+        publish_plans: list[dict[str, Any]] = []
+        for cid in sorted(target_class_ids):
             cls_obj = db.query(Class).filter(Class.class_id == cid).with_for_update().first()
 
-            # 1. Fetch current active published loads
+            # 1. Fetch current active published loads and existing drafts
             current_pub_loads = (
                 db.query(SubjectLoad)
                 .filter(
@@ -1593,6 +1595,7 @@ def batch_save_subject_loads(
                     SubjectLoad.is_active_version.is_(True),
                     SubjectLoad.status.in_(["published", "active"]),
                 )
+                .order_by(SubjectLoad.subject_load_id.asc())
                 .all()
             )
             current_base = max((sl.section_revision or 1 for sl in current_pub_loads), default=0)
@@ -1604,10 +1607,49 @@ def batch_save_subject_loads(
                     detail=f"Section revision conflict for '{cls_obj.section_name if cls_obj else cid}': your edit is based on Revision {payload.base_revision}, but the published section is Revision {current_base}. Reload the section before publishing.",
                 )
 
+            existing_drafts = (
+                db.query(SubjectLoad)
+                .filter(
+                    SubjectLoad.class_id == cid,
+                    SubjectLoad.academic_period_id == payload.academic_period_id,
+                    SubjectLoad.status == "draft",
+                )
+                .order_by(SubjectLoad.subject_load_id.asc())
+                .all()
+            )
             cls_items = [item for item in payload.loads if item.class_id == cid]
 
+            # Match incoming slots 1-to-1 to existing drafts and active baseline loads
+            matched_drafts = SubjectLoadDependencyService.match_loads_to_drafts(
+                cls_items,
+                existing_drafts,
+                academic_period_id=payload.academic_period_id,
+                allow_single_slot_stateless_fallback=True,
+            )
+            matched_baselines = SubjectLoadDependencyService.match_loads_to_baselines(
+                cls_items,
+                current_pub_loads,
+                academic_period_id=payload.academic_period_id,
+                matched_drafts=matched_drafts,
+                allow_single_slot_stateless_fallback=True,
+            )
+            matched_baseline_ids = {
+                b.subject_load_id for b in matched_baselines.values() if b.subject_load_id is not None
+            }
+            removed_baseline_logical_ids = {
+                b.logical_load_id
+                for b in current_pub_loads
+                if b.subject_load_id not in matched_baseline_ids and b.logical_load_id
+            }
+            allocated_logical_ids = SubjectLoadDependencyService.allocate_logical_load_ids(
+                cls_items,
+                academic_period_id=payload.academic_period_id,
+                matched_baselines=matched_baselines,
+                matched_drafts=matched_drafts,
+                reserved_ids=removed_baseline_logical_ids,
+            )
+
             # 2. Deletion Guard & Strict Identity Check
-            # Convert incoming items into transient SubjectLoads for classification
             incoming_transient = [
                 SubjectLoad(
                     class_id=it.class_id,
@@ -1618,9 +1660,14 @@ def batch_save_subject_loads(
                     end_time=it.end_time,
                     days_of_week=it.days_of_week,
                     slot_id=it.slot_id,
-                    logical_load_id=it.logical_load_id or f"LL_{it.class_id}_{it.subject_id}_{payload.academic_period_id}",
+                    logical_load_id=allocated_logical_ids[idx],
+                    continued_from_load_id=(
+                        matched_baselines[idx].subject_load_id
+                        if idx in matched_baselines
+                        else None
+                    ),
                 )
-                for it in cls_items
+                for idx, it in enumerate(cls_items)
             ]
 
             classified = SubjectLoadDependencyService.classify_section_changes(current_pub_loads, incoming_transient)
@@ -1646,104 +1693,127 @@ def batch_save_subject_loads(
                                 status_code=status.HTTP_409_CONFLICT,
                                 detail=f"Cannot remove '{s_name}' from section '{cls_obj.section_name if cls_obj else cid}': an active teacher substitution is currently assigned. Please conclude or cancel the substitution before removing the subject.",
                             )
+                elif change["change_type"] == ChangeType.REMOVED_SLOT:
+                    b_load = change["baseline_load"]
+                    if SubjectLoadDependencyService.get_active_substitution_count(db, b_load.subject_load_id) > 0:
+                        s_name = db.query(Subject.subject_name).filter(Subject.subject_id == b_load.subject_id).scalar() or f"Subject #{b_load.subject_id}"
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=f"Cannot remove this meeting slot for '{s_name}' in section '{cls_obj.section_name if cls_obj else cid}': an active teacher substitution is currently assigned to this slot. Please conclude or cancel the substitution before removing the slot.",
+                        )
 
-            # 3. Archive previous active published loads
-            for pub in current_pub_loads:
-                pub.is_active_version = False
-                pub.status = "archived"
+            publish_plans.append({
+                "cid": cid,
+                "current_pub_loads": current_pub_loads,
+                "current_base": current_base,
+                "cls_items": cls_items,
+                "matched_drafts": matched_drafts,
+                "matched_baselines": matched_baselines,
+                "allocated_logical_ids": allocated_logical_ids,
+            })
 
-            new_revision = current_base + 1
+        # Phase 2: Atomic archive, promotion, substitution repointing, and draft cleanup
+        try:
+            for plan in publish_plans:
+                cid = plan["cid"]
+                current_pub_loads: list[SubjectLoad] = plan["current_pub_loads"]
+                current_base: int = plan["current_base"]
+                cls_items = plan["cls_items"]
+                matched_drafts: dict[int, SubjectLoad] = plan["matched_drafts"]
+                matched_baselines: dict[int, SubjectLoad] = plan["matched_baselines"]
+                allocated_logical_ids: list[str] = plan["allocated_logical_ids"]
 
-            # Fetch existing draft loads for this class to promote or reuse
-            existing_drafts = (
-                db.query(SubjectLoad)
-                .filter(
+                # 3. Archive previous active published loads and flush before activating new rows
+                for pub in current_pub_loads:
+                    pub.is_active_version = False
+                    pub.status = "archived"
+                if current_pub_loads:
+                    db.flush()
+
+                new_revision = current_base + 1
+                promoted_pairs: list[tuple[SubjectLoad, SubjectLoad | None]] = []
+                for idx, it in enumerate(cls_items):
+                    logical_id = allocated_logical_ids[idx]
+                    prev_pub = matched_baselines.get(idx)
+                    cont_id = prev_pub.subject_load_id if prev_pub else None
+                    matched_draft = matched_drafts.get(idx)
+
+                    if matched_draft is not None:
+                        p_load = matched_draft
+                        p_load.logical_load_id = logical_id
+                    else:
+                        p_load = SubjectLoad(
+                            class_id=it.class_id,
+                            subject_id=it.subject_id,
+                            academic_period_id=payload.academic_period_id,
+                            logical_load_id=logical_id,
+                            version=(prev_pub.version or 1) + 1 if prev_pub else 1,
+                        )
+                        db.add(p_load)
+
+                    p_load.staff_id = it.staff_id
+                    p_load.slot_id = it.slot_id
+                    p_load.start_time = it.start_time
+                    p_load.end_time = it.end_time
+                    p_load.days_of_week = it.days_of_week
+                    p_load.status = "published"
+                    p_load.is_active_version = True
+                    p_load.is_locked = True
+                    p_load.section_revision = new_revision
+                    p_load.base_revision = current_base
+                    p_load.published_at = now_time
+                    p_load.published_by = user_email
+                    p_load.last_modified_by = user_email
+                    p_load.continued_from_load_id = cont_id
+                    promoted_pairs.append((p_load, prev_pub))
+                    saved_count += 1
+
+                db.flush()
+
+                # 4. Atomic substitution repointing & Reassignment audit logs (1-to-1 per slot)
+                for p_load, prev_pub in promoted_pairs:
+                    if prev_pub is not None:
+                        subs = (
+                            db.query(TeacherSubstitution)
+                            .filter(
+                                TeacherSubstitution.subject_load_id == prev_pub.subject_load_id,
+                                TeacherSubstitution.status == "active",
+                                or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+                            )
+                            .all()
+                        )
+                        for s in subs:
+                            s.subject_load_id = p_load.subject_load_id
+
+                        if prev_pub.staff_id != p_load.staff_id:
+                            log_entry = SubjectLoadAssignmentLog(
+                                logical_load_id=p_load.logical_load_id,
+                                subject_load_id=p_load.subject_load_id,
+                                class_id=p_load.class_id,
+                                subject_id=p_load.subject_id,
+                                academic_period_id=p_load.academic_period_id,
+                                old_staff_id=prev_pub.staff_id,
+                                new_staff_id=p_load.staff_id,
+                                changed_by=user_email,
+                                change_reason="Section revision published",
+                            )
+                            db.add(log_entry)
+
+                # 5. Delete any remaining unpromoted draft rows for this section
+                promoted_ids = {p_load.subject_load_id for p_load, _ in promoted_pairs}
+                remaining_drafts_q = db.query(SubjectLoad).filter(
                     SubjectLoad.class_id == cid,
                     SubjectLoad.academic_period_id == payload.academic_period_id,
                     SubjectLoad.status == "draft",
                 )
-                .all()
-            )
-            draft_by_logical = {d.logical_load_id: d for d in existing_drafts if d.logical_load_id}
+                if promoted_ids:
+                    remaining_drafts_q = remaining_drafts_q.filter(~SubjectLoad.subject_load_id.in_(promoted_ids))
+                remaining_drafts_q.delete(synchronize_session="fetch")
 
-            promoted_loads: list[SubjectLoad] = []
-            for it in cls_items:
-                logical_id = it.logical_load_id or f"LL_{it.class_id}_{it.subject_id}_{payload.academic_period_id}"
-                prev_pub = next((p for p in current_pub_loads if p.logical_load_id == logical_id), None)
-                cont_id = prev_pub.subject_load_id if prev_pub else None
-
-                if logical_id in draft_by_logical:
-                    p_load = draft_by_logical[logical_id]
-                else:
-                    p_load = SubjectLoad(
-                        class_id=it.class_id,
-                        subject_id=it.subject_id,
-                        academic_period_id=payload.academic_period_id,
-                        logical_load_id=logical_id,
-                    )
-                    db.add(p_load)
-
-                p_load.staff_id = it.staff_id
-                p_load.slot_id = it.slot_id
-                p_load.start_time = it.start_time
-                p_load.end_time = it.end_time
-                p_load.days_of_week = it.days_of_week
-                p_load.status = "published"
-                p_load.is_active_version = True
-                p_load.is_locked = True
-                p_load.section_revision = new_revision
-                p_load.base_revision = current_base
-                p_load.published_at = now_time
-                p_load.published_by = user_email
-                p_load.last_modified_by = user_email
-                p_load.continued_from_load_id = cont_id
-                promoted_loads.append(p_load)
-                saved_count += 1
-
-            db.flush()
-
-            # 4. Atomic substitution repointing & Reassignment audit logs
-            for p_load in promoted_loads:
-                prev_pub = next((p for p in current_pub_loads if p.logical_load_id == p_load.logical_load_id), None)
-                if prev_pub:
-                    # Repoint active non-terminal substitutions
-                    subs = (
-                        db.query(TeacherSubstitution)
-                        .filter(
-                            TeacherSubstitution.subject_load_id == prev_pub.subject_load_id,
-                            TeacherSubstitution.status == "active",
-                            or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
-                        )
-                        .all()
-                    )
-                    for s in subs:
-                        s.subject_load_id = p_load.subject_load_id
-
-                    # Log teacher reassignment
-                    if prev_pub.staff_id != p_load.staff_id:
-                        log_entry = SubjectLoadAssignmentLog(
-                            logical_load_id=p_load.logical_load_id,
-                            subject_load_id=p_load.subject_load_id,
-                            class_id=p_load.class_id,
-                            subject_id=p_load.subject_id,
-                            academic_period_id=p_load.academic_period_id,
-                            old_staff_id=prev_pub.staff_id,
-                            new_staff_id=p_load.staff_id,
-                            changed_by=user_email,
-                            change_reason="Section revision published",
-                        )
-                        db.add(log_entry)
-
-            # 5. Delete any remaining unpromoted draft rows for this section
-            promoted_ids = {p.subject_load_id for p in promoted_loads}
-            db.query(SubjectLoad).filter(
-                SubjectLoad.class_id == cid,
-                SubjectLoad.academic_period_id == payload.academic_period_id,
-                SubjectLoad.status == "draft",
-                ~SubjectLoad.subject_load_id.in_(promoted_ids),
-            ).delete(synchronize_session=False)
-
-        db.commit()
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
     scope_label = "all sections" if payload.publish_scope == "all" else f"{payload.publish_scope} scope"
     return BatchSaveSubjectLoadResponse(

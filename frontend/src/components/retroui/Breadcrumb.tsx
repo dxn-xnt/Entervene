@@ -1,7 +1,7 @@
-import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
-import { ChevronRight, MoreHorizontal } from "lucide-react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
+import { ChevronRight, MoreHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const BreadcrumbRoot = React.forwardRef<
   HTMLElement,
@@ -13,8 +13,8 @@ const BreadcrumbRoot = React.forwardRef<
     className={cn("w-full", className)}
     {...props}
   />
-))
-BreadcrumbRoot.displayName = "Breadcrumb"
+));
+BreadcrumbRoot.displayName = "Breadcrumb";
 
 const BreadcrumbList = React.forwardRef<
   HTMLOListElement,
@@ -32,38 +32,42 @@ const BreadcrumbList = React.forwardRef<
       "[&>li:not(:first-child)_a]:!text-base sm:[&>li:not(:first-child)_a]:!text-lg md:[&>li:not(:first-child)_a]:!text-xl [&>li:not(:first-child)_a]:!font-semibold",
       "[&>li:not(:first-child)_button]:!text-base sm:[&>li:not(:first-child)_button]:!text-lg md:[&>li:not(:first-child)_button]:!text-xl [&>li:not(:first-child)_button]:!font-semibold",
       "[&>li:not(:first-child)_[aria-current=page]]:!text-base sm:[&>li:not(:first-child)_[aria-current=page]]:!text-lg md:[&>li:not(:first-child)_[aria-current=page]]:!text-xl [&>li:not(:first-child)_[aria-current=page]]:!font-bold",
-      className
+      className,
     )}
     {...props}
   />
-))
-BreadcrumbList.displayName = "BreadcrumbList"
+));
+BreadcrumbList.displayName = "BreadcrumbList";
 
 const BreadcrumbItem = React.forwardRef<
   HTMLLIElement,
   React.ComponentPropsWithoutRef<"li">
 >(({ className, ...props }, ref) => (
-  <li ref={ref} className={cn("inline-flex items-center", className)} {...props} />
-))
-BreadcrumbItem.displayName = "BreadcrumbItem"
+  <li
+    ref={ref}
+    className={cn("inline-flex items-center", className)}
+    {...props}
+  />
+));
+BreadcrumbItem.displayName = "BreadcrumbItem";
 
 const BreadcrumbLink = React.forwardRef<
   HTMLAnchorElement,
   React.ComponentPropsWithoutRef<"a"> & { asChild?: boolean }
 >(({ asChild, className, ...props }, ref) => {
-  const Comp = asChild ? Slot : "a"
+  const Comp = asChild ? Slot : "a";
   return (
     <Comp
       ref={ref}
       className={cn(
         "min-w-0 rounded font-semibold tracking-tight text-muted-foreground transition-colors hover:text-foreground",
-        className
+        className,
       )}
       {...props}
     />
-  )
-})
-BreadcrumbLink.displayName = "BreadcrumbLink"
+  );
+});
+BreadcrumbLink.displayName = "BreadcrumbLink";
 
 const BreadcrumbPage = React.forwardRef<
   HTMLSpanElement,
@@ -75,8 +79,8 @@ const BreadcrumbPage = React.forwardRef<
     className={cn("min-w-0 font-bold text-foreground", className)}
     {...props}
   />
-))
-BreadcrumbPage.displayName = "BreadcrumbPage"
+));
+BreadcrumbPage.displayName = "BreadcrumbPage";
 
 const BreadcrumbSeparator = ({
   children,
@@ -91,8 +95,8 @@ const BreadcrumbSeparator = ({
   >
     {children ?? <ChevronRight />}
   </li>
-)
-BreadcrumbSeparator.displayName = "BreadcrumbSeparator"
+);
+BreadcrumbSeparator.displayName = "BreadcrumbSeparator";
 
 const BreadcrumbEllipsis = ({
   className,
@@ -106,8 +110,8 @@ const BreadcrumbEllipsis = ({
     <MoreHorizontal className="h-4 w-4" />
     <span className="sr-only">More</span>
   </span>
-)
-BreadcrumbEllipsis.displayName = "BreadcrumbEllipsis"
+);
+BreadcrumbEllipsis.displayName = "BreadcrumbEllipsis";
 
 const Breadcrumb = Object.assign(BreadcrumbRoot, {
   List: BreadcrumbList,
@@ -116,8 +120,6 @@ const Breadcrumb = Object.assign(BreadcrumbRoot, {
   Page: BreadcrumbPage,
   Separator: BreadcrumbSeparator,
   Ellipsis: BreadcrumbEllipsis,
-})
+});
 
-export { Breadcrumb }
-
-
+export { Breadcrumb };

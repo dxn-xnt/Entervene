@@ -217,7 +217,7 @@ export default function AddClassModal({
 
         <Dialog.Footer>
           <Dialog.Close>
-            <Button variant={"outline"} onClick={handleClose}>Cancel</Button>
+            <Button variant={"outline"} autoIcon={false} onClick={handleClose}>Cancel</Button>
           </Dialog.Close>
         </Dialog.Footer>
       </Dialog.Content>
@@ -250,7 +250,7 @@ export default function AddClassModal({
         <div className="flex items-center justify-between w-full">
           <Text as="h5" className="font-sans text-xl font-bold">{dialogTitle}</Text>
           {stepCountText && (
-            <Text as="h5" className="font-sans text-md font-bold">{stepCountText}</Text>
+            <Text as="p" className="font-sans text-sm font-bold">{stepCountText}</Text>
           )}
         </div>
       </Dialog.Header>
@@ -408,7 +408,7 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
       </div>
       <AdminValidationAlert message={saveError?.message === "Review the class setup before saving." ? null : saveError?.message} attempt={validationAttempt} />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={`grid gap-3 ${setup.sections.length > 1 ? "sm:grid-cols-2" : "grid-cols-1"}`}>
         {setup.sections.map((section) => {
           const students = assignmentState.assignmentsBySection[section.localId] ?? [];
           const femaleCount = students.filter(
@@ -481,15 +481,15 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
         </div>
       )}
 
-      <div className="-mx-4 -mb-4 flex w-[calc(100%+2rem)] flex-wrap items-center justify-between gap-2 border-t-2 px-4 py-4">
-        <Button variant="outline" onClick={onClose}>Close</Button>
+      <Dialog.Footer position="static" className="-mx-4 -mb-4 mt-0 w-[calc(100%+2rem)] justify-between">
+        <Button variant="outline" autoIcon={false} onClick={onClose}>Close</Button>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={onBack}>Back</Button>
           <Button variant="default" disabled={isSaving} onClick={saveClasses}>
             {isSaving ? "Saving classes..." : saveError?.retryable ? "Retry Save Classes" : "Save Classes"}
           </Button>
         </div>
-      </div>
+      </Dialog.Footer>
     </div>
   );
 }

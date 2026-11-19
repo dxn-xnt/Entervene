@@ -209,13 +209,6 @@ const StudentQuizResult = () => {
                       Retake Quiz
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate(origin.path)}
-                    className="shrink-0 gap-2 whitespace-nowrap"
-                  >
-                    Back to {origin.label}
-                  </Button>
                 </div>
               </div>
 

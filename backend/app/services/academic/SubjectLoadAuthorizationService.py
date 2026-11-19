@@ -295,13 +295,13 @@ class SubjectLoadAuthorizationService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     @classmethod
-    def get_active_published_load(
+    def get_active_published_loads(
         cls,
         db: Session,
         class_id: int,
         subject_id: int,
         academic_period_id: int,
-    ) -> SubjectLoad | None:
+    ) -> list[SubjectLoad]:
         return (
             db.query(SubjectLoad)
             .filter(
@@ -311,8 +311,67 @@ class SubjectLoadAuthorizationService:
                 SubjectLoad.is_active_version.is_(True),
                 SubjectLoad.status.in_(["published", "active"]),
             )
+            .order_by(SubjectLoad.subject_load_id.asc())
+            .all()
+        )
+
+    @classmethod
+    def get_active_published_load(
+        cls,
+        db: Session,
+        class_id: int,
+        subject_id: int,
+        academic_period_id: int,
+    ) -> SubjectLoad | None:
+        loads = cls.get_active_published_loads(db, class_id, subject_id, academic_period_id)
+        return loads[0] if loads else None
+
+    @classmethod
+    def _evaluate_load_access_level(
+        cls,
+        db: Session,
+        load: SubjectLoad,
+        staff_id: str,
+        *,
+        target_date: date_type,
+        restriction_reason: str | None,
+    ) -> SubjectAccessLevel:
+        active_sub = SubstitutionService.get_active_substitution(db, load.subject_load_id, as_of=target_date)
+        if active_sub is not None:
+            # 1. Substitute teacher has active write/grading authority (downgraded to VIEW_ONLY if historical/archived)
+            if staff_id == active_sub.substitute_staff_id:
+                return SubjectAccessLevel.VIEW_ONLY if restriction_reason else SubjectAccessLevel.WRITE
+
+            # 2. Current permanent primary teacher on SubjectLoad has view-only access during substitution
+            if staff_id == load.staff_id:
+                return SubjectAccessLevel.VIEW_ONLY
+
+            # 3. Original on-leave primary teacher: retains view-only access ONLY if they are still the primary teacher on SubjectLoad
+            # If permanently replaced (A -> B), former Teacher A receives DENIED per least privilege.
+            if staff_id == active_sub.original_staff_id and load.staff_id == active_sub.original_staff_id:
+                return SubjectAccessLevel.VIEW_ONLY
+
+            return SubjectAccessLevel.DENIED
+
+        # No active substitution: assigned primary teacher has write authority in open contexts, view-only in historical/archived
+        if staff_id == load.staff_id:
+            return SubjectAccessLevel.VIEW_ONLY if restriction_reason else SubjectAccessLevel.WRITE
+
+        # Check if staff was an authorized substitute teacher on this load (active or completed)
+        from app.models.academic.TeacherSubstitution import TeacherSubstitution
+        past_sub = (
+            db.query(TeacherSubstitution.substitution_id)
+            .filter(
+                TeacherSubstitution.subject_load_id == load.subject_load_id,
+                TeacherSubstitution.substitute_staff_id == staff_id,
+                TeacherSubstitution.status.in_(["active", "completed"]),
+            )
             .first()
         )
+        if past_sub is not None:
+            return SubjectAccessLevel.VIEW_ONLY
+
+        return SubjectAccessLevel.DENIED
 
     @classmethod
     def get_teacher_access_level(
@@ -372,46 +431,25 @@ class SubjectLoadAuthorizationService:
         except Exception:
             pass
 
-        load = cls.get_active_published_load(db, class_id, subject_id, academic_period_id)
-        if not load:
+        loads = cls.get_active_published_loads(db, class_id, subject_id, academic_period_id)
+        if not loads:
             return SubjectAccessLevel.DENIED
 
-        active_sub = SubstitutionService.get_active_substitution(db, load.subject_load_id, as_of=target_date)
-        if active_sub is not None:
-            # 1. Substitute teacher has active write/grading authority (downgraded to VIEW_ONLY if historical/archived)
-            if staff_id == active_sub.substitute_staff_id:
-                return SubjectAccessLevel.VIEW_ONLY if restriction_reason else SubjectAccessLevel.WRITE
-
-            # 2. Current permanent primary teacher on SubjectLoad has view-only access during substitution
-            if staff_id == load.staff_id:
-                return SubjectAccessLevel.VIEW_ONLY
-
-            # 3. Original on-leave primary teacher: retains view-only access ONLY if they are still the primary teacher on SubjectLoad
-            # If permanently replaced (A -> B), former Teacher A receives DENIED per least privilege.
-            if staff_id == active_sub.original_staff_id and load.staff_id == active_sub.original_staff_id:
-                return SubjectAccessLevel.VIEW_ONLY
-
-            return SubjectAccessLevel.DENIED
-
-        # No active substitution: assigned primary teacher has write authority in open contexts, view-only in historical/archived
-        if staff_id == load.staff_id:
-            return SubjectAccessLevel.VIEW_ONLY if restriction_reason else SubjectAccessLevel.WRITE
-
-        # Check if staff was an authorized substitute teacher on this load (active or completed)
-        from app.models.academic.TeacherSubstitution import TeacherSubstitution
-        past_sub = (
-            db.query(TeacherSubstitution.substitution_id)
-            .filter(
-                TeacherSubstitution.subject_load_id == load.subject_load_id,
-                TeacherSubstitution.substitute_staff_id == staff_id,
-                TeacherSubstitution.status.in_(["active", "completed"]),
+        best_level = SubjectAccessLevel.DENIED
+        for load in loads:
+            level = cls._evaluate_load_access_level(
+                db,
+                load,
+                staff_id,
+                target_date=target_date,
+                restriction_reason=restriction_reason,
             )
-            .first()
-        )
-        if past_sub is not None:
-            return SubjectAccessLevel.VIEW_ONLY
+            if level == SubjectAccessLevel.WRITE:
+                return SubjectAccessLevel.WRITE
+            if level == SubjectAccessLevel.VIEW_ONLY:
+                best_level = SubjectAccessLevel.VIEW_ONLY
 
-        return SubjectAccessLevel.DENIED
+        return best_level
 
     @classmethod
     def can_view(

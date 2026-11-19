@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { OverviewCard } from "@/components/overview-cards";
-import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
+import { Empty } from "@/components/retroui/Empty";
 import { Loader } from "@/components/retroui/Loader";
 import { Button } from "@/components/teacher/button";
 import { toast } from "sonner";
@@ -305,12 +305,16 @@ function AdminCurrentTermDashboard() {
               />
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {visibleGradeHierarchy.map((group) => (
-                  <AdminPredictionGradeCard
-                    key={group.grade_level}
-                    group={group}
-                  />
-                ))}
+                {visibleGradeHierarchy.map((group) => {
+                  const isFullWidth = group.sections.length >= 2;
+                  return (
+                    <AdminPredictionGradeCard
+                      key={group.grade_level}
+                      group={group}
+                      className={isFullWidth ? "col-span-1 md:col-span-2" : "col-span-1"}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
@@ -506,9 +510,19 @@ function TeacherCurrentTermDashboard() {
                 <span>Loading current-term projections...</span>
               </div>
             ) : loadError ? null : !selectedPeriodId ? (
-              <Card className="border-2 border-black bg-white p-6 text-center font-semibold text-gray-700">
-                Select an academic term to view projections.
-              </Card>
+              <Empty className="w-full border-2 border-black bg-white p-6 shadow-none hover:shadow-none justify-center">
+                <Empty.Content className="gap-2">
+                  <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                    <Sparkles className="size-6 text-muted-foreground" />
+                  </Empty.Icon>
+                  <Empty.Title className="text-base font-bold text-foreground">
+                    Select an academic term
+                  </Empty.Title>
+                  <Empty.Description className="text-sm text-muted-foreground">
+                    Select an academic term to view projections.
+                  </Empty.Description>
+                </Empty.Content>
+              </Empty>
             ) : filtered ? (
               <PredictionTable
                 items={data.items}
@@ -529,14 +543,31 @@ function TeacherCurrentTermDashboard() {
               <div className="flex flex-col gap-3">
                 {subjectSummaries.length ? (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {subjectSummaries.map((group) => (
-                      <PredictionSubjectSection key={group.subject_id} group={group} />
-                    ))}
+                    {subjectSummaries.map((group) => {
+                      const isFullWidth = group.sections.length >= 2;
+                      return (
+                        <PredictionSubjectSection
+                          key={group.subject_id}
+                          group={group}
+                          className={isFullWidth ? "col-span-1 md:col-span-2" : "col-span-1"}
+                        />
+                      );
+                    })}
                   </div>
                 ) : (
-                  <Card className="border-2 border-black bg-white p-6 text-center font-semibold">
-                    No current-term projections are available for this scope.
-                  </Card>
+                  <Empty className="w-full border-2 border-black bg-white p-6 shadow-none hover:shadow-none justify-center">
+                    <Empty.Content className="gap-2">
+                      <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                        <Sparkles className="size-6 text-muted-foreground" />
+                      </Empty.Icon>
+                      <Empty.Title className="text-base font-bold text-foreground">
+                        No current-term projections available
+                      </Empty.Title>
+                      <Empty.Description className="text-sm text-muted-foreground">
+                        No current-term projections are available for this scope.
+                      </Empty.Description>
+                    </Empty.Content>
+                  </Empty>
                 )}
               </div>
             )}

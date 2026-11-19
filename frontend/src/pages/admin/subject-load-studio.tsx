@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
@@ -24,14 +24,12 @@ import { Table } from "@/components/retroui/Table";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import {
   apiFetch,
   getSubjectLoadStudioData,
   validateSubjectLoads,
-  autoScheduleSubjectLoads,
   batchSaveSubjectLoads,
   unlockSection,
   discardDraft,
@@ -46,13 +44,10 @@ import AssignTeacherModal, { type TeacherModalTarget } from "@/pages/admin/forms
 import {
   AlertTriangle,
   ArrowRightLeft,
-  CheckCircle2,
   Send,
   AlertCircle,
   Plus,
   Trash2,
-  Wand2,
-  Sparkles,
   Settings,
   Search,
   Copy,
@@ -66,118 +61,50 @@ import {
 import { Input } from "@/components/retroui/Input";
 import { useSettings } from "@/context/SettingsContext";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
-import { timeStringToMinutes, validatePeriodTimeRange } from "@/lib/time-utils";
+import { timeStringToMinutes } from "@/lib/time-utils";
 import { cn } from "@/lib/utils";
 import { classPathwayLabel } from "@/lib/class-pathway";
+import { buildInitialStudioLoads, isSubjectOfferedForClass } from "@/pages/admin/subject-load-init";
+import {
+  conflictAffectsSection,
+  conflictKeys,
+  getLoadConflictSummary,
+  getSlotConflictSummary,
+} from "@/pages/admin/subject-load-conflicts";
 import { getLockedSectionIds } from "@/pages/admin/subject-load-lock";
+import {
+  diagnoseMissingPeriodSlots,
+  formatTemplateGroupName,
+  getAssignableClassSlots,
+  getClassGradeLevel,
+  getCompatiblePeriodSlots,
+  getConfiguredTemplateSlots,
+  isJhsGradeLevel,
+  isShsGradeLevel,
+  resolveAssignedTemplateGroup,
+  resolveDefaultShsDrawerGroup,
+  resolveMatchingPeriodSlot,
+  withAuthoritativeTemplateSlots,
+} from "@/pages/admin/subject-load-templates";
 import { getSubjectColor } from "@/lib/subject-colors";
 import { teacherAssignmentConflict } from "@/pages/admin/teacher-availability";
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 
-function conflictKeys(conflict: ConflictItem): string[] {
-  return Array.from(new Set([
-    ...(conflict.affected_keys || []),
-    conflict.affected_key,
-    conflict.related_affected_key,
-  ].filter((key): key is string => Boolean(key))));
-}
-
-function conflictAffectsClass(conflict: ConflictItem, classId: number): boolean {
-  return conflict.class_id === classId
-    || conflict.related_class_id === classId
-    || conflictKeys(conflict).some((key) => key.startsWith(`${classId}_`));
-}
-
-function conflictAffectsLoad(conflict: ConflictItem, classId: number, subjectId: number): boolean {
-  const key = `${classId}_${subjectId}`;
-  return conflictKeys(conflict).includes(key)
-    || (conflict.class_id === classId && conflict.subject_id === subjectId)
-    || (conflict.related_class_id === classId && conflict.related_subject_id === subjectId);
-}
-
-function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
-  if (!str) return { hour: fallbackHour, minute: 0, period: "AM" };
+function formatTime12h(str?: string | null): string {
+  if (!str) return "";
   const parts = str.split(":");
-  if (parts.length < 2) return { hour: fallbackHour, minute: 0, period: "AM" };
+  if (parts.length < 2) return str;
   let h = parseInt(parts[0], 10);
   const m = parseInt(parts[1], 10) || 0;
-  let p = "AM";
+  if (Number.isNaN(h)) return str;
+  let period = "AM";
   if (h >= 12) {
-    p = "PM";
+    period = "PM";
     if (h > 12) h -= 12;
   } else if (h === 0) {
     h = 12;
-    p = "PM"; // Auto-correct to PM for UI display
   }
-  return { hour: h, minute: m, period: p };
-}
-
-function timeValueToString(tv: TimeValue): string {
-  let h = tv.hour;
-  if (tv.period === "PM" && h < 12) h += 12;
-  if (tv.period === "AM" && h === 12) h = 0;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(h)}:${pad(tv.minute)}`;
-}
-
-function formatTime12h(str?: string | null): string {
-  if (!str) return "";
-  const tv = stringToTimeValue(str);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${tv.hour}:${pad(tv.minute)} ${tv.period}`;
-}
-
-function isSubjectOfferedForClass(
-  sub: { subject_id: number; academic_level_id: number },
-  cls: { academic_level_id: number; academic_year_id: number; pathway_id?: number | null },
-  offerings: Array<{
-    subject_id: number;
-    academic_year_id: number;
-    academic_level_id: number;
-    academic_period_id: number;
-    pathway_ids?: number[];
-  }>,
-  academicPeriodId: number,
-): boolean {
-  if (sub.academic_level_id !== cls.academic_level_id) return false;
-
-  return offerings.some((so) => {
-    if (
-      so.subject_id !== sub.subject_id ||
-      so.academic_level_id !== cls.academic_level_id ||
-      so.academic_year_id !== cls.academic_year_id ||
-      so.academic_period_id !== academicPeriodId
-    ) {
-      return false;
-    }
-
-    const eligiblePathwayIds = so.pathway_ids || [];
-    return eligiblePathwayIds.length === 0 || (
-      cls.pathway_id != null && eligiblePathwayIds.includes(cls.pathway_id)
-    );
-  });
-}
-
-function subjectOfferingForClass(
-  subjectId: number,
-  cls: { academic_level_id: number; academic_year_id: number; pathway_id?: number | null },
-  offerings: SubjectLoadStudioData["subject_offerings"],
-  academicPeriodId: number,
-) {
-  return (offerings || []).find((offering) => {
-    if (offering.subject_id !== subjectId
-      || offering.academic_level_id !== cls.academic_level_id
-      || offering.academic_year_id !== cls.academic_year_id
-      || offering.academic_period_id !== academicPeriodId) return false;
-    const pathwayIds = offering.pathway_ids || [];
-    return pathwayIds.length === 0 || (cls.pathway_id != null && pathwayIds.includes(cls.pathway_id));
-  });
-}
-
-function slotDurationMinutes(slot: { start_time: string; end_time: string }) {
-  const start = timeStringToMinutes(slot.start_time);
-  const end = timeStringToMinutes(slot.end_time);
-  return start == null || end == null || end <= start ? null : end - start;
+  return `${h}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 function studioClassPathwayLabel(
@@ -300,6 +227,7 @@ function relocateLoads(items: SubjectLoadItem[], from: GridBlockRef, to: GridBlo
     const remaining = itemDays.filter((d) => !from.days.includes(d));
     const moved: SubjectLoadItem = {
       ...item,
+      slot_id: null,
       start_time: to.startTime,
       end_time: to.endTime,
       days_of_week: sortDayKeys(to.days),
@@ -471,20 +399,10 @@ export default function AdminSubjectLoadStudio() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [autoScheduleNotice, setAutoScheduleNotice] = useState<{ title?: string; message: string; type: "success" | "error" } | null>(null);
-
-  useEffect(() => {
-    if (autoScheduleNotice?.type === "success") {
-      const timer = setTimeout(() => {
-        setAutoScheduleNotice(null);
-      }, 6000);
-      return () => clearTimeout(timer);
-    }
-  }, [autoScheduleNotice]);
-  const [timeValidationError, setTimeValidationError] = useState<{ slotKey: string; message: string } | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [jumpIndex, setJumpIndex] = useState<{ type: "error" | "warning" | "unassigned"; idx: number } | null>(null);
   const [isBreakDrawerOpen, setIsBreakDrawerOpen] = useState<boolean>(false);
+  const [breakDrawerGroup, setBreakDrawerGroup] = useState<string | null>(null);
   const [periodTemplateSlots, setPeriodTemplateSlots] = useState<PeriodTemplateSlotItem[]>([]);
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [sectionViewModes, setSectionViewModes] = useState<Record<number, "grid" | "list">>({});
@@ -494,47 +412,48 @@ export default function AdminSubjectLoadStudio() {
   const [teacherModalTarget, setTeacherModalTarget] = useState<TeacherModalTarget | null>(null);
   const [pendingPeriodChange, setPendingPeriodChange] = useState<PendingPeriodChange | null>(null);
   const [isResolvingPeriodChange, setIsResolvingPeriodChange] = useState(false);
+  const validationSeqRef = useRef(0);
   const lockedSectionIds = useMemo(() => getLockedSectionIds(studioData), [studioData]);
   const isSectionLocked = (classId: number) => lockedSectionIds.has(classId);
 
+  const openBreakTimelinesDrawer = useCallback((group?: string | null) => {
+    setBreakDrawerGroup(group ?? null);
+    setIsBreakDrawerOpen(true);
+  }, []);
+
   const isJhsClass = useCallback((classId: number) => {
     const cls = studioData?.classes.find((item) => item.class_id === classId);
-    const grade = studioData?.academic_levels.find(
-      (level) => level.academic_level_id === cls?.academic_level_id
-    )?.grade_level;
-    return grade != null && grade >= 7 && grade <= 10;
+    return isJhsGradeLevel(getClassGradeLevel(cls, studioData?.academic_levels));
   }, [studioData]);
 
   const classPeriodSlots = useCallback((classId: number) => {
     const cls = studioData?.classes.find((item) => item.class_id === classId);
-    const group = cls?.period_template_group || "JHS_45MIN";
-    return periodTemplateSlots
-      .filter((slot) => slot.template_group === group && slot.slot_type === "CLASS" && !slot.is_locked_break && slot.slot_id != null)
-      .sort((a, b) => a.display_order - b.display_order);
+    return getAssignableClassSlots(cls, studioData?.academic_levels || [], periodTemplateSlots);
   }, [periodTemplateSlots, studioData]);
 
   const subjectPeriodSlots = useCallback((classId: number, subjectId: number) => {
     const cls = studioData?.classes.find((item) => item.class_id === classId);
     if (!cls || !studioData) return [];
-    const offering = subjectOfferingForClass(
-      subjectId,
+    return getCompatiblePeriodSlots(
       cls,
-      studioData.subject_offerings,
+      subjectId,
+      studioData.academic_levels || [],
+      periodTemplateSlots,
+      studioData.subject_offerings || [],
       selectedPeriodId || studioData.active_period_id,
     );
-    if (offering?.minutes == null) return [];
-    return classPeriodSlots(classId).filter((slot) => slotDurationMinutes(slot) === offering.minutes);
-  }, [classPeriodSlots, selectedPeriodId, studioData]);
+  }, [periodTemplateSlots, selectedPeriodId, studioData]);
 
-  const withAuthoritativeJhsSlots = useCallback((items: SubjectLoadItem[]) => items.map((item) => {
-    if (!isJhsClass(item.class_id) || !item.start_time || !item.end_time) return item;
-    const matches = classPeriodSlots(item.class_id).filter(
-      (slot) => slot.start_time === item.start_time && slot.end_time === item.end_time
-    );
-    return matches.length === 1
-      ? { ...item, slot_id: matches[0].slot_id, start_time: matches[0].start_time, end_time: matches[0].end_time }
-      : item;
-  }), [classPeriodSlots, isJhsClass]);
+  const withAuthoritativeSlots = useCallback(
+    (items: SubjectLoadItem[]) =>
+      withAuthoritativeTemplateSlots(
+        items,
+        studioData?.classes || [],
+        studioData?.academic_levels || [],
+        periodTemplateSlots,
+      ),
+    [periodTemplateSlots, studioData],
+  );
 
   const gradeOptions = useMemo(() => {
     if (!studioData?.academic_levels) return [];
@@ -577,21 +496,13 @@ export default function AdminSubjectLoadStudio() {
 
   const getSectionSlots = useCallback(
     (cls: { class_id: number; period_template_group?: string | null; section_name?: string; academic_level_id: number }) => {
-      let groupKey = cls.period_template_group || "JHS_45MIN";
-      const levelObj = studioData?.academic_levels.find((l) => l.academic_level_id === cls.academic_level_id);
-      const grade = levelObj?.grade_level || 7;
-      if (!cls.period_template_group && grade >= 11) {
-        const name = (cls.section_name || "").toLowerCase();
-        if (name.includes("del mundo") || name.includes("reyes")) {
-          groupKey = "SHS_DELMUNDO_REYES";
-        } else {
-          groupKey = "SHS_CAMPOS_ZARA";
-        }
-      }
+      const assignedGroup = resolveAssignedTemplateGroup(cls, studioData?.academic_levels || []);
+      const sorted = [
+        ...getConfiguredTemplateSlots(cls, studioData?.academic_levels || [], periodTemplateSlots),
+      ];
 
-      const groupSlots = periodTemplateSlots.filter((s) => s.template_group === groupKey);
-      const sorted = [...groupSlots].sort((a, b) => a.display_order - b.display_order);
-
+      // Preserve existing custom saved schedules visually on the timetable grid
+      // without silently overwriting or dropping them.
       const sectionLoads = loads.filter((l) => l.class_id === cls.class_id && l.start_time && l.end_time);
       const knownStarts = new Set(sorted.map((s) => s.start_time));
 
@@ -599,8 +510,8 @@ export default function AdminSubjectLoadStudio() {
         if (l.start_time && !knownStarts.has(l.start_time)) {
           knownStarts.add(l.start_time);
           sorted.push({
-            template_group: groupKey,
-            slot_name: `Period (${formatTime12h(l.start_time)})`,
+            template_group: assignedGroup || "CUSTOM_SAVED",
+            slot_name: `Saved (${formatTime12h(l.start_time)})`,
             slot_type: "CLASS",
             start_time: l.start_time,
             end_time: l.end_time || l.start_time,
@@ -625,18 +536,16 @@ export default function AdminSubjectLoadStudio() {
   const activeGroupKey = useMemo(() => {
     if (!activeGradeId) return "JHS_45MIN";
     const levelObj = studioData?.academic_levels.find((l) => String(l.academic_level_id) === activeGradeId);
-    const grade = levelObj?.grade_level || 7;
+    const grade = levelObj?.grade_level ?? null;
+    const gradeClasses = (studioData?.classes || []).filter((c) => String(c.academic_level_id) === activeGradeId);
     const selectedClass = selectedSectionId !== "all"
       ? studioData?.classes.find((c) => String(c.class_id) === selectedSectionId)
-      : studioData?.classes.find((c) => String(c.academic_level_id) === activeGradeId);
-    if (selectedClass?.period_template_group) return selectedClass.period_template_group;
-    if (grade >= 11) {
-      const name = (selectedClass?.section_name || "").toLowerCase();
-      if (name.includes("del mundo") || name.includes("reyes")) return "SHS_DELMUNDO_REYES";
-      return "SHS_CAMPOS_ZARA";
-    }
+      : gradeClasses[carouselActiveIdx] || gradeClasses[0];
+    const assigned = resolveAssignedTemplateGroup(selectedClass, studioData?.academic_levels || []);
+    if (assigned) return assigned;
+    if (isShsGradeLevel(grade)) return resolveDefaultShsDrawerGroup(periodTemplateSlots);
     return "JHS_45MIN";
-  }, [activeGradeId, selectedSectionId, studioData]);
+  }, [activeGradeId, carouselActiveIdx, periodTemplateSlots, selectedSectionId, studioData]);
 
 
   const previousPeriods = useMemo(() => {
@@ -651,12 +560,9 @@ export default function AdminSubjectLoadStudio() {
 
 
   // Load studio data
-  const loadStudio = useCallback(async (periodId?: number, preserveNotice = false) => {
+  const loadStudio = useCallback(async (periodId?: number) => {
     setIsLoading(true);
     setLoadError(false);
-    if (!preserveNotice) {
-      setAutoScheduleNotice(null);
-    }
     try {
       const data = await getSubjectLoadStudioData(periodId);
       setStudioData(data);
@@ -664,123 +570,18 @@ export default function AdminSubjectLoadStudio() {
         setPeriodTemplateSlots(data.period_template_slots);
       }
 
-      // Initialize subject loads: populate missing loads from section x subject combinations
-      const existing = data.existing_loads || [];
       const periodIdToUse = data.active_period_id;
-
-      const initialLoads: SubjectLoadItem[] = [];
-
-      const offerings = data.subject_offerings || [];
-      const includedExisting = new Set<SubjectLoadItem>();
-
-      const appendExistingLoad = (m: SubjectLoadItem, idx: number, isOfferingEligible: boolean) => {
-        includedExisting.add(m);
-        initialLoads.push({
-          _key: m.subject_load_id
-            ? `sl_${m.subject_load_id}`
-            : `slot_${m.class_id}_${m.subject_id}_${idx}`,
-          _offering_eligible: isOfferingEligible,
-          subject_load_id: m.subject_load_id,
-          class_id: m.class_id,
-          subject_id: m.subject_id,
-          staff_id: m.staff_id || null,
-          academic_period_id: periodIdToUse,
-          slot_id: m.slot_id,
-          start_time: m.start_time || null,
-          end_time: m.end_time || null,
-          days_of_week: m.days_of_week || [],
-          status: m.status || "draft",
-          is_locked: Boolean(m.is_locked || m.status === "published"),
-          logical_load_id: m.logical_load_id,
-          section_revision: m.section_revision,
-          base_revision: m.status === "published" || m.status === "active"
-            ? m.section_revision
-            : m.base_revision,
-          has_live_data: m.has_live_data,
-          dependencies: m.dependencies,
-        });
-      };
-
-      (data.classes || []).forEach((cls) => {
-        // Find subjects matching class academic level & pathway offering for this period
-        const levelSubjects = (data.subjects || []).filter((sub) =>
-          isSubjectOfferedForClass(sub, cls, offerings, periodIdToUse)
-        );
-
-        // Fresh sections receive a safe, deterministic draft timetable. If a
-        // section already has scheduled rows, preserve them and leave only new
-        // subjects unscheduled for explicit admin placement.
-        const hasExistingSchedule = existing.some(
-          (load) => load.class_id === cls.class_id && load.start_time && load.end_time
-        );
-        const templateGroup = cls.period_template_group || "JHS_45MIN";
-        const classSlots = (data.period_template_slots || [])
-          .filter((slot) => slot.template_group === templateGroup && slot.slot_type === "CLASS" && !slot.is_locked_break && slot.slot_id != null)
-          .sort((a, b) => a.display_order - b.display_order);
-        const defaultSchedule = new Map<number, { slot: (typeof classSlots)[number]; days: string[] }>();
-
-        if (!hasExistingSchedule && classSlots.length > 0) {
-          const usedByDuration = new Map<number, number>();
-          levelSubjects.forEach((subject) => {
-            const offering = subjectOfferingForClass(subject.subject_id, cls, offerings, periodIdToUse);
-            if (offering?.minutes == null) return;
-            const matchingSlots = classSlots.filter((slot) => slotDurationMinutes(slot) === offering.minutes);
-            const index = usedByDuration.get(offering.minutes) || 0;
-            const slot = matchingSlots[index % Math.max(1, matchingSlots.length)];
-            if (!slot) return;
-            const cycle = Math.floor(index / matchingSlots.length);
-            const days = cycle === 0
-              ? ["MON", "TUE", "WED", "THU", "FRI"]
-              : cycle % 2 === 1 ? ["MON", "WED", "FRI"] : ["TUE", "THU"];
-            defaultSchedule.set(subject.subject_id, { slot, days });
-            usedByDuration.set(offering.minutes, index + 1);
-          });
-        }
-
-        levelSubjects.forEach((sub) => {
-          const matched = existing.filter(
-            (ex) => ex.class_id === cls.class_id && ex.subject_id === sub.subject_id
-          );
-
-          if (matched.length > 0) {
-            matched.forEach((m, idx) => {
-              appendExistingLoad(m, idx, true);
-            });
-          } else {
-            // No DB record yet — create synthetic draft load so unassigned counts are accurate
-            initialLoads.push({
-              _key: `new_${cls.class_id}_${sub.subject_id}`,
-              _offering_eligible: true,
-              subject_load_id: undefined,
-              class_id: cls.class_id,
-              subject_id: sub.subject_id,
-              staff_id: null,
-              academic_period_id: periodIdToUse,
-              slot_id: defaultSchedule.get(sub.subject_id)?.slot.slot_id ?? null,
-              start_time: defaultSchedule.get(sub.subject_id)?.slot.start_time ?? null,
-              end_time: defaultSchedule.get(sub.subject_id)?.slot.end_time ?? null,
-              days_of_week: defaultSchedule.get(sub.subject_id)?.days ?? [],
-              status: "draft",
-              is_locked: false,
-            });
-          }
-        });
-      });
-
-      // Keep existing rows whose offering was removed or changed visible for
-      // review/correction. They are not synthesized as eligible rows and the
-      // shared backend validator will continue to block their publication.
-      existing.forEach((load, idx) => {
-        if (!includedExisting.has(load)) appendExistingLoad(load, idx, false);
-      });
-
+      const initialLoads = buildInitialStudioLoads(data);
       setLoads(initialLoads);
 
-      // Trigger initial conflict validation
+      // Trigger initial conflict validation with sequence guard to avoid stale overwrites
+      const validationSeq = ++validationSeqRef.current;
       if (initialLoads.length > 0) {
         const valRes = await validateSubjectLoads(periodIdToUse, initialLoads);
-        setConflicts(valRes.conflicts);
-        setTeacherWorkloads(valRes.teacher_workloads);
+        if (validationSeq === validationSeqRef.current) {
+          setConflicts(valRes.conflicts);
+          setTeacherWorkloads(valRes.teacher_workloads);
+        }
       } else {
         setConflicts([]);
         setTeacherWorkloads([]);
@@ -802,19 +603,22 @@ export default function AdminSubjectLoadStudio() {
     }
   }, [loadStudio, selectedPeriodId]);
 
-  // Run validation whenever loads change
+  // Run validation whenever loads change, ignoring out-of-order stale responses
   const runValidation = useCallback(
     async (updatedLoads: SubjectLoadItem[]) => {
-      if (!selectedPeriodId) return;
+      const periodId = selectedPeriodId ?? studioData?.active_period_id;
+      if (!periodId) return;
+      const validationSeq = ++validationSeqRef.current;
       try {
-        const valRes = await validateSubjectLoads(selectedPeriodId, withAuthoritativeJhsSlots(updatedLoads));
+        const valRes = await validateSubjectLoads(periodId, withAuthoritativeSlots(updatedLoads));
+        if (validationSeq !== validationSeqRef.current) return;
         setConflicts(valRes.conflicts);
         setTeacherWorkloads(valRes.teacher_workloads);
       } catch (e) {
         console.error("Validation error:", e);
       }
     },
-    [selectedPeriodId, withAuthoritativeJhsSlots]
+    [selectedPeriodId, studioData?.active_period_id, withAuthoritativeSlots]
   );
 
   // Load update handlers
@@ -825,51 +629,6 @@ export default function AdminSubjectLoadStudio() {
         ? { ...item, staff_id: staffId === "none" ? null : staffId, status: "draft", is_locked: false }
         : item
     );
-    setLoads(updated);
-    void runValidation(updated);
-  };
-
-  const handleTimeChange = (
-    slotKey: string,
-    field: "start_time" | "end_time",
-    val: string
-  ) => {
-    const item = loads.find(i => i._key === slotKey);
-    if (!item) return;
-    if (isSectionLocked(item.class_id)) return;
-
-    const start = field === "start_time" ? val : (item.start_time || "00:00");
-    const end = field === "end_time" ? val : (item.end_time || "00:00");
-
-    const schoolDayStart = getSetting("school_day_start", "06:00");
-    const schoolDayEnd = getSetting("school_day_end", "20:00");
-
-    const errorMsg = validatePeriodTimeRange(start, end, schoolDayStart, schoolDayEnd);
-    if (errorMsg) {
-      setTimeValidationError({ slotKey, message: errorMsg });
-      return; // Reject change
-    }
-    if (timeValidationError?.slotKey === slotKey) setTimeValidationError(null);
-
-    const updated = loads.map((item) => {
-      if (item._key !== slotKey) return item;
-
-      const newItem = { ...item, [field]: val, status: "draft", is_locked: false };
-
-      // When start_time switches to PM, auto-force end_time to PM too
-      if (field === "start_time") {
-        const startTv = stringToTimeValue(val);
-        if (startTv.period === "PM") {
-          const endTv = stringToTimeValue(item.end_time, 9);
-          if (endTv.period === "AM") {
-            const pmHour = endTv.hour >= 1 && endTv.hour <= 9 ? endTv.hour : 12;
-            newItem.end_time = timeValueToString({ hour: pmHour, minute: endTv.minute, period: "PM" });
-          }
-        }
-      }
-
-      return newItem;
-    });
     setLoads(updated);
     void runValidation(updated);
   };
@@ -909,7 +668,14 @@ export default function AdminSubjectLoadStudio() {
     );
 
     if (occupants.length > 0) {
-      const isExactSwap = occupants.length === 1
+      const occupantCanUseSourceSlot = occupants.length === 1
+        && Boolean(item.start_time && item.end_time)
+        && subjectPeriodSlots(item.class_id, occupants[0].subject_id).some(
+          (slot) =>
+            (item.slot_id != null && slot.slot_id === item.slot_id)
+            || (slot.start_time === item.start_time && slot.end_time === item.end_time)
+        );
+      const isExactSwap = occupantCanUseSourceSlot
         && occupants[0].subject_id !== item.subject_id
         && sameDaySet(sourceDays, occupants[0].days_of_week || []);
       setPendingPeriodChange({
@@ -969,7 +735,7 @@ export default function AdminSubjectLoadStudio() {
     let updated = relocateLoads(loads, sourceRef, targetRef);
     updated = relocateLoads(updated, targetRef, sourceRef);
     updated = mergeAdjacentLoads(updated, source.class_id);
-    updated = withAuthoritativeJhsSlots(updated);
+    updated = withAuthoritativeSlots(updated);
 
     setLoads(updated);
     await runValidation(updated);
@@ -1002,6 +768,8 @@ export default function AdminSubjectLoadStudio() {
 
   const handleAddSlot = (classId: number, subjectId: number) => {
     if (isSectionLocked(classId)) return;
+    const selectedSlot = subjectPeriodSlots(classId, subjectId)[0];
+    if (!selectedSlot) return;
     const existingSlots = loads.filter(
       (l) => l.class_id === classId && l.subject_id === subjectId
     );
@@ -1013,17 +781,16 @@ export default function AdminSubjectLoadStudio() {
     const usedDays = new Set(existingSlots.flatMap((s) => s.days_of_week || []));
     const allDays = ["THU", "FRI", "TUE", "MON", "WED"];
     const defaultDay = allDays.find((d) => !usedDays.has(d)) || "THU";
-    const selectedSlot = subjectPeriodSlots(classId, subjectId)[0];
 
     const newSlot: SubjectLoadItem = {
       _key: newKey,
       class_id: classId,
       subject_id: subjectId,
       staff_id: firstSlot?.staff_id || null,
-      academic_period_id: selectedPeriodId || 1,
-      slot_id: selectedSlot?.slot_id ?? null,
-      start_time: selectedSlot?.start_time ?? null,
-      end_time: selectedSlot?.end_time ?? null,
+      academic_period_id: selectedPeriodId || studioData?.active_period_id || 1,
+      slot_id: selectedSlot.slot_id ?? null,
+      start_time: selectedSlot.start_time,
+      end_time: selectedSlot.end_time,
       days_of_week: [defaultDay],
       status: "draft",
     };
@@ -1094,18 +861,19 @@ export default function AdminSubjectLoadStudio() {
         (l) => l.class_id === classId && l.subject_id === subjectId && l.start_time === startTime && l.end_time === endTime
       );
       const unscheduled = updated.find(
-        (l) => l.class_id === classId && l.subject_id === subjectId && !l.start_time && (l.days_of_week || []).length === 0
+        (l) => l.class_id === classId && l.subject_id === subjectId && !l.start_time && !l.end_time
       );
 
       if (sameSlot) {
         updated = updated.map((l) =>
           l === sameSlot
             ? {
-                ...l,
-                days_of_week: sortDayKeys([...(l.days_of_week || []).map(normalizeDayKey), ...sortedDays]),
-                status: "draft",
-                is_locked: false,
-              }
+              ...l,
+              slot_id: authoritativeSlot?.slot_id ?? l.slot_id ?? null,
+              days_of_week: sortDayKeys([...(l.days_of_week || []).map(normalizeDayKey), ...sortedDays]),
+              status: "draft",
+              is_locked: false,
+            }
             : l
         );
       } else if (unscheduled) {
@@ -1120,7 +888,7 @@ export default function AdminSubjectLoadStudio() {
           class_id: classId,
           subject_id: subjectId,
           staff_id: defaultStaffId,
-          academic_period_id: selectedPeriodId || 1,
+          academic_period_id: selectedPeriodId || studioData?.active_period_id || 1,
           slot_id: authoritativeSlot?.slot_id ?? null,
           start_time: startTime,
           end_time: endTime,
@@ -1165,157 +933,11 @@ export default function AdminSubjectLoadStudio() {
       updated = relocateLoads(updated, target, source);
     }
     updated = mergeAdjacentLoads(updated, classId);
-    updated = withAuthoritativeJhsSlots(updated);
+    updated = withAuthoritativeSlots(updated);
 
     setLoads(updated);
     setCellSelection(null);
     void runValidation(updated);
-  };
-
-  // Auto-schedule entire studio or single section
-  const handleAutoSchedule = async (targetClassId?: number) => {
-    if (!selectedPeriodId) return;
-    setIsLoading(true);
-    setAutoScheduleNotice(null);
-    try {
-      const currentLoads = [...loads];
-
-      const isClassLocked = isSectionLocked;
-
-      let targetClassIds: number[] = [];
-      if (targetClassId) {
-        targetClassIds = [targetClassId];
-      }
-
-      const candidateClasses = targetClassId
-        ? studioData?.classes.filter((c) => targetClassIds.includes(c.class_id)) || []
-        : filteredClasses;
-
-      const lockedClassIds = new Set(
-        candidateClasses.filter((cls) => isClassLocked(cls.class_id)).map((cls) => cls.class_id)
-      );
-      const unlockedTargetClasses = candidateClasses.filter((cls) => !lockedClassIds.has(cls.class_id));
-
-      if (unlockedTargetClasses.length === 0) {
-        setAutoScheduleNotice({
-          title: "All Sections Locked",
-          message: targetClassId
-            ? "Unlock this section to auto-fit."
-            : "Unlock sections to auto-generate.",
-          type: "error",
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      unlockedTargetClasses.forEach((cls) => {
-        const offerings = studioData?.subject_offerings || [];
-
-        const levelSubjects = (studioData?.subjects || []).filter((sub) =>
-          isSubjectOfferedForClass(sub, cls, offerings, selectedPeriodId)
-        );
-        levelSubjects.forEach((sub) => {
-          const hasSlot = currentLoads.some(
-            (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
-          );
-          if (!hasSlot) {
-            currentLoads.push({
-              _key: `slot_${cls.class_id}_${sub.subject_id}_${Date.now()}`,
-              _offering_eligible: true,
-              class_id: cls.class_id,
-              subject_id: sub.subject_id,
-              staff_id: null,
-              academic_period_id: selectedPeriodId,
-              start_time: null,
-              end_time: null,
-              days_of_week: [],
-              status: "draft",
-              is_locked: false,
-            });
-          }
-        });
-      });
-
-      const loadsToProcess = targetClassId
-        ? currentLoads.filter((l) => targetClassIds.includes(l.class_id) && l._offering_eligible !== false)
-        : currentLoads.filter((l) => l._offering_eligible !== false);
-
-      const res = await autoScheduleSubjectLoads(selectedPeriodId, withAuthoritativeJhsSlots(loadsToProcess), "standard");
-
-      // Merge updated scheduled loads back into full loads array (preserving locked sections)
-      const scheduledMap = new Map(
-        res.scheduled_loads.map((sl) => [`${sl.class_id}_${sl.subject_id}`, sl])
-      );
-
-      const mergedLoads = currentLoads.map((item) => {
-        // Preserve locked sections / loads untouched
-        if (lockedClassIds.has(item.class_id) || isSectionLocked(item.class_id)) {
-          return item;
-        }
-
-        const key = `${item.class_id}_${item.subject_id}`;
-        const match = scheduledMap.get(key);
-        if (match && (targetClassId === undefined || targetClassIds.includes(item.class_id))) {
-          return {
-            ...item,
-            slot_id: match.slot_id ?? null,
-            start_time: match.start_time || null,
-            end_time: match.end_time || null,
-            days_of_week: match.days_of_week || [],
-            status: "draft",
-            is_locked: false,
-          };
-        }
-        return item;
-      });
-
-      setLoads(mergedLoads);
-      setConflicts(res.conflicts);
-      setTeacherWorkloads(res.teacher_workloads);
-
-      const errCount = res.conflicts.filter((c) => c.severity === "error").length;
-      const warnCount = res.conflicts.filter((c) => c.severity === "warning" && c.rule !== "UNASSIGNED_TEACHER").length;
-      const unscheduledCount = res.unscheduled_loads?.length ?? 0;
-      const unlockedCount = unlockedTargetClasses.length;
-      const lockedCount = lockedClassIds.size;
-      const preservedNotice = lockedCount > 0 ? ` (${lockedCount} locked section${lockedCount > 1 ? "s" : ""} preserved)` : "";
-
-      if (unscheduledCount > 0) {
-        setAutoScheduleNotice({
-          title: "Auto-fit Incomplete",
-          message: `${unscheduledCount} subject load${unscheduledCount === 1 ? " was" : "s were"} left unscheduled because no conflict-free slot is available${preservedNotice}.`,
-          type: "error",
-        });
-      } else if (errCount > 0) {
-        setAutoScheduleNotice({
-          title: "Auto-fit Complete",
-          message: `Detected ${errCount} ${errCount === 1 ? "conflict" : "conflicts"}${preservedNotice}. Please review highlighted errors.`,
-          type: "error",
-        });
-      } else if (warnCount > 0) {
-        setAutoScheduleNotice({
-          title: "Auto-fit with Warnings",
-          message: `Detected ${warnCount} ${warnCount === 1 ? "warning" : "warnings"}${preservedNotice}. Please check conflict tracker.`,
-          type: "error",
-        });
-      } else {
-        setAutoScheduleNotice({
-          title: "Auto-fit Successful",
-          message: targetClassId
-            ? "Section timetable auto-fitted without conflicts!"
-            : `Generated timetables for ${unlockedCount} section(s).${lockedCount > 0 ? ` ${lockedCount} locked section(s) preserved.` : ""}`,
-          type: "success",
-        });
-      }
-    } catch (err) {
-      setAutoScheduleNotice({
-        title: "Auto-fit Failed",
-        message: err instanceof Error ? err.message : "Unable to generate timetable.",
-        type: "error",
-      });
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleCopyFromTerm = async () => {
@@ -1373,7 +995,7 @@ export default function AdminSubjectLoadStudio() {
           is_locked: false,
         }));
 
-      const finalLoads = withAuthoritativeJhsSlots([...currentLoads, ...newLoads]);
+      const finalLoads = withAuthoritativeSlots([...currentLoads, ...newLoads]);
       setLoads(finalLoads);
       await runValidation(finalLoads);
 
@@ -1771,7 +1393,7 @@ export default function AdminSubjectLoadStudio() {
       }
     }
 
-    const normalizedLoads = withAuthoritativeJhsSlots(currentLoads);
+    const normalizedLoads = withAuthoritativeSlots(currentLoads);
     setLoads(normalizedLoads);
     void runValidation(normalizedLoads);
   };
@@ -1779,12 +1401,9 @@ export default function AdminSubjectLoadStudio() {
   // Preset pattern applications
   const handleApplyPreset = (classId: number, subjectId: number, pattern: "2day" | "3day" | "4day") => {
     if (isSectionLocked(classId)) return;
-    const classObj = studioData?.classes.find((c) => c.class_id === classId);
-    const targetGroup = classObj?.period_template_group || "JHS_45MIN";
-    const groupClassSlots = periodTemplateSlots.filter((s) => s.template_group === targetGroup && !s.is_locked_break && s.slot_type === "CLASS");
-    const firstSlot = groupClassSlots[0];
-    const defaultStart = firstSlot?.start_time || null;
-    const defaultEnd = firstSlot?.end_time || null;
+    const compatibleSlots = subjectPeriodSlots(classId, subjectId);
+    const firstSlot = compatibleSlots[0];
+    if (!firstSlot) return;
 
     let days: string[] = ["MON", "WED"];
     if (pattern === "2day") {
@@ -1795,11 +1414,19 @@ export default function AdminSubjectLoadStudio() {
       days = ["MON", "TUE", "WED", "THU"];
     }
 
-    const updated = loads.map((l) =>
-      l.class_id === classId && l.subject_id === subjectId
-        ? { ...l, days_of_week: days, slot_id: firstSlot?.slot_id ?? null, start_time: defaultStart, end_time: defaultEnd, status: "draft", is_locked: false }
-        : l
-    );
+    const updated = loads.map((l) => {
+      if (l.class_id !== classId || l.subject_id !== subjectId) return l;
+      const preservedSlot = resolveMatchingPeriodSlot(l, compatibleSlots) ?? firstSlot;
+      return {
+        ...l,
+        days_of_week: days,
+        slot_id: preservedSlot.slot_id ?? null,
+        start_time: preservedSlot.start_time,
+        end_time: preservedSlot.end_time,
+        status: "draft",
+        is_locked: false,
+      };
+    });
     setLoads(updated);
     void runValidation(updated);
   };
@@ -1819,8 +1446,8 @@ export default function AdminSubjectLoadStudio() {
         loads.filter((load) => !isSectionLocked(load.class_id) && (load.status === "draft" || !load.is_locked)).map((load) => load.class_id)
       );
       const loadsToSave = action === "draft"
-        ? withAuthoritativeJhsSlots(loads.filter((load) => draftClassIds.has(load.class_id)))
-        : withAuthoritativeJhsSlots(loads.filter((load) => !isSectionLocked(load.class_id)));
+        ? withAuthoritativeSlots(loads.filter((load) => draftClassIds.has(load.class_id)))
+        : withAuthoritativeSlots(loads.filter((load) => !isSectionLocked(load.class_id)));
       let baseRevToPass: number | null = null;
       if (publishScope === "section" && targetClassId) {
         const sectionLoads = loads.filter((l) => l.class_id === targetClassId);
@@ -1844,6 +1471,7 @@ export default function AdminSubjectLoadStudio() {
         baseRevToPass
       );
 
+      validationSeqRef.current += 1;
       setConflicts(res.conflicts);
       toast.success({
         title: action === "draft" ? "Draft saved" : "Subject loads published",
@@ -1851,7 +1479,7 @@ export default function AdminSubjectLoadStudio() {
       });
 
       // Refresh studio data to sync with DB
-      void loadStudio(selectedPeriodId);
+      await loadStudio(selectedPeriodId);
     } catch (err: any) {
       const detail = err?.data?.detail || err?.message || "";
       if (err?.status === 409) {
@@ -1860,7 +1488,7 @@ export default function AdminSubjectLoadStudio() {
             title: "Section Locked",
             description: detail,
           });
-          void loadStudio(selectedPeriodId, true);
+          void loadStudio(selectedPeriodId);
         } else if (detail.includes("Cannot remove") || detail.includes("SUBJECT_LOAD_HAS_LIVE_DATA")) {
           toast.error({
             title: "Cannot Remove Populated Subject",
@@ -1871,7 +1499,7 @@ export default function AdminSubjectLoadStudio() {
             title: "Revision Conflict",
             description: `${detail} If the draft remains after reloading, use Discard Draft, then Unlock Section to start from the current published revision. Discarding loses that draft's changes.`,
           });
-          void loadStudio(selectedPeriodId, true);
+          void loadStudio(selectedPeriodId);
         } else {
           toast.error({
             title: "Conflict Error",
@@ -1958,8 +1586,9 @@ export default function AdminSubjectLoadStudio() {
         } else if (norm === "draft") {
           if (isPublished && !hasPendingDraft) return false;
         } else if (norm === "conflicts") {
+          const classLoads = loads.filter((l) => l.class_id === cls.class_id);
           const hasConflicts = conflicts.some(
-            (c) => c.severity === "error" && conflictAffectsClass(c, cls.class_id)
+            (c) => c.severity === "error" && conflictAffectsSection(c, cls.class_id, classLoads)
           );
           if (!hasConflicts) return false;
         } else if (norm === "active") {
@@ -1977,10 +1606,16 @@ export default function AdminSubjectLoadStudio() {
       }
       return true;
     });
-  }, [studioData, activeGradeId, selectedSectionId, statusFilter, searchQuery, lockedSectionIds, conflicts]);
+  }, [studioData, activeGradeId, selectedSectionId, statusFilter, searchQuery, lockedSectionIds, conflicts, loads]);
 
-  // Compute teacher availability helper
+  // Compute teacher availability helper (time overlaps + daily workload caps)
   const getTeacherAvailabilityStatus = (staffId: string, classId: number, subjectId: number) => {
+    const parsedMaxSubjects = Number(getSetting("max_subjects_per_day", "6"));
+    const parsedMaxHours = Number(getSetting("max_hours_per_day", "6.0"));
+    const workloadCaps = {
+      maxSubjectsPerDay: Number.isFinite(parsedMaxSubjects) && parsedMaxSubjects > 0 ? parsedMaxSubjects : 6,
+      maxHoursPerDay: Number.isFinite(parsedMaxHours) && parsedMaxHours > 0 ? parsedMaxHours : 6.0,
+    };
     return teacherAssignmentConflict(
       loads,
       staffId,
@@ -1988,12 +1623,13 @@ export default function AdminSubjectLoadStudio() {
       subjectId,
       studioData?.classes,
       studioData?.subjects,
+      workloadCaps,
     ) ?? "Available";
   };
 
-  // Check if a specific load has an error conflict
-  const getLoadConflict = (classId: number, subjectId: number) => {
-    return conflicts.find((conflict) => conflictAffectsLoad(conflict, classId, subjectId));
+  // Resolve prioritized conflicts for a specific load (errors before warnings, preserving all details)
+  const getLoadConflict = (classId: number, subjectId: number, subjectSlots: SubjectLoadItem[] = []) => {
+    return getLoadConflictSummary(conflicts, classId, subjectId, subjectSlots);
   };
 
   const errorConflictsCount = conflicts.filter((c) => c.severity === "error").length;
@@ -2026,19 +1662,7 @@ export default function AdminSubjectLoadStudio() {
   const activeSectionConflicts = useMemo(() => {
     if (!activeDisplayedClass) return [];
     const clsId = activeDisplayedClass.class_id;
-    const staffIdsInClass = new Set(activeSectionLoads.map((l) => l.staff_id).filter(Boolean));
-
-    return conflicts.filter((c) => {
-      if (conflictAffectsClass(c, clsId)) return true;
-      if (c.staff_id && staffIdsInClass.has(c.staff_id)) {
-        if (c.rule === "TEACHER_OVERLAP") {
-          return activeSectionLoads.some(
-            (l) => l.staff_id === c.staff_id && (!c.day || (l.days_of_week || []).includes(c.day))
-          );
-        }
-      }
-      return false;
-    });
+    return conflicts.filter((c) => conflictAffectsSection(c, clsId, activeSectionLoads));
   }, [conflicts, activeDisplayedClass, activeSectionLoads]);
 
   const activeSectionErrorConflictsCount = useMemo(() => {
@@ -2054,22 +1678,6 @@ export default function AdminSubjectLoadStudio() {
   const activeSectionUnassignedTotal = useMemo(() => {
     return activeSectionLoads.filter((l) => !l.staff_id).length;
   }, [activeSectionLoads]);
-
-  const formattedAutoScheduleMessage = useMemo(() => {
-    if (!autoScheduleNotice?.message) return "";
-    let msg = autoScheduleNotice.message;
-    if (autoScheduleNotice.title) {
-      const escapedTitle = autoScheduleNotice.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      msg = msg.replace(new RegExp(`^${escapedTitle}[.:,\\s-]*`, "i"), "");
-      msg = msg.replace(/^auto-fit complete[.:,\s-]*/i, "");
-      msg = msg.replace(/^successfully\s+/i, "");
-      msg = msg.replace(/^all sections (in this scope )?are locked[.:,\s-]*/i, "");
-      if (msg.length > 0) {
-        msg = msg.charAt(0).toUpperCase() + msg.slice(1);
-      }
-    }
-    return msg || autoScheduleNotice.message;
-  }, [autoScheduleNotice]);
 
   // Jump to and highlight conflicting/warning/unassigned slots or rows
   const handleJumpToItem = (type: "error" | "warning" | "unassigned") => {
@@ -2092,6 +1700,17 @@ export default function AdminSubjectLoadStudio() {
           for (const key of conflictKeys(c)) {
             const parts = key.split("_");
             if (parts.length >= 2 && Number(parts[0]) === clsId) ids.push(Number(parts[1]));
+          }
+          if (ids.length === 0 && c.staff_id && (c.rule === "DAILY_WORKLOAD_EXCEEDED" || c.rule === "TEACHER_OVERLAP")) {
+            const cDays = c.days && c.days.length > 0 ? c.days : c.day ? [c.day] : [];
+            for (const load of activeSectionLoads) {
+              if (
+                load.staff_id === c.staff_id &&
+                (cDays.length === 0 || (load.days_of_week || []).some((d) => cDays.includes(d)))
+              ) {
+                ids.push(load.subject_id);
+              }
+            }
           }
           return ids;
         })
@@ -2141,25 +1760,25 @@ export default function AdminSubjectLoadStudio() {
     : "this section";
   const pendingCurrentSlot = pendingPeriodChange
     ? classPeriodSlots(pendingPeriodChange.source.class_id).find((slot) =>
-        slot.slot_id === pendingPeriodChange.source.slot_id || (
-          slot.start_time === pendingPeriodChange.source.start_time
-          && slot.end_time === pendingPeriodChange.source.end_time
-        )
+      slot.slot_id === pendingPeriodChange.source.slot_id || (
+        slot.start_time === pendingPeriodChange.source.start_time
+        && slot.end_time === pendingPeriodChange.source.end_time
       )
+    )
     : undefined;
   const pendingOccupantNames = pendingPeriodChange
     ? Array.from(new Set(pendingPeriodChange.occupants.map((occupant) =>
-        studioData?.subjects.find((subject) => subject.subject_id === occupant.subject_id)?.subject_name ?? "Another subject"
-      )))
+      studioData?.subjects.find((subject) => subject.subject_id === occupant.subject_id)?.subject_name ?? "Another subject"
+    )))
     : [];
   const pendingOccupantDetails = pendingPeriodChange
     ? pendingPeriodChange.occupants.map((occupant) => ({
-        key: occupant._key ?? `${occupant.class_id}_${occupant.subject_id}`,
-        name: studioData?.subjects.find((subject) => subject.subject_id === occupant.subject_id)?.subject_name ?? "Another subject",
-        days: formatDayNames((pendingPeriodChange.source.days_of_week || []).filter((day) =>
-          (occupant.days_of_week || []).map(normalizeDayKey).includes(normalizeDayKey(day))
-        )),
-      }))
+      key: occupant._key ?? `${occupant.class_id}_${occupant.subject_id}`,
+      name: studioData?.subjects.find((subject) => subject.subject_id === occupant.subject_id)?.subject_name ?? "Another subject",
+      days: formatDayNames((pendingPeriodChange.source.days_of_week || []).filter((day) =>
+        (occupant.days_of_week || []).map(normalizeDayKey).includes(normalizeDayKey(day))
+      )),
+    }))
     : [];
 
   return (
@@ -2192,7 +1811,7 @@ export default function AdminSubjectLoadStudio() {
                   size="header"
                   variant="outline"
                   disabled={isLoading || isSaving}
-                  onClick={() => setIsBreakDrawerOpen(true)}
+                  onClick={() => openBreakTimelinesDrawer(activeGroupKey)}
                   className="gap-2 cursor-pointer"
                 >
                   <Settings className="size-3.5 text-black" />
@@ -2320,7 +1939,6 @@ export default function AdminSubjectLoadStudio() {
                               setSelectedGradeId(grade.id);
                               setSelectedSectionId("all");
                               setCarouselActiveIdx(0);
-                              setAutoScheduleNotice(null);
                             }}
                             className="shrink-0 border-black shadow-none"
                           >
@@ -2328,57 +1946,9 @@ export default function AdminSubjectLoadStudio() {
                           </Button>
                         ))}
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* Auto-Generate All */}
-                        <Button
-                          size="sm"
-                          disabled={isLoading || isSaving}
-                          onClick={() => void handleAutoSchedule()}
-                          className="gap-2 cursor-pointer"
-                        >
-                          <Sparkles className="size-3" />
-                          <span>Auto-Generate</span>
-                        </Button>
-                      </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 font-bold">
-                      {autoScheduleNotice && (
-                        <Badge
-                          size="sm"
-                          variant="outline"
-                          className={cn(
-                            "inline-flex items-center gap-1.5 font-bold select-none px-2.5 max-w-full",
-                            autoScheduleNotice.type === "success"
-                              ? "bg-emerald-50 text-emerald-950 border-emerald-600"
-                              : "bg-red-50 text-destructive border-destructive"
-                          )}
-                          role="status"
-                          aria-live="polite"
-                        >
-                          {autoScheduleNotice.type === "success" ? (
-                            <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
-                          ) : (
-                            <AlertCircle className="size-3.5 shrink-0 text-destructive" />
-                          )}
-                          <span className="truncate max-w-xs sm:max-w-md md:max-w-lg" title={formattedAutoScheduleMessage}>
-                            {autoScheduleNotice.title && (
-                              <strong className="font-bold mr-1">{autoScheduleNotice.title}:</strong>
-                            )}
-                            {formattedAutoScheduleMessage}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setAutoScheduleNotice(null)}
-                            className="ml-1 text-muted-foreground hover:text-black cursor-pointer p-0.5 rounded transition-colors shrink-0"
-                            aria-label="Dismiss notice"
-                          >
-                            <X className="size-3" />
-                          </button>
-                        </Badge>
-                      )}
-
                       {activeSectionErrorConflictsCount > 0 && (
                         <Tooltip>
                           <TooltipTrigger render={<span className="inline-flex"><Badge
@@ -2455,7 +2025,7 @@ export default function AdminSubjectLoadStudio() {
                       const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
                       const isSectionPublished = isSectionLocked(cls.class_id);
                       const sectionErrors = conflicts.filter(
-                        (c) => c.severity === "error" && conflictAffectsClass(c, cls.class_id)
+                        (c) => c.severity === "error" && conflictAffectsSection(c, cls.class_id, sectionLoads)
                       );
                       const sectionHasErrors = sectionErrors.length > 0;
                       const isPublishSectionDisabled = isSaving || sectionHasErrors || sectionUnassignedCount > 0;
@@ -2486,6 +2056,13 @@ export default function AdminSubjectLoadStudio() {
                       const hasPendingDraft = Boolean(
                         studioData?.has_pending_draft_by_class?.[cls.class_id] ||
                         studioData?.has_pending_draft_by_class?.[String(cls.class_id)]
+                      );
+
+                      const siblingSections = (studioData?.classes || []).filter(
+                        (c) => c.class_id !== cls.class_id && c.academic_level_id === cls.academic_level_id
+                      );
+                      const configuredSiblings = siblingSections.filter((c) =>
+                        loads.some((l) => l.class_id === c.class_id && l.start_time && l.end_time)
                       );
 
                       return (
@@ -2541,118 +2118,100 @@ export default function AdminSubjectLoadStudio() {
                               Publish Section
                             </Button>
                           )}
-                          <DropdownMenu>
-                            <Tooltip>
-                              <TooltipTrigger render={<span className="inline-flex">
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    disabled={isSectionPublished || isSaving}
-                                    className="rounded! bg-black p-[7px] text-white shadow-none hover:bg-black disabled:bg-black disabled:text-white disabled:opacity-100"
-                                    aria-label="More options"
-                                    onClick={(e) => e.preventDefault()}
-                                  >
-                                    <EllipsisIcon className="size-3.5" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                              </span>} />
-                              <TooltipContent>Section actions</TooltipContent>
-                            </Tooltip>
-                            <DropdownMenuContent align="end" collisionPadding={12} className="w-max min-w-[200px] max-w-[calc(100vw-2rem)] rounded border-2 border-border">
-                              <DropdownMenuItem
-                                className="gap-2 cursor-pointer"
-                                disabled={isSectionPublished || isSaving}
-                                onClick={() => void handleAutoSchedule(cls.class_id)}
-                              >
-                                <Wand2 className="size-4" /> Auto-Fit Section
-                              </DropdownMenuItem>
-
-                              {(() => {
-                                const siblingSections = (studioData?.classes || []).filter(
-                                  (c) => c.class_id !== cls.class_id && c.academic_level_id === cls.academic_level_id
-                                );
-                                const configuredSiblings = siblingSections.filter((c) =>
-                                  loads.some((l) => l.class_id === c.class_id && l.start_time && l.end_time)
-                                );
-
-                                if (configuredSiblings.length === 1) {
-                                  const sib = configuredSiblings[0];
-                                  return (
-                                    <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="gap-2 rounded cursor-pointer">
-                                        <Copy className="size-4" />
-                                        <span className="min-w-0 whitespace-normal break-words">Copy from <span className="font-bold">{sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}</span></span>
-                                      </DropdownMenuSubTrigger>
-                                      <DropdownMenuPortal>
-                                        <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)] [&_[data-slot=dropdown-menu-item]]:whitespace-normal">
-                                          <DropdownMenuItem
-                                            className="font-bold"
-                                            onClick={() =>
-                                              void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
-                                            }
-                                          >
-                                            Conflict-Aware Fill (Recommended)
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            className=""
-                                            onClick={() =>
-                                              void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
-                                            }
-                                          >
-                                            Exact Match
-                                          </DropdownMenuItem>
-                                        </DropdownMenuSubContent>
-                                      </DropdownMenuPortal>
-                                    </DropdownMenuSub>
-                                  );
-                                }
-
-                                if (configuredSiblings.length > 1) {
-                                  return (
-                                    <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="gap-2 rounded cursor-pointer">
-                                        <Copy className="size-4" />
-                                        <span>Copy Schedule</span>
-                                      </DropdownMenuSubTrigger>
-                                      <DropdownMenuPortal>
-                                        <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)]">
-                                          {configuredSiblings.map((sib) => (
-                                            <DropdownMenuSub key={sib.class_id}>
-                                              <DropdownMenuSubTrigger className="rounded cursor-pointer whitespace-normal break-words font-bold focus:bg-gray-100">
-                                                {sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}
-                                              </DropdownMenuSubTrigger>
-                                              <DropdownMenuPortal>
-                                                <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)] [&_[data-slot=dropdown-menu-item]]:whitespace-normal">
-                                                  <DropdownMenuItem
-                                                    className="cursor-pointer font-bold focus:bg-gray-100"
-                                                    onClick={() =>
-                                                      void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
-                                                    }
-                                                  >
-                                                    Conflict-Aware Fill (Recommended)
-                                                  </DropdownMenuItem>
-                                                  <DropdownMenuItem
-                                                    className="cursor-pointer focus:bg-gray-100"
-                                                    onClick={() =>
-                                                      void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
-                                                    }
-                                                  >
-                                                    Exact Match
-                                                  </DropdownMenuItem>
-                                                </DropdownMenuSubContent>
-                                              </DropdownMenuPortal>
-                                            </DropdownMenuSub>
-                                          ))}
-                                        </DropdownMenuSubContent>
-                                      </DropdownMenuPortal>
-                                    </DropdownMenuSub>
-                                  );
-                                }
-                                return null;
-                              })()}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {configuredSiblings.length > 0 && (
+                            <DropdownMenu>
+                              <Tooltip>
+                                <TooltipTrigger render={<span className="inline-flex">
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      disabled={isSectionPublished || isSaving}
+                                      className="rounded! bg-black p-[7px] text-white shadow-none hover:bg-black disabled:bg-black disabled:text-white disabled:opacity-100"
+                                      aria-label="More options"
+                                      onClick={(e) => e.preventDefault()}
+                                    >
+                                      <EllipsisIcon className="size-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                </span>} />
+                                <TooltipContent>Section actions</TooltipContent>
+                              </Tooltip>
+                              <DropdownMenuContent align="end" collisionPadding={12} className="w-max min-w-[200px] max-w-[calc(100vw-2rem)] rounded border-2 border-border">
+                                {configuredSiblings.length === 1 ? (
+                                  (() => {
+                                    const sib = configuredSiblings[0];
+                                    return (
+                                      <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger className="gap-2 rounded cursor-pointer">
+                                          <Copy className="size-4" />
+                                          <span className="min-w-0 whitespace-normal break-words">Copy from <span className="font-bold">{sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}</span></span>
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuPortal>
+                                          <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)] [&_[data-slot=dropdown-menu-item]]:whitespace-normal">
+                                            <DropdownMenuItem
+                                              className="font-bold"
+                                              onClick={() =>
+                                                void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
+                                              }
+                                            >
+                                              Conflict-Aware Fill (Recommended)
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                              className=""
+                                              onClick={() =>
+                                                void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
+                                              }
+                                            >
+                                              Exact Match
+                                            </DropdownMenuItem>
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuPortal>
+                                      </DropdownMenuSub>
+                                    );
+                                  })()
+                                ) : (
+                                  <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger className="gap-2 rounded cursor-pointer">
+                                      <Copy className="size-4" />
+                                      <span>Copy Schedule</span>
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuPortal>
+                                      <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)]">
+                                        {configuredSiblings.map((sib) => (
+                                          <DropdownMenuSub key={sib.class_id}>
+                                            <DropdownMenuSubTrigger className="rounded cursor-pointer whitespace-normal break-words font-bold focus:bg-gray-100">
+                                              {sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuPortal>
+                                              <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)] [&_[data-slot=dropdown-menu-item]]:whitespace-normal">
+                                                <DropdownMenuItem
+                                                  className="cursor-pointer font-bold focus:bg-gray-100"
+                                                  onClick={() =>
+                                                    void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
+                                                  }
+                                                >
+                                                  Conflict-Aware Fill (Recommended)
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                  className="cursor-pointer focus:bg-gray-100"
+                                                  onClick={() =>
+                                                    void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
+                                                  }
+                                                >
+                                                  Exact Match
+                                                </DropdownMenuItem>
+                                              </DropdownMenuSubContent>
+                                            </DropdownMenuPortal>
+                                          </DropdownMenuSub>
+                                        ))}
+                                      </DropdownMenuSubContent>
+                                    </DropdownMenuPortal>
+                                  </DropdownMenuSub>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </div>
                       );
                     };
@@ -2696,15 +2255,36 @@ export default function AdminSubjectLoadStudio() {
                             invalidDraftSubjectIds.has(sub.subject_id)
                           );
                           const sectionLocked = isSectionLocked(cls.class_id);
+                          const isJhs = isJhsClass(cls.class_id);
+                          const configuredTemplateSlots = getConfiguredTemplateSlots(
+                            cls,
+                            studioData?.academic_levels || [],
+                            periodTemplateSlots,
+                          );
+                          const assignableClassSlots = classPeriodSlots(cls.class_id);
                           const sectionTemplateSlots = getSectionSlots(cls);
-                          const configuredNames = new Set(sectionTemplateSlots.map((slot) => slot.slot_name));
-                          const hasValidTimetable = isJhsClass(cls.class_id)
+                          const configuredNames = new Set(configuredTemplateSlots.map((slot) => slot.slot_name));
+                          const hasValidTimetable = isJhs
                             ? cls.period_template_group === "JHS_45MIN" &&
-                              (studioData?.jhs_template_audit
-                                ? sectionTemplateSlots.length >= JHS_REQUIRED_SLOT_NAMES.length &&
-                                  JHS_REQUIRED_SLOT_NAMES.every((name) => configuredNames.has(name))
-                                : sectionTemplateSlots.some((slot) => slot.slot_type === "CLASS" && !slot.is_locked_break))
-                            : sectionTemplateSlots.some((slot) => slot.slot_type === "CLASS" && !slot.is_locked_break);
+                            (studioData?.jhs_template_audit
+                              ? configuredTemplateSlots.length >= JHS_REQUIRED_SLOT_NAMES.length &&
+                              JHS_REQUIRED_SLOT_NAMES.every((name) => configuredNames.has(name))
+                              : assignableClassSlots.length > 0)
+                            : assignableClassSlots.length > 0;
+                          const hasSavedScheduledLoads = sectionLoads.some((l) => Boolean(l.start_time && l.end_time));
+                          const sectionViewMode = sectionViewModes[cls.class_id] || "grid";
+                          const sectionDrawerGroup =
+                            resolveAssignedTemplateGroup(cls, studioData?.academic_levels || [])
+                            || (isJhs ? "JHS_45MIN" : resolveDefaultShsDrawerGroup(periodTemplateSlots));
+                          const sectionMissingTimetableReason = !isJhs
+                            ? !cls.period_template_group
+                              ? `No Break Timeline is assigned to ${cls.section_name}. Assign a Senior High template in Edit Break Timelines to schedule periods.`
+                              : cls.period_template_group === "JHS_45MIN"
+                                ? `${cls.section_name} is assigned to the Junior High template (JHS_45MIN). Assign an SHS template in Edit Break Timelines.`
+                                : `The assigned Break Timeline (${formatTemplateGroupName(cls.period_template_group)}) has no class periods. Add class periods in Edit Break Timelines.`
+                            : `Subject Load for ${cls.section_name} is unavailable until its complete bell schedule is configured. The timetable controls every assignable class period and break.`;
+                          const blockSectionWithEmptyState =
+                            !hasValidTimetable && (isJhs || (!hasSavedScheduledLoads && sectionViewMode === "grid"));
 
                           const timesBySubject = new Map<string, { start: number; end: number }>();
                           for (const l of sectionLoads) {
@@ -2743,31 +2323,35 @@ export default function AdminSubjectLoadStudio() {
                                     message={`${invalidDraftSubjectIds.size} existing subject load${invalidDraftSubjectIds.size === 1 ? " is" : "s are"} no longer eligible for this year, term, grade, and pathway. ${invalidDraftSubjectIds.size === 1 ? "It is" : "They are"} shown for review but cannot be published until the offering is corrected.`}
                                   />
                                 )}
-                                {/* <div className="flex items-center justify-between pb-1 flex-wrap gap-2">
-                                  <div className="flex items-center gap-2 flex-wrap">
+                                {!hasValidTimetable && !blockSectionWithEmptyState && (
+                                  <Alert status="warning" className="my-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <div>
+                                        <Alert.Title className="font-bold">Break Timeline required</Alert.Title>
+                                        <Alert.Description className="mt-0.5 text-xs text-yellow-950">
+                                          {sectionMissingTimetableReason}
+                                        </Alert.Description>
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-1.5 shrink-0 shadow-none"
+                                        onClick={() => openBreakTimelinesDrawer(sectionDrawerGroup)}
+                                      >
+                                        <Settings className="size-3.5" aria-hidden="true" />
+                                        <span>Edit Break Timelines</span>
+                                      </Button>
+                                    </div>
+                                  </Alert>
+                                )}
 
-                                    <Badge
-                                      size="sm"
-                                      variant={isSectionPublished ? "surface" : "default"}
-                                    >
-                                      {isSectionPublished ? "Published" : "Draft"}
-                                    </Badge>
-
-                                    <Badge
-                                      size="sm"
-                                      variant="solid"
-                                    >
-                                      {classSubjects.length} Subjects
-                                    </Badge>
-                                  </div>
-                                </div> */}
-
-                                {!hasValidTimetable ? (
+                                {blockSectionWithEmptyState ? (
                                   <EmptyStateCard
                                     title="Configure the timetable first"
-                                    description={`Subject Load for ${cls.section_name} is unavailable until its complete bell schedule is configured. The timetable controls every assignable class period and break.`}
-                                    actionLabel="Configure timetable"
-                                    onAction={() => setIsBreakDrawerOpen(true)}
+                                    description={sectionMissingTimetableReason}
+                                    actionLabel={isJhs ? "Configure timetable" : "Edit Break Timelines"}
+                                    onAction={() => openBreakTimelinesDrawer(sectionDrawerGroup)}
                                     icon={<Clock className="size-5" />}
                                   />
                                 ) : classSubjects.length === 0 ? (
@@ -2780,107 +2364,114 @@ export default function AdminSubjectLoadStudio() {
                                       </EmptyDescription>
                                     </EmptyHeader>
                                   </Empty>
-                                ) : (sectionViewModes[cls.class_id] || "grid") === "grid" ? (
+                                ) : sectionViewMode === "grid" ? (
                                   <>
-                                  {!sectionLocked && (
-                                    cellSelection?.classId === cls.class_id ? (
-                                      <div
-                                        role="toolbar"
-                                        aria-label="Selected timetable cells"
-                                        className="my-2 flex flex-wrap items-center justify-between gap-2 rounded border-2 border-black bg-primary/15 px-3 py-2"
-                                      >
-                                        <span className="text-sm font-bold text-black">
-                                          {cellSelection.cells.length} cell{cellSelection.cells.length === 1 ? "" : "s"} selected
-                                          <span className="ml-2 font-normal text-muted-foreground">
-                                            Ctrl/⌘ + click to group more cells · Esc to clear
+                                    {!sectionLocked && (
+                                      cellSelection?.classId === cls.class_id ? (
+                                        <div
+                                          role="toolbar"
+                                          aria-label="Selected timetable cells"
+                                          className="my-2 flex flex-wrap items-center justify-between gap-2 rounded border-2 border-black bg-primary/15 px-3 py-2"
+                                        >
+                                          <span className="text-sm font-bold text-black">
+                                            {cellSelection.cells.length} cell{cellSelection.cells.length === 1 ? "" : "s"} selected
+                                            <span className="ml-2 font-normal text-muted-foreground">
+                                              Ctrl/⌘ + click to group more cells · Esc to clear
+                                            </span>
                                           </span>
-                                        </span>
-                                        <div className="flex items-center gap-2">
-                                          <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                              <Button size="sm" className="gap-2">
-                                                <Plus className="size-3.5" />
-                                                Add Subject
-                                              </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent
-                                              align="end"
-                                              collisionPadding={12}
-                                              className="max-h-72 min-w-[220px] overflow-y-auto rounded border-2 border-border"
-                                            >
-                                              {sortedClassSubjects.map((sub) => (
-                                                <DropdownMenuItem
-                                                  key={sub.subject_id}
-                                                  className="gap-2 cursor-pointer"
-                                                  onClick={() => handleAssignSubjectToCells(cls.class_id, sub.subject_id)}
-                                                >
-                                                  <span
-                                                    aria-hidden="true"
-                                                    className={cn("size-3 shrink-0 rounded-sm border border-black", getSubjectColor(sub.subject_name, sub.subject_id))}
-                                                  />
-                                                  {sub.subject_name}
-                                                </DropdownMenuItem>
-                                              ))}
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
-                                          <Button size="sm" variant="outline" className="gap-2" onClick={() => setCellSelection(null)}>
-                                            <X className="size-3.5" />
-                                            Clear
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <p className="mt-2 text-xs text-muted-foreground">
-                                        Drag a subject onto another to swap them. Click empty cells (Ctrl/⌘ + click to group several) to add a subject.
-                                      </p>
-                                    )
-                                  )}
-                                  <Table
-                                    className="w-full min-w-[640px] border-collapse bg-background text-sm"
-                                    wrapperClassName="h-auto overflow-x-auto rounded border-2 border-black bg-background my-2 shadow-none"
-                                  >
-                                    <Table.Header className="">
-                                      <Table.Row className="border-b-2 border-black">
-                                        {/* Sticky time-label corner */}
-                                        <Table.Head className="sticky left-0 z-20 w-28 border-b-2 border-r-2 border-black bg-primary px-3 py-2.5 text-left text-base font-bold text-black">
-                                          Time
-                                        </Table.Head>
-                                        {TIMETABLE_DAYS.map((d) => (
-                                          <Table.Head
-                                            key={d.key}
-                                            className="border-b-2 border-r-none border-black bg-primary px-3 py-2.5 text-center text-base font-bold text-black whitespace-nowrap min-w-[120px]"
-                                          >
-                                            <div>{d.full}</div>
-                                          </Table.Head>
-                                        ))}
-                                      </Table.Row>
-                                    </Table.Header>
-                                    <Table.Body>
-                                      {sectionTemplateSlots.map((slot, sIdx) => {
-                                        const isBreak = slot.is_locked_break || slot.slot_type !== "CLASS";
-                                        const timeLabel = `${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}`;
-
-                                        if (isBreak) {
-                                          return (
-                                            <Table.Row key={`break_${slot.display_order}_${sIdx}`} className="bg-background border-none">
-                                              <Table.Cell className="sticky left-0 z-10 border-r-2 border-t-2 border-black bg-background px-3 py-1 text-xs font-semibold text-foreground whitespace-nowrap">
-                                                {timeLabel}
-                                              </Table.Cell>
-                                              <Table.Cell
-                                                colSpan={TIMETABLE_DAYS.length}
-                                                className="border-none bg-background px-3 py-1.5 text-center text-xs font-medium text-muted-foreground"
+                                          <div className="flex items-center gap-2">
+                                            <DropdownMenu>
+                                              <DropdownMenuTrigger asChild>
+                                                <Button size="sm" className="gap-2">
+                                                  <Plus className="size-3.5" />
+                                                  Add Subject
+                                                </Button>
+                                              </DropdownMenuTrigger>
+                                              <DropdownMenuContent
+                                                align="end"
+                                                collisionPadding={12}
+                                                className="max-h-72 min-w-[220px] overflow-y-auto rounded border-2 border-border"
                                               >
-                                                {slot.slot_name}
-                                              </Table.Cell>
-                                            </Table.Row>
-                                          );
-                                        }
+                                                {sortedClassSubjects.map((sub) => (
+                                                  <DropdownMenuItem
+                                                    key={sub.subject_id}
+                                                    className="gap-2 cursor-pointer"
+                                                    onClick={() => handleAssignSubjectToCells(cls.class_id, sub.subject_id)}
+                                                  >
+                                                    <span
+                                                      aria-hidden="true"
+                                                      className={cn("size-3 shrink-0 rounded-sm border border-black", getSubjectColor(sub.subject_name, sub.subject_id))}
+                                                    />
+                                                    {sub.subject_name}
+                                                  </DropdownMenuItem>
+                                                ))}
+                                              </DropdownMenuContent>
+                                            </DropdownMenu>
+                                            <Button size="sm" variant="outline" className="gap-2" onClick={() => setCellSelection(null)}>
+                                              <X className="size-3.5" />
+                                              Clear
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <p className="mt-2 text-xs text-muted-foreground">
+                                          Drag a subject onto another to swap them. Click empty cells (Ctrl/⌘ + click to group several) to add a subject.
+                                        </p>
+                                      )
+                                    )}
+                                    <Table
+                                      className="w-full min-w-[640px] border-collapse bg-background text-sm"
+                                      wrapperClassName="h-auto overflow-x-auto rounded border-2 border-black bg-background my-2 shadow-none"
+                                    >
+                                      <Table.Header className="">
+                                        <Table.Row className="border-b-2 border-black">
+                                          {/* Sticky time-label corner */}
+                                          <Table.Head className="sticky left-0 z-20 w-28 border-b-2 border-r-2 border-black bg-primary px-3 py-2.5 text-left text-base font-bold text-black">
+                                            Time
+                                          </Table.Head>
+                                          {TIMETABLE_DAYS.map((d) => (
+                                            <Table.Head
+                                              key={d.key}
+                                              className="border-b-2 border-r-none border-black bg-primary px-3 py-2.5 text-center text-base font-bold text-black whitespace-nowrap min-w-[120px]"
+                                            >
+                                              <div>{d.full}</div>
+                                            </Table.Head>
+                                          ))}
+                                        </Table.Row>
+                                      </Table.Header>
+                                      <Table.Body>
+                                        {sectionTemplateSlots.map((slot, sIdx) => {
+                                          const isBreak = slot.is_locked_break || slot.slot_type !== "CLASS";
+                                          const timeLabel = `${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}`;
 
-                                        return (
-                                          <Table.Row key={`slot_${slot.start_time}_${sIdx}`} className="bg-background border-none hover:bg-background">
+                                          if (isBreak) {
+                                            return (
+                                              <Table.Row key={`break_${slot.display_order}_${sIdx}`} className="bg-background border-none">
+                                                <Table.Cell className="sticky left-0 z-10 border-r-2 border-t-2 border-black bg-background px-3 py-1 text-xs font-semibold text-foreground whitespace-nowrap">
+                                                  {timeLabel}
+                                                </Table.Cell>
+                                                <Table.Cell
+                                                  colSpan={TIMETABLE_DAYS.length}
+                                                  className="border-none bg-background px-3 py-1.5 text-center text-xs font-medium text-muted-foreground"
+                                                >
+                                                  {slot.slot_name}
+                                                </Table.Cell>
+                                              </Table.Row>
+                                            );
+                                          }
+
+                                          const isCustomSavedRow = !isBreak && slot.slot_id == null;
+
+                                          return (
+                                            <Table.Row key={`slot_${slot.start_time}_${sIdx}`} className="bg-background border-none hover:bg-background">
                                             {/* Sticky time label */}
                                             <Table.Cell className="sticky left-0 z-10 border-r-2 border-y-2 border-black bg-background px-3 py-2.5 align-middle whitespace-nowrap">
                                               <div className="text-xs font-bold text-black">{timeLabel}</div>
+                                              {isCustomSavedRow && (
+                                                <div className="mt-0.5 text-[10px] font-semibold text-amber-800">
+                                                  Saved custom time
+                                                </div>
+                                              )}
                                             </Table.Cell>
                                             {(() => {
                                               const dayLoads = TIMETABLE_DAYS.map((d, dIdx) => {
@@ -2912,198 +2503,210 @@ export default function AdminSubjectLoadStudio() {
                                                 matchedLoads: typeof sectionLoads;
                                               };
 
-                                              const groupedCells: GroupedDayCell[] = [];
-                                              dayLoads.forEach((dItem, idx) => {
-                                                const prev = groupedCells[groupedCells.length - 1];
-                                                if (prev && dItem.matchedLoads.length > 0 && dayLoads[prev.startIdx].key === dItem.key) {
-                                                  prev.colSpan += 1;
-                                                  prev.endIdx = idx;
-                                                } else {
-                                                  groupedCells.push({
-                                                    startIdx: idx,
-                                                    endIdx: idx,
-                                                    colSpan: 1,
-                                                    matchedLoads: dItem.matchedLoads,
-                                                  });
-                                                }
-                                              });
-
-                                              return groupedCells.map((group) => {
-                                                const groupDays = TIMETABLE_DAYS.slice(group.startIdx, group.endIdx + 1).map((d) => d.key);
-                                                const blockRef: GridBlockRef = {
-                                                  classId: cls.class_id,
-                                                  loadKeys: group.matchedLoads.map((l) => l._key).filter((k): k is string => Boolean(k)),
-                                                  startTime: slot.start_time,
-                                                  endTime: slot.end_time,
-                                                  days: groupDays,
-                                                };
-                                                const dropId = `${cls.class_id}|${slot.start_time}|${group.startIdx}`;
-                                                const isDropTarget =
-                                                  !sectionLocked && gridDragSource?.classId === cls.class_id;
-                                                const isDragOver = isDropTarget && gridDragOverId === dropId;
-                                                const dropHandlers = isDropTarget
-                                                  ? {
-                                                      onDragOver: (e: React.DragEvent) => {
-                                                        e.preventDefault();
-                                                        e.dataTransfer.dropEffect = "move";
-                                                        if (gridDragOverId !== dropId) setGridDragOverId(dropId);
-                                                      },
-                                                      onDragLeave: (e: React.DragEvent) => {
-                                                        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                                                          setGridDragOverId((prev) => (prev === dropId ? null : prev));
-                                                        }
-                                                      },
-                                                      onDrop: (e: React.DragEvent) => {
-                                                        e.preventDefault();
-                                                        if (gridDragSource) handleGridDrop(cls.class_id, gridDragSource, blockRef);
-                                                        setGridDragSource(null);
-                                                        setGridDragOverId(null);
-                                                      },
-                                                    }
-                                                  : {};
-                                                const cellId = gridCellId(slot.start_time, slot.end_time, groupDays[0]);
-                                                const isCellSelected =
-                                                  cellSelection?.classId === cls.class_id && cellSelection.cells.includes(cellId);
-
-                                                return (
-                                                  <Table.Cell
-                                                    key={`slot_${slot.start_time}_grp_${group.startIdx}_${group.endIdx}`}
-                                                    colSpan={group.colSpan}
-                                                    className="border-none px-1.5 py-1 align-top"
-                                                    {...dropHandlers}
-                                                  >
-                                                    {group.matchedLoads.length === 0 ? (
-                                                      <div
-                                                        role={sectionLocked ? undefined : "button"}
-                                                        tabIndex={sectionLocked ? undefined : 0}
-                                                        aria-pressed={sectionLocked ? undefined : isCellSelected}
-                                                        aria-label={sectionLocked ? undefined : `${TIMETABLE_DAYS[group.startIdx].full} ${timeLabel}`}
-                                                        title={sectionLocked ? undefined : "Click to select · Ctrl/⌘ + click to group cells"}
-                                                        onClick={(e) => handleToggleGridCell(cls.class_id, cellId, e.ctrlKey || e.metaKey)}
-                                                        onKeyDown={(e) => {
-                                                          if (e.key === "Enter" || e.key === " ") {
-                                                            e.preventDefault();
-                                                            handleToggleGridCell(cls.class_id, cellId, e.ctrlKey || e.metaKey);
+                                                        const groupedCells: GroupedDayCell[] = [];
+                                                        dayLoads.forEach((dItem, idx) => {
+                                                          const prev = groupedCells[groupedCells.length - 1];
+                                                          if (prev && dItem.matchedLoads.length > 0 && dayLoads[prev.startIdx].key === dItem.key) {
+                                                            prev.colSpan += 1;
+                                                            prev.endIdx = idx;
+                                                          } else {
+                                                            groupedCells.push({
+                                                              startIdx: idx,
+                                                              endIdx: idx,
+                                                              colSpan: 1,
+                                                              matchedLoads: dItem.matchedLoads,
+                                                            });
                                                           }
-                                                        }}
-                                                        className={cn(
-                                                          "flex h-full min-h-[2.75rem] items-center justify-center rounded border-2 border-dashed border-transparent text-black transition-colors focus:outline-none",
-                                                          !sectionLocked && "cursor-pointer hover:border-black/40 hover:bg-primary/10 focus-visible:border-black",
-                                                          isCellSelected && "border-solid border-black bg-primary/30 hover:bg-primary/30",
-                                                          isDragOver && "border-black bg-primary/20"
-                                                        )}
-                                                      >
-                                                        {isCellSelected && <Plus className="size-4" aria-hidden="true" />}
-                                                      </div>
-                                                    ) : (
-                                                      <div
-                                                        draggable={!sectionLocked}
-                                                        onDragStart={(e) => {
-                                                          if (sectionLocked) return;
-                                                          e.dataTransfer.effectAllowed = "move";
-                                                          e.dataTransfer.setData("text/plain", blockRef.loadKeys.join(","));
-                                                          setGridDragSource(blockRef);
-                                                          setCellSelection(null);
-                                                        }}
-                                                        onDragEnd={() => {
-                                                          setGridDragSource(null);
-                                                          setGridDragOverId(null);
-                                                        }}
-                                                        className={cn(
-                                                          "flex flex-col gap-1 w-full rounded transition-opacity",
-                                                          !sectionLocked && "cursor-grab active:cursor-grabbing",
-                                                          gridDragSource?.classId === cls.class_id &&
-                                                            gridDragSource.startTime === slot.start_time &&
-                                                            gridDragSource.days.join() === groupDays.join() &&
-                                                            "opacity-50",
-                                                          isDragOver && "outline-2 outline-offset-2 outline-dashed outline-black"
-                                                        )}
-                                                      >
-                                                        {group.matchedLoads.length > 1 && (
-                                                          <Badge
-                                                            variant="outline"
-                                                            className="border-red-400 bg-red-50 text-red-700 text-[9px] font-bold self-start"
-                                                          >
-                                                            ⚠ {group.matchedLoads.length} overlapping
-                                                          </Badge>
-                                                        )}
-                                                        {group.matchedLoads.map((mLoad, mIdx) => {
-                                                          const subObj = (studioData?.subjects || []).find(
-                                                            (s) => s.subject_id === mLoad.subject_id
-                                                          );
-                                                          const teacherObj = (studioData?.teachers || []).find(
-                                                            (t) => t.staff_id === mLoad.staff_id
-                                                          );
-                                                          const conflict = getLoadConflict(cls.class_id, mLoad.subject_id);
-                                                          const isSlotHighlighted = highlightedKey === `${cls.class_id}_${mLoad.subject_id}`;
-                                                          const subjectBg = getSubjectColor(subObj?.subject_name, mLoad.subject_id);
+                                                        });
+
+                                                        return groupedCells.map((group) => {
+                                                          const groupDays = TIMETABLE_DAYS.slice(group.startIdx, group.endIdx + 1).map((d) => d.key);
+                                                          const blockRef: GridBlockRef = {
+                                                            classId: cls.class_id,
+                                                            loadKeys: group.matchedLoads.map((l) => l._key).filter((k): k is string => Boolean(k)),
+                                                            startTime: slot.start_time,
+                                                            endTime: slot.end_time,
+                                                            days: groupDays,
+                                                          };
+                                                          const dropId = `${cls.class_id}|${slot.start_time}|${group.startIdx}`;
+                                                          const isDropTarget =
+                                                            !sectionLocked && !isCustomSavedRow && gridDragSource?.classId === cls.class_id;
+                                                          const isDragOver = isDropTarget && gridDragOverId === dropId;
+                                                          const dropHandlers = isDropTarget
+                                                            ? {
+                                                              onDragOver: (e: React.DragEvent) => {
+                                                                e.preventDefault();
+                                                                e.dataTransfer.dropEffect = "move";
+                                                                if (gridDragOverId !== dropId) setGridDragOverId(dropId);
+                                                              },
+                                                              onDragLeave: (e: React.DragEvent) => {
+                                                                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                                                                  setGridDragOverId((prev) => (prev === dropId ? null : prev));
+                                                                }
+                                                              },
+                                                              onDrop: (e: React.DragEvent) => {
+                                                                e.preventDefault();
+                                                                if (gridDragSource) handleGridDrop(cls.class_id, gridDragSource, blockRef);
+                                                                setGridDragSource(null);
+                                                                setGridDragOverId(null);
+                                                              },
+                                                            }
+                                                            : {};
+                                                          const cellId = gridCellId(slot.start_time, slot.end_time, groupDays[0]);
+                                                          const isCellInteractive = !sectionLocked && !isCustomSavedRow;
+                                                          const isCellSelected =
+                                                            isCellInteractive && cellSelection?.classId === cls.class_id && cellSelection.cells.includes(cellId);
 
                                                           return (
-                                                            <div
-                                                              key={mLoad.subject_load_id || mLoad._key || mIdx}
-                                                              id={`timetable-slot-${cls.class_id}_${mLoad.subject_id}`}
-                                                              role="button"
-                                                              tabIndex={0}
-                                                              title={conflict ? conflict.message : teacherObj ? `Assigned: ${teacherObj.name}` : "Click to assign teacher"}
-                                                              onClick={() => {
-                                                                if (!sectionLocked) {
-                                                                  setTeacherModalTarget({
-                                                                    classId: cls.class_id,
-                                                                    className: cls.section_name,
-                                                                    subjectId: mLoad.subject_id,
-                                                                    subjectName: subObj?.subject_name || `Subject #${mLoad.subject_id}`,
-                                                                    currentStaffId: mLoad.staff_id ?? null,
-                                                                  });
-                                                                }
-                                                              }}
-                                                              onKeyDown={(e) => {
-                                                                if ((e.key === "Enter" || e.key === " ") && !sectionLocked) {
-                                                                  e.preventDefault();
-                                                                  setTeacherModalTarget({
-                                                                    classId: cls.class_id,
-                                                                    className: cls.section_name,
-                                                                    subjectId: mLoad.subject_id,
-                                                                    subjectName: subObj?.subject_name || `Subject #${mLoad.subject_id}`,
-                                                                    currentStaffId: mLoad.staff_id ?? null,
-                                                                  });
-                                                                }
-                                                              }}
-                                                              className={cn(
-                                                                "w-full rounded border-2 border-black px-2 py-1.5 text-xs hover:bg-retro leading-snug shadow-sm cursor-pointer transition-all hover:-translate-y-0.5 active:translate-y-0 focus:outline-none",
-                                                                isSlotHighlighted
-                                                                  ? " border-primary bg-primary/25 scale-[1.03] shadow-md z-10 animate-pulse"
-                                                                  : conflict
-                                                                    ? conflict.severity === "error"
-                                                                      ? "border-destructive bg-destructive/20 text-destructive-foreground"
-                                                                      : "border-amber-400 bg-amber-100/50"
-                                                                    : !mLoad.staff_id
-                                                                      ? cn("border-dashed border-amber-600/80", subjectBg)
-                                                                      : subjectBg
-                                                              )}
+                                                            <Table.Cell
+                                                              key={`slot_${slot.start_time}_grp_${group.startIdx}_${group.endIdx}`}
+                                                              colSpan={group.colSpan}
+                                                              className="border-none px-1.5 py-1 align-top"
+                                                              {...dropHandlers}
                                                             >
-                                                              <div className="font-bold text-sm leading-tight text-black truncate">
-                                                                {subObj?.subject_name || `Subject #${mLoad.subject_id}`}
-                                                              </div>
-                                                              <div className="text-xs text-muted-foreground truncate">
-                                                                {teacherObj
-                                                                  ? teacherObj.name
-                                                                  : <span className="italic font-medium text-amber-700">Unassigned</span>}
-                                                              </div>
+                                                              {group.matchedLoads.length === 0 ? (
+                                                                <div
+                                                                  role={isCellInteractive ? "button" : undefined}
+                                                                  tabIndex={isCellInteractive ? 0 : undefined}
+                                                                  aria-pressed={isCellInteractive ? isCellSelected : undefined}
+                                                                  aria-label={isCellInteractive ? `${TIMETABLE_DAYS[group.startIdx].full} ${timeLabel}` : undefined}
+                                                                  title={isCellInteractive ? "Click to select · Ctrl/⌘ + click to group cells" : undefined}
+                                                                  onClick={isCellInteractive ? (e) => handleToggleGridCell(cls.class_id, cellId, e.ctrlKey || e.metaKey) : undefined}
+                                                                  onKeyDown={isCellInteractive ? (e) => {
+                                                                    if (e.key === "Enter" || e.key === " ") {
+                                                                      e.preventDefault();
+                                                                      handleToggleGridCell(cls.class_id, cellId, e.ctrlKey || e.metaKey);
+                                                                    }
+                                                                  } : undefined}
+                                                                  className={cn(
+                                                                    "flex h-full min-h-[2.75rem] items-center justify-center rounded border-2 border-dashed border-transparent text-black transition-colors focus:outline-none",
+                                                                    isCellInteractive && "cursor-pointer hover:border-black/40 hover:bg-primary/10 focus-visible:border-black",
+                                                                    isCellSelected && "border-solid border-black bg-primary/30 hover:bg-primary/30",
+                                                                    isDragOver && "border-black bg-primary/20"
+                                                                  )}
+                                                                >
+                                                                  {isCellSelected && <Plus className="size-4" aria-hidden="true" />}
+                                                                </div>
+                                                              ) : (
+                                                                <div
+                                                                  draggable={!sectionLocked}
+                                                                  onDragStart={(e) => {
+                                                                    if (sectionLocked) return;
+                                                                    e.dataTransfer.effectAllowed = "move";
+                                                                    e.dataTransfer.setData("text/plain", blockRef.loadKeys.join(","));
+                                                                    setGridDragSource(blockRef);
+                                                                    setCellSelection(null);
+                                                                  }}
+                                                                  onDragEnd={() => {
+                                                                    setGridDragSource(null);
+                                                                    setGridDragOverId(null);
+                                                                  }}
+                                                                  className={cn(
+                                                                    "flex flex-col gap-1 w-full rounded transition-opacity",
+                                                                    !sectionLocked && "cursor-grab active:cursor-grabbing",
+                                                                    gridDragSource?.classId === cls.class_id &&
+                                                                    gridDragSource.startTime === slot.start_time &&
+                                                                    gridDragSource.days.join() === groupDays.join() &&
+                                                                    "opacity-50",
+                                                                    isDragOver && "outline-2 outline-offset-2 outline-dashed outline-black"
+                                                                  )}
+                                                                >
+                                                                  {group.matchedLoads.length > 1 && (
+                                                                    <Badge
+                                                                      variant="outline"
+                                                                      className="border-red-400 bg-red-50 text-red-700 text-[9px] font-bold self-start"
+                                                                    >
+                                                                      ⚠ {group.matchedLoads.length} overlapping
+                                                                    </Badge>
+                                                                  )}
+                                                                  {group.matchedLoads.map((mLoad, mIdx) => {
+                                                                    const subObj = (studioData?.subjects || []).find(
+                                                                      (s) => s.subject_id === mLoad.subject_id
+                                                                    );
+                                                                    const teacherObj = (studioData?.teachers || []).find(
+                                                                      (t) => t.staff_id === mLoad.staff_id
+                                                                    );
+                                                                    const conflictSummary = getSlotConflictSummary(conflicts, mLoad, groupDays);
+                                                                    const conflict = conflictSummary?.primary;
+                                                                    const isSlotHighlighted = highlightedKey === `${cls.class_id}_${mLoad.subject_id}`;
+                                                                    const subjectBg = getSubjectColor(subObj?.subject_name, mLoad.subject_id);
+                                                                    const canOpenCardModal = !sectionLocked || Boolean(conflictSummary);
+                                                                    const openSlotModal = () => {
+                                                                      if (!canOpenCardModal) return;
+                                                                      setTeacherModalTarget({
+                                                                        classId: cls.class_id,
+                                                                        className: cls.section_name,
+                                                                        subjectId: mLoad.subject_id,
+                                                                        subjectName: subObj?.subject_name || `Subject #${mLoad.subject_id}`,
+                                                                        currentStaffId: mLoad.staff_id ?? null,
+                                                                        slot: {
+                                                                          class_id: cls.class_id,
+                                                                          subject_id: mLoad.subject_id,
+                                                                          staff_id: mLoad.staff_id ?? null,
+                                                                          subject_load_id: mLoad.subject_load_id ?? null,
+                                                                          slot_id: mLoad.slot_id ?? null,
+                                                                          start_time: mLoad.start_time ?? slot.start_time,
+                                                                          end_time: mLoad.end_time ?? slot.end_time,
+                                                                          days_of_week: groupDays,
+                                                                        },
+                                                                        slotLabel: `${groupDays.join(", ")} · ${timeLabel}`,
+                                                                      });
+                                                                    };
 
-                                                            </div>
+                                                                    return (
+                                                                      <div
+                                                                        key={mLoad.subject_load_id || mLoad._key || mIdx}
+                                                                        id={`timetable-slot-${cls.class_id}_${mLoad.subject_id}`}
+                                                                        data-slot-time={`${slot.start_time}-${slot.end_time}`}
+                                                                        data-slot-days={groupDays.join(",")}
+                                                                        data-conflict-severity={conflict?.severity ?? "none"}
+                                                                        role="button"
+                                                                        tabIndex={0}
+                                                                        title={conflictSummary ? conflictSummary.tooltip : teacherObj ? `Assigned: ${teacherObj.name}` : "Click to assign teacher"}
+                                                                        onClick={openSlotModal}
+                                                                        onKeyDown={(e) => {
+                                                                          if ((e.key === "Enter" || e.key === " ") && canOpenCardModal) {
+                                                                            e.preventDefault();
+                                                                            openSlotModal();
+                                                                          }
+                                                                        }}
+                                                                        className={cn(
+                                                                          "w-full rounded border-2 border-black px-2 py-1.5 text-xs hover:bg-retro leading-snug shadow-sm cursor-pointer transition-all hover:-translate-y-0.5 active:translate-y-0 focus:outline-none",
+                                                                          isSlotHighlighted
+                                                                            ? " border-primary bg-primary/25 scale-[1.03] shadow-md z-10 animate-pulse"
+                                                                            : conflict
+                                                                              ? conflict.severity === "error"
+                                                                                ? "border-destructive bg-destructive/20 text-destructive-foreground"
+                                                                                : "border-amber-400 bg-amber-100/50"
+                                                                              : !mLoad.staff_id
+                                                                                ? cn("border-dashed border-amber-600/80", subjectBg)
+                                                                                : subjectBg
+                                                                        )}
+                                                                      >
+                                                                        <div className="font-bold text-sm leading-tight text-black truncate">
+                                                                          {subObj?.subject_name || `Subject #${mLoad.subject_id}`}
+                                                                        </div>
+                                                                        <div className="text-xs text-muted-foreground truncate">
+                                                                          {teacherObj
+                                                                            ? teacherObj.name
+                                                                            : <span className="italic font-medium text-amber-700">Unassigned</span>}
+                                                                        </div>
+
+                                                                      </div>
+                                                                    );
+                                                                  })}
+                                                                </div>
+                                                              )}
+                                                            </Table.Cell>
                                                           );
-                                                        })}
-                                                      </div>
-                                                    )}
-                                                  </Table.Cell>
+                                                        });
+                                                      })()
+                                                    }
+                                            </Table.Row>
                                                 );
-                                              });
-                                            })()}
-                                          </Table.Row>
-                                        );
-                                      })}
-                                    </Table.Body>
-                                  </Table>
+                                              })}
+                                            </Table.Body>
+                                    </Table>
                                   </>
                                 ) : (
                                   <Table
@@ -3123,7 +2726,8 @@ export default function AdminSubjectLoadStudio() {
                                           (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
                                         );
 
-                                        const conflict = getLoadConflict(cls.class_id, sub.subject_id);
+                                        const conflictSummary = getLoadConflict(cls.class_id, sub.subject_id, subjectSlots);
+                                        const conflict = conflictSummary?.primary;
                                         const isOfferingEligible = !invalidDraftSubjectIds.has(sub.subject_id);
                                         const isHighlighted =
                                           highlightedKey === `${cls.class_id}_${sub.subject_id}`;
@@ -3155,10 +2759,21 @@ export default function AdminSubjectLoadStudio() {
                                                       Not offered — cannot publish
                                                     </Badge>
                                                   )}
-                                                  {conflict && (
-                                                    <span className="max-w-full whitespace-normal break-words rounded border border-black bg-red-100 px-1.5 py-0.5 text-[11px] font-bold" title={conflict.message}>
-                                                      {conflict.severity === "error" ? "Conflict" : "Warning"}: {conflict.message}
-                                                    </span>
+                                                  {conflictSummary && (
+                                                    <div className="flex max-w-full flex-col items-start gap-1" title={conflictSummary.tooltip}>
+                                                      {conflictSummary.all.map((item, idx) => (
+                                                        <span
+                                                          key={`${item.rule}-${idx}`}
+                                                          className={cn(
+                                                            "max-w-full whitespace-normal break-words rounded border border-black px-1.5 py-0.5 text-[11px] font-bold",
+                                                            item.severity === "error" ? "bg-red-100" : "bg-amber-100"
+                                                          )}
+                                                          title={item.message}
+                                                        >
+                                                          {item.severity === "error" ? "Conflict" : "Warning"}: {item.message}
+                                                        </span>
+                                                      ))}
+                                                    </div>
                                                   )}
                                                 </div>
                                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -3245,106 +2860,156 @@ export default function AdminSubjectLoadStudio() {
 
                                             {/* Days & Time Slot Columns */}
                                             <Table.Cell className="py-2.5 px-2 align-middle">
-                                              {subjectSlots.length === 0 ? (
-                                                <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
-                                                  {subjectPeriodSlots(cls.class_id, sub.subject_id).length
-                                                    ? "Unscheduled — click “+ Add Slot” to assign schedule"
-                                                    : "No timetable slot matches this offering’s configured duration"}
-                                                </span>
-                                              ) : (
-                                                <div className="flex flex-col gap-2">
-                                                  {subjectSlots.map((slot, sIdx) => {
-                                                    const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
-                                                    const resolvedPeriodSlot = classPeriodSlots(cls.class_id).find(
-                                                      (period) => period.slot_id === slot.slot_id || (
-                                                        period.start_time === slot.start_time && period.end_time === slot.end_time
-                                                      )
-                                                    );
+                                              {(() => {
+                                                const compatibleSlots = subjectPeriodSlots(cls.class_id, sub.subject_id);
+                                                const missingSlotInfo = compatibleSlots.length === 0
+                                                  ? diagnoseMissingPeriodSlots(
+                                                    cls,
+                                                    sub.subject_id,
+                                                    studioData?.academic_levels || [],
+                                                    periodTemplateSlots,
+                                                    offerings,
+                                                    selectedPeriodId || studioData?.active_period_id || 0,
+                                                  )
+                                                  : null;
+
+                                                if (subjectSlots.length === 0) {
+                                                  if (compatibleSlots.length > 0) {
                                                     return (
-                                                      <div key={slotKey} className="flex flex-wrap items-center gap-2.5">
-                                                        {/* Days Chips */}
-                                                        <div className="flex flex-wrap gap-0.5">
-                                                          {DAYS.map((d) => {
-                                                            const isSelected = (slot.days_of_week || []).includes(d.key);
-                                                            return (
-                                                              <button
-                                                                key={d.key}
+                                                      <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
+                                                        Unscheduled — click “+ Add Slot” to assign schedule
+                                                      </span>
+                                                    );
+                                                  }
+                                                  return (
+                                                    <div className="flex flex-col items-start gap-1.5 rounded border-2 border-amber-500 bg-amber-50 px-2.5 py-1.5 text-xs">
+                                                      <span className="font-semibold text-amber-950">
+                                                        {missingSlotInfo?.message || "No timetable slot matches this offering’s configured duration."}
+                                                      </span>
+                                                      {missingSlotInfo?.showEditTimelinesAction && (
+                                                        <Button
+                                                          type="button"
+                                                          size="sm"
+                                                          variant="outline"
+                                                          className="h-7 gap-1.5 text-xs shadow-none"
+                                                          onClick={() => openBreakTimelinesDrawer(missingSlotInfo.drawerGroup)}
+                                                        >
+                                                          <Settings className="size-3" aria-hidden="true" />
+                                                          <span>Edit Break Timelines</span>
+                                                        </Button>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                }
+
+                                                return (
+                                                  <div className="flex flex-col gap-2">
+                                                    {subjectSlots.map((slot, sIdx) => {
+                                                      const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
+                                                      const matchedCompatibleSlot = resolveMatchingPeriodSlot(slot, compatibleSlots);
+                                                      const matchedAssignableSlot = resolveMatchingPeriodSlot(slot, assignableClassSlots);
+                                                      const hasSavedTime = Boolean(slot.start_time && slot.end_time);
+                                                      return (
+                                                        <div key={slotKey} className="flex flex-wrap items-start gap-2.5">
+                                                          {/* Days Chips */}
+                                                          <div className="flex flex-wrap gap-0.5 pt-1">
+                                                            {DAYS.map((d) => {
+                                                              const isSelected = (slot.days_of_week || []).includes(d.key);
+                                                              return (
+                                                                <button
+                                                                  key={d.key}
+                                                                  type="button"
+                                                                  disabled={sectionLocked}
+                                                                  onClick={() => handleToggleDay(slotKey, d.key)}
+                                                                  className={`size-6 text-[11px] font-bold border-2 border-black transition-all ${isSelected
+                                                                    ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
+                                                                    : "bg-background text-foreground opacity-50 hover:opacity-100"
+                                                                    }`}
+                                                                >
+                                                                  {d.label}
+                                                                </button>
+                                                              );
+                                                            })}
+                                                          </div>
+
+                                                          {/* All grades (Grades 7-12) select from duration-compatible CLASS slots in their assigned Break Timeline. */}
+                                                          {compatibleSlots.length > 0 ? (
+                                                            <div className="flex flex-col gap-1">
+                                                              <Select
+                                                                value={matchedCompatibleSlot?.slot_id != null ? String(matchedCompatibleSlot.slot_id) : ""}
+                                                                onValueChange={(value) => handlePeriodSlotChange(slotKey, value)}
+                                                                disabled={sectionLocked}
+                                                              >
+                                                                <Select.Trigger
+                                                                  id={`schedule-period-${slotKey}`}
+                                                                  aria-label={`Schedule period for ${sub.subject_name}`}
+                                                                  className="min-w-52 rounded shadow-none"
+                                                                >
+                                                                  <Select.Value placeholder="Select timetable period" />
+                                                                </Select.Trigger>
+                                                                <Select.Content className="rounded">
+                                                                  {compatibleSlots.map((period) => (
+                                                                    <Select.Item key={period.slot_id} value={String(period.slot_id)}>
+                                                                      {period.slot_name} — {formatTime12h(period.start_time)}–{formatTime12h(period.end_time)}
+                                                                    </Select.Item>
+                                                                  ))}
+                                                                </Select.Content>
+                                                              </Select>
+                                                              {hasSavedTime && !matchedCompatibleSlot && (
+                                                                <span className="text-[11px] font-semibold text-amber-900">
+                                                                  Saved time: {formatTime12h(slot.start_time)}–{formatTime12h(slot.end_time)}{" "}
+                                                                  {matchedAssignableSlot
+                                                                    ? `(${matchedAssignableSlot.slot_name} — duration mismatch)`
+                                                                    : "(custom saved time — not in current Break Timeline)"}
+                                                                </span>
+                                                              )}
+                                                            </div>
+                                                          ) : (
+                                                            <div className="flex max-w-sm flex-col items-start gap-1.5 rounded border-2 border-amber-500 bg-amber-50 px-2.5 py-1.5 text-xs">
+                                                              {hasSavedTime && (
+                                                                <span className="font-bold text-black">
+                                                                  Saved time: {formatTime12h(slot.start_time)}–{formatTime12h(slot.end_time)} (preserved)
+                                                                </span>
+                                                              )}
+                                                              <span className="font-semibold text-amber-950">
+                                                                {missingSlotInfo?.message || "No timetable slot matches this offering’s configured duration."}
+                                                              </span>
+                                                              {missingSlotInfo?.showEditTimelinesAction && (
+                                                                <Button
+                                                                  type="button"
+                                                                  size="sm"
+                                                                  variant="outline"
+                                                                  className="h-7 gap-1.5 text-xs shadow-none"
+                                                                  onClick={() => openBreakTimelinesDrawer(missingSlotInfo.drawerGroup)}
+                                                                >
+                                                                  <Settings className="size-3" aria-hidden="true" />
+                                                                  <span>Edit Break Timelines</span>
+                                                                </Button>
+                                                              )}
+                                                            </div>
+                                                          )}
+
+                                                          {/* Delete slot button */}
+                                                          {subjectSlots.length > 1 && (
+                                                            <Tooltip>
+                                                              <TooltipTrigger render={<button
                                                                 type="button"
                                                                 disabled={sectionLocked}
-                                                                onClick={() => handleToggleDay(slotKey, d.key)}
-                                                                className={`size-6 text-[11px] font-bold border-2 border-black transition-all ${isSelected
-                                                                  ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
-                                                                  : "bg-background text-foreground opacity-50 hover:opacity-100"
-                                                                  }`}
+                                                                onClick={() => handleRemoveSlot(slotKey)}
+                                                                className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1 mt-0.5"
+                                                                aria-label="Remove time slot"
                                                               >
-                                                                {d.label}
-                                                              </button>
-                                                            );
-                                                          })}
+                                                                <Trash2 className="size-3.5" />
+                                                              </button>} />
+                                                              <TooltipContent>Remove time slot</TooltipContent>
+                                                            </Tooltip>
+                                                          )}
                                                         </div>
-
-                                                        {/* JHS uses the shared timetable; SHS retains its existing editor. */}
-                                                        {isJhsClass(cls.class_id) ? (
-                                                          <Select
-                                                            value={resolvedPeriodSlot?.slot_id != null ? String(resolvedPeriodSlot.slot_id) : ""}
-                                                            onValueChange={(value) => handlePeriodSlotChange(slotKey, value)}
-                                                            disabled={sectionLocked}
-                                                          >
-                                                            <Select.Trigger
-                                                              id={`schedule-period-${slotKey}`}
-                                                              aria-label={`Schedule period for ${sub.subject_name}`}
-                                                              className="min-w-52 rounded shadow-none"
-                                                            >
-                                                              <Select.Value placeholder="Select timetable period" />
-                                                            </Select.Trigger>
-                                                            <Select.Content className="rounded">
-                                                              {subjectPeriodSlots(cls.class_id, sub.subject_id).map((period) => (
-                                                                <Select.Item key={period.slot_id} value={String(period.slot_id)}>
-                                                                  {period.slot_name} — {formatTime12h(period.start_time)}–{formatTime12h(period.end_time)}
-                                                                </Select.Item>
-                                                              ))}
-                                                            </Select.Content>
-                                                          </Select>
-                                                        ) : <div className="grid gap-1">
-                                                          <fieldset id={`schedule-time-${slotKey}`} tabIndex={-1} disabled={sectionLocked} aria-invalid={timeValidationError?.slotKey === slotKey} className={`flex items-center gap-1 ${timeValidationError?.slotKey === slotKey ? "rounded border-2 border-destructive" : ""}`}>
-                                                            <TimePickerSingle
-                                                              value={stringToTimeValue(slot.start_time, 8)}
-                                                              onChange={(newStart) =>
-                                                                handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
-                                                              }
-                                                            />
-                                                            <span className="text-xs font-bold text-muted-foreground">–</span>
-                                                            <TimePickerSingle
-                                                              value={stringToTimeValue(slot.end_time, 9)}
-                                                              lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
-                                                              onChange={(newEnd) =>
-                                                                handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
-                                                              }
-                                                            />
-                                                          </fieldset>
-                                                          {timeValidationError?.slotKey === slotKey && <FormMessage>{timeValidationError.message}</FormMessage>}
-                                                        </div>}
-
-                                                        {/* Delete slot button */}
-                                                        {subjectSlots.length > 1 && (
-                                                          <Tooltip>
-                                                            <TooltipTrigger render={<button
-                                                              type="button"
-                                                              disabled={sectionLocked}
-                                                              onClick={() => handleRemoveSlot(slotKey)}
-                                                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
-                                                              aria-label="Remove time slot"
-                                                            >
-                                                              <Trash2 className="size-3.5" />
-                                                            </button>} />
-                                                            <TooltipContent>Remove time slot</TooltipContent>
-                                                          </Tooltip>
-                                                        )}
-                                                      </div>
-                                                    );
-                                                  })}
-                                                </div>
-                                              )}
+                                                      );
+                                                    })}
+                                                  </div>
+                                                );
+                                              })()}
                                             </Table.Cell>
 
                                             {/* Smart Teacher Dropdown & Workload Bar */}
@@ -3441,23 +3106,25 @@ export default function AdminSubjectLoadStudio() {
                                                           </Button>
                                                           <button
                                                             type="button"
+                                                            disabled={subjectPeriodSlots(cls.class_id, sub.subject_id).length === 0}
                                                             onClick={() => {
                                                               setOpenRowKey(null);
                                                               handleApplyPreset(cls.class_id, sub.subject_id, "2day");
                                                             }}
-                                                            className="text-[11px] font-bold text-left px-2 py-1 hover:bg-sky-100 text-sky-950 rounded"
+                                                            className="text-[11px] font-bold text-left px-2 py-1 hover:bg-sky-100 text-sky-950 rounded disabled:opacity-40 disabled:cursor-not-allowed"
                                                           >
-                                                            Preset: 2-Day (MW 2h)
+                                                            Preset: 2-Day (MW)
                                                           </button>
                                                           <button
                                                             type="button"
+                                                            disabled={subjectPeriodSlots(cls.class_id, sub.subject_id).length === 0}
                                                             onClick={() => {
                                                               setOpenRowKey(null);
                                                               handleApplyPreset(cls.class_id, sub.subject_id, "3day");
                                                             }}
-                                                            className="text-[11px] font-bold text-left px-2 py-1 hover:bg-purple-100 text-purple-950 rounded"
+                                                            className="text-[11px] font-bold text-left px-2 py-1 hover:bg-purple-100 text-purple-950 rounded disabled:opacity-40 disabled:cursor-not-allowed"
                                                           >
-                                                            Preset: 3-Day (MWF 1.3h)
+                                                            Preset: 3-Day (MWF)
                                                           </button>
                                                         </div>
                                                       )}
@@ -3587,9 +3254,12 @@ export default function AdminSubjectLoadStudio() {
 
       <BreakConfigDrawer
         open={isBreakDrawerOpen}
-        onClose={() => setIsBreakDrawerOpen(false)}
+        onClose={() => {
+          setIsBreakDrawerOpen(false);
+          setBreakDrawerGroup(null);
+        }}
         initialSlots={periodTemplateSlots}
-        initialGroup={activeGroupKey}
+        initialGroup={breakDrawerGroup || activeGroupKey}
         onSaved={() => void loadStudio(selectedPeriodId || undefined)}
         studioData={studioData}
       />
@@ -3712,30 +3382,69 @@ export default function AdminSubjectLoadStudio() {
           if (!open) setTeacherModalTarget(null);
         }}
       >
-        {teacherModalTarget && (
-          <AssignTeacherModal
-            target={teacherModalTarget}
-            teachers={studioData?.teachers || []}
-            teacherWorkloads={teacherWorkloads}
-            loads={loads}
-            getTeacherAvailabilityStatus={getTeacherAvailabilityStatus}
-            onAssign={(classId, subjectId, staffId) => {
-              if (staffId !== "none") {
-                const conflict = getTeacherAvailabilityStatus(staffId, classId, subjectId);
-                if (conflict.includes("Conflict")) {
-                  toast.error({
-                    title: "Teacher unavailable",
-                    description: conflict,
+        {teacherModalTarget && (() => {
+          const modalTargetLoads = loads.filter(
+            (l) =>
+              l.class_id === teacherModalTarget.classId &&
+              l.subject_id === teacherModalTarget.subjectId
+          );
+          const modalConflictSummary = teacherModalTarget.slot
+            ? getSlotConflictSummary(
+              conflicts,
+              teacherModalTarget.slot,
+              teacherModalTarget.slot.days_of_week,
+            )
+            : getLoadConflictSummary(
+              conflicts,
+              teacherModalTarget.classId,
+              teacherModalTarget.subjectId,
+              modalTargetLoads,
+            );
+          const modalSectionLocked = isSectionLocked(teacherModalTarget.classId);
+          return (
+            <AssignTeacherModal
+              target={teacherModalTarget}
+              teachers={studioData?.teachers || []}
+              teacherWorkloads={teacherWorkloads}
+              loads={loads}
+              conflictSummary={modalConflictSummary}
+              sectionLocked={modalSectionLocked}
+              onEditInListView={() => {
+                const targetClassId = teacherModalTarget.classId;
+                const key = `${targetClassId}_${teacherModalTarget.subjectId}`;
+                setTeacherModalTarget(null);
+                setSectionViewModes((prev) => ({ ...prev, [targetClassId]: "list" }));
+                setHighlightedKey(key);
+                setTimeout(() => {
+                  document.getElementById(`subject-row-${key}`)?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
                   });
-                  return;
+                }, 60);
+                setTimeout(() => {
+                  setHighlightedKey((curr) => (curr === key ? null : curr));
+                }, 3500);
+              }}
+              getTeacherAvailabilityStatus={getTeacherAvailabilityStatus}
+              onAssign={(classId, subjectId, staffId) => {
+                if (isSectionLocked(classId)) return;
+                if (staffId !== "none") {
+                  const conflict = getTeacherAvailabilityStatus(staffId, classId, subjectId);
+                  if (conflict.includes("Conflict")) {
+                    toast.error({
+                      title: "Teacher unavailable",
+                      description: conflict,
+                    });
+                    return;
+                  }
                 }
-              }
-              handleTeacherChange(classId, subjectId, staffId);
-              setTeacherModalTarget(null);
-            }}
-            onClose={() => setTeacherModalTarget(null)}
-          />
-        )}
+                handleTeacherChange(classId, subjectId, staffId);
+                setTeacherModalTarget(null);
+              }}
+              onClose={() => setTeacherModalTarget(null)}
+            />
+          );
+        })()}
       </Dialog>
     </AppLayout>
   );
