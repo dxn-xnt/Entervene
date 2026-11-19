@@ -199,7 +199,7 @@ export default function CreateClassworkModal({
           display_order: level.display_order ?? index,
         }));
       }
-      return target ? scaleRubricToMaxPoints(defaultLevels, target.max_points) : defaultLevels;
+      return target ? scaleRubricLevels(defaultLevels, target.max_points) : defaultLevels;
     }
     return defaultLevels;
   });
@@ -233,7 +233,7 @@ export default function CreateClassworkModal({
     }));
     if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
       const freshDefaults = defaultActivityRubric.map((level) => ({ ...level }));
-      setRubricLevels(scaleRubricToMaxPoints(freshDefaults, selectedOriginalTarget.max_points));
+      setRubricLevels(scaleRubricLevels(freshDefaults, selectedOriginalTarget.max_points));
     }
   }, [remediationDraft, remediationGradeTreatment, selectedOriginalTarget, selectedType]);
 
@@ -634,7 +634,7 @@ export default function CreateClassworkModal({
                         setDraft((cur) => ({ ...cur, total_points: String(target.max_points) }));
                         if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
                           const freshDefaults = defaultActivityRubric.map((level) => ({ ...level }));
-                          setRubricLevels(scaleRubricToMaxPoints(freshDefaults, target.max_points));
+                          setRubricLevels(scaleRubricLevels(freshDefaults, target.max_points));
                         }
                       }
                     }
