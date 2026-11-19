@@ -17,10 +17,26 @@ const Toaster = ({ ...props }: ToasterProps) => {
       containerAriaLabel="Notifications"
       style={{ zIndex: 999999 }}
       icons={{
-        success: <span className="flex size-5 shrink-0 items-center justify-center"><CircleCheck aria-hidden="true" className="size-5" /></span>,
-        error: <span className="flex size-5 shrink-0 items-center justify-center"><CircleAlert aria-hidden="true" className="size-5" /></span>,
-        warning: <span className="flex size-5 shrink-0 items-center justify-center"><TriangleAlert aria-hidden="true" className="size-5" /></span>,
-        info: <span className="flex size-5 shrink-0 items-center justify-center"><Info aria-hidden="true" className="size-5" /></span>,
+        success: (
+          <span className="flex size-5 shrink-0 items-center justify-center">
+            <CircleCheck aria-hidden="true" className="size-5" />
+          </span>
+        ),
+        error: (
+          <span className="flex size-5 shrink-0 items-center justify-center">
+            <CircleAlert aria-hidden="true" className="size-5" />
+          </span>
+        ),
+        warning: (
+          <span className="flex size-5 shrink-0 items-center justify-center">
+            <TriangleAlert aria-hidden="true" className="size-5" />
+          </span>
+        ),
+        info: (
+          <span className="flex size-5 shrink-0 items-center justify-center">
+            <Info aria-hidden="true" className="size-5" />
+          </span>
+        ),
       }}
       toastOptions={{
         classNames: {

@@ -22,8 +22,9 @@ const textVariants = cva("font-sans", {
 });
 
 interface TextProps
-  extends Omit<HTMLAttributes<HTMLElement>, "className">,
-  VariantProps<typeof textVariants> {
+  extends
+    Omit<HTMLAttributes<HTMLElement>, "className">,
+    VariantProps<typeof textVariants> {
   className?: string;
 }
 

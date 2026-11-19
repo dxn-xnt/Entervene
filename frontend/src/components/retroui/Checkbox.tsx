@@ -3,29 +3,34 @@ import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Check } from "lucide-react";
 
-const checkboxVariants = cva("border-2 rounded-sm! outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/35", {
-  variants: {
-    variant: {
-      default: "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground ",
-      outline: "",
-      solid:
-        "data-[state=checked]:bg-foreground data-[state=checked]:text-background",
+const checkboxVariants = cva(
+  "border-2 rounded-sm! outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/35",
+  {
+    variants: {
+      variant: {
+        default:
+          "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground ",
+        outline: "",
+        solid:
+          "data-[state=checked]:bg-foreground data-[state=checked]:text-background",
+      },
+      size: {
+        sm: "h-4 w-4",
+        md: "h-5 w-5",
+        lg: "h-6 w-6",
+      },
     },
-    size: {
-      sm: "h-4 w-4",
-      md: "h-5 w-5",
-      lg: "h-6 w-6",
+    defaultVariants: {
+      variant: "default",
+      size: "md",
     },
   },
-  defaultVariants: {
-    variant: "default",
-    size: "md",
-  },
-});
+);
 
 interface CheckboxProps
-  extends React.ComponentProps<typeof CheckboxPrimitive.Root>,
-  VariantProps<typeof checkboxVariants> { }
+  extends
+    React.ComponentProps<typeof CheckboxPrimitive.Root>,
+    VariantProps<typeof checkboxVariants> {}
 
 export const Checkbox = ({
   className,
