@@ -327,6 +327,7 @@ export interface InterventionSupportMaterialsHandle {
 }
 
 export interface InterventionSupportMaterialsProps {
+  navigation?: import("react").ReactNode;
   onChangesChange?: (hasChanges: boolean) => void;
   detail: TeacherInterventionDetail;
   page?: "overview" | "plan";
@@ -339,7 +340,7 @@ const InterventionSupportMaterials = forwardRef<
   InterventionSupportMaterialsHandle,
   InterventionSupportMaterialsProps
 >(function InterventionSupportMaterials(
-  { detail, page = "overview", previousResolved, onAddInterventionActivity, onChangesChange, wizardStep },
+  { detail, page = "overview", previousResolved, onAddInterventionActivity, onChangesChange, wizardStep, navigation },
   ref
 ) {
   const toast = useToast();
@@ -1893,6 +1894,8 @@ const InterventionSupportMaterials = forwardRef<
           </div>
         </Card>
       </div>
+
+      {navigation}
 
       {previousResolved && (
         <Card className="space-y-2 w-full border-2 border-border">

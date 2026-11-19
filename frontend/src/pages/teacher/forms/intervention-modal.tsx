@@ -6,6 +6,7 @@ import { Button } from "@/components/teacher/button";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
+import { Tabs } from "@/components/retroui/Tabs";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Empty } from "@/components/retroui/Empty";
@@ -48,7 +49,15 @@ const percentVariant = (
   return "destructive";
 };
 
-export const INTERVENTION_ACTIVITY_WIZARD_STEP = 4;
+export const INTERVENTION_ACTIVITY_WIZARD_STEP = 1;
+
+const supportTabs = [
+  { id: "1", label: "Support Plan" },
+  { id: "2", label: "Support Resources" },
+  { id: "3", label: "Practice Assessment" },
+  { id: "4", label: "Remediation Activity" },
+  { id: "5", label: "Summary" },
+];
 
 const strongestEvidence = (diagnosis: DiagnosisSnapshot) => {
   const scored = diagnosis.lowest_supported_competencies ?? [];
@@ -217,6 +226,22 @@ export default function InterventionModal({
   const requestClose = async () => {
     if (!(await saveReadingSelections())) return;
     onClose();
+  };
+  const navigateToStep = async (target: number) => {
+    if (savingAdjustments || activating) return;
+    const currentStep = supportPage === "plan" ? wizardStep : 1;
+    if (target > currentStep) {
+      for (let step = currentStep; step < target; step++) {
+        if (!supportMaterialsRef.current?.validateStep(step)) {
+          contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+      }
+    }
+    if (!(await saveReadingSelections())) return;
+    setSupportPage("plan");
+    setWizardStep(target);
+    contentRef.current?.scrollTo({ top: 0 });
   };
 
   return (
@@ -432,6 +457,16 @@ export default function InterventionModal({
                     wizardStep={supportPage === "plan" ? wizardStep : undefined}
                     detail={detail}
                     previousResolved={previousResolved}
+                    navigation={(
+                      <Tabs
+                        tabs={supportTabs}
+                        activeTab={String(supportPage === "plan" ? wizardStep : 1)}
+                        onTabChange={(step) => void navigateToStep(Number(step))}
+                        className="-mx-5! static!"
+                        listClassName="px-5!"
+                        tabClassName="rounded-t-lg!"
+                      />
+                    )}
                     onAddInterventionActivity={() => {
                       setSupportPage("plan");
                       setWizardStep(INTERVENTION_ACTIVITY_WIZARD_STEP);
@@ -732,8 +767,7 @@ export default function InterventionModal({
           </Button>
           {isActive && supportPage === "plan" && wizardStep > 1 && (
             <Button variant="outline" disabled={savingAdjustments} onClick={() => {
-              setWizardStep((step) => step - 1);
-              contentRef.current?.scrollTo({ top: 0 });
+              void navigateToStep(wizardStep - 1);
             }}>Back</Button>
           )}
           {isActive && (

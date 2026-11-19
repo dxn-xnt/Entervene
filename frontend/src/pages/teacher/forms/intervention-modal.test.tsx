@@ -57,7 +57,7 @@ const detail = {
 } as TeacherInterventionDetail;
 
 describe("intervention support wizard navigation", () => {
-  it("moves an already-open support plan from step 1 to remediation activity step 4", () => {
+  it("starts intervention activity setup at step 1 without skipping setup", () => {
     render(
       <InterventionModal
         isOpen
@@ -77,8 +77,8 @@ describe("intervention support wizard navigation", () => {
     expect(screen.getByText("Step 1 of 5")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Add Intervention Activity" }));
 
-    expect(screen.getByText("Step 4 of 5")).toBeDefined();
-    expect(screen.getByTestId("support-wizard-step").textContent).toBe("4");
+    expect(screen.getByText("Step 1 of 5")).toBeDefined();
+    expect(screen.getByTestId("support-wizard-step").textContent).toBe("1");
   });
 
   it("saves changed reading selections before closing step 2", async () => {
