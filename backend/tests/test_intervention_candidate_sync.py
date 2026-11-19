@@ -15,6 +15,10 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.intervention.InterventionCandidateService import sync_intervention_for_persisted_prediction
+from app.services.intervention.InterventionReconciliationService import (
+    reconcile_open_interventions_for_template_threshold_change,
+)
+from app.services.grading.PassingPolicyAdminService import edit_template_threshold
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
 from app.services.prediction import DevelopmentCurrentTermPredictionPersistenceService as persistence
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
@@ -117,6 +121,192 @@ def test_later_improvement_resolves_without_rewriting_trigger(current_period_con
     assert rows[0].source_prediction_id == first["prediction_id"]
     assert rows[0].resolution_reason == "IMPROVED_PREDICTION"
     assert rows[0].resolved_at is not None
+
+
+@pytest.mark.parametrize("starting_status", ["CANDIDATE", "ACTIVE"])
+def test_template_threshold_change_reconciles_open_intervention_and_preserves_trigger(
+    current_period_context, monkeypatch, starting_status,
+):
+    ctx = current_period_context
+    model_id = _setup(ctx, monkeypatch, [82.69, 85.32850036075038])
+    first = _run(ctx, model_id)
+    intervention = _interventions(ctx)[0]
+    activated_at = None
+    if starting_status == "ACTIVE":
+        staff_id = ctx["staff"].staff_id
+        activated_at = datetime.now(timezone.utc)
+        intervention.status = "ACTIVE"
+        intervention.activated_at = activated_at
+        intervention.activated_by_staff_id = staff_id
+        ctx["db"].commit()
+    add_activity(ctx, "PERFORMANCE_TASK", 15, 20)
+    latest = _run(ctx, model_id)
+    assert latest["revision"] == 2
+    assert _interventions(ctx)[0].status == starting_status
+
+    edit_template_threshold(
+        ctx["db"],
+        template_id=ctx["template"].grading_template_id,
+        year_id=ctx["period"].academic_year_id,
+        raw_threshold="85",
+        expected_updated_at=ctx["template"].updated_at,
+        reason="Align intervention passing policy",
+        actor=ctx["staff"].user_id,
+    )
+
+    resolved = _interventions(ctx)[0]
+    assert resolved.status == "RESOLVED"
+    assert resolved.resolution_reason == "IMPROVED_PREDICTION"
+    assert resolved.resolved_at is not None
+    assert resolved.source_prediction_id == first["prediction_id"]
+    if activated_at is None:
+        assert resolved.activated_at is None
+    else:
+        assert resolved.activated_at.replace(tzinfo=timezone.utc) == activated_at
+    source = ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"])
+    assert float(source.predicted_period_grade) == 82.69
+    assert source.intervention_level == "MODERATE_RISK"
+
+
+@pytest.mark.parametrize(
+    "raw_grade,expected_status",
+    [(84.999, "CANDIDATE"), (85.0, "RESOLVED")],
+)
+def test_threshold_change_uses_latest_raw_grade_at_boundary(
+    current_period_context, monkeypatch, raw_grade, expected_status,
+):
+    ctx = current_period_context
+    model_id = _setup(ctx, monkeypatch, [84.0, raw_grade])
+    _run(ctx, model_id)
+    add_activity(ctx, "PERFORMANCE_TASK", 15, 20)
+    latest = _run(ctx, model_id)
+    persisted = ctx["db"].get(DevelopmentCurrentTermPrediction, latest["prediction_id"])
+    assert float(persisted.predicted_period_grade) == 85.0
+
+    edit_template_threshold(
+        ctx["db"], template_id=ctx["template"].grading_template_id,
+        year_id=ctx["period"].academic_year_id, raw_threshold="85",
+        expected_updated_at=ctx["template"].updated_at,
+        reason="Apply exact passing boundary", actor=ctx["staff"].user_id,
+    )
+
+    assert _interventions(ctx)[0].status == expected_status
+
+
+def test_threshold_reconciliation_is_scoped_and_never_reopens_resolved(
+    current_period_context, monkeypatch,
+):
+    ctx = current_period_context
+    model_id = _setup(ctx, monkeypatch, [84.0])
+    _run(ctx, model_id)
+
+    other_template = GradingTemplate(
+        template_name="Unrelated", passing_threshold=Decimal("70"), status="active",
+    )
+    ctx["db"].add(other_template)
+    ctx["db"].flush()
+    other_subject = Subject(
+        subject_name="Unrelated Subject", subject_codename="OTHER",
+        academic_level_id=ctx["level"].academic_level_id,
+        grading_template_id=other_template.grading_template_id,
+    )
+    ctx["db"].add(other_subject)
+    ctx["db"].flush()
+    unrelated_prediction = DevelopmentCurrentTermPrediction(
+        student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
+        subject_id=other_subject.subject_id,
+        source_period_id=ctx["period"].academic_period_id,
+        target_period_id=ctx["period"].academic_period_id,
+        model_version_id=model_id, revision=1, predicted_period_grade=Decimal("99"),
+        intervention_level="LOW_RISK", intervention_basis="TEST",
+        evidence_snapshot={
+            "readiness": {"status": "READY"},
+            "projected_final_term_grade_raw": 99.0,
+        },
+    )
+    ctx["db"].add(unrelated_prediction)
+    ctx["db"].flush()
+    unrelated = Intervention(
+        student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
+        subject_id=other_subject.subject_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        source_prediction_id=unrelated_prediction.prediction_id,
+        status="CANDIDATE", diagnosis_snapshot={},
+    )
+    ctx["db"].add(unrelated)
+    resolved_prediction = DevelopmentCurrentTermPrediction(
+        student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        source_period_id=ctx["next_period"].academic_period_id,
+        target_period_id=ctx["next_period"].academic_period_id,
+        model_version_id=model_id, revision=1, predicted_period_grade=Decimal("70"),
+        intervention_level="HIGH_RISK", intervention_basis="TEST",
+        evidence_snapshot={
+            "readiness": {"status": "READY"},
+            "projected_final_term_grade_raw": 70.0,
+        },
+    )
+    ctx["db"].add(resolved_prediction)
+    ctx["db"].flush()
+    historical = Intervention(
+        student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=ctx["next_period"].academic_period_id,
+        source_prediction_id=resolved_prediction.prediction_id,
+        status="RESOLVED", resolution_reason="IMPROVED_PREDICTION",
+        resolved_at=datetime.now(timezone.utc), diagnosis_snapshot={},
+    )
+    ctx["db"].add(historical)
+    ctx["db"].commit()
+
+    ctx["template"].passing_threshold = Decimal("83")
+    ctx["db"].flush()
+    result = reconcile_open_interventions_for_template_threshold_change(
+        ctx["db"], academic_year_id=ctx["period"].academic_year_id,
+        grading_template_id=ctx["template"].grading_template_id,
+    )
+
+    assert result == {"affected": 1, "resolved": 1}
+    assert unrelated.status == "CANDIDATE"
+    assert historical.status == "RESOLVED"
+    assert historical.resolution_reason == "IMPROVED_PREDICTION"
+
+
+def test_threshold_reconciliation_is_idempotent_and_notifies_once(
+    current_period_context, monkeypatch,
+):
+    from app.services.intervention import InterventionCandidateService as candidate_service
+
+    ctx = current_period_context
+    model_id = _setup(ctx, monkeypatch, [84.0, 85.5])
+    _run(ctx, model_id)
+    add_activity(ctx, "PERFORMANCE_TASK", 15, 20)
+    _run(ctx, model_id)
+    events = []
+    monkeypatch.setattr(
+        candidate_service,
+        "stage_intervention_notification",
+        lambda _db, intervention, *, event, predicted_grade: events.append(
+            (intervention.intervention_id, event, predicted_grade)
+        ),
+    )
+    ctx["template"].passing_threshold = Decimal("85")
+    ctx["db"].flush()
+
+    first = reconcile_open_interventions_for_template_threshold_change(
+        ctx["db"], academic_year_id=ctx["period"].academic_year_id,
+        grading_template_id=ctx["template"].grading_template_id,
+    )
+    second = reconcile_open_interventions_for_template_threshold_change(
+        ctx["db"], academic_year_id=ctx["period"].academic_year_id,
+        grading_template_id=ctx["template"].grading_template_id,
+    )
+
+    assert first == {"affected": 1, "resolved": 1}
+    assert second == {"affected": 0, "resolved": 0}
+    assert [(event, grade) for _, event, grade in events] == [
+        ("IMPROVED_PREDICTION", 85.5),
+    ]
 
 
 def test_active_intervention_resolves_and_later_high_risk_revision_does_not_create_candidate(current_period_context, monkeypatch):

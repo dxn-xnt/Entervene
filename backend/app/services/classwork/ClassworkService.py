@@ -465,12 +465,26 @@ async def create_classwork_wizard_record(
                 is_finalized=True,
             ).first():
                 raise HTTPException(status_code=409, detail="The period grade is finalized")
+            existing_exam_remediation = db.query(ClassworkAssignment).filter_by(
+                original_exam_assignment_id=original_exam_assignment_id,
+                recipient_student_id=intervention.student_id,
+            ).first()
+            if (
+                existing_exam_remediation is not None
+                and existing_exam_remediation.remediation_request_id != remediation_request_id
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="The selected original Examination already has a remediation activity",
+                )
         elif original_exam_assignment_id is not None:
             raise HTTPException(status_code=400, detail="Original Examination link requires Examination grade treatment")
         prior = db.query(ClassworkAssignment).filter_by(remediation_request_id=remediation_request_id).first()
         if prior:
             if prior.source_intervention_id != intervention_id or prior.assigned_by_staff_id != staff_id:
                 raise HTTPException(status_code=409, detail="Remediation request was already used")
+            if treatment == "EXAMINATION" and prior.original_exam_assignment_id != original_exam_assignment_id:
+                raise HTTPException(status_code=409, detail="Remediation request was already used for a different target")
             if original_classwork_assignment_id is not None:
                 from app.services.intervention.RemediationAssignmentLinkService import create_remediation_assignment_link
                 create_remediation_assignment_link(

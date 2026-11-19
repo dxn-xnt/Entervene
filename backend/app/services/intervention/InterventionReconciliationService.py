@@ -24,6 +24,78 @@ from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECT
 from app.services.prediction.DevelopmentCurrentTermPredictionService import canonicalize_v3_features, resolve_v3_scope
 
 
+def reconcile_open_interventions_for_template_threshold_change(
+    db: Session,
+    *,
+    academic_year_id: int,
+    grading_template_id: int,
+) -> dict[str, int]:
+    """Re-evaluate affected open interventions inside the policy transaction.
+
+    The existing prediction synchronizer remains the lifecycle authority. This
+    adapter only narrows the work to open rows in the edited academic year whose
+    effective period-aware subject template is the one being changed.
+    """
+    open_rows = db.query(Intervention).join(
+        AcademicPeriod,
+        AcademicPeriod.academic_period_id == Intervention.academic_period_id,
+    ).filter(
+        AcademicPeriod.academic_year_id == academic_year_id,
+        Intervention.status.in_(OPEN_STATUSES),
+    ).order_by(Intervention.intervention_id).all()
+
+    affected_ids = []
+    for intervention in open_rows:
+        threshold = require_subject_passing_threshold(
+            db,
+            academic_year_id=academic_year_id,
+            subject_id=intervention.subject_id,
+            academic_period_id=intervention.academic_period_id,
+        )
+        if threshold.grading_template_id == grading_template_id:
+            affected_ids.append(intervention.intervention_id)
+
+    if not affected_ids:
+        return {"affected": 0, "resolved": 0}
+
+    rows = db.query(Intervention).filter(
+        Intervention.intervention_id.in_(affected_ids),
+        Intervention.status.in_(OPEN_STATUSES),
+    ).order_by(Intervention.intervention_id).with_for_update().all()
+
+    affected = 0
+    resolved = 0
+    for intervention in rows:
+        source = db.get(DevelopmentCurrentTermPrediction, intervention.source_prediction_id)
+        if source is None:
+            raise ValueError("Open intervention source prediction is unavailable.")
+        latest = db.query(DevelopmentCurrentTermPrediction).filter_by(
+            student_id=intervention.student_id,
+            class_id=intervention.class_id,
+            subject_id=intervention.subject_id,
+            source_period_id=intervention.academic_period_id,
+            target_period_id=intervention.academic_period_id,
+            model_version_id=source.model_version_id,
+        ).order_by(DevelopmentCurrentTermPrediction.revision.desc()).first()
+        if latest is None:
+            raise ValueError("Open intervention latest prediction is unavailable.")
+
+        affected += 1
+        before = intervention.status
+        sync_intervention_for_persisted_prediction(
+            db,
+            latest,
+            student_id=intervention.student_id,
+            class_id=intervention.class_id,
+            subject_id=intervention.subject_id,
+            academic_period_id=intervention.academic_period_id,
+        )
+        if before in OPEN_STATUSES and intervention.status == "RESOLVED":
+            resolved += 1
+
+    return {"affected": affected, "resolved": resolved}
+
+
 def reconcile_existing_candidate(db: Session, prediction_id: int, *, apply: bool = False) -> str:
     """Return a skip reason or create a candidate in the caller's transaction.
 

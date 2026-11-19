@@ -5,6 +5,7 @@ import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage"
 import { useNavigate } from "react-router-dom";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/teacher/button";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { useToast } from "@/components/retroui/Toast";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
@@ -28,7 +29,11 @@ import {
   getTeacherPracticeAssessment,
   listTeacherPracticeAttempts,
 } from "@/lib/practice-assessment-api";
-import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
+import { InterventionPredictionHistory } from "@/components/teacher/intervention-prediction-history";
+import {
+  remediationProgressState,
+} from "./remediation-progress-status";
+import { RemediationProgressNotice } from "./remediation-progress-notice";
 import {
   createSupportMaterial,
   generateStudentReviewer,
@@ -141,12 +146,12 @@ const isSupportedAIRecommendation = (
 
 const validateCap = (value: string): string | null => {
   const trimmed = value.trim();
-  if (!trimmed) return "Score adjustment cap is required.";
+  if (!trimmed) return "Target-score ceiling is required.";
   const parsed = Number(trimmed);
-  if (Number.isNaN(parsed)) return "Cap must be a valid number.";
-  if (parsed < 0) return "Cap cannot be negative.";
+  if (Number.isNaN(parsed)) return "Target-score ceiling must be a valid number.";
+  if (parsed < 0) return "Target-score ceiling cannot be negative.";
   if (parsed >= 100) {
-    return "Full Replacement (100%) is not permitted under remediation policy. Cap must be less than 100%.";
+    return "Full Replacement (100%) is not permitted under remediation policy. The target-score ceiling must be less than 100%.";
   }
   return null;
 };
@@ -326,7 +331,7 @@ export interface InterventionSupportMaterialsProps {
   detail: TeacherInterventionDetail;
   page?: "overview" | "plan";
   previousResolved?: TeacherInterventionSummary;
-  onAdjustSupport?: () => void;
+  onAddInterventionActivity?: () => void;
   wizardStep?: number;
 }
 
@@ -334,7 +339,7 @@ const InterventionSupportMaterials = forwardRef<
   InterventionSupportMaterialsHandle,
   InterventionSupportMaterialsProps
 >(function InterventionSupportMaterials(
-  { detail, page = "overview", previousResolved, onAdjustSupport, onChangesChange, wizardStep },
+  { detail, page = "overview", previousResolved, onAddInterventionActivity, onChangesChange, wizardStep },
   ref
 ) {
   const toast = useToast();
@@ -373,6 +378,8 @@ const InterventionSupportMaterials = forwardRef<
   const [projectionResponse, setProjectionResponse] = useState<SubjectGradeProjectionResponse | null>(null);
   const [projectionLoading, setProjectionLoading] = useState(false);
   const [projectionError, setProjectionError] = useState<string | null>(null);
+  const [actualOutcome, setActualOutcome] = useState<SubjectGradeProjectionResponse | null>(null);
+  const [actualOutcomeLoading, setActualOutcomeLoading] = useState(false);
   const projectionRequestRef = useRef(0);
   const lastRequestedKey = useRef("");
   const [recommendationPreviewReady, setRecommendationPreviewReady] = useState(false);
@@ -540,8 +547,15 @@ const InterventionSupportMaterials = forwardRef<
             : primaryAssigned?.original_assignment_id != null
               ? [primaryAssigned.original_assignment_id]
               : [];
+      const linkedOriginalIds = new Set(
+        (workspace.progress?.assigned_remediation ?? [])
+          .map((item) => item.original_assignment_id)
+          .filter((id): id is number => id != null)
+      );
+      const unlinkedTargets = loadedTargets.filter((id) => !linkedOriginalIds.has(id));
+      const currentTarget = unlinkedTargets.length === 1 ? unlinkedTargets[0] : null;
       const loadedCap = loadedPlan.score_adjustment_cap ?? 75;
-      setSelectedActivityIds(loadedTargets);
+      setSelectedActivityIds(currentTarget == null ? [] : [currentTarget]);
       setCapInput(String(loadedCap));
       setCapError(null);
       if (workspace.score_previews && workspace.score_previews.length > 0) {
@@ -566,7 +580,7 @@ const InterventionSupportMaterials = forwardRef<
       setSavedPlanValues(planValues({
         ...loadedPlan,
         original_exam_assignment_id: loadedPlan.original_exam_assignment_id ?? loadedTargets[0] ?? null,
-      }, loadedTargets, String(loadedCap), workspace.resources));
+      }, currentTarget == null ? [] : [currentTarget], String(loadedCap), workspace.resources));
       const initialSavedReadings = (loadedPlan.selected_resources || [])
         .filter((r) => r.kind === "CLASSWORK")
         .map((r) => r.id);
@@ -826,66 +840,22 @@ const InterventionSupportMaterials = forwardRef<
   ]);
 
   const toggleActivitySelection = (activity: (typeof treatmentActivities)[number]) => {
-    if (hasSavedAssessment) return;
     const matchingExam = originalExams.find(
       (e) => e.title === activity.title || e.assignment_id === activity.classwork_id
     );
     const assignmentId = (activity as { classwork_assignment_id?: number }).classwork_assignment_id;
     const targetId = assignmentId ?? matchingExam?.assignment_id ?? activity.classwork_id;
-    const altId = activity.classwork_id;
     const examTargetId = matchingExam?.assignment_id ?? targetId;
-
-    setSelectedActivityIds((prev) => {
-      const isAlreadySelected =
-        prev.includes(targetId) ||
-        prev.includes(altId) ||
-        (assignmentId != null && prev.includes(assignmentId)) ||
-        (matchingExam && prev.includes(matchingExam.assignment_id)) ||
-        (plan.grade_treatment === "EXAMINATION" &&
-          plan.original_exam_assignment_id != null &&
-          (plan.original_exam_assignment_id === targetId ||
-            plan.original_exam_assignment_id === altId ||
-            plan.original_exam_assignment_id === examTargetId));
-
-      let next: number[];
-      if (isAlreadySelected) {
-        next = prev.filter(
-          (id) =>
-            id !== targetId &&
-            id !== altId &&
-            (assignmentId != null ? id !== assignmentId : true) &&
-            (matchingExam ? id !== matchingExam.assignment_id : true)
-        );
-        if (
-          plan.grade_treatment === "EXAMINATION" &&
-          (plan.original_exam_assignment_id === targetId ||
-            plan.original_exam_assignment_id === altId ||
-            plan.original_exam_assignment_id === examTargetId)
-        ) {
-          const nextExam = originalExams.find((e) => next.includes(e.assignment_id));
-          setPlan((current) => ({
-            ...current,
-            target_assignment_ids: next,
-            original_exam_assignment_id: nextExam?.assignment_id ?? (next[0] ?? null),
-          }));
-        } else {
-          setPlan((current) => ({
-            ...current,
-            target_assignment_ids: next,
-          }));
-        }
-      } else {
-        next = [...prev, targetId];
-        setPlan((current) => ({
-          ...current,
-          target_assignment_ids: next,
-          ...(plan.grade_treatment === "EXAMINATION" && !current.original_exam_assignment_id
-            ? { original_exam_assignment_id: examTargetId }
-            : {}),
-        }));
-      }
-      return next;
-    });
+    setSelectedActivityIds([targetId]);
+    setPlan((current) => ({
+      ...current,
+      target_assignment_ids: current.target_assignment_ids?.includes(targetId)
+        ? current.target_assignment_ids
+        : [...(current.target_assignment_ids ?? []), targetId],
+      ...(plan.grade_treatment === "EXAMINATION"
+        ? { original_exam_assignment_id: examTargetId }
+        : {}),
+    }));
   };
 
   const selectedScorePreviews = useMemo(() => {
@@ -1125,7 +1095,7 @@ const InterventionSupportMaterials = forwardRef<
           submission_status: "draft",
           grade: null,
           total_points: generatedDraft.total_points,
-          original_assignment_id: plan.original_exam_assignment_id ?? plan.target_assignment_ids?.[0] ?? null,
+          original_assignment_id: plan.original_exam_assignment_id ?? selectedActivityIds[0] ?? null,
           original_title:
             chosenActivities[0]?.title ??
             originalExams.find((item) => item.assignment_id === plan.original_exam_assignment_id)?.title ??
@@ -1146,6 +1116,61 @@ const InterventionSupportMaterials = forwardRef<
   const hasRemediationActivity = assigned.length > 0;
   const hasConfiguredSupport = Boolean(hasSupportingResources && hasRemediationActivity);
   const primaryAssignedAssessment = assigned[0] ?? null;
+  const persistedActivities = progress?.assigned_remediation ?? [];
+  const linkedOriginalIds = new Set(
+    persistedActivities
+      .map((item) => item.original_assignment_id)
+      .filter((id): id is number => id != null)
+  );
+  const allRemediationGraded =
+    persistedActivities.length > 0 && persistedActivities.every(
+      (item) => item.submission_status === "graded" && item.grade != null,
+    );
+  useEffect(() => {
+    let active = true;
+    if (!allRemediationGraded || !isGraded(plan.teacher_choice)) {
+      setActualOutcome(null);
+      setActualOutcomeLoading(false);
+      return () => { active = false; };
+    }
+    setActualOutcomeLoading(true);
+    projectSubjectGrade(interventionId, { target_assignment_ids: [] })
+      .then((result) => { if (active) setActualOutcome(result); })
+      .catch(() => { if (active) setActualOutcome(null); })
+      .finally(() => { if (active) setActualOutcomeLoading(false); });
+    return () => { active = false; };
+  }, [allRemediationGraded, interventionId, plan.teacher_choice, persistedActivities.length]);
+  const canAddAnother = Boolean(
+    allRemediationGraded &&
+    !actualOutcomeLoading &&
+    detail.status === "ACTIVE" &&
+    actualOutcome?.status !== "FINALIZED" &&
+    !(actualOutcome?.status === "AVAILABLE" && actualOutcome.current_reaches_passing_threshold === true) &&
+    actualOutcome?.additional_eligible_targets_have_positive_improvement
+  );
+  const remediationState = remediationProgressState({
+    interventionStatus: detail.status,
+    activities: persistedActivities,
+    outcome: actualOutcome,
+    outcomeLoading: actualOutcomeLoading,
+  });
+  const positiveEligibleTargetIds = new Set(
+    (actualOutcome?.eligible_target_gains ?? [])
+      .filter((item) => item.possible_score_gain > 0)
+      .map((item) => item.assignment_id),
+  );
+  const canCreateRemediation = assigned.length === 0 || canAddAnother;
+  const requiresCurrentTarget = !hasSavedAssessment || canAddAnother;
+  const openAdditionalTargetSelection = () => {
+    const recommended = actualOutcome?.recommended_target_assignment_id;
+    if (recommended != null) {
+      const activity = treatmentActivities.find(
+        (item) => canonicalAssignmentId(item, originalExams) === recommended,
+      );
+      if (activity) toggleActivitySelection(activity);
+    }
+    setPanel("classworks");
+  };
   const activeGradeTreatment: GradeTreatment | null =
     plan.grade_treatment ??
     (primaryAssignedAssessment?.is_graded === false
@@ -1213,7 +1238,10 @@ const InterventionSupportMaterials = forwardRef<
       (!plan.grade_treatment ||
         (plan.grade_treatment === "EXAMINATION" &&
           !plan.original_exam_assignment_id &&
-          selectedActivityIds.length === 0))
+          selectedActivityIds.length === 0) ||
+        (requiresCurrentTarget &&
+          (plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") &&
+          selectedActivityIds.length !== 1))
     ) {
       const msg = "Choose a grade treatment and original Examination before continuing.";
       toast.error({ title: "Incomplete adjustment", description: msg });
@@ -1226,7 +1254,7 @@ const InterventionSupportMaterials = forwardRef<
       const err = validateCap(capInput);
       if (err) {
         setCapError(err);
-        toast.error({ title: "Invalid adjustment cap", description: err });
+        toast.error({ title: "Invalid target-score ceiling", description: err });
         return false;
       }
       parsedCap = parseFloat(capInput);
@@ -1247,7 +1275,10 @@ const InterventionSupportMaterials = forwardRef<
           : {}),
         ...(treatmentToUse && treatmentToUse !== "PRACTICE_ONLY"
           ? {
-            target_assignment_ids: selectedActivityIds,
+            target_assignment_ids: Array.from(new Set([
+              ...(plan.target_assignment_ids ?? []),
+              ...selectedActivityIds,
+            ])),
             score_adjustment_cap:
               parsedCap !== undefined && Number.isFinite(parsedCap) ? parsedCap : 75,
           }
@@ -1258,21 +1289,18 @@ const InterventionSupportMaterials = forwardRef<
       }
       setPlan(result.plan);
       setSavedPlanValues(planValues(result.plan,
-        result.plan.target_assignment_ids ?? selectedActivityIds,
+        selectedActivityIds,
         String(result.plan.score_adjustment_cap ?? capInput), result.resources));
       const updatedSavedReadings = (result.plan.selected_resources || [])
         .filter((r) => r.kind === "CLASSWORK")
         .map((r) => r.id);
       setSavedReadingIds(updatedSavedReadings);
       setResources(result.resources);
-      if (result.plan.target_assignment_ids !== undefined) {
-        setSelectedActivityIds(result.plan.target_assignment_ids);
-      }
       if (result.plan.score_adjustment_cap !== undefined) {
         setCapInput(String(result.plan.score_adjustment_cap));
         setCapError(null);
       }
-      fetchProjection(result.plan.target_assignment_ids ?? selectedActivityIds, true);
+      fetchProjection(selectedActivityIds, true);
       toast.success({ title: "Adjustments saved successfully." });
       return true;
     } catch (cause) {
@@ -1295,6 +1323,10 @@ const InterventionSupportMaterials = forwardRef<
             ? "Choose a remediation activity."
             : step === 4 && !plan.grade_treatment
               ? "Select a grade treatment."
+            : step === 4 && requiresCurrentTarget &&
+              (plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") &&
+              selectedActivityIds.length !== 1
+              ? "Select exactly one original classwork for this remediation activity."
               : step === 4 && plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id
                 ? "Select the original exam."
               : step === 4 && plan.grade_treatment !== "PRACTICE_ONLY"
@@ -1324,9 +1356,9 @@ const InterventionSupportMaterials = forwardRef<
         (plan.grade_treatment === "EXAMINATION" &&
           !plan.original_exam_assignment_id &&
           selectedActivityIds.length === 0) ||
-        ((plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") &&
-          (!plan.target_assignment_ids || plan.target_assignment_ids.length === 0) &&
-          selectedActivityIds.length === 0))
+        (requiresCurrentTarget &&
+          (plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") &&
+          selectedActivityIds.length !== 1))
     ) {
       toast.error({
         title: "Incomplete adjustment",
@@ -1480,11 +1512,12 @@ const InterventionSupportMaterials = forwardRef<
     setDraftSaveError(null);
     setDraftSaveState("validating");
     try {
-      await preflightRemediationDraft(interventionId, generatedDraft);
+      await preflightRemediationDraft(interventionId, selectedActivityIds[0] ?? null, generatedDraft);
       setDraftSaveState("saving");
       const saved = await createRemediationAssessment(
         interventionId,
         requestId,
+        selectedActivityIds[0] ?? null,
         generatedDraft
       );
       if (saved.is_published !== false) {
@@ -1619,8 +1652,9 @@ const InterventionSupportMaterials = forwardRef<
       isGraded(plan.teacher_choice) &&
       (!plan.grade_treatment ||
         (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id) ||
-        ((plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") &&
-          (!plan.target_assignment_ids || plan.target_assignment_ids.length === 0)))
+        (requiresCurrentTarget &&
+          (plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") &&
+          selectedActivityIds.length !== 1))
     ) {
       toast.error({
         title: "Incomplete adjustment",
@@ -1648,10 +1682,7 @@ const InterventionSupportMaterials = forwardRef<
       plan.target_assignment_ids &&
       plan.target_assignment_ids.length > 0
     ) {
-      const initialTarget =
-        recommendedAssignmentId && plan.target_assignment_ids.includes(recommendedAssignmentId)
-          ? recommendedAssignmentId
-          : plan.target_assignment_ids[0];
+      const initialTarget = selectedActivityIds[0];
       params.set("original_classwork_assignment_id", String(initialTarget));
     }
     params.set(
@@ -1734,7 +1765,10 @@ const InterventionSupportMaterials = forwardRef<
       (!plan.grade_treatment ||
         (plan.grade_treatment === "EXAMINATION" &&
           !plan.original_exam_assignment_id &&
-          selectedActivityIds.length === 0)));
+          selectedActivityIds.length === 0) ||
+        (requiresCurrentTarget &&
+          (plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") &&
+          selectedActivityIds.length !== 1)));
 
 
   const resourceOption = (item: RemediationResource) => {
@@ -1851,13 +1885,9 @@ const InterventionSupportMaterials = forwardRef<
                 <p className="text-sm">
                   Class: <span className="text-base font-semibold">{detail.class_name}</span>
                 </p>
-                <p>
-                  Trigger: <strong>{detail.triggering_predicted_grade.toFixed(2)}</strong>
-                </p>
-                <p>
-                  Latest:{" "}
-                  <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
-                </p>
+                <div className="col-span-2 mt-1">
+                  <InterventionPredictionHistory item={detail} />
+                </div>
               </div>
             </div>
           </div>
@@ -1933,8 +1963,8 @@ const InterventionSupportMaterials = forwardRef<
                 <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                   <div className="space-y-1"><dt className="text-muted-foreground">Delivery method</dt><dd className="font-semibold">{plan.teacher_choice ? label(plan.teacher_choice) : "No activity selected"}</dd></div>
                   <div className="space-y-1"><dt className="text-muted-foreground">Grade treatment</dt><dd className="font-semibold">{componentLabel(plan.grade_treatment)}</dd></div>
-                  {plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY" && <div className="space-y-1"><dt className="text-muted-foreground">Score adjustment cap</dt><dd className="font-semibold">{capInput}%</dd></div>}
-                  <div className="space-y-1"><dt className="text-muted-foreground">Targeted classworks</dt><dd className="font-semibold">{selectedActivityIds.length}</dd></div>
+                  {plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY" && <div className="space-y-1"><dt className="text-muted-foreground">Target-score ceiling</dt><dd className="font-semibold">{capInput}%</dd></div>}
+                  <div className="space-y-1"><dt className="text-muted-foreground">Current target</dt><dd className="font-semibold">{chosenActivities[0]?.title ?? "None selected"}</dd></div>
                 </dl>
               </Card>
             </div>
@@ -2261,28 +2291,18 @@ const InterventionSupportMaterials = forwardRef<
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1">
-                      <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
-                        <Empty.Content>
-                          <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
-                            <IconContainer className="bg-primary" size="sm">
-                              <Activity className="size-8" />
-                            </IconContainer>
-                          </Empty.Icon>
-                          <Empty.Title className="text-base!"></Empty.Title>
-                          <Empty.Description className="text-sm text-muted-foreground">
-                            No support activity has been recorded yet. Click Adjust Support below to configure learning resources and prepare remediation.
-                          </Empty.Description>
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={onAdjustSupport}
-                            className="mt-1"
-                          >
-                            <Plus className="size-3.5 mr-1.5" />
-                            Add Intervention Activity
-                          </Button>
-                        </Empty.Content>
-                      </Empty>
+                      <TeacherEmptyState
+                        compact
+                        className="w-full border-2 rounded! border-border bg-background shadow-none hover:shadow-none"
+                        icon={<Activity />}
+                        title="No intervention activity yet"
+                        description="Choose how remediation will be delivered and configure its grade treatment."
+                        action={onAddInterventionActivity ? {
+                          label: "Add Intervention Activity",
+                          onClick: onAddInterventionActivity,
+                          icon: <Plus className="size-3.5 mr-1.5" />,
+                        } : undefined}
+                      />
                     </div>
                   )}
 
@@ -2765,8 +2785,8 @@ const InterventionSupportMaterials = forwardRef<
               </Dialog>
 
               <Dialog
-                open={panel === "classworks" && !hasSavedAssessment}
-                onOpenChange={(open) => setPanel(open && !hasSavedAssessment ? "classworks" : "")}
+                open={panel === "classworks"}
+                onOpenChange={(open) => setPanel(open ? "classworks" : "")}
               >
                 <Dialog.Content
                   size="md"
@@ -2799,7 +2819,7 @@ const InterventionSupportMaterials = forwardRef<
                       <Card className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
                         <div className="flex items-center justify-between">
                           <Label htmlFor="score-adjustment-cap" className="text-base font-bold">
-                            Score Adjustment Cap
+                            Target-Score Ceiling
                           </Label>
 
                           <div className="flex flex-row gap-1">
@@ -2825,7 +2845,7 @@ const InterventionSupportMaterials = forwardRef<
                         </div>
                         <div className="flex items-center gap-2 justify-between">
                           <span className="text-xs text-muted-foreground">
-                            Default: 75% · Prohibits 100% full replacement
+                            Limits the selected classwork score, not the subject grade. Default: 75% · 100% full replacement is prohibited.
                           </span>
                           <div className="flex items-center gap-1.5">
                             {[75, 80, 85].map((preset) => {
@@ -2866,12 +2886,12 @@ const InterventionSupportMaterials = forwardRef<
                         75
                       ) ? (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Unsaved cap change ({capInput}%). The projection above reflects the saved{" "}
+                        Unsaved target-score ceiling ({capInput}%). The preview above reflects the saved{" "}
                         {projectionResponse?.target_projections?.[0]?.cap_percentage ??
                           projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
                           plan.score_adjustment_cap ??
                           75}
-                        % cap until adjustments are saved.
+                        % ceiling until adjustments are saved.
                       </p>
                     ) : null}
 
@@ -2880,7 +2900,7 @@ const InterventionSupportMaterials = forwardRef<
                         <div className="flex items-center justify-between">
                           <p className="text-base font-bold">Score Adjustment Preview</p>
                           <Badge variant="surface" size="sm">
-                            {capInput || "75"}% Cap
+                            {capInput || "75"}% Target-Score Ceiling
                           </Badge>
                         </div>
                         <div className="flex flex-col gap-2">
@@ -2955,7 +2975,14 @@ const InterventionSupportMaterials = forwardRef<
 
                       {treatmentActivities.length > 0 ? (
                         <div className="flex flex-col gap-2 mt-1">
-                          {treatmentActivities.map((activity) => {
+                          {treatmentActivities.filter((activity) => {
+                            const targetId = canonicalAssignmentId(activity, originalExams);
+                            const isUnlinked = targetId == null || !linkedOriginalIds.has(targetId);
+                            const hasPositiveProgressiveGain =
+                              !allRemediationGraded ||
+                              (targetId != null && positiveEligibleTargetIds.has(targetId));
+                            return isUnlinked && hasPositiveProgressiveGain;
+                          }).map((activity) => {
                             const resource = resources.find(
                               (r) =>
                                 r.kind === "CLASSWORK" &&
@@ -3036,6 +3063,7 @@ const InterventionSupportMaterials = forwardRef<
 
                                     <Checkbox
                                       checked={isSelected}
+                                      aria-label={`Select ${activity.title} as the remediation target`}
                                       variant="solid"
                                       className={`border-black transition-colors ${isSelected ? "bg-black text-white" : "bg-white text-black"}`}
                                       onClick={(e) => e.stopPropagation()}
@@ -3067,7 +3095,7 @@ const InterventionSupportMaterials = forwardRef<
                         </Empty>
                       )}
                       <p className="text-xs text-muted-foreground">
-                        Select one or more {plan.grade_treatment === "PRACTICE_ONLY" ? "diagnostic" : componentLabel(plan.grade_treatment).toLowerCase()} activities to receive score adjustments.
+                        Select exactly one original classwork. This remediation activity can adjust only that classwork.
                       </p>
                     </div>
 
@@ -3243,6 +3271,10 @@ const InterventionSupportMaterials = forwardRef<
 
               <div className={wizardStep != null && wizardStep !== 4 ? "hidden" : "flex flex-col gap-1"}>
                 <h3 className="font-black">Remediation Activity</h3>
+                <RemediationProgressNotice
+                  state={remediationState}
+                  onAddAnother={openAdditionalTargetSelection}
+                />
                 <Card className="flex flex-col gap-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                     <p className="font-bold text-base">
@@ -3372,9 +3404,9 @@ const InterventionSupportMaterials = forwardRef<
                                   ? "Remedial Exam replaces the original assessment's effective score only when higher."
                                   : "Grade treatment and score adjustment rules are locked to the saved assessment."}
                         </p>
-                        <p className="text-sm text-muted-foreground flex items-start gap-2">
-                          <Lock className="mt-0.5 size-4 shrink-0" />
-                          Academic treatment, targeted classwork, and adjustment cap are locked because a curated remediation activity exists.
+                        <p className="text-xs text-muted-foreground px-1 flex items-center gap-1">
+                          <Lock className="size-3 inline shrink-0" />
+                          Academic treatment, targeted classwork, and target-score ceiling are locked because a curated remediation activity exists.
                         </p>
                       </div>
                     ) : (
@@ -3483,19 +3515,19 @@ const InterventionSupportMaterials = forwardRef<
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <Label className="text-base font-bold">
-                              Targeted {componentLabel(activeGradeTreatment)} {chosenActivities.length > 1 ? "Classworks" : "Classwork"}
+                              Current Targeted {componentLabel(activeGradeTreatment)} Classwork
                             </Label>
                             <Badge variant={!hasSavedAssessment && capError ? "destructive" : "surface"} size="sm">
-                              {!hasSavedAssessment && capError ? "Invalid Cap" : `${capInput ? capInput : (plan.score_adjustment_cap ?? 75)}% Cap`}
+                              {!hasSavedAssessment && capError ? "Invalid Ceiling" : `${capInput ? capInput : (plan.score_adjustment_cap ?? 75)}% Target-Score Ceiling`}
                             </Badge>
                           </div>
-                          {!hasSavedAssessment && chosenActivities.length > 0 && (
+                          {(!hasSavedAssessment || canAddAnother) && chosenActivities.length > 0 && (
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => setPanel("classworks")}
                             >
-                              Reselect Activities
+                              Change Target
                             </Button>
                           )}
                         </div>
@@ -3551,8 +3583,8 @@ const InterventionSupportMaterials = forwardRef<
                                   </div>
                                   <p className="text-sm text-muted-foreground">
                                     {hasSavedAssessment
-                                      ? `Original max: ${preview?.max_points ?? chosenActivity.possible_score} pts · Capped at ${plan.score_adjustment_cap ?? 75}%`
-                                      : "Actual grade reflects from students remediation score."}
+                                      ? `Original max: ${preview?.max_points ?? chosenActivity.possible_score} pts · Target-score ceiling: ${plan.score_adjustment_cap ?? 75}%`
+                                      : "The actual adjustment will use this student's remediation score."}
                                   </p>
                                 </Card>
                               );
@@ -3583,7 +3615,7 @@ const InterventionSupportMaterials = forwardRef<
                                 </p>
                               </div>
                               <div className="flex flex-col gap-0.5">
-                                <p className="text-sm text-muted-foreground">Adjustment Cap</p>
+                                <p className="text-xs text-muted-foreground font-medium">Target-Score Ceiling</p>
                                 <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
                                   {plan.score_adjustment_cap ?? 75}%
                                 </p>
@@ -3687,6 +3719,11 @@ const InterventionSupportMaterials = forwardRef<
                                   Edit Assessment
                                 </Button>
                               </div>
+                              <div className="grid gap-2 border-t-2 border-border px-3 pb-3 pt-2 text-sm sm:grid-cols-3">
+                                <div><span className="text-muted-foreground">Linked original</span><strong className="block">{item.original_title ?? "Ungraded support"}</strong></div>
+                                <div><span className="text-muted-foreground">Original score</span><strong className="block">{item.original_grade ?? "—"}{item.total_points != null ? `/${item.total_points}` : ""}</strong></div>
+                                <div><span className="text-muted-foreground">Actual outcome</span><strong className="block">{item.effective_grade ?? item.grade ?? "Pending"}{item.total_points != null ? `/${item.total_points}` : ""}</strong></div>
+                              </div>
                             </Card>
                           );
                         })}
@@ -3709,7 +3746,7 @@ const InterventionSupportMaterials = forwardRef<
                       </Empty>
                     )}
 
-                    {assigned.length === 0 &&
+                    {canCreateRemediation &&
                       (plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") &&
                       generationEligibility &&
                       generationEligibility.eligible_taught_lessons.length === 0 && (
@@ -3728,7 +3765,7 @@ const InterventionSupportMaterials = forwardRef<
                         />
                       )}
 
-                    {assigned.length === 0 && plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
+                    {canCreateRemediation && plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
                       <div className="flex flex-row flex-wrap w-full justify-end items-center gap-2 mt-2">
                         {(plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") && (
                           <Button

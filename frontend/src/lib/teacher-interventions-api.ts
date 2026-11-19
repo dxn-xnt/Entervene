@@ -299,6 +299,7 @@ export interface ProjectionUnavailableReason {
   code: string;
   message: string;
   assignment_id?: number | null;
+  missing_evidence?: string[];
 }
 
 export interface PassingThresholdPolicy {
@@ -505,7 +506,7 @@ export type RemediationGeneratedDraft = RemediationQuizDraft | RemediationClassw
 export const generateRemediationDraft = (
   id: number,
   payload: RemediationDraftGenerationRequest
-) => read<RemediationGeneratedDraft>(`${base}/${id}/remediation/draft`, "POST", payload);
+) => read<RemediationGeneratedDraft>(`${base}/${id}/remediation/generate-draft`, "POST", payload);
 
 export interface RemediationDraftPreflightResult {
   is_valid: boolean;
@@ -535,19 +536,21 @@ export interface RemediationAssessmentCreateResult {
 
 export const preflightRemediationDraft = (
   id: number,
+  targetAssignmentId: number | null,
   draft: RemediationGeneratedDraft
 ) => read<RemediationDraftPreflightResult>(
   `${base}/${id}/remediation/preflight`,
   "POST",
-  { draft, validation_stage: "SAVE_DRAFT" }
+  { draft, target_assignment_id: targetAssignmentId, validation_stage: "SAVE_DRAFT" }
 );
 
 export const createRemediationAssessment = (
   id: number,
   remediationRequestId: string,
+  targetAssignmentId: number | null,
   draft: RemediationGeneratedDraft
 ) => read<RemediationAssessmentCreateResult>(
   `${base}/${id}/remediation/assessment`,
   "POST",
-  { remediation_request_id: remediationRequestId, draft }
+  { remediation_request_id: remediationRequestId, target_assignment_id: targetAssignmentId, draft }
 );

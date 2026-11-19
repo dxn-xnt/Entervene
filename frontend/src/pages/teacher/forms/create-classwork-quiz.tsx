@@ -133,19 +133,13 @@ export default function CreateClassworkQuizModal({
 
     const [selectedTargetId, setSelectedTargetId] = useState<number | null>(() => {
         if (initialTargetAssignmentId) return initialTargetAssignmentId;
-        if (remediationOriginalTargets && remediationOriginalTargets.length > 0) {
-            const rec = remediationOriginalTargets.find((t) => t.is_recommended);
-            return rec ? rec.assignment_id : remediationOriginalTargets[0].assignment_id;
-        }
         return null;
     });
 
     const selectedOriginalTarget = useMemo(() => {
         if (!remediationOriginalTargets || remediationOriginalTargets.length === 0) return null;
         return (
-            remediationOriginalTargets.find((t) => t.assignment_id === selectedTargetId) ||
-            remediationOriginalTargets[0] ||
-            null
+            remediationOriginalTargets.find((t) => t.assignment_id === selectedTargetId) || null
         );
     }, [remediationOriginalTargets, selectedTargetId]);
 
@@ -158,8 +152,8 @@ export default function CreateClassworkQuizModal({
                     : "";
         const defaultTotalPoints = remediationOriginalExam
             ? String(remediationOriginalExam.total_points)
-            : (isGradedWWPT && remediationOriginalTargets && remediationOriginalTargets.length > 0)
-                ? String((remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) || remediationOriginalTargets.find((t) => t.is_recommended) || remediationOriginalTargets[0]).max_points)
+            : (isGradedWWPT && selectedOriginalTarget)
+                ? String(selectedOriginalTarget.max_points)
                 : emptyClassworkDraft.total_points;
         const defaultAttempts = (remediationGradeTreatment === "EXAMINATION" || isGradedWWPT)
             ? "1"
