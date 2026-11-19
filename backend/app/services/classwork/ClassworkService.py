@@ -976,10 +976,6 @@ def update_classwork_record(
         parsed_levels = validate_activity_rubric(parsed_levels)
         values["total_points"] = max(level.points for level in parsed_levels)
     validate_classwork_values(total_points=values.get("total_points"))
-    if is_quiz_type(target_type):
-        if replacement_links:
-            raise HTTPException(status_code=400, detail="Reference links are not supported for quizzes")
-        replacement_links = None
     lesson_ids = values.pop("lesson_ids", None)
     if lesson_ids is not None:
         lesson_ids = dedupe_ids(lesson_ids)

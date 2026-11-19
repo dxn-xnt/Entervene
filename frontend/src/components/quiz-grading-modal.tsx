@@ -9,6 +9,7 @@ import type { TeacherQuizSubmissionDetail } from "@/pages/teacher/classworks/qui
 import { Card } from "./retroui/Card";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
 import { formatDate, formatToTitleCase } from "@/lib/formatters";
+import { formatStudentRosterName } from "@/lib/classwork-utils";
 import { Avatar } from "@/components/retroui/Avatar";
 import QuizFeedbackAssistant from "@/components/quiz-feedback-assistant";
 
@@ -372,6 +373,8 @@ export default function QuizGradingModal({
     );
   };
 
+  const studentDisplayName = detail ? formatStudentRosterName(detail) : "Student";
+
   return (
     <Dialog
       open={isOpen}
@@ -387,7 +390,7 @@ export default function QuizGradingModal({
           <div className="flex w-full items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-black">
-                Grade Quiz Answers: {detail?.student_name || "Student"}
+                Grade Quiz Answers: {studentDisplayName}
               </h2>
             </div>
             <button
@@ -426,14 +429,14 @@ export default function QuizGradingModal({
                   <Avatar variant="student" className="size-10 shrink-0">
                     <Avatar.Image
                       src={detail.avatar || "/avatars/student-avatars/1.svg"}
-                      alt={detail.student_name}
+                      alt={studentDisplayName}
                     />
                     <Avatar.Fallback>
-                      {detail.student_name.slice(0, 1).toUpperCase()}
+                      {studentDisplayName.slice(0, 1).toUpperCase()}
                     </Avatar.Fallback>
                   </Avatar>
                   <div className="flex flex-col">
-                    <p className="text-lg font-extrabold text-black">{detail.student_name}</p>
+                    <p className="text-lg font-extrabold text-black">{studentDisplayName}</p>
                     {detail.submitted_at && (
                       <p className="text-xs font-normal text-foreground">
                         Submitted on {formatDate(detail.submitted_at)}

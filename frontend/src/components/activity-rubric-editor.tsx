@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { BookOpen } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { RubricTemplateDialog } from "@/components/rubric-template-dialog";
@@ -10,12 +10,14 @@ type Props = {
   levels: ActivityRubricLevel[];
   onChange: (levels: ActivityRubricLevel[]) => void;
   disabled?: boolean;
+  disabledReason?: string;
 };
 
-export function ActivityRubricEditor({ levels, onChange, disabled }: Props) {
+export function ActivityRubricEditor({ levels, onChange, disabled, disabledReason }: Props) {
   const [dialogMode, setDialogMode] = useState<"choose" | null>(null);
   const [chosenTitle, setChosenTitle] = useState<string>("Scoring Rubric");
   const baselineLevelsRef = useRef<ActivityRubricLevel[]>(levels);
+  const lockExplanationId = useId();
 
   useEffect(() => {
     if (
@@ -38,7 +40,14 @@ export function ActivityRubricEditor({ levels, onChange, disabled }: Props) {
         <p className="text-sm text-foreground font-medium -mb-1">
           Choose Rubrics
         </p>
-        <Button type="button" size="sm" disabled={disabled} onClick={() => setDialogMode("choose")}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={disabled}
+          aria-describedby={disabled && disabledReason ? lockExplanationId : undefined}
+          title={disabled && disabledReason ? disabledReason : undefined}
+          onClick={() => setDialogMode("choose")}
+        >
           <BookOpen /> Choose Template
         </Button>
       </div>
@@ -46,8 +55,10 @@ export function ActivityRubricEditor({ levels, onChange, disabled }: Props) {
         title={chosenTitle}
         totalPoints={activityRubricMaximum(levels)}
         rubricLevels={levels}
-        editable={!disabled}
+        editable
         disabled={disabled}
+        disabledReason={disabledReason}
+        disabledReasonId={disabled && disabledReason ? lockExplanationId : undefined}
         onTotalPointsChange={handleTotalPointsChange}
       />
       {dialogMode && (
