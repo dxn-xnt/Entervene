@@ -12,21 +12,31 @@ import { Badge } from "@/components/retroui/Badge";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Button } from "@/components/teacher/button";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
+import { Progress } from "@/components/retroui/Progress";
+import {
+  compareTrackingStudentsBySurname,
+  formatStudentRosterName,
+  isTrackingStudentGraded,
+  type GradingStatusFilter,
+} from "@/lib/classwork-utils";
+import type { QuizStudentScore } from "./quiz-builder-types";
 
-const QUIZ_TABS: Array<TabItem<"overview" | "questions" | "students">> = [
+const QUIZ_TABS: Array<TabItem<"overview" | "questions">> = [
   { id: "overview", label: "Overview", icon: BarChart3 },
   { id: "questions", label: "Questions", icon: HelpCircle },
-  { id: "students", label: "Students", icon: Users },
 ];
+
+type QuizSubmissionStatus = "on_time" | "late" | "in_progress" | "not_submitted";
+type QuizSubmissionStatusFilter = "all" | QuizSubmissionStatus;
 
 /**
  * Accuracy tier thresholds (in percent) for question analysis and navigation.
  * Tune these constants directly to adjust grading bands without modifying JSX logic.
  */
-export const ACCURACY_THRESHOLD_HIGH = 80;    // >= 80%: High mastery (green)
-export const ACCURACY_THRESHOLD_MEDIUM = 50;  // 50% - 79%: Moderate difficulty (yellow); < 50%: Low accuracy / high-wrong (red)
+const ACCURACY_THRESHOLD_HIGH = 80;    // >= 80%: High mastery (green)
+const ACCURACY_THRESHOLD_MEDIUM = 50;  // 50% - 79%: Moderate difficulty (yellow); < 50%: Low accuracy / high-wrong (red)
 
-export function getAccuracyColorClass(accuracy: number | null | undefined, answeredCount?: number): string {
+function getAccuracyColorClass(accuracy: number | null | undefined, answeredCount?: number): string {
   if (answeredCount === 0 || accuracy === null || accuracy === undefined) {
     return "bg-gray-100 text-black";
   }
@@ -37,6 +47,13 @@ export function getAccuracyColorClass(accuracy: number | null | undefined, answe
     return "bg-[#FFD08A] text-black";
   }
   return "bg-[#FF6B6B] text-black";
+}
+
+function getAccuracyIndicatorClass(accuracy: number | null): string {
+  if (accuracy === null) return "bg-gray-300";
+  if (accuracy >= ACCURACY_THRESHOLD_HIGH) return "bg-[#8BCB88]";
+  if (accuracy >= ACCURACY_THRESHOLD_MEDIUM) return "bg-[#FFD08A]";
+  return "bg-[#FF6B6B]";
 }
 
 interface QuizAnalysisViewProps {
@@ -54,8 +71,12 @@ export default function QuizAnalysisView({
   selected,
   setSelectedGradingSubmissionId,
 }: QuizAnalysisViewProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "questions" | "students">("overview");
-  const [studentSort, setStudentSort] = useState<"accuracy" | "name">("accuracy");
+  const [activeTab, setActiveTab] = useState<"overview" | "questions">("overview");
+  const [studentSort, setStudentSort] = useState<"accuracy" | "name">("name");
+  const [submissionStatusFilter, setSubmissionStatusFilter] =
+    useState<QuizSubmissionStatusFilter>("all");
+  const [gradingStatusFilter, setGradingStatusFilter] =
+    useState<GradingStatusFilter>("all");
   const [questionSort, setQuestionSort] = useState<"order" | "accuracy">("order");
 
   if (isQuizAnalysisLoading) {
@@ -83,19 +104,100 @@ export default function QuizAnalysisView({
     );
   }
 
+  const dueDate =
+    selected.assignments?.find((assignment) => assignment.due_date)?.due_date ??
+    selected.due_date;
+  const getQuizSubmissionStatus = (student: QuizStudentScore): QuizSubmissionStatus => {
+    const status = student.status.trim().toLowerCase();
+    if (!student.submission_id || status === "not_submitted" || status === "missed") {
+      return "not_submitted";
+    }
+    if (status === "pending") return "in_progress";
+    if (status === "late") return "late";
+    if (
+      student.submitted_at &&
+      dueDate &&
+      new Date(student.submitted_at).getTime() > new Date(dueDate).getTime()
+    ) {
+      return "late";
+    }
+    if (["submitted", "graded"].includes(status)) return "on_time";
+    return "in_progress";
+  };
+  const isCompletedGradedResult = (student: QuizStudentScore) => {
+    const status = getQuizSubmissionStatus(student);
+    return (
+      (status === "on_time" || status === "late") &&
+      isTrackingStudentGraded(student)
+    );
+  };
+
+  const completedStudents = quizAnalysis.students.filter((student) => {
+    const status = getQuizSubmissionStatus(student);
+    return status === "on_time" || status === "late";
+  });
+  const completedScoredStudents = completedStudents.filter(
+    (student) => student.score_percent !== null && student.score_percent !== undefined,
+  );
+  const classAccuracy = completedScoredStudents.length > 0
+    ? Math.round(
+      (completedScoredStudents.reduce((sum, student) => sum + Number(student.score_percent), 0)
+        / completedScoredStudents.length) * 100,
+    ) / 100
+    : null;
+  const getCompletedQuestionStats = (questionId: number) => {
+    const evaluatedAnswers = completedStudents
+      .map((student) => student.answers?.find((answer) => answer.quiz_question_id === questionId))
+      .filter((answer) => answer?.is_correct === true || answer?.is_correct === false);
+    const correctCount = evaluatedAnswers.filter((answer) => answer?.is_correct === true).length;
+    return {
+      evaluatedCount: evaluatedAnswers.length,
+      correctCount,
+      accuracy: evaluatedAnswers.length > 0
+        ? Math.round((correctCount / evaluatedAnswers.length) * 10000) / 100
+        : null,
+    };
+  };
+
   const sortedStudents = [...quizAnalysis.students].sort((a, b) => {
     if (studentSort === "accuracy") {
-      const aScore = a.score_percent ?? 0;
-      const bScore = b.score_percent ?? 0;
-      return bScore - aScore;
+      const aScore = a.score_percent;
+      const bScore = b.score_percent;
+      if (aScore === null || aScore === undefined) {
+        if (bScore !== null && bScore !== undefined) return 1;
+      } else if (bScore === null || bScore === undefined) {
+        return -1;
+      } else if (bScore !== aScore) {
+        return bScore - aScore;
+      }
     }
-    return a.student_name.localeCompare(b.student_name);
+    return compareTrackingStudentsBySurname(a, b);
   });
+
+  const filteredStudents = sortedStudents.filter((student) => {
+    const status = getQuizSubmissionStatus(student);
+    const matchesSubmission =
+      submissionStatusFilter === "all" || status === submissionStatusFilter;
+    const graded = isCompletedGradedResult(student);
+    const matchesGrading =
+      gradingStatusFilter === "all" ||
+      (gradingStatusFilter === "graded" ? graded : !graded);
+    return matchesSubmission && matchesGrading;
+  });
+
+  const submissionStatusLabel = (status: QuizSubmissionStatus) => ({
+    on_time: "On Time",
+    late: "Late",
+    in_progress: "In Progress",
+    not_submitted: "Not Submitted",
+  })[status];
 
   const sortedQuestions = [...quizAnalysis.questions].sort((a, b) => {
     if (questionSort === "accuracy") {
-      const aAcc = a.accuracy_percent ?? 0;
-      const bAcc = b.accuracy_percent ?? 0;
+      const aAcc = getCompletedQuestionStats(a.quiz_question_id).accuracy;
+      const bAcc = getCompletedQuestionStats(b.quiz_question_id).accuracy;
+      if (aAcc === null) return bAcc === null ? 0 : 1;
+      if (bAcc === null) return -1;
       return bAcc - aAcc;
     }
     return 0; // maintain original display_order which is already sorted
@@ -110,13 +212,13 @@ export default function QuizAnalysisView({
         <OverviewCard
           className="shadow-none"
           title="Class Accuracy"
-          count={`${quizAnalysis.class_accuracy_percent ?? 0}%`}
-          statDescription="Average correct rate"
+          count={classAccuracy === null ? "No results yet" : `${classAccuracy}%`}
+          statDescription="Average completed score"
         />
         <OverviewCard
           className="shadow-none"
           title="Participation"
-          count={`${quizAnalysis.submitted_count} of ${quizAnalysis.total_students}`}
+          count={`${completedStudents.length} of ${quizAnalysis.total_students}`}
           statDescription="Students submitted"
         />
         <OverviewCard
@@ -135,74 +237,10 @@ export default function QuizAnalysisView({
           onTabChange={(tab) => setActiveTab(tab)}
           counts={{
             questions: quizAnalysis.questions.length,
-            students: quizAnalysis.students.length,
           }}
         />
         <div className="-mx-4 px-4 pb-4">
           <Card className="mt-4 w-full border-0 p-0 shadow-none">
-            {activeTab === "overview" && (
-              <div className="overflow-x-auto">
-                <Table className="w-full text-left text-sm border-collapse">
-                  <Table.Header>
-                    <Table.Row className="border-b border-border">
-                      <Table.Head className="font-head text-primary-foreground whitespace-nowrap pr-4">Learner's Name</Table.Head>
-                      <Table.Head className="font-head text-primary-foreground text-center px-4">Points</Table.Head>
-                      {quizAnalysis.questions.map((q, i) => (
-                        <Table.Head key={q.quiz_question_id} className="font-head text-center px-2">
-                          <div className="text-xs font-normal text-foreground pr-2">Q{i + 1}</div>
-                          <div className="text-sm font-bold whitespace-nowrap text-foreground">{q.accuracy_percent ?? 0}%</div>
-                        </Table.Head>
-                      ))}
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {sortedStudents.map((student) => (
-                      <Table.Row key={student.student_id} className="border-b border-border last:border-0">
-                        <Table.Cell className="py-3 pr-4">
-                          <div className="flex items-center gap-2">
-                            <Avatar variant="student" className="size-8 shrink-0">
-                              <Avatar.Image
-                                src={student.avatar || "/avatars/student-avatars/1.svg"}
-                                alt={student.student_name}
-                              />
-                              <Avatar.Fallback>
-                                {student.student_name.slice(0, 1).toUpperCase()}
-                              </Avatar.Fallback>
-                            </Avatar>
-                            <span className="font-bold whitespace-nowrap">{student.student_name}</span>
-                          </div>
-                        </Table.Cell>
-                        <Table.Cell className="py-3 px-4 text-center font-bold">
-                          {student.grade ?? 0} <span className="text-gray-500 font-normal">({student.score_percent ?? 0}%)</span>
-                        </Table.Cell>
-                        {quizAnalysis.questions.map((q) => {
-                          const ans = student.answers?.find((a) => a.quiz_question_id === q.quiz_question_id);
-                          const isCorrect = ans?.is_correct;
-                          return (
-                            <Table.Cell key={q.quiz_question_id} className="py-3 px-2 text-center">
-                              <div className="flex justify-center">
-                                {isCorrect === true ? (
-                                  <div className="h-6 w-8 bg-[#8BCB88] border-2 border-black rounded flex items-center justify-center">
-                                    <Check size={14} className="text-black" />
-                                  </div>
-                                ) : isCorrect === false ? (
-                                  <div className="h-6 w-8 bg-[#FF6B6B] border-2 border-black rounded flex items-center justify-center">
-                                    <X size={14} className="text-black" />
-                                  </div>
-                                ) : (
-                                  <div className="h-6 w-8 bg-gray-100 border-2 border-black rounded" />
-                                )}
-                              </div>
-                            </Table.Cell>
-                          );
-                        })}
-                      </Table.Row>
-                    ))}
-                  </Table.Body>
-                </Table>
-              </div>
-            )}
-
             {activeTab === "questions" && (
               <div>
                 {/* Sticky Question Navigator */}
@@ -218,7 +256,12 @@ export default function QuizAnalysisView({
 
                         <div className="flex items-center gap-2 text-sm">
                           <span className="font-medium text-gray-600 text-xs">Sort By:</span>
-                          <Select value={questionSort} onValueChange={(v) => setQuestionSort(v as any)}>
+                          <Select
+                            value={questionSort}
+                            onValueChange={(value) =>
+                              setQuestionSort(value as "order" | "accuracy")
+                            }
+                          >
                             <Select.Trigger className="h-8 border-2 border-black w-36">
                               <Select.Value />
                             </Select.Trigger>
@@ -235,8 +278,11 @@ export default function QuizAnalysisView({
                       >
                         {quizAnalysis.questions.map((q, idx) => {
                           const displayNum = idx + 1;
-                          const accuracy = q.accuracy_percent ?? 0;
-                          const colorClass = getAccuracyColorClass(q.accuracy_percent, q.answered_count);
+                          const stats = getCompletedQuestionStats(q.quiz_question_id);
+                          const accuracyLabel = stats.accuracy === null
+                            ? "No results yet"
+                            : `${stats.accuracy}% accuracy`;
+                          const colorClass = getAccuracyColorClass(stats.accuracy, stats.evaluatedCount);
                           return (
                             <Tooltip key={q.quiz_question_id}>
                               <TooltipTrigger render={<button
@@ -247,11 +293,11 @@ export default function QuizAnalysisView({
                                   el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
                                 }}
                                 className={`relative flex h-8 min-w-8 items-center justify-center rounded border-2 border-black px-2 text-xs font-black transition cursor-pointer ${colorClass} hover:opacity-90 hover:translate-y-1 active:translate-y-2 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1`}
-                                aria-label={`Jump to question ${displayNum} (${accuracy}% Accuracy)`}
+                                aria-label={`Jump to question ${displayNum} (${accuracyLabel})`}
                               >
                                 {displayNum}
                               </button>} />
-                              <TooltipContent>{q.answered_count === 0 ? `Question ${displayNum}: no attempts` : `Question ${displayNum}: ${accuracy}% accuracy`}</TooltipContent>
+                              <TooltipContent>Question {displayNum}: {accuracyLabel}</TooltipContent>
                             </Tooltip>
                           );
                         })}
@@ -271,12 +317,49 @@ export default function QuizAnalysisView({
                   </div>
                 )}
 
+                {quizAnalysis.questions.length > 0 && (
+                  <Card
+                    data-testid="question-accuracy-chart"
+                    className="mb-3 space-y-3 border-2 border-black p-3 shadow-none sm:p-4"
+                  >
+                    <div>
+                      <h3 className="text-base font-bold">Per-question Accuracy</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Completed, evaluated attempts only.
+                      </p>
+                    </div>
+                    <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2">
+                      {quizAnalysis.questions.map((question, index) => {
+                        const stats = getCompletedQuestionStats(question.quiz_question_id);
+                        return (
+                          <div
+                            key={question.quiz_question_id}
+                            data-testid={`question-accuracy-${question.quiz_question_id}`}
+                            className="grid grid-cols-[2rem_minmax(0,1fr)_5.5rem] items-center gap-2"
+                          >
+                            <span className="text-xs font-bold">Q{index + 1}</span>
+                            <Progress
+                              value={stats.accuracy ?? 0}
+                              className="h-3 border border-black"
+                              indicatorClassName={getAccuracyIndicatorClass(stats.accuracy)}
+                            />
+                            <span className="text-right text-xs font-semibold">
+                              {stats.accuracy === null ? "No results yet" : `${stats.accuracy}%`}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+
                 <div className="space-y-3">
                   {sortedQuestions.map((q, i) => {
                     const originalIndex = quizAnalysis.questions.findIndex((orig) => orig.quiz_question_id === q.quiz_question_id);
                     const questionNumber = originalIndex !== -1 ? originalIndex + 1 : i + 1;
-                    const isHighWrong = (q.answered_count ?? 0) > 0 && (q.accuracy_percent ?? 0) < ACCURACY_THRESHOLD_MEDIUM;
-                    const wrongPercent = Math.round(100 - (q.accuracy_percent ?? 0));
+                    const stats = getCompletedQuestionStats(q.quiz_question_id);
+                    const isHighWrong = stats.accuracy !== null && stats.accuracy < ACCURACY_THRESHOLD_MEDIUM;
+                    const wrongPercent = stats.accuracy === null ? null : Math.round(100 - stats.accuracy);
                     return (
                       <div
                         key={q.quiz_question_id}
@@ -317,11 +400,17 @@ export default function QuizAnalysisView({
                           <div className="flex gap-4">
                             <div className="flex flex-row text-sm items-center gap-2">
                               <span className="text-muted-foreground">Correct answer:</span>
-                              <Badge variant="secondary" size="sm">{q.correct_count}/{q.answered_count}</Badge>
+                              <Badge variant="secondary" size="sm">
+                                {stats.evaluatedCount > 0
+                                  ? `${stats.correctCount}/${stats.evaluatedCount}`
+                                  : "No results yet"}
+                              </Badge>
                             </div>
                             <div className="flex flex-row text-sm items-center gap-2">
                               <span className="text-muted-foreground">Accuracy:</span>
-                              <Badge variant="secondary" size="sm">{q.accuracy_percent ?? 0}%</Badge>
+                              <Badge variant="secondary" size="sm">
+                                {stats.accuracy === null ? "No results yet" : `${stats.accuracy}%`}
+                              </Badge>
                             </div>
                           </div>
                         </div>
@@ -432,105 +521,177 @@ export default function QuizAnalysisView({
               </div>
             )}
 
-            {activeTab === "students" && (
+            {activeTab === "overview" && (
               <div>
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+                <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <div className="flex gap-4 text-xs font-bold">
                     <div className="flex items-center font-medium gap-1"><div className="w-4 h-4 bg-[#8BCB88] border-2 border-black rounded-sm" /> Correct</div>
                     <div className="flex items-center font-medium gap-1"><div className="w-4 h-4 bg-[#FF6B6B] border-2 border-black rounded-sm" /> Incorrect</div>
                     <div className="flex items-center font-medium gap-1"><div className="w-4 h-4 bg-white border-2 border-black rounded-sm" /> Unattempted</div>
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-medium text-gray-600">Sort By:</span>
-                    <Select value={studentSort} onValueChange={(v) => setStudentSort(v as any)}>
-                      <Select.Trigger className="h-8 bg-white border-2 border-black w-32">
-                        <Select.Value />
-                      </Select.Trigger>
-                      <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                        <Select.Item value="accuracy">Accuracy</Select.Item>
-                        <Select.Item value="name">Name</Select.Item>
-                      </Select.Content>
-                    </Select>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex min-w-40 flex-col gap-1">
+                      <label htmlFor="quiz-submission-status-filter" className="text-xs font-semibold text-muted-foreground">
+                        Submission Status
+                      </label>
+                      <Select
+                        value={submissionStatusFilter}
+                        onValueChange={(value) => setSubmissionStatusFilter(value as QuizSubmissionStatusFilter)}
+                      >
+                        <Select.Trigger id="quiz-submission-status-filter" className="h-8 min-w-40 bg-white shadow-none">
+                          <Select.Value />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="all">All</Select.Item>
+                          <Select.Item value="on_time">On Time</Select.Item>
+                          <Select.Item value="late">Late</Select.Item>
+                          <Select.Item value="in_progress">In Progress</Select.Item>
+                          <Select.Item value="not_submitted">Not Submitted</Select.Item>
+                        </Select.Content>
+                      </Select>
+                    </div>
+                    <div className="flex min-w-40 flex-col gap-1">
+                      <label htmlFor="quiz-grading-status-filter" className="text-xs font-semibold text-muted-foreground">
+                        Grading Status
+                      </label>
+                      <Select
+                        value={gradingStatusFilter}
+                        onValueChange={(value) => setGradingStatusFilter(value as GradingStatusFilter)}
+                      >
+                        <Select.Trigger id="quiz-grading-status-filter" className="h-8 min-w-40 bg-white shadow-none">
+                          <Select.Value />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="all">All</Select.Item>
+                          <Select.Item value="graded">Graded</Select.Item>
+                          <Select.Item value="not_graded">Not Graded</Select.Item>
+                        </Select.Content>
+                      </Select>
+                    </div>
+                    <div className="flex min-w-40 flex-col gap-1">
+                      <label htmlFor="quiz-student-sort" className="text-xs font-semibold text-muted-foreground">
+                        Sort By
+                      </label>
+                      <Select value={studentSort} onValueChange={(value) => setStudentSort(value as "accuracy" | "name")}>
+                        <Select.Trigger id="quiz-student-sort" className="h-8 min-w-40 bg-white shadow-none">
+                          <Select.Value />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="name">Name</Select.Item>
+                          <Select.Item value="accuracy">Accuracy</Select.Item>
+                        </Select.Content>
+                      </Select>
+                    </div>
                   </div>
                 </div>
                 <div className="w-full">
-                  <Table className="w-full text-left text-sm border-spacing-0" wrapperClassName="shadow-none">
+                  <Table
+                    data-testid="quiz-overview-student-table"
+                    className="min-w-[1040px] text-left text-sm"
+                    wrapperClassName="shadow-none"
+                    containerClassName="max-w-full overflow-x-auto"
+                  >
                     <Table.Header>
                       <Table.Row className="border-b-2 border-black">
-                        <Table.Head className="font-head text-primary-foreground whitespace-nowrap pl-4 w-52 sm:w-60 shrink-0">Learner's Name</Table.Head>
-                        <Table.Head className="font-head text-primary-foreground min-w-[160px]"></Table.Head>
-                        <Table.Head className="font-head text-primary-foreground text-center px-4 sticky  w-[90px] min-w-[90px] max-w-[90px] bg-primary border-l-2 text-sm">Accuracy</Table.Head>
-                        <Table.Head className="font-head text-primary-foreground text-center px-4 sticky  w-[90px] min-w-[90px] max-w-[90px] bg-primary text-sm">Points</Table.Head>
-                        <Table.Head className="font-head text-primary-foreground text-center px-4 sticky  w-[80px] min-w-[80px] max-w-[80px] bg-primary text-sm">Score</Table.Head>
-                        <Table.Head className="font-head text-primary-foreground text-right pr-4 sticky right-0 z-20 w-[80px] bg-primary text-sm text-right">Action</Table.Head>
+                        <Table.Head className="w-[260px] min-w-[260px] whitespace-nowrap pl-4 text-sm">Student Name</Table.Head>
+                        <Table.Head className="w-[140px] min-w-[140px] whitespace-nowrap text-sm">Submission Status</Table.Head>
+                        <Table.Head className="min-w-[240px] whitespace-nowrap text-sm">Question Indicators</Table.Head>
+                        <Table.Head className="w-[100px] min-w-[100px] border-l-2 px-4 text-center text-sm">Accuracy</Table.Head>
+                        <Table.Head className="w-[110px] min-w-[110px] px-4 text-center text-sm">Points</Table.Head>
+                        <Table.Head className="w-[80px] min-w-[80px] px-4 text-center text-sm">Score</Table.Head>
+                        <Table.Head className="w-[90px] min-w-[90px] pr-4 text-right text-sm">Action</Table.Head>
                       </Table.Row>
                     </Table.Header>
                     <Table.Body>
-                      {sortedStudents.map((student) => {
-                        const corrects = student.answers?.filter(a => a.is_correct === true).length || 0;
+                      {filteredStudents.map((student) => {
+                        const displayName = formatStudentRosterName(student);
+                        const submissionStatus = getQuizSubmissionStatus(student);
+                        const isCompletedAttempt = submissionStatus === "on_time" || submissionStatus === "late";
+                        const evaluatedAnswers = isCompletedAttempt
+                          ? student.answers?.filter((answer) => answer.is_correct === true || answer.is_correct === false) ?? []
+                          : [];
+                        const corrects = evaluatedAnswers.filter((answer) => answer.is_correct === true).length;
+                        const hasGrade = isCompletedAttempt && student.grade !== null && student.grade !== undefined;
+                        const hasScorePercent =
+                          isCompletedAttempt && student.score_percent !== null && student.score_percent !== undefined;
                         return (
                           <Table.Row key={student.student_id} className="group border-b border-border last:border-0 transition-colors">
-                            <Table.Cell className="py-4 pl-4 pr-2 w-52 sm:w-60 shrink-0">
-                              <div className="flex items-center gap-2">
+                            <Table.Cell className="w-[260px] min-w-[260px] py-4 pl-4 pr-3">
+                              <div className="flex min-w-0 items-center gap-2">
                                 <Avatar variant="student" className="size-8 shrink-0">
                                   <Avatar.Image
                                     src={student.avatar || "/avatars/student-avatars/1.svg"}
-                                    alt={student.student_name}
+                                    alt={displayName}
                                   />
                                   <Avatar.Fallback>
-                                    {student.student_name.slice(0, 1).toUpperCase()}
+                                    {displayName.slice(0, 1).toUpperCase()}
                                   </Avatar.Fallback>
                                 </Avatar>
                                 {student.submission_id ? (
                                   <button
                                     type="button"
                                     onClick={() => setSelectedGradingSubmissionId(student.submission_id!)}
-                                    className="font-bold whitespace-nowrap hover:underline text-left"
+                                    className="min-w-0 whitespace-normal text-left font-bold leading-tight hover:underline"
                                   >
-                                    {student.student_name}
+                                    {displayName}
                                   </button>
                                 ) : (
-                                  <span className="font-bold whitespace-nowrap text-gray-700">
-                                    {student.student_name}
+                                  <span className="min-w-0 whitespace-normal font-bold leading-tight text-gray-700">
+                                    {displayName}
                                   </span>
                                 )}
                               </div>
                             </Table.Cell>
-                            <Table.Cell className="py-4 px-2 min-w-0 max-w-0 w-full">
-                              <div className="flex items-center gap-2 min-w-0 w-full">
-                                <div
-                                  data-testid="dot-strip-scroll-container"
-                                  className="overflow-x-auto min-w-0 flex-1 py-1 px-1 scrollbar-thin"
-                                >
-                                  <div className="flex items-center gap-[2px] w-max pr-3">
-                                    {quizAnalysis.questions.map((q) => {
-                                      const ans = student.answers?.find(a => a.quiz_question_id === q.quiz_question_id);
-                                      return (
-                                        <div
-                                          key={q.quiz_question_id}
-                                          data-testid={`question-dot-${q.quiz_question_id}`}
-                                          className={`w-[14px] h-[18px] border-2 border-black rounded-sm shrink-0 ${ans?.is_correct === true ? 'bg-[#8BCB88]' : ans?.is_correct === false ? 'bg-[#FF6B6B]' : 'bg-gray-100'
-                                            }`}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                                <span className="text-xs font-bold text-[#3A6D38] ml-2 shrink-0 whitespace-nowrap">
-                                  {corrects} corrects <Check size={12} className="inline" />
-                                </span>
+                            <Table.Cell className="w-[140px] min-w-[140px] py-4">
+                              <Badge
+                                variant={submissionStatus === "on_time" ? "success" : submissionStatus === "late" ? "destructive" : "outline"}
+                                size="sm"
+                                className="shrink-0 whitespace-nowrap"
+                              >
+                                {submissionStatusLabel(submissionStatus)}
+                              </Badge>
+                            </Table.Cell>
+                            <Table.Cell className="min-w-[240px] py-4">
+                              <div
+                                data-testid={`question-indicators-${student.student_id}`}
+                                role="img"
+                                aria-label={isCompletedAttempt
+                                  ? `${corrects} correct out of ${evaluatedAnswers.length} evaluated answers`
+                                  : `${submissionStatusLabel(submissionStatus)} attempt indicators`}
+                                className="flex w-max min-w-[216px] items-center gap-[3px] py-1 pr-3"
+                              >
+                                {quizAnalysis.questions.length > 0 ? quizAnalysis.questions.map((q, index) => {
+                                  const ans = student.answers?.find(a => a.quiz_question_id === q.quiz_question_id);
+                                  return (
+                                    <div
+                                      key={q.quiz_question_id}
+                                      title={`Question ${index + 1}`}
+                                      className={`h-[18px] w-[14px] shrink-0 rounded-sm border-2 border-black ${ans?.is_correct === true ? "bg-[#8BCB88]" : ans?.is_correct === false ? "bg-[#FF6B6B]" : "bg-gray-100"}`}
+                                    />
+                                  );
+                                }) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
                               </div>
                             </Table.Cell>
-                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg w-[90px] min-w-[90px] max-w-[90px] border-l-2 border-border">
-                              {student.score_percent ?? 0}<span className="text-xs font-normal text-gray-500">%</span>
+                            <Table.Cell className="w-[100px] min-w-[100px] border-l-2 border-border px-4 py-4 text-center text-lg font-bold">
+                              {hasScorePercent ? (
+                                <>{student.score_percent}<span className="text-xs font-normal text-gray-500">%</span></>
+                              ) : (
+                                <span className="font-normal text-muted-foreground">—</span>
+                              )}
                             </Table.Cell>
-                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg w-[90px] min-w-[90px] max-w-[90px]">
-                              {student.grade ?? 0}<span className="text-xs font-normal text-gray-500">/{totalPoints}</span>
+                            <Table.Cell className="w-[110px] min-w-[110px] px-4 py-4 text-center text-lg font-bold">
+                              {hasGrade ? (
+                                <>{student.grade}<span className="text-xs font-normal text-gray-500">/{totalPoints}</span></>
+                              ) : (
+                                <span className="font-normal text-muted-foreground">—</span>
+                              )}
                             </Table.Cell>
-                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg w-[80px] min-w-[80px] max-w-[80px]">
-                              {student.grade ?? 0}
+                            <Table.Cell className="w-[80px] min-w-[80px] px-4 py-4 text-center text-lg font-bold">
+                              {hasGrade ? student.grade : <span className="font-normal text-muted-foreground">—</span>}
                             </Table.Cell>
-                            <Table.Cell className="py-4 pr-4 text-right">
+                            <Table.Cell className="w-[90px] min-w-[90px] py-4 pr-4 text-right">
                               {student.submission_id ? (
                                 <div className="flex justify-end">
                                   <Button
@@ -548,6 +709,19 @@ export default function QuizAnalysisView({
                           </Table.Row>
                         );
                       })}
+                      {filteredStudents.length === 0 && (
+                        <Table.Row className="hover:bg-transparent">
+                          <Table.Cell colSpan={7} className="p-0 whitespace-normal">
+                            <TeacherEmptyState
+                              compact
+                              className="rounded! border-0 bg-card shadow-none hover:shadow-none"
+                              icon={<Users />}
+                              title="No matching students"
+                              description="No students match the selected submission and grading filters."
+                            />
+                          </Table.Cell>
+                        </Table.Row>
+                      )}
                     </Table.Body>
                   </Table>
                 </div>

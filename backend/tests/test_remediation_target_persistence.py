@@ -491,3 +491,117 @@ def test_preview_score_adjustment_service_and_workspace(candidate_context):
     assert wp["max_adjusted_score"] == 16.0
     assert wp["possible_gain"] == 2.0
 
+
+def test_progressive_unlinked_target_can_be_changed_while_linked_history_stays_immutable(candidate_context):
+    from uuid import uuid4
+    from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+
+    ctx = candidate_context
+    db = ctx["db"]
+    _activate(ctx)
+
+    first = _make_classwork_target(ctx, "Original WW 1", category="WRITTEN_WORK", score=10.0)
+    second = _make_classwork_target(ctx, "Original WW 2", category="WRITTEN_WORK", score=11.0)
+    third = _make_classwork_target(ctx, "Original WW 3", category="WRITTEN_WORK", score=12.0)
+
+    save_plan(
+        db, _staff(ctx), _id(ctx),
+        PlanUpdate(
+            teacher_choice="CLASSWORK",
+            grade_treatment="WRITTEN_WORK",
+            target_assignment_ids=[first.classwork_assignment_id],
+            score_adjustment_cap=75.0,
+        ),
+    )
+
+    rem_cw = Classwork(
+        title="Remediation 1",
+        classwork_category="WRITTEN_WORK",
+        classwork_type="ASSIGNMENT",
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=_staff(ctx),
+        total_points=20.0,
+        is_graded=True,
+        is_published=True,
+    )
+    db.add(rem_cw)
+    db.flush()
+    rem_asgn = ClassworkAssignment(
+        classwork_id=rem_cw.classwork_id,
+        class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        assigned_by_staff_id=_staff(ctx),
+        is_published=True,
+        recipient_student_id=ctx["student"].student_id,
+        source_intervention_id=_id(ctx),
+        remediation_request_id=uuid4(),
+    )
+    db.add(rem_asgn)
+    db.flush()
+    db.add(RemediationAssignmentLink(
+        remediation_assignment_id=rem_asgn.classwork_assignment_id,
+        original_assignment_id=first.classwork_assignment_id,
+        source_intervention_id=_id(ctx),
+        student_id=ctx["student"].student_id,
+        component="WRITTEN_WORK",
+        score_adjustment_cap=75.0,
+        created_by_staff_id=_staff(ctx),
+    ))
+    # Simulate legacy WW plan that polluted original_exam_assignment_id and had an unlinked target saved
+    row = db.get(Intervention, _id(ctx))
+    row.remediation_plan = {
+        **(row.remediation_plan or {}),
+        "original_exam_assignment_id": first.classwork_assignment_id,
+        "target_assignment_ids": [first.classwork_assignment_id, second.classwork_assignment_id],
+    }
+    db.commit()
+
+    workspace_before = get_workspace(db, _staff(ctx), _id(ctx))
+    assert workspace_before["plan"]["original_exam_assignment_id"] is None
+
+    # Changing the unlinked second target to third succeeds and replaces second instead of accumulating
+    updated = save_plan(
+        db, _staff(ctx), _id(ctx),
+        PlanUpdate(
+            teacher_choice="CLASSWORK",
+            grade_treatment="WRITTEN_WORK",
+            target_assignment_ids=[
+                first.classwork_assignment_id,
+                second.classwork_assignment_id,
+                third.classwork_assignment_id,
+            ],
+            score_adjustment_cap=75.0,
+        ),
+    )
+    assert updated["plan"]["target_assignment_ids"] == [
+        first.classwork_assignment_id,
+        third.classwork_assignment_id,
+    ]
+    assert updated["plan"]["original_exam_assignment_id"] is None
+
+    # Removing or reordering the linked first target still raises HTTP 409
+    with pytest.raises(HTTPException) as remove_exc:
+        save_plan(
+            db, _staff(ctx), _id(ctx),
+            PlanUpdate(
+                teacher_choice="CLASSWORK",
+                grade_treatment="WRITTEN_WORK",
+                target_assignment_ids=[third.classwork_assignment_id],
+                score_adjustment_cap=75.0,
+            ),
+        )
+    assert remove_exc.value.status_code == 409
+
+    with pytest.raises(HTTPException) as reorder_exc:
+        save_plan(
+            db, _staff(ctx), _id(ctx),
+            PlanUpdate(
+                teacher_choice="CLASSWORK",
+                grade_treatment="WRITTEN_WORK",
+                target_assignment_ids=[third.classwork_assignment_id, first.classwork_assignment_id],
+                score_adjustment_cap=75.0,
+            ),
+        )
+    assert reorder_exc.value.status_code == 409
+
+

@@ -249,7 +249,7 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     expect(screen.getByText(/Add Reference Link/i)).toBeDefined();
   });
 
-  it("Scenario 15: Edit Classwork modal hides ReferenceLinkEditor for QUIZ and renders it for ASSIGNMENT", () => {
+  it("Scenario 15: Edit Classwork modal renders ReferenceLinkEditor for QUIZ and ASSIGNMENT", () => {
     const quizClasswork: TeacherClasswork = {
       classwork_id: 10,
       title: "Sample Quiz",
@@ -282,8 +282,15 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
       </MemoryRouter>,
     );
 
-    // Hidden for Quiz
-    expect(screen.queryByText("Reference Links")).toBeNull();
+    // Available for Quiz edits without adding a rubric.
+    expect(screen.getByText("Reference Links")).toBeDefined();
+    expect(screen.getByText(/Add Reference Link/i)).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Scoring Rubric" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Basic Information" }).className).toContain("order-0");
+    expect(screen.getByRole("region", { name: "Editable Settings" }).className).toContain("order-1");
+    expect(screen.getByRole("region", { name: "Reference Links / Materials" }).className).toContain("order-2");
+    expect(screen.getByRole("region", { name: "Assign to Sections" }).className).toContain("order-4");
+    expect(screen.getByTestId("edit-classwork-modal-body").className).toContain("overflow-y-auto");
 
     // Rerender with Assignment
     rerender(
@@ -300,6 +307,7 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     // Rendered for Assignment
     expect(screen.getByText("Reference Links")).toBeDefined();
     expect(screen.getByText(/Add Reference Link/i)).toBeDefined();
+    expect(screen.getByRole("region", { name: "Scoring Rubric" }).className).toContain("order-3");
   });
 
   it("restores editable quiz creation settings before attempts", async () => {

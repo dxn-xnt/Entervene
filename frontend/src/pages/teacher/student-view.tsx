@@ -113,7 +113,7 @@ export function StudentRecordDetail({
             <Card.Title className="flex items-center gap-3 text-2xl sm:text-3xl">
               <Avatar variant="student" className="size-12 shrink-0">
                 <Avatar.Image
-                  src={(detail.student as any)?.avatar || "/avatars/student-avatars/1.svg"}
+                  src={(detail.student as { avatar?: string | null })?.avatar || "/avatars/student-avatars/1.svg"}
                   alt={detail.student.full_name}
                 />
                 <Avatar.Fallback>

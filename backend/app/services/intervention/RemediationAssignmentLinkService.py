@@ -23,6 +23,9 @@ from app.services.grading.SubjectGradeProjectionService import (
     FINALIZED,
     calculate_subject_grade_projection,
 )
+from app.services.intervention.RemediationRubricService import (
+    assert_remediation_rubric_compatible,
+)
 
 
 LINKABLE_COMPONENTS = {
@@ -238,6 +241,14 @@ def create_remediation_assignment_link(
         or Decimal(str(rem_points)) != Decimal(str(orig_points))
     ):
         raise HTTPException(400, "Remedial maximum points must equal the original classwork")
+
+    assert_remediation_rubric_compatible(
+        original.classwork,
+        remediation_assignment.classwork.rubric_levels,
+        candidate_type=remediation_assignment.classwork.classwork_type,
+        candidate_total_points=rem_points,
+        status_code=400,
+    )
 
     if not db.query(StudentSubmission.submission_id).filter_by(
         classwork_assignment_id=original_assignment_id,
