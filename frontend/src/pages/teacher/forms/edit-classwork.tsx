@@ -1,5 +1,6 @@
 "use client";
 
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { unorderedValues, optionalNumber } from "@/lib/form-changes";
@@ -1263,13 +1264,13 @@ export default function EditClassworkModal({
                 >
                   {!isReadingType(editDraft.classwork_type) && (
                     <Field label="Due Date">
-                      <Input
-                        type="datetime-local"
+                      <DatePicker
+                        includeTime
                         value={editDraft.due_date}
-                        onChange={(event) =>
+                        onValueChange={(value) =>
                           setEditDraft((current) => ({
                             ...current,
-                            due_date: event.target.value,
+                            due_date: value,
                           }))
                         }
                         disabled={isSavingEdit}
@@ -1307,13 +1308,13 @@ export default function EditClassworkModal({
                   </Field>
 
                   <Field label="Locked Until">
-                    <Input
-                      type="datetime-local"
+                    <DatePicker
+                      includeTime
                       value={editDraft.lock_date}
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         setEditDraft((current) => ({
                           ...current,
-                          lock_date: event.target.value,
+                          lock_date: value,
                         }))
                       }
                       disabled={isSavingEdit || !editDraft.is_published}
@@ -1440,14 +1441,14 @@ export default function EditClassworkModal({
 
                     {quizResultsDraft.summary_release_mode === "SCHEDULED" ? (
                       <Field label="Release Date & Time" isRequired>
-                        <Input
-                          type="datetime-local"
+                        <DatePicker
+                          includeTime
                           aria-label="Release Date & Time"
                           value={quizResultsDraft.summary_release_at}
-                          onChange={(event) =>
+                          onValueChange={(value) =>
                             setQuizResultsDraft((current) => ({
                               ...current,
-                              summary_release_at: event.target.value,
+                              summary_release_at: value,
                             }))
                           }
                           disabled={isSavingEdit || !quizResultsDraft.loaded}

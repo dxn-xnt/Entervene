@@ -27,7 +27,6 @@ export function ReferenceLinkEditor({ links, onChange, disabled = false }: {
   return <section className="space-y-3" aria-label="Reference Links">
     <div>
       <h3 className="font-semibold">Reference Links</h3>
-      <p className="text-sm text-muted-foreground">Optional websites or documents for students to read. Sharing permissions are managed by the linked site.</p>
     </div>
     {links.length === 0 ? (
       <TeacherEmptyState

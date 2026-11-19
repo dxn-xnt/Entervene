@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.intervention.Intervention import Intervention
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.RemediationDraft import (
@@ -40,6 +41,9 @@ from app.services.intervention.InterventionRemediationDraftValidationService imp
     validate_remediation_draft,
 )
 from app.services.intervention.InterventionRemediationService import _row
+from app.services.intervention.RemediationAssignmentLinkService import (
+    assert_progressive_remediation_eligible,
+)
 from app.services.intervention.RemediationReadingPrerequisiteService import (
     resolve_reading_prerequisite_snapshot_items,
 )
@@ -51,6 +55,8 @@ def preflight_remediation_draft(
     intervention_id: int,
     draft_input: RemediationDraft | dict[str, Any],
     *,
+    target_assignment_id: int | None = None,
+    allow_existing_remediation_assignment_id: int | None = None,
     require_readings: bool = True,
 ) -> RemediationPublicationPreflightResult:
     """Perform preflight validation and authoring payload conversion for a remediation draft.
@@ -126,6 +132,11 @@ def preflight_remediation_draft(
     treatment = validated_draft.grade_treatment
 
     if treatment != "PRACTICE_ONLY":
+        if target_assignment_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Select one explicit original classwork for this remediation activity",
+            )
         # Check if academic period grade is already finalized
         finalized = db.query(StudentPeriodGrade.period_grade_id).filter_by(
             student_id=intervention.student_id,
@@ -151,6 +162,25 @@ def preflight_remediation_draft(
                 raise HTTPException(
                     status_code=422,
                     detail="Graded EXAMINATION remediation requires a selected original Examination assignment",
+                )
+            if target_assignment_id != orig_exam_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Selected target does not match the saved original Examination",
+                )
+
+            duplicate_exam_query = db.query(ClassworkAssignment.classwork_assignment_id).filter_by(
+                original_exam_assignment_id=orig_exam_id,
+                recipient_student_id=intervention.student_id,
+            )
+            if allow_existing_remediation_assignment_id is not None:
+                duplicate_exam_query = duplicate_exam_query.filter(
+                    ClassworkAssignment.classwork_assignment_id != allow_existing_remediation_assignment_id
+                )
+            if duplicate_exam_query.first():
+                raise HTTPException(
+                    status_code=409,
+                    detail="The selected original Examination already has a remediation activity",
                 )
 
             orig_exam_asgn = db.get(ClassworkAssignment, orig_exam_id)
@@ -235,7 +265,27 @@ def preflight_remediation_draft(
                 else CanonicalGradingComponent.PERFORMANCE_TASK
             )
 
-            for target_id in plan_targets:
+            if target_assignment_id not in plan_targets:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Selected target is not in the intervention plan",
+                )
+            duplicate_query = db.query(RemediationAssignmentLink.remediation_link_id).filter_by(
+                original_assignment_id=target_assignment_id,
+                student_id=intervention.student_id,
+            )
+            if allow_existing_remediation_assignment_id is not None:
+                duplicate_query = duplicate_query.filter(
+                    RemediationAssignmentLink.remediation_assignment_id != allow_existing_remediation_assignment_id
+                )
+            if duplicate_query.first():
+                raise HTTPException(
+                    status_code=409,
+                    detail="The selected original classwork already has a remediation activity",
+                )
+
+            selected_targets = [target_assignment_id]
+            for target_id in selected_targets:
                 orig_asgn = db.get(ClassworkAssignment, target_id)
                 if orig_asgn is None or orig_asgn.classwork is None:
                     raise HTTPException(
@@ -288,8 +338,8 @@ def preflight_remediation_draft(
                         ),
                     )
 
-            # Check maximum points against primary target assignment (target_assignment_ids[0])
-            primary_target = db.get(ClassworkAssignment, plan_targets[0])
+            # One remediation activity must match its one explicitly selected original.
+            primary_target = db.get(ClassworkAssignment, target_assignment_id)
             orig_points = primary_target.classwork.total_points if primary_target and primary_target.classwork else None
             if (
                 orig_points is None
@@ -304,7 +354,17 @@ def preflight_remediation_draft(
                     ),
                 )
 
-            resolved_target_ids = list(plan_targets)
+            assert_progressive_remediation_eligible(
+                db,
+                intervention=intervention,
+                staff_id=staff_id,
+                target_assignment_id=target_assignment_id,
+                component=treatment,
+                cap_percentage=authoritative_cap,
+                exclude_remediation_assignment_id=allow_existing_remediation_assignment_id,
+            )
+
+            resolved_target_ids = selected_targets
 
     # 7. Resolve Reading Prerequisites
     is_graded = (treatment != "PRACTICE_ONLY")

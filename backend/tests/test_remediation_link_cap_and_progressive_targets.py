@@ -16,11 +16,38 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.classwork.ClassworkService import create_classwork_wizard_record
 from app.services.intervention.InterventionRemediationService import PlanUpdate, save_plan
 from app.services.intervention.RemediationAssignmentLinkService import create_remediation_assignment_link
+from app.services.intervention import RemediationAssignmentLinkService as link_service
 from tests.test_intervention_support_materials import _activate
 from tests.test_remediation_target_persistence import _make_classwork_target
-from tests.test_targeted_remedial_classwork import _linked_classwork_kwargs
+from tests.test_targeted_remedial_classwork import _linked_classwork_kwargs as _base_linked_classwork_kwargs
+from tests.test_remediation_reading_prerequisite import _reading
 from tests.test_teacher_intervention_review import candidate_context, _id, _staff
 from tests.test_current_period_live_feature_builder import current_period_context
+
+
+def _linked_classwork_kwargs(ctx, request_id, original_assignment_id):
+    """Keep legacy progressive-target fixtures valid under required Reading policy."""
+    row = ctx["db"].get(Intervention, _id(ctx))
+    plan = dict(row.remediation_plan or {})
+    selected = list(plan.get("selected_resources") or [])
+    if not selected:
+        reading, _assignment = _reading(ctx, "Progressive remediation preparation")
+        plan["selected_resources"] = [{"kind": "CLASSWORK", "id": reading.classwork_id}]
+        row.remediation_plan = plan
+        ctx["db"].commit()
+    return _base_linked_classwork_kwargs(ctx, request_id, original_assignment_id)
+
+
+def _publish_and_grade(ctx, assignment, grade=18.0):
+    assignment.is_published = True
+    assignment.classwork.is_published = True
+    ctx["db"].add(StudentSubmission(
+        classwork_assignment_id=assignment.classwork_assignment_id,
+        student_id=ctx["student"].student_id,
+        grade=grade,
+        status="graded",
+    ))
+    ctx["db"].commit()
 
 
 def test_cap_snapshot_default_75_percent(candidate_context):
@@ -164,7 +191,23 @@ def test_multi_target_plan_creates_distinct_activities_and_links(candidate_conte
     assert link_1.original_assignment_id == first.classwork_assignment_id
     assert link_1.score_adjustment_cap == Decimal("80.00")
 
-    # Create remediation activity 2 targeting second original
+    # A second activity is blocked until the first is published, completed, and graded.
+    with pytest.raises(HTTPException) as pending:
+        asyncio.run(create_classwork_wizard_record(
+            **_linked_classwork_kwargs(c, uuid4(), second.classwork_assignment_id)
+        ))
+    assert pending.value.status_code == 409
+    assert pending.value.detail["code"] == "REMEDIATION_RESULT_PENDING"
+
+    rem_1.is_published = True
+    rem_1.classwork.is_published = True
+    db.add(StudentSubmission(
+        classwork_assignment_id=rem_1.classwork_assignment_id,
+        student_id=c["student"].student_id, grade=18.0, status="graded",
+    ))
+    db.commit()
+
+    # Missing Examination evidence does not block a teacher-initiated second activity.
     created_2 = asyncio.run(create_classwork_wizard_record(
         **_linked_classwork_kwargs(c, uuid4(), second.classwork_assignment_id)
     ))
@@ -180,11 +223,7 @@ def test_multi_target_plan_creates_distinct_activities_and_links(candidate_conte
     assert link_1.remediation_link_id != link_2.remediation_link_id
     assert db.query(RemediationAssignmentLink).count() == 2
 
-    # Add submissions to both remediation activities; raw original scores remain preserved
-    db.add(StudentSubmission(
-        classwork_assignment_id=rem_1.classwork_assignment_id,
-        student_id=c["student"].student_id, grade=18.0, status="graded",
-    ))
+    # Add the second result; raw original scores remain preserved.
     db.add(StudentSubmission(
         classwork_assignment_id=rem_2.classwork_assignment_id,
         student_id=c["student"].student_id, grade=19.0, status="graded",
@@ -207,6 +246,66 @@ def test_multi_target_plan_creates_distinct_activities_and_links(candidate_conte
         rem_1.classwork_assignment_id: 18.0,
         rem_2.classwork_assignment_id: 19.0,
     }
+
+
+def test_progressive_creation_rejects_target_without_positive_gain(candidate_context):
+    c = candidate_context
+    db = c["db"]
+    _activate(c)
+    first = _make_classwork_target(c, "Initial WW", score=10.0, points=20.0)
+    no_gain = _make_classwork_target(c, "Already above ceiling", score=18.0, points=20.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK",
+        grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[first.classwork_assignment_id, no_gain.classwork_assignment_id],
+        score_adjustment_cap=80.0,
+    ))
+    created = asyncio.run(create_classwork_wizard_record(
+        **_linked_classwork_kwargs(c, uuid4(), first.classwork_assignment_id)
+    ))
+    first_remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    _publish_and_grade(c, first_remediation)
+
+    with pytest.raises(HTTPException) as rejected:
+        asyncio.run(create_classwork_wizard_record(
+            **_linked_classwork_kwargs(c, uuid4(), no_gain.classwork_assignment_id)
+        ))
+    assert rejected.value.status_code == 409
+    assert rejected.value.detail["code"] == "NO_POSITIVE_REMEDIATION_TARGET"
+
+
+def test_progressive_creation_rejects_official_passing_result(candidate_context, monkeypatch):
+    c = candidate_context
+    db = c["db"]
+    _activate(c)
+    first = _make_classwork_target(c, "Initial WW", score=10.0, points=20.0)
+    second = _make_classwork_target(c, "Unused WW", score=11.0, points=20.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK",
+        grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[first.classwork_assignment_id, second.classwork_assignment_id],
+        score_adjustment_cap=80.0,
+    ))
+    created = asyncio.run(create_classwork_wizard_record(
+        **_linked_classwork_kwargs(c, uuid4(), first.classwork_assignment_id)
+    ))
+    first_remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    _publish_and_grade(c, first_remediation)
+    monkeypatch.setattr(link_service, "calculate_subject_grade_projection", lambda *_args, **_kwargs: {
+        "status": "AVAILABLE",
+        "current_reaches_passing_threshold": True,
+        "eligible_target_gains": [{
+            "assignment_id": second.classwork_assignment_id,
+            "possible_score_gain": 5.0,
+        }],
+    })
+
+    with pytest.raises(HTTPException) as rejected:
+        asyncio.run(create_classwork_wizard_record(
+            **_linked_classwork_kwargs(c, uuid4(), second.classwork_assignment_id)
+        ))
+    assert rejected.value.status_code == 409
+    assert rejected.value.detail["code"] == "PASSING_RESULT_REACHED"
 
 
 def test_prevent_conflicting_duplicate_remediation_for_same_original(candidate_context):

@@ -1938,6 +1938,7 @@ def get_class_schedule(
 def get_my_schedule(
     academic_period_id: int | None = Query(None),
     schedule_date: date_type | None = Query(None),
+    staff_id: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1964,7 +1965,7 @@ def get_my_schedule(
             return {"is_published": False, "schedule": []}
 
     elif role in ("teacher", "admin"):
-        staff_id = get_optional_staff_id(current_user=current_user, db=db)
+        staff_id = (staff_id if role == "admin" and staff_id else None) or get_optional_staff_id(current_user=current_user, db=db)
         if not staff_id:
             pub_load = db.query(SubjectLoad).filter(
                 SubjectLoad.academic_period_id == period_id,

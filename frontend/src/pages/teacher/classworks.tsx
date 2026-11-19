@@ -182,27 +182,19 @@ export default function Classworks() {
             workspace.plan.grade_treatment === "WRITTEN_WORK" ||
             workspace.plan.grade_treatment === "PERFORMANCE_TASK"
           ) {
-            const targetIds = workspace.plan.target_assignment_ids || [];
+            const linkedOriginalIds = new Set(
+              (workspace.progress.assigned_remediation ?? [])
+                .map((item) => item.original_assignment_id)
+                .filter((id): id is number => id != null)
+            );
+            const targetIds = (workspace.plan.target_assignment_ids || [])
+              .filter((id) => !linkedOriginalIds.has(id));
             if (targetIds.length === 0) {
               setRemediationError(
-                "No target classwork assignments saved in the intervention plan. Return to the Intervention to select a target."
+                "No eligible unlinked target is selected. Return to the Intervention to evaluate the result and choose another target if needed."
               );
               return;
             }
-
-            const candidates = (workspace.score_previews || [])
-              .filter(
-                (p) =>
-                  targetIds.includes(p.assignment_id) &&
-                  Number.isFinite(p.possible_gain) &&
-                  p.possible_gain > 0
-              )
-              .sort(
-                (a, b) =>
-                  b.possible_gain - a.possible_gain ||
-                  a.assignment_id - b.assignment_id
-              );
-            const recommendedId = candidates[0]?.assignment_id ?? null;
 
             const resolvedTargets: RemediationClassworkTarget[] = targetIds.map(
               (targetId) => {
@@ -236,7 +228,7 @@ export default function Classworks() {
                     (maxPoints > 0 && origScore != null
                       ? (origScore / maxPoints) * 100
                       : null),
-                  is_recommended: targetId === recommendedId,
+                  is_recommended: false,
                 };
               }
             );
@@ -249,7 +241,10 @@ export default function Classworks() {
             if (urlTargetId && targetIds.includes(urlTargetId)) {
               setInitialTargetAssignmentId(urlTargetId);
             } else {
-              setInitialTargetAssignmentId(recommendedId ?? targetIds[0]);
+              setRemediationError(
+                "No explicit original classwork target was provided. Return to the Intervention and select one target before creating remediation."
+              );
+              return;
             }
           }
           setRemediationReferences(

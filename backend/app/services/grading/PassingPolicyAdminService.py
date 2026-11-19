@@ -166,10 +166,25 @@ def edit_template_threshold(db: Session, *, template_id: int, year_id: int,
            action="edit", old=old, new=value, actor=actor,
            reason=note, revision=last_revision + 1)
     try:
+        # The edited threshold and every resulting intervention transition are
+        # one transaction. Flushing first makes the new policy authoritative to
+        # the period-aware threshold reader used by the synchronizer.
+        db.flush()
+        from app.services.intervention.InterventionReconciliationService import (
+            reconcile_open_interventions_for_template_threshold_change,
+        )
+        reconcile_open_interventions_for_template_threshold_change(
+            db,
+            academic_year_id=year_id,
+            grading_template_id=template_id,
+        )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise _error(409, "POLICY_WRITE_CONFLICT", "Policy changed concurrently; reload and try again.") from exc
+    except Exception:
+        db.rollback()
+        raise
     return template_to_item(template, db)
 
 

@@ -8,7 +8,6 @@ import { Loader } from "@/components/retroui/Loader";
 import { Button } from "@/components/teacher/button";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
@@ -42,21 +41,9 @@ import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-ca
 import { Download, Loader2, SearchX, Sparkles } from "lucide-react";
 
 const TEACHER_RISK_CARDS = [
-  {
-    key: "MODERATE_RISK" as const,
-    label: "Moderate Risk",
-    activeClass: "bg-[#ff9233] ring-2 ring-black",
-  },
-  {
-    key: "HIGH_RISK" as const,
-    label: "High Risk",
-    activeClass: "bg-[#ff3333] ring-2 ring-black",
-  },
-  {
-    key: "ON_TRACK" as const,
-    label: "On Track",
-    activeClass: "bg-[#00e65f] ring-2 ring-black",
-  },
+  { key: "MODERATE_RISK" as const, label: "Moderate Risk" },
+  { key: "HIGH_RISK" as const, label: "High Risk" },
+  { key: "ON_TRACK" as const, label: "On Track" },
 ];
 
 export default function PredictionsDashboard() {
@@ -230,10 +217,9 @@ function AdminCurrentTermDashboard() {
           </div>
           <Button
             variant="outline"
-            size="sm"
+            size="header"
             onClick={handleExportCsv}
             disabled={isExporting || !selectedPeriodId}
-            className="gap-1.5"
             data-testid="export-risk-summary-csv-button"
           >
             {isExporting ? (
@@ -248,24 +234,12 @@ function AdminCurrentTermDashboard() {
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <div aria-label="Prediction risk summary" className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
             {TEACHER_RISK_CARDS.map((card) => (
-              <button
+              <OverviewCard
                 key={card.key}
-                type="button"
-                onClick={() => setRiskLevel((current) => current === card.key ? undefined : card.key)}
-                aria-label={`Filter by ${card.label}`}
-                aria-pressed={riskLevel === card.key}
-                className="cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-              >
-                <OverviewCard
-                  title={card.label}
-                  count={String(displaySummary[card.key])}
-                  statDescription={riskDescriptions[card.key]}
-                  className={cn(
-                    "w-full border-2 border-black shadow-[4px_4px_0px_#000]",
-                    riskLevel === card.key && `translate-x-1 translate-y-1 shadow-none ${card.activeClass}`,
-                  )}
-                />
-              </button>
+                title={card.label}
+                count={String(displaySummary[card.key])}
+                statDescription={riskDescriptions[card.key]}
+              />
             ))}
           </div>
 
@@ -472,10 +446,9 @@ function TeacherCurrentTermDashboard() {
           </div>
           <Button
             variant="outline"
-            size="sm"
+            size="header"
             onClick={handleExportCsv}
             disabled={isExporting || !selectedPeriodId}
-            className="gap-1.5"
             data-testid="export-risk-summary-csv-button"
           >
             {isExporting ? (
@@ -490,24 +463,12 @@ function TeacherCurrentTermDashboard() {
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
           <div aria-label="Prediction risk summary" className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
             {TEACHER_RISK_CARDS.map((card) => (
-              <button
+              <OverviewCard
                 key={card.key}
-                type="button"
-                onClick={() => setRiskLevel((current) => current === card.key ? undefined : card.key)}
-                aria-label={`Filter by ${card.label}`}
-                aria-pressed={riskLevel === card.key}
-                className="cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-              >
-                <OverviewCard
-                  title={card.label}
-                  count={String(displaySummary[card.key])}
-                  statDescription={riskDescriptions[card.key]}
-                  className={cn(
-                    "w-full border-2 border-black shadow-[4px_4px_0px_#000]",
-                    riskLevel === card.key && `translate-x-1 translate-y-1 shadow-none ${card.activeClass}`,
-                  )}
-                />
-              </button>
+                title={card.label}
+                count={String(displaySummary[card.key])}
+                statDescription={riskDescriptions[card.key]}
+              />
             ))}
           </div>
 

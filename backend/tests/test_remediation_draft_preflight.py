@@ -328,7 +328,10 @@ def test_preflight_quiz_draft_success(candidate_context):
 
     draft = _make_quiz_draft(comp.competency_id, lesson.lesson_id, 10.0)
 
-    result = preflight_remediation_draft(db, staff_id, intervention_id, draft)
+    result = preflight_remediation_draft(
+        db, staff_id, intervention_id, draft,
+        target_assignment_id=target_asgn.classwork_assignment_id,
+    )
 
     assert result.is_valid is True
     assert result.draft_format == "QUIZ"
@@ -375,7 +378,10 @@ def test_preflight_classwork_pt_success(candidate_context):
 
     draft = _make_classwork_draft(comp.competency_id, lesson.lesson_id, 20.0)
 
-    result = preflight_remediation_draft(db, staff_id, intervention_id, draft)
+    result = preflight_remediation_draft(
+        db, staff_id, intervention_id, draft,
+        target_assignment_id=target_asgn.classwork_assignment_id,
+    )
 
     assert result.is_valid is True
     assert result.draft_format == "CLASSWORK"
@@ -416,7 +422,10 @@ def test_preflight_revalidates_teacher_edits(candidate_context):
     draft.questions[0].teacher_answer_key.correct_answer = "6"
     draft.questions[1].points = 4.0
 
-    result = preflight_remediation_draft(db, staff_id, intervention_id, draft)
+    result = preflight_remediation_draft(
+        db, staff_id, intervention_id, draft,
+        target_assignment_id=target_asgn.classwork_assignment_id,
+    )
 
     assert result.is_valid is True
     assert result.total_points == 10.0
@@ -458,7 +467,10 @@ def test_preflight_preserves_teacher_cap_rejects_client_override(candidate_conte
 
     draft = _make_quiz_draft(comp.competency_id, lesson.lesson_id, 10.0)
 
-    result = preflight_remediation_draft(db, staff_id, intervention_id, draft)
+    result = preflight_remediation_draft(
+        db, staff_id, intervention_id, draft,
+        target_assignment_id=target_asgn.classwork_assignment_id,
+    )
 
     # Authoritative cap must be 82.5, preserving teacher control
     assert result.authoritative_cap == 82.5
@@ -475,7 +487,10 @@ def test_preflight_rejects_point_mismatch_with_original_target(candidate_context
     draft = _make_quiz_draft(comp.competency_id, lesson.lesson_id, 15.0)
 
     with pytest.raises(HTTPException) as exc:
-        preflight_remediation_draft(db, staff_id, intervention_id, draft)
+        preflight_remediation_draft(
+            db, staff_id, intervention_id, draft,
+            target_assignment_id=target_asgn.classwork_assignment_id,
+        )
 
     assert exc.value.status_code == 422
     assert "must equal original classwork maximum points" in str(exc.value.detail)
@@ -554,7 +569,10 @@ def test_preflight_rejects_unscored_original_target(candidate_context):
     draft = _make_quiz_draft(comp.competency_id, lesson.lesson_id, 10.0)
 
     with pytest.raises(HTTPException) as exc:
-        preflight_remediation_draft(db, staff_id, intervention_id, draft)
+        preflight_remediation_draft(
+            db, staff_id, intervention_id, draft,
+            target_assignment_id=target_asgn.classwork_assignment_id,
+        )
 
     assert exc.value.status_code == 422
     assert "needs a recorded score" in str(exc.value.detail)
@@ -576,7 +594,10 @@ def test_preflight_rejects_graded_remediation_without_reading_prerequisites(cand
     draft = _make_quiz_draft(comp.competency_id, lesson.lesson_id, 10.0)
 
     with pytest.raises(HTTPException) as exc:
-        preflight_remediation_draft(db, staff_id, intervention_id, draft)
+        preflight_remediation_draft(
+            db, staff_id, intervention_id, draft,
+            target_assignment_id=target_asgn.classwork_assignment_id,
+        )
 
     assert exc.value.status_code == 400
     assert "requires at least one valid Supporting Reading" in str(exc.value.detail)
@@ -586,7 +607,7 @@ def test_save_draft_preflight_allows_missing_reading_but_publication_preflight_d
     candidate_context,
 ):
     ctx = candidate_context
-    comp, lesson, _target_asgn, _reading = _setup_intervention_with_targets(
+    comp, lesson, target_asgn, _reading = _setup_intervention_with_targets(
         ctx, "WRITTEN_WORK", 10.0,
     )
     plan = dict(ctx["candidate"].remediation_plan or {})
@@ -598,11 +619,19 @@ def test_save_draft_preflight_allows_missing_reading_but_publication_preflight_d
 
     saved_draft_check = client.post(
         f"/api/v1/teacher/interventions/{_id(ctx)}/remediation/preflight",
-        json={"draft": draft, "validation_stage": "SAVE_DRAFT"},
+        json={
+            "draft": draft,
+            "target_assignment_id": target_asgn.classwork_assignment_id,
+            "validation_stage": "SAVE_DRAFT",
+        },
     )
     publication_check = client.post(
         f"/api/v1/teacher/interventions/{_id(ctx)}/remediation/preflight",
-        json={"draft": draft, "validation_stage": "PUBLICATION"},
+        json={
+            "draft": draft,
+            "target_assignment_id": target_asgn.classwork_assignment_id,
+            "validation_stage": "PUBLICATION",
+        },
     )
 
     assert saved_draft_check.status_code == 200, saved_draft_check.json()
@@ -644,7 +673,10 @@ def test_preflight_zero_database_writes(candidate_context):
 
     draft = _make_quiz_draft(comp.competency_id, lesson.lesson_id, 10.0)
 
-    result = preflight_remediation_draft(db, staff_id, intervention_id, draft)
+    result = preflight_remediation_draft(
+        db, staff_id, intervention_id, draft,
+        target_assignment_id=target_asgn.classwork_assignment_id,
+    )
     assert result.is_valid is True
 
     # Count rows after preflight
@@ -682,7 +714,10 @@ def test_preflight_endpoint_auth_and_response(candidate_context):
     teacher_client = _client(ctx, role="teacher")
     resp = teacher_client.post(
         f"/api/v1/teacher/interventions/{intervention_id}/remediation/preflight",
-        json={"draft": _make_quiz_draft(comp.competency_id, lesson.lesson_id, 10.0).model_dump()},
+        json={
+            "draft": _make_quiz_draft(comp.competency_id, lesson.lesson_id, 10.0).model_dump(),
+            "target_assignment_id": target_asgn.classwork_assignment_id,
+        },
     )
     assert resp.status_code == 200, resp.json()
     data = resp.json()

@@ -454,7 +454,7 @@ def get_user_detail(
             selected_year = resolve_active_academic_year(db)
 
         class_row = (
-            db.query(Class.section_name, AcademicLevel.grade_level)
+            db.query(Class.class_id, Class.section_name, AcademicLevel.grade_level)
             .join(StudentClass, Class.class_id == StudentClass.class_id)
             .outerjoin(AcademicLevel, AcademicLevel.academic_level_id == Class.academic_level_id)
             .filter(StudentClass.student_id == user.student_id)
@@ -508,6 +508,7 @@ def get_user_detail(
         )
 
         item["student_id"] = str(user.student_id)
+        item["class_id"] = class_row.class_id if class_row else None
         item["section"] = class_row.section_name if class_row else None
         item["grade_level"] = class_row.grade_level if class_row else user.grade_level
         item["student_status"] = "No Section Assigned" if not class_row else user.account_status
@@ -539,8 +540,51 @@ def get_user_analytics(
         return _student_user_analytics(db, user.student_id, user.user_id, target_period)
     if client_role == "teacher" and user.staff_id:
         return _teacher_user_analytics(db, user.staff_id, target_period)
+    if client_role == "admin":
+        return _admin_user_analytics(db, target_period)
     return {
         "summary": None,
+        "subject_mastery": [],
+        "score_trend": [],
+        "historical_performance": [],
+        "period_performance": [],
+        "quarterly_performance": [],
+        "subject_breakdown": [],
+        "activity_feed": [],
+        "classwork": [],
+        "lms_behavior": None,
+    }
+
+
+def _admin_user_analytics(
+    db: Session,
+    target_period: AcademicPeriod,
+) -> dict:
+    classes_made = (
+        db.query(func.count(Class.class_id))
+        .filter(Class.academic_year_id == target_period.academic_year_id)
+        .scalar()
+        or 0
+    )
+    subject_loads_assigned = (
+        db.query(func.count(SubjectLoad.subject_load_id))
+        .filter(SubjectLoad.academic_period_id == target_period.academic_period_id)
+        .filter(SubjectLoad.is_active_version.is_(True))
+        .scalar()
+        or 0
+    )
+    subjects_added = (
+        db.query(func.count(Subject.subject_id))
+        .filter(func.lower(func.coalesce(Subject.status, "active")) == "active")
+        .scalar()
+        or 0
+    )
+    return {
+        "summary": {
+            "classesMade": int(classes_made),
+            "subjectLoadsAssigned": int(subject_loads_assigned),
+            "subjectsAdded": int(subjects_added),
+        },
         "subject_mastery": [],
         "score_trend": [],
         "historical_performance": [],

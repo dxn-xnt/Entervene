@@ -8,6 +8,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Avatar } from "@/components/retroui/Avatar";
 import { Badge } from "@/components/retroui/Badge";
 import { getRiskBadgeMeta } from "@/lib/formatters";
 import { Button } from "@/components/retroui/Button";
@@ -210,6 +211,7 @@ export default function PredictionDetailSheet({
             <CurrentTermTeacherDetail
               prediction={currentTermPrediction}
               isTeacher={isTeacher}
+              candidateId={candidateId}
               activeInterventionId={activeInterventionId}
             />
 
@@ -769,10 +771,12 @@ function formatDate(value: string): string {
 function CurrentTermTeacherDetail({
   prediction,
   isTeacher = false,
+  candidateId,
   activeInterventionId,
 }: {
   prediction: DevelopmentCurrentTermListItem;
   isTeacher?: boolean;
+  candidateId?: number;
   activeInterventionId?: number;
 }) {
   const academic = prediction.academic_evidence;
@@ -780,6 +784,7 @@ function CurrentTermTeacherDetail({
   const submissions = prediction.participation_context.submissions;
   const term = prediction.term_context;
   const riskDisplay = getTeacherRiskDisplay(prediction.intervention_level);
+  const studentDisplayName = prediction.student_name || prediction.student_id;
 
   return (
     <div className="flex flex-col gap-4 px-5 text-sm">
@@ -834,20 +839,58 @@ function CurrentTermTeacherDetail({
         <h2 id="student-overview-heading" className="mb-2 text-base font-black">
           Student Overview
         </h2>
-        <Card className="grid grid-cols-1 gap-x-4 gap-y-2 border-2 border-black p-3 shadow-none sm:grid-cols-2">
-          <dt className="text-gray-600 font-semibold">Student</dt>
-          <dd className="font-bold">
-            {prediction.student_name || prediction.student_id}
-          </dd>
+        <Card className="w-full space-y-2 border-2 border-black bg-primary shadow-none">
+          <div className="flex items-start gap-4">
+            <div className="flex flex-col mt-3 items-center h-full">
+              <Avatar variant="student" className="size-14 shrink-0">
+                <Avatar.Image
+                  src="/avatars/student-avatars/1.svg"
+                  alt={studentDisplayName}
+                />
+                <Avatar.Fallback>
+                  {(studentDisplayName || "?").charAt(0).toUpperCase()}
+                </Avatar.Fallback>
+              </Avatar>
+            </div>
 
-          <dt className="text-gray-600 font-semibold">Class / Section</dt>
-          <dd>{prediction.class_name}</dd>
+            <div className="flex flex-col gap-1 w-full">
+              <div className="flex flex-row justify-between w-full items-end">
+                <h3 className="text-xl font-black -mb-1">{studentDisplayName}</h3>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {candidateId !== undefined && (
+                    <Badge variant="solid" size="sm">
+                      Candidate
+                    </Badge>
+                  )}
+                  {activeInterventionId !== undefined && (
+                    <Badge variant="solid" size="sm">
+                      Active
+                    </Badge>
+                  )}
+                  <Badge
+                    className={getRiskBadgeMeta(riskDisplay.level).bg}
+                    size="sm"
+                  >
+                    {riskDisplay.label}
+                  </Badge>
+                </div>
+              </div>
 
-          <dt className="text-gray-600 font-semibold">Subject</dt>
-          <dd>{prediction.subject_name}</dd>
-
-          <dt className="text-gray-600 font-semibold">Academic Term</dt>
-          <dd>{prediction.period_name}</dd>
+              <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
+                <p className="text-sm">
+                  Subject:{" "}
+                  <span className="text-base font-semibold">{prediction.subject_name}</span>
+                </p>
+                <p className="text-sm">
+                  Class:{" "}
+                  <span className="text-base font-semibold">{prediction.class_name}</span>
+                </p>
+                <p className="col-span-2">
+                  Term: <strong>{prediction.period_name}</strong>
+                </p>
+              </div>
+            </div>
+          </div>
         </Card>
       </section>
 

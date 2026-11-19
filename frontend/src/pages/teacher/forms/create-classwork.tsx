@@ -1,5 +1,6 @@
 "use client";
 
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCheck, FileText, Plus, Trash2, X } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
@@ -92,8 +93,7 @@ export default function CreateClassworkModal({
     if (initialTargetAssignmentId && remediationOriginalTargets.some((t) => t.assignment_id === initialTargetAssignmentId)) {
       return initialTargetAssignmentId;
     }
-    const rec = remediationOriginalTargets.find((t) => t.is_recommended);
-    return rec?.assignment_id ?? remediationOriginalTargets[0]?.assignment_id ?? null;
+    return null;
   });
 
   const selectedOriginalTarget = useMemo(() => {
@@ -109,8 +109,8 @@ export default function CreateClassworkModal({
           : "";
     const targetPoints = remediationOriginalExam
       ? String(remediationOriginalExam.total_points)
-      : (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && remediationOriginalTargets.length
-        ? String((remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) ?? remediationOriginalTargets[0]).max_points)
+      : (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && selectedOriginalTarget
+        ? String(selectedOriginalTarget.max_points)
         : emptyClassworkDraft.total_points;
     return {
       ...emptyClassworkDraft,
@@ -172,7 +172,7 @@ export default function CreateClassworkModal({
       remediationOriginalTargets.length
     ) {
       const target = remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) ?? remediationOriginalTargets[0];
-      return scaleRubricLevels(defaultLevels, target.max_points);
+      return target ? scaleRubricLevels(defaultLevels, target.max_points) : defaultLevels;
     }
     return defaultLevels;
   });
@@ -906,13 +906,13 @@ export default function CreateClassworkModal({
               <div className={`grid gap-4 ${isReadingType(selectedType) ? "" : "sm:grid-cols-2"}`}>
                 {!isReadingType(selectedType) && (
                   <Field label="Due Date">
-                    <Input
-                      type="datetime-local"
+                    <DatePicker
+                      includeTime
                       value={draft.due_date}
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         setDraft((current) => ({
                           ...current,
-                          due_date: event.target.value,
+                          due_date: value,
                         }))
                       }
                       disabled={isCreating}
@@ -953,13 +953,13 @@ export default function CreateClassworkModal({
               </div>
 
               <Field label="Locked Until">
-                <Input
-                  type="datetime-local"
+                <DatePicker
+                  includeTime
                   value={draft.lock_date}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setDraft((current) => ({
                       ...current,
-                      lock_date: event.target.value,
+                      lock_date: value,
                     }))
                   }
                   disabled={isCreating || !draft.is_published}

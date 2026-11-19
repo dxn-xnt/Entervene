@@ -1,5 +1,6 @@
 "use client";
 
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCheck, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/teacher/button";
@@ -132,19 +133,13 @@ export default function CreateClassworkQuizModal({
 
     const [selectedTargetId, setSelectedTargetId] = useState<number | null>(() => {
         if (initialTargetAssignmentId) return initialTargetAssignmentId;
-        if (remediationOriginalTargets && remediationOriginalTargets.length > 0) {
-            const rec = remediationOriginalTargets.find((t) => t.is_recommended);
-            return rec ? rec.assignment_id : remediationOriginalTargets[0].assignment_id;
-        }
         return null;
     });
 
     const selectedOriginalTarget = useMemo(() => {
         if (!remediationOriginalTargets || remediationOriginalTargets.length === 0) return null;
         return (
-            remediationOriginalTargets.find((t) => t.assignment_id === selectedTargetId) ||
-            remediationOriginalTargets[0] ||
-            null
+            remediationOriginalTargets.find((t) => t.assignment_id === selectedTargetId) || null
         );
     }, [remediationOriginalTargets, selectedTargetId]);
 
@@ -157,8 +152,8 @@ export default function CreateClassworkQuizModal({
                     : "";
         const defaultTotalPoints = remediationOriginalExam
             ? String(remediationOriginalExam.total_points)
-            : (isGradedWWPT && remediationOriginalTargets && remediationOriginalTargets.length > 0)
-                ? String((remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) || remediationOriginalTargets.find((t) => t.is_recommended) || remediationOriginalTargets[0]).max_points)
+            : (isGradedWWPT && selectedOriginalTarget)
+                ? String(selectedOriginalTarget.max_points)
                 : emptyClassworkDraft.total_points;
         const defaultAttempts = (remediationGradeTreatment === "EXAMINATION" || isGradedWWPT)
             ? "1"
@@ -1271,6 +1266,7 @@ export default function CreateClassworkQuizModal({
                                         {createError === "Total points must be greater than zero." && <FormMessage id="quiz-total-points-error">{createError}</FormMessage>}
                                     </Field>
                                 </div>
+
                                 {remediationFocus && (
                                     <p className="rounded border p-3 text-sm">
                                         Evidence focus: {focusGuidance(remediationFocus)}
@@ -1816,13 +1812,13 @@ export default function CreateClassworkQuizModal({
 
                                     {quizSettings.summary_release_mode === "SCHEDULED" ? (
                                         <Field label="Release Date & Time" isRequired>
-                                            <Input
-                                                type="datetime-local"
+                                            <DatePicker
+                                                includeTime
                                                 value={quizSettings.summary_release_at}
-                                                onChange={(event) =>
+                                                onValueChange={(value) =>
                                                     setQuizSettings((current) => ({
                                                         ...current,
-                                                        summary_release_at: event.target.value,
+                                                        summary_release_at: value,
                                                     }))
                                                 }
                                                 disabled={isCreating}
@@ -1897,14 +1893,14 @@ export default function CreateClassworkQuizModal({
 
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <Field label="Due Date" isRequired={quizSettings.summary_release_mode === "AFTER_DUE_DATE"}>
-                                        <Input
-                                            type="datetime-local"
+                                        <DatePicker
+                                            includeTime
                                             value={draft.due_date}
-                                            onChange={(event) => {
-                                                if (event.target.value && createError.startsWith("A due date is required")) setCreateError("");
+                                            onValueChange={(value) => {
+                                                if (value && createError.startsWith("A due date is required")) setCreateError("");
                                                 setDraft((current) => ({
                                                     ...current,
-                                                    due_date: event.target.value,
+                                                    due_date: value,
                                                 }));
                                             }}
                                             disabled={isCreating}
@@ -1987,13 +1983,13 @@ export default function CreateClassworkQuizModal({
 
                                 <div className="grid gap-4 sm:grid-cols-2 mt-4">
                                     <Field label="Locked Until">
-                                        <Input
-                                            type="datetime-local"
+                                        <DatePicker
+                                            includeTime
                                             value={draft.lock_date}
-                                            onChange={(event) =>
+                                            onValueChange={(value) =>
                                                 setDraft((current) => ({
                                                     ...current,
-                                                    lock_date: event.target.value,
+                                                    lock_date: value,
                                                 }))
                                             }
                                             disabled={isCreating || !draft.is_published}

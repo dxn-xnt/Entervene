@@ -11,7 +11,6 @@ import { OverviewCard } from "@/components/overview-cards";
 import { ClassworkItemLine } from "@/components/item-line/classwork";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { isReadingType } from "@/lib/classwork-utils";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import type {
   StudentRecordDetailResponse,
 } from "@/lib/student-record-api";
@@ -468,28 +467,6 @@ export function TeacherStudentView({
                 </Breadcrumb.Item>
               </Breadcrumb.List>
             </Breadcrumb>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center justify-end">
-            {(student || studentDetail?.student) && subjectLoads && subjectLoads.length > 0 && (
-              <ManualSuggestionPanel
-                classId={Number(classId)}
-                student={
-                  student || {
-                    student_id: studentDetail?.student?.student_id || "",
-                    full_name: studentName,
-                    student_lrn: studentDetail?.student?.lrn || null,
-                    gender: studentDetail?.student?.gender || "",
-                    email: studentDetail?.student?.email || null,
-                    account_status: studentDetail?.student?.status || null,
-                    avatar_initial: studentName ? studentName.charAt(0) : "S",
-                  }
-                }
-                subjectLoads={subjectLoads}
-                displayMode="header"
-              />
-            )}
-
           </div>
         </header>
       </div>
