@@ -12,7 +12,10 @@ import {
   CheckSquare,
   ClipboardList,
   FileText,
+  HelpCircle,
   LockKeyhole,
+  Award,
+  RotateCcw,
   Shield,
   Timer,
 } from "lucide-react";
@@ -74,6 +77,7 @@ type StudentClassworkDetail = ClassworkDetail & {
 
 function statusLabel(status?: string | null): string {
   if (!status || status === "not_submitted_yet") return "Not submitted";
+  if (status === "pending") return "In progress";
   return status.replaceAll("_", " ");
 }
 
@@ -251,7 +255,7 @@ export default function StudentClassworkView() {
     searchParams.get("title") ||
     (detail?.subject_name ? `${detail.subject_name} Support` : "Support Details");
   const quizLink = quizPathWithContext(
-    routes.student.quizView.replace(":assignmentId", String(assignmentId)),
+    routes.student.quizTake.replace(":assignmentId", String(assignmentId)),
     `?from=${encodeURIComponent(`${location.pathname}${location.search}`)}`,
   );
   const back = () => navigate(returnPath);
@@ -785,6 +789,15 @@ export default function StudentClassworkView() {
                             ? "Your Submission"
                             : "Submit Your Work"}
                     </h2>
+                    {isQuiz && quiz && (
+                      <Badge
+                        variant={quiz.is_passed ? "success" : "outline"}
+                        size="sm"
+                        className="capitalize"
+                      >
+                        {quiz.is_passed ? "Passed" : statusLabel(quiz.status)}
+                      </Badge>
+                    )}
                     {!isQuiz && !isReading && submission?.status === "graded" &&
                       (submission.grade != null || detail.show_scores === false) && (
                       <Badge variant="success" size="md">
@@ -829,29 +842,58 @@ export default function StudentClassworkView() {
                         {quizError}
                       </p>
                     ) : quiz ? (
-                      <div className="space-y-3 text-sm">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="capitalize">
-                            Status: {quiz.is_passed ? "Passed" : statusLabel(quiz.status)}
-                          </span>
-                          {quiz.is_passed && (
-                            <Badge variant="success" size="sm">
-                              Passed
-                            </Badge>
-                          )}
+                      <div className="space-y-4 text-sm">
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                          <div className="flex min-w-0 items-center gap-3 rounded border-2 border-black bg-white p-3">
+                            <IconContainer variant="primary" size="sm" className="size-9 shrink-0 p-0">
+                              <HelpCircle size={18} />
+                            </IconContainer>
+                            <div className="min-w-0">
+                              <p className="text-lg font-bold leading-none">{quiz.questions.length}</p>
+                              <p className="mt-1 text-xs font-medium text-muted-foreground">
+                                {quiz.questions.length === 1 ? "Question" : "Questions"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex min-w-0 items-center gap-3 rounded border-2 border-black bg-white p-3">
+                            <IconContainer variant="primary" size="sm" className="size-9 shrink-0 p-0">
+                              <Timer size={18} />
+                            </IconContainer>
+                            <div className="min-w-0">
+                              <p className="text-lg font-bold leading-none">
+                                {quiz.duration_minutes ? `${quiz.duration_minutes}m` : "No limit"}
+                              </p>
+                              <p className="mt-1 text-xs font-medium text-muted-foreground">Time Limit</p>
+                            </div>
+                          </div>
+
+                          <div className="flex min-w-0 items-center gap-3 rounded border-2 border-black bg-white p-3">
+                            <IconContainer variant="primary" size="sm" className="size-9 shrink-0 p-0">
+                              <Award size={18} />
+                            </IconContainer>
+                            <div className="min-w-0">
+                              <p className="text-lg font-bold leading-none">
+                                {quiz.total_points ?? detail.total_points ?? 0}
+                              </p>
+                              <p className="mt-1 text-xs font-medium text-muted-foreground">Total Points</p>
+                            </div>
+                          </div>
+
+                          <div className="flex min-w-0 items-center gap-3 rounded border-2 border-black bg-white p-3">
+                            <IconContainer variant="primary" size="sm" className="size-9 shrink-0 p-0">
+                              <RotateCcw size={18} />
+                            </IconContainer>
+                            <div className="min-w-0">
+                              <p className="text-lg font-bold leading-none">
+                                {quiz.is_passed
+                                  ? `${quiz.attempts_used ?? quiz.attempt_count}`
+                                  : `${quiz.attempts_used ?? quiz.attempt_count}/${quiz.max_attempts}`}
+                              </p>
+                              <p className="mt-1 text-xs font-medium text-muted-foreground">Attempts Used</p>
+                            </div>
+                          </div>
                         </div>
-                        <p>
-                          {quiz.is_passed
-                            ? `Attempts used: ${quiz.attempts_used ?? quiz.attempt_count}`
-                            : `Attempts used: ${quiz.attempts_used ?? quiz.attempt_count} · Remaining: ${quiz.attempts_remaining ?? Math.max(0, quiz.max_attempts - quiz.attempt_count)} · Total: ${quiz.max_attempts}`}
-                        </p>
-                        <p>
-                          {quiz.questions.length} questions ·{" "}
-                          {quiz.total_points ?? detail.total_points ?? 0} points
-                        </p>
-                        {quiz.duration_minutes && (
-                          <p>{quiz.duration_minutes} minutes</p>
-                        )}
                         {(quiz.grade != null ||
                           (quiz.status === "graded" &&
                             (detail.show_scores === false ||
@@ -925,7 +967,7 @@ export default function StudentClassworkView() {
                               onClick={() => navigate(quizLink)}
                             >
                               {quiz.status === "pending"
-                                ? "Continue Quiz"
+                                ? "Resume Quiz"
                                 : quiz.status === "not_started"
                                   ? "Start Quiz"
                                   : "Retake Quiz"}
