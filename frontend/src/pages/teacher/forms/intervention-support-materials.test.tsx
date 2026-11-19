@@ -13,6 +13,10 @@ import type {
 import InterventionSupportMaterials, {
   type InterventionSupportMaterialsHandle,
 } from "./intervention-support-materials";
+import {
+  PracticeAssessmentApiError,
+  type PracticeAssessmentDetail,
+} from "@/lib/practice-assessment-api";
 
 const apiMocks = vi.hoisted(() => ({
   listSupportMaterials: vi.fn(),
@@ -28,11 +32,12 @@ const apiMocks = vi.hoisted(() => ({
   listTeacherPracticeAttempts: vi.fn(),
   getTeacherClasses: vi.fn(),
 }));
+const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 
 vi.mock("@/components/retroui/Toast", () => ({
   useToast: () => ({
-    success: vi.fn(),
-    error: vi.fn(),
+    success: toastMocks.success,
+    error: toastMocks.error,
   }),
 }));
 
@@ -40,10 +45,22 @@ vi.mock("@/lib/api", () => ({
   getTeacherClasses: apiMocks.getTeacherClasses,
 }));
 
-vi.mock("@/lib/practice-assessment-api", () => ({
-  getTeacherPracticeAssessment: apiMocks.getTeacherPracticeAssessment,
-  listTeacherPracticeAttempts: apiMocks.listTeacherPracticeAttempts,
+vi.mock("./create-classwork", () => ({
+  default: ({ onSuccess }: { onSuccess: (created: unknown) => void }) => (
+    <button onClick={() => onSuccess({ classwork_id: 303, title: "Newly Created Reading" })}>
+      Finish creating reading
+    </button>
+  ),
 }));
+
+vi.mock("@/lib/practice-assessment-api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/practice-assessment-api")>();
+  return {
+    ...actual,
+    getTeacherPracticeAssessment: apiMocks.getTeacherPracticeAssessment,
+    listTeacherPracticeAttempts: apiMocks.listTeacherPracticeAttempts,
+  };
+});
 
 vi.mock("@/lib/teacher-interventions-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/teacher-interventions-api")>();
@@ -603,5 +620,831 @@ describe("InterventionSupportMaterials progressive target selection and creation
     expect(await screen.findByText(/No unused eligible classwork has a positive possible improvement/i)).toBeDefined();
     expect(screen.queryByRole("button", { name: "Add Another Remediation Activity" })).toBeNull();
     expect(screen.queryByLabelText("New Remediation Activity")).toBeNull();
+  });
+});
+
+describe("InterventionSupportMaterials supporting resources", () => {
+  const recommendedReading = {
+    kind: "CLASSWORK" as const,
+    id: 301,
+    title: "Linear Equations Review",
+    description: "Review reading",
+    lesson: "Linear Equations",
+    topic: "Linear Equations",
+    attachments: [],
+    classwork_type: "READING",
+    access: "ALREADY_ACCESSIBLE" as const,
+    ai_read: "METADATA_ONLY" as const,
+    recommended: true,
+    match_reason: "Matched competency metadata: Solve linear equations",
+    match_level: "COMPETENCY" as const,
+    match_rank: 100,
+    is_graded: false,
+  };
+  const otherReading = {
+    ...recommendedReading,
+    id: 302,
+    title: "Number Sense Review",
+    lesson: "Number Sense",
+    topic: "Number Sense",
+    recommended: false,
+    match_reason: null,
+    match_level: null,
+    match_rank: 0,
+  };
+
+  it("shows recommendations unselected, then saves, removes, and reloads explicit selections", async () => {
+    const baseWorkspace = makeWorkspace([]);
+    let persistedWorkspace: RemediationWorkspace = {
+      ...baseWorkspace,
+      resources: [recommendedReading, otherReading],
+      plan: {
+        ...baseWorkspace.plan,
+        teacher_choice: "EXISTING_MATERIAL_ONLY",
+        grade_treatment: null,
+        target_assignment_ids: [],
+        selected_resources: [],
+      },
+      progress: {
+        ...baseWorkspace.progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    };
+    apiMocks.getRemediationWorkspace.mockImplementation(async () => persistedWorkspace);
+    apiMocks.saveRemediationPlan.mockImplementation(async (_id: number, payload) => {
+      persistedWorkspace = {
+        ...persistedWorkspace,
+        plan: {
+          ...persistedWorkspace.plan,
+          ...payload,
+          selected_resources: payload.selected_resources,
+        },
+      };
+      return persistedWorkspace;
+    });
+    const ref = createRef<InterventionSupportMaterialsHandle>();
+    const onChangesChange = vi.fn();
+
+    const first = render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          ref={ref}
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+          onChangesChange={onChangesChange}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Recommended Materials")).toBeDefined();
+    const recommendedCheckbox = screen.getByRole("checkbox", {
+      name: "Select Linear Equations Review",
+    });
+    expect(recommendedCheckbox.getAttribute("aria-checked")).toBe("false");
+    expect(apiMocks.saveRemediationPlan).not.toHaveBeenCalled();
+
+    fireEvent.click(recommendedCheckbox);
+    expect(recommendedCheckbox.getAttribute("aria-checked")).toBe("true");
+    await waitFor(() => expect(onChangesChange).toHaveBeenLastCalledWith(true));
+    const firstSave = await ref.current?.saveAdjustments();
+    expect(toastMocks.error).not.toHaveBeenCalled();
+    expect(firstSave).toBe(true);
+    expect(apiMocks.saveRemediationPlan).toHaveBeenLastCalledWith(
+      7,
+      expect.objectContaining({
+        selected_resources: [{ kind: "CLASSWORK", id: 301 }],
+      }),
+    );
+
+    first.unmount();
+    const reopenedRef = createRef<InterventionSupportMaterialsHandle>();
+    const reopenedChanges = vi.fn();
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          ref={reopenedRef}
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+          onChangesChange={reopenedChanges}
+        />
+      </MemoryRouter>,
+    );
+
+    const reopenedCheckbox = await screen.findByRole("checkbox", {
+      name: "Select Linear Equations Review",
+    });
+    expect(reopenedCheckbox.getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(reopenedCheckbox);
+    await waitFor(() => expect(reopenedChanges).toHaveBeenLastCalledWith(true));
+    await expect(reopenedRef.current?.saveAdjustments()).resolves.toBe(true);
+    expect(apiMocks.saveRemediationPlan).toHaveBeenLastCalledWith(
+      7,
+      expect.objectContaining({ selected_resources: [] }),
+    );
+    expect(persistedWorkspace.plan.selected_resources).toEqual([]);
+    expect(persistedWorkspace.plan.target_assignment_ids).toEqual([]);
+    expect(persistedWorkspace.plan.teacher_choice).toBe("EXISTING_MATERIAL_ONLY");
+    expect(persistedWorkspace.plan.grade_treatment).toBeNull();
+  });
+
+  it("saves a newly created reading as a strict resource reference", async () => {
+    const baseWorkspace = makeWorkspace([]);
+    const createdReading = {
+      ...recommendedReading,
+      id: 303,
+      title: "Newly Created Reading",
+      recommended: false,
+      match_reason: null,
+      match_level: null,
+      match_rank: 0,
+    };
+    let workspace: RemediationWorkspace = {
+      ...baseWorkspace,
+      resources: [recommendedReading],
+      plan: {
+        ...baseWorkspace.plan,
+        teacher_choice: "EXISTING_MATERIAL_ONLY",
+        grade_treatment: null,
+        target_assignment_ids: [],
+        selected_resources: [],
+      },
+      progress: {
+        ...baseWorkspace.progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    };
+    apiMocks.getRemediationWorkspace.mockImplementation(async () => workspace);
+    apiMocks.saveRemediationPlan.mockImplementation(async (_id: number, payload) => ({
+      ...workspace,
+      plan: { ...workspace.plan, ...payload },
+    }));
+    const ref = createRef<InterventionSupportMaterialsHandle>();
+    const onChangesChange = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          ref={ref}
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+          onChangesChange={onChangesChange}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add Additional Resources" }));
+    workspace = { ...workspace, resources: [recommendedReading, createdReading] };
+    fireEvent.click(await screen.findByRole("button", { name: "Finish creating reading" }));
+    await waitFor(() => expect(onChangesChange).toHaveBeenLastCalledWith(true));
+
+    await expect(ref.current?.saveAdjustments()).resolves.toBe(true);
+    expect(apiMocks.saveRemediationPlan).toHaveBeenLastCalledWith(
+      7,
+      expect.objectContaining({
+        selected_resources: [{ kind: "CLASSWORK", id: 303 }],
+      }),
+    );
+  });
+
+  it("shows recommended badges unselected and expands Browse Other Resources by default on open", async () => {
+    const baseWorkspace = makeWorkspace([]);
+    apiMocks.getRemediationWorkspace.mockResolvedValue({
+      ...baseWorkspace,
+      resources: [recommendedReading, otherReading],
+      plan: {
+        ...baseWorkspace.plan,
+        teacher_choice: null,
+        grade_treatment: null,
+        target_assignment_ids: [],
+        selected_resources: [],
+      },
+      progress: {
+        ...baseWorkspace.progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Recommended Materials")).toBeDefined();
+    const recRow = screen.getByRole("button", { name: "Open classwork: Linear Equations Review" });
+    expect(within(recRow).getByText("Recommended")).toBeDefined();
+    expect(
+      within(recRow)
+        .getByRole("checkbox", { name: "Select Linear Equations Review" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+
+    const browseTrigger = screen.getByRole("button", { name: "Browse Other Resources" });
+    expect(browseTrigger.getAttribute("aria-expanded")).toBe("true");
+
+    const otherRow = screen.getByRole("button", { name: "Open classwork: Number Sense Review" });
+    expect(within(otherRow).queryByText("Recommended")).toBeNull();
+    expect(
+      within(otherRow)
+        .getByRole("checkbox", { name: "Select Number Sense Review" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+
+    const searchInput = screen.getByLabelText("Search other resources");
+    fireEvent.change(searchInput, { target: { value: "Nonexistent" } });
+    expect(screen.queryByRole("button", { name: "Open classwork: Number Sense Review" })).toBeNull();
+    expect(screen.getByText("No matching readings")).toBeDefined();
+
+    fireEvent.change(searchInput, { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Open classwork: Number Sense Review" })).toBeDefined();
+  });
+
+  it("keeps Browse Other Resources expanded without fabricating Recommended badges when backend returns no recommended matches", async () => {
+    const baseWorkspace = makeWorkspace([]);
+    const nonRecommendedA = {
+      ...otherReading,
+      id: 311,
+      title: "Points and Lines Reading",
+    };
+    const nonRecommendedB = {
+      ...otherReading,
+      id: 312,
+      title: "Parallel Lines Reading",
+    };
+    apiMocks.getRemediationWorkspace.mockResolvedValue({
+      ...baseWorkspace,
+      focus: {
+        ...baseWorkspace.focus,
+        evidence_level: "COMPONENT_ONLY",
+        lesson_ids: [],
+        lessons: [],
+        competency_ids: [],
+        competencies: [],
+      },
+      resources: [nonRecommendedA, nonRecommendedB],
+      plan: {
+        ...baseWorkspace.plan,
+        teacher_choice: null,
+        grade_treatment: null,
+        target_assignment_ids: [],
+        selected_resources: [],
+      },
+      progress: {
+        ...baseWorkspace.progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+        />
+      </MemoryRouter>,
+    );
+
+    const browseTrigger = await screen.findByRole("button", { name: "Browse Other Resources" });
+    expect(browseTrigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByText("Recommended Materials")).toBeNull();
+    expect(screen.queryByText("Recommended")).toBeNull();
+    expect(screen.getByRole("button", { name: "Open classwork: Points and Lines Reading" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Open classwork: Parallel Lines Reading" })).toBeDefined();
+    expect(
+      screen.getByRole("checkbox", { name: "Select Points and Lines Reading" }).getAttribute("aria-checked"),
+    ).toBe("false");
+  });
+
+  it("shows the empty supporting readings state when no readings exist", async () => {
+    const baseWorkspace = makeWorkspace([]);
+    apiMocks.getRemediationWorkspace.mockResolvedValue({
+      ...baseWorkspace,
+      resources: [],
+      plan: {
+        ...baseWorkspace.plan,
+        teacher_choice: null,
+        grade_treatment: null,
+        target_assignment_ids: [],
+        selected_resources: [],
+      },
+      progress: {
+        ...baseWorkspace.progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("No supporting readings available")).toBeDefined();
+    expect(screen.queryByText("Recommended Materials")).toBeNull();
+    expect(screen.queryByText("Recommended")).toBeNull();
+  });
+
+  it("displays scored competency diagnosis when available and insufficient-evidence copy only for COMPONENT_ONLY", async () => {
+    const scoredWorkspace: RemediationWorkspace = {
+      ...makeWorkspace([]),
+      focus: {
+        ...makeWorkspace([]).focus,
+        evidence_level: "SCORED_COMPETENCY",
+        competency_ids: [7],
+        competencies: [{ id: 7, label: "Measurement and Geometry" }],
+      },
+      progress: {
+        ...makeWorkspace([]).progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    };
+    apiMocks.getRemediationWorkspace.mockResolvedValueOnce(scoredWorkspace);
+
+    const first = render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={baseDetail} page="overview" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Scored whole-activity competency evidence")).toBeDefined();
+    expect(screen.getByText(/Measurement and Geometry/)).toBeDefined();
+    expect(screen.queryByText(/No specific lesson or competency weakness can be identified/i)).toBeNull();
+    first.unmount();
+
+    apiMocks.getRemediationWorkspace.mockResolvedValueOnce({
+      ...scoredWorkspace,
+      focus: {
+        ...scoredWorkspace.focus,
+        evidence_level: "COMPONENT_ONLY",
+        lesson_ids: [],
+        lessons: [],
+        competency_ids: [],
+        competencies: [],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={baseDetail} page="overview" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Component-level evidence only")).toBeDefined();
+    expect(
+      screen.getByText(/No specific lesson or competency weakness can be identified from the available scored evidence\./i),
+    ).toBeDefined();
+  });
+});
+
+describe("InterventionSupportMaterials Practice Assessment loading", () => {
+  const savedPracticeAssessment: PracticeAssessmentDetail = {
+    practice_assessment_id: 21,
+    intervention_id: 7,
+    title: "Saved Practice Check",
+    status: "DRAFT",
+    gatekeeper_policy: "REQUIRE_PASS",
+    passing_percentage: 75,
+    version: 1,
+    questions: [],
+  };
+
+  const renderPracticeStep = () => render(
+    <MemoryRouter>
+      <InterventionSupportMaterials
+        detail={baseDetail}
+        page="plan"
+        wizardStep={2}
+      />
+    </MemoryRouter>,
+  );
+
+  it("displays a successfully loaded assessment", async () => {
+    apiMocks.getTeacherPracticeAssessment.mockResolvedValue(savedPracticeAssessment);
+
+    renderPracticeStep();
+
+    expect(await screen.findByText("Saved Practice Check")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Edit Practice Assessment" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Add Practice Assessment" })).toBeNull();
+  });
+
+  it("shows the empty creation state only for a genuine missing assessment", async () => {
+    apiMocks.getTeacherPracticeAssessment.mockResolvedValue(null);
+
+    renderPracticeStep();
+
+    expect(await screen.findByRole("button", { name: "Add Practice Assessment" })).toBeDefined();
+    expect(screen.queryByText("Unable to load Practice Assessment")).toBeNull();
+  });
+
+  it.each([
+    [new PracticeAssessmentApiError(500, "Database unavailable"), "service is unavailable"],
+    [new TypeError("Failed to fetch"), "Check your connection"],
+  ])("blocks assessment actions for a load failure", async (failure, expectedMessage) => {
+    apiMocks.getTeacherPracticeAssessment.mockRejectedValue(failure);
+
+    renderPracticeStep();
+
+    expect(await screen.findByText("Unable to load Practice Assessment")).toBeDefined();
+    expect(screen.getByText(new RegExp(expectedMessage, "i"))).toBeDefined();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Add Practice Assessment" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit Practice Assessment" })).toBeNull();
+  });
+
+  it("recovers after retrying a failed load", async () => {
+    apiMocks.getTeacherPracticeAssessment
+      .mockRejectedValueOnce(new PracticeAssessmentApiError(500, "Database unavailable"))
+      .mockResolvedValueOnce(savedPracticeAssessment);
+
+    renderPracticeStep();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Saved Practice Check")).toBeDefined();
+    expect(apiMocks.getTeacherPracticeAssessment).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Unable to load Practice Assessment")).toBeNull();
+  });
+});
+
+describe("InterventionSupportMaterials remediation activity integration regressions", () => {
+  const readingItem = {
+    kind: "CLASSWORK" as const,
+    id: 301,
+    title: "Linear Equations Review",
+    description: "Review reading",
+    lesson: "Linear Equations",
+    topic: "Linear Equations",
+    attachments: [],
+    classwork_type: "READING",
+    access: "ALREADY_ACCESSIBLE" as const,
+    ai_read: "METADATA_ONLY" as const,
+    recommended: true,
+    match_reason: "Matched competency metadata",
+    match_level: "COMPETENCY" as const,
+    match_rank: 100,
+    is_graded: false,
+  };
+
+  it("shows an inline error with Retry on workspace load failure instead of empty state and recovers on retry", async () => {
+    apiMocks.getRemediationWorkspace
+      .mockRejectedValueOnce(new Error("Workspace service unavailable"))
+      .mockResolvedValueOnce(makeWorkspace([101]));
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={3}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Unable to load support workspace")).toBeDefined();
+    expect(screen.getByText("Workspace service unavailable")).toBeDefined();
+    expect(screen.queryByText("No activity created yet")).toBeNull();
+    expect(apiMocks.generateRemediationAdvisory).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Remedial Quiz 1")).toBeDefined();
+    expect(screen.queryByText("Unable to load support workspace")).toBeNull();
+  });
+
+  it("triggers AI recommendation on Step 3 only without overwriting teacher choice or generating activities, and accepts EXISTING_MATERIAL_ONLY", async () => {
+    const emptyPlanWorkspace: RemediationWorkspace = {
+      ...makeWorkspace([]),
+      resources: [readingItem],
+      plan: {
+        teacher_choice: null,
+        grade_treatment: null,
+        target_assignment_ids: [],
+        score_adjustment_cap: 75,
+        selected_resources: [],
+        ai_suggestion: null,
+      },
+      progress: {
+        ...makeWorkspace([]).progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    };
+    apiMocks.getRemediationWorkspace.mockResolvedValue(emptyPlanWorkspace);
+    apiMocks.generateRemediationAdvisory.mockResolvedValue({
+      ...emptyPlanWorkspace,
+      plan: {
+        ...emptyPlanWorkspace.plan,
+        ai_suggestion: {
+          recommended_format: "QUIZ",
+          recommended_grade_treatment: "WRITTEN_WORK",
+          reason: "A short quiz supports the verified Written Work focus.",
+          focus: [],
+          evidence_used: {},
+        },
+      },
+    });
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Recommended Materials")).toBeDefined();
+    expect(apiMocks.generateRemediationAdvisory).not.toHaveBeenCalled();
+
+    rerender(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={3}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText("A short quiz supports the verified Written Work focus.")
+    ).toBeDefined();
+    expect(apiMocks.generateRemediationAdvisory).toHaveBeenCalledTimes(1);
+    expect(apiMocks.generateRemediationDraft).not.toHaveBeenCalled();
+    expect(screen.getByRole("radio", { name: /Quiz/i }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("radio", { name: /Classwork/i }).getAttribute("aria-checked")).toBe("false");
+
+    cleanup();
+    vi.clearAllMocks();
+    apiMocks.listSupportMaterials.mockResolvedValue({ items: [], total: 0 });
+    apiMocks.getTeacherPracticeAssessment.mockResolvedValue(null);
+    apiMocks.listTeacherPracticeAttempts.mockResolvedValue([]);
+    apiMocks.getTeacherClasses.mockResolvedValue([]);
+    apiMocks.getRemediationWorkspace.mockResolvedValue({
+      ...emptyPlanWorkspace,
+      plan: {
+        ...emptyPlanWorkspace.plan,
+        ai_suggestion: {
+          recommended_format: "EXISTING_MATERIAL_ONLY",
+          recommended_grade_treatment: null,
+          reason: "Existing reading materials support the verified Written Work focus.",
+          focus: [],
+          evidence_used: {},
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={3}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText("Existing reading materials support the verified Written Work focus.")
+    ).toBeDefined();
+    expect(screen.queryByText(/No supported remediation recommendation/i)).toBeNull();
+    expect(apiMocks.generateRemediationAdvisory).not.toHaveBeenCalled();
+  });
+
+  it("saves Step 1 reading selections via readingsOnly even when Activity 1 is graded and canAddAnother is true", async () => {
+    const workspaceWithReading: RemediationWorkspace = {
+      ...makeWorkspace([101]),
+      resources: [readingItem],
+    };
+    apiMocks.getRemediationWorkspace.mockResolvedValue(workspaceWithReading);
+    apiMocks.saveRemediationPlan.mockImplementation(async (_id, payload) => ({
+      ...workspaceWithReading,
+      plan: {
+        ...workspaceWithReading.plan,
+        ...payload,
+      },
+    }));
+
+    const ref = createRef<InterventionSupportMaterialsHandle>();
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          ref={ref}
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+        />
+      </MemoryRouter>
+    );
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Select Linear Equations Review",
+    });
+    fireEvent.click(checkbox);
+
+    const saved = await ref.current?.saveAdjustments({ readingsOnly: true });
+    expect(saved).toBe(true);
+    expect(toastMocks.error).not.toHaveBeenCalled();
+    expect(apiMocks.saveRemediationPlan).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        selected_resources: [{ kind: "CLASSWORK", id: 301 }],
+      }),
+    );
+  });
+
+  it("preserves saved PRACTICE_ONLY grade treatment on reopen without marking changes dirty", async () => {
+    const practiceWorkspace: RemediationWorkspace = {
+      ...makeWorkspace([]),
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "PRACTICE_ONLY",
+        target_assignment_ids: [],
+        score_adjustment_cap: 75,
+        selected_resources: [],
+        ai_suggestion: null,
+      },
+      progress: {
+        ...makeWorkspace([]).progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    };
+    apiMocks.getRemediationWorkspace.mockResolvedValue(practiceWorkspace);
+    const onChangesChange = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={3}
+          onChangesChange={onChangesChange}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Ungraded Activity")).toBeDefined();
+    expect(onChangesChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("uses the selected original exam subtype, omits unfiltered focus competency/question IDs, clears stale draft on failure, and retries save with the same request ID", async () => {
+    const examDetail: TeacherInterventionDetail = {
+      ...baseDetail,
+      diagnosis_summary: { weakest_supported_components: ["EXAMINATION"] },
+      diagnosis_snapshot: {
+        weakest_supported_components: ["EXAMINATION"],
+        supporting_activities: [
+          {
+            classwork_id: 50,
+            classwork_assignment_id: 201,
+            title: "Summative 1",
+            component: "EXAMINATION",
+            score: 20,
+            possible_score: 50,
+            percent: 40,
+          },
+          {
+            classwork_id: 51,
+            classwork_assignment_id: 202,
+            title: "Summative 2",
+            component: "EXAMINATION",
+            score: 20,
+            possible_score: 50,
+            percent: 40,
+          },
+        ],
+      },
+    };
+    const examWorkspace: RemediationWorkspace = {
+      ...makeWorkspace([202]),
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "EXAMINATION",
+        original_exam_assignment_id: 202,
+        target_assignment_ids: [202],
+        score_adjustment_cap: 75,
+        selected_resources: [],
+        ai_suggestion: null,
+      },
+      focus: {
+        ...makeWorkspace().focus,
+        component: "EXAMINATION",
+        exam_subtype: null,
+        exam_subtype_requires_confirmation: true,
+        competency_ids: [999],
+        question_evidence: [{ quiz_question_id: 888, score: 0, possible_score: 5 }],
+      },
+      original_exams: [
+        { assignment_id: 201, title: "Summative 1", subtype: "SUMMATIVE_1", score: 20, total_points: 50 },
+        { assignment_id: 202, title: "Summative 2", subtype: "SUMMATIVE_2", score: 20, total_points: 50 },
+      ],
+      progress: {
+        ...makeWorkspace().progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+      score_previews: [],
+    };
+    const examDraft: RemediationQuizDraft = {
+      ...mockDraft,
+      target_component: "EXAMINATION",
+      grade_treatment: "EXAMINATION",
+      exam_subtype: "SUMMATIVE_2",
+      total_points: 50,
+      questions: [{ ...mockDraft.questions[0], points: 50 }],
+    };
+
+    apiMocks.getRemediationWorkspace.mockResolvedValue(examWorkspace);
+    apiMocks.generateRemediationDraft
+      .mockResolvedValueOnce(examDraft)
+      .mockRejectedValueOnce(new Error("Temporary AI error"))
+      .mockResolvedValueOnce(examDraft);
+    apiMocks.createRemediationAssessment
+      .mockRejectedValueOnce(new Error("Network timeout"))
+      .mockResolvedValueOnce({
+        remediation_request_id: "req-exam",
+        intervention_id: 7,
+        classwork_id: 701,
+        classwork_assignment_id: 801,
+        quiz_id: 901,
+        draft_format: "QUIZ",
+        grade_treatment: "EXAMINATION",
+        is_published: false,
+      });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={examDetail}
+          page="plan"
+          wizardStep={3}
+        />
+      </MemoryRouter>
+    );
+
+    const generateBtn = await screen.findByRole("button", { name: /Generate with AI/i });
+    fireEvent.click(generateBtn);
+
+    await waitFor(() => {
+      expect(apiMocks.generateRemediationDraft).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          draft_format: "QUIZ",
+          target_component: "EXAMINATION",
+          grade_treatment: "EXAMINATION",
+          exam_subtype: "SUMMATIVE_2",
+          target_assignment_id: 202,
+          total_points: 50,
+        }),
+      );
+    });
+    const genPayload = apiMocks.generateRemediationDraft.mock.calls[0][1];
+    expect(genPayload.selected_competency_ids).toBeUndefined();
+    expect(genPayload.selected_quiz_question_ids).toBeUndefined();
+
+    // Closing preview before saving and failing a regeneration clears the stale draft
+    await screen.findByRole("button", { name: /Save Assessment Draft/i });
+    fireEvent.click(screen.getByRole("button", { name: /Close Preview/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+    expect(await screen.findByText("Temporary AI error")).toBeDefined();
+    expect(screen.queryByRole("button", { name: /Edit Draft/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /Save Assessment Draft/i }).hasAttribute("disabled")).toBe(true);
+
+    // Retry generation succeeds; then first save fails transiently and retry reuses same remediation_request_id
+    fireEvent.click(screen.getByRole("button", { name: /Retry Generation/i }));
+    const saveDraftBtn = await screen.findByRole("button", { name: /Save Assessment Draft/i });
+    await waitFor(() => expect(saveDraftBtn.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(saveDraftBtn);
+    expect(await screen.findByText("Network timeout")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /Save Assessment Draft/i }));
+    await waitFor(() => expect(apiMocks.createRemediationAssessment).toHaveBeenCalledTimes(2));
+    expect(apiMocks.createRemediationAssessment.mock.calls[0][1]).toBe(
+      apiMocks.createRemediationAssessment.mock.calls[1][1]
+    );
+    expect(await screen.findByText("Assessment draft saved")).toBeDefined();
   });
 });

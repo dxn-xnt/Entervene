@@ -23,6 +23,7 @@ from app.services.classwork.ClassworkShared import assignment_is_available, assi
 from app.models.intervention.Intervention import Intervention
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.ai import Provider
+from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
 from app.services.intervention.InterventionReviewerGenerationService import build_grounding
 from app.services.intervention.InterventionSupportMaterialService import _basis
 from app.services.intervention.TeacherInterventionService import _eligible_scope, _source
@@ -173,7 +174,7 @@ def _row(db: Session, staff_id: str, intervention_id: int) -> Intervention:
 
 def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
     result = []
-    focus = build_remediation_focus(row)
+    focus = build_remediation_focus(row, db=db)
 
     # Supporting Resources are genuine, non-graded READING classworks only (Lessons are not supporting resources).
     classworks = db.query(Classwork).filter(
@@ -371,12 +372,22 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     if cap is None:
         cap = float(DEFAULT_REMEDIATION_CAP_PERCENTAGE)
 
+    focus = build_remediation_focus(row, db=db)
+    cached_suggestion = stored_plan.get("ai_suggestion")
+    if (
+        isinstance(cached_suggestion, dict)
+        and isinstance(cached_suggestion.get("evidence_used"), dict)
+        and cached_suggestion["evidence_used"].get("has_scored_competency_evidence") is False
+        and focus.get("evidence_level") in {"QUESTION_SCORE", "SCORED_COMPETENCY"}
+    ):
+        cached_suggestion = None
+
     plan_data = {
         "grade_treatment": None,
         "teacher_choice": None,
         "selected_resources": [],
-        "ai_suggestion": None,
         **stored_plan,
+        "ai_suggestion": cached_suggestion,
         "original_exam_assignment_id": orig_exam,
         "target_assignment_ids": target_ids,
         "score_adjustment_cap": cap,
@@ -387,7 +398,7 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     eligibility = resolve_remediation_generation_eligibility(db, row)
     eligibility.pop("scope", None)
     return {"plan": plan_data,
-            "resources": resources(db, row, staff_id), "focus": build_remediation_focus(row),
+            "resources": resources(db, row, staff_id), "focus": focus,
             "generation_eligibility": eligibility,
             "original_exams": original_exams(db, row),
             "progress": progress(db, row),
@@ -644,9 +655,9 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
                 )
 
     if requested_treatment == "EXAMINATION":
-        if not target_ids and body.original_exam_assignment_id is None:
+        if requested_exam_id is None:
             raise HTTPException(422, "Select a scored original Examination in this student scope")
-        if body.original_exam_assignment_id is not None and body.original_exam_assignment_id not in {
+        if requested_exam_id not in {
             exam["assignment_id"] for exam in original_exams(db, row)
         }:
             raise HTTPException(422, "Select a scored original Examination in this student scope")
@@ -735,7 +746,7 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         "target_assignment_ids": target_ids,
         "score_adjustment_cap": resolved_cap,
         "selected_resources": [ref.model_dump() for ref in body.selected_resources],
-        "evidence_basis": _basis(row),
+        "evidence_basis": _basis(row, diagnosis_override=effective_diagnosis_snapshot(db, row)),
     })
     row.remediation_plan = plan
     db.commit()
@@ -746,23 +757,36 @@ async def generate_advisory(db: Session, staff_id: str, intervention_id: int) ->
     row = _row(db, staff_id, intervention_id)
     if not settings.groq_api_key and not settings.gemini_api_key:
         raise HTTPException(503, "AI service is not configured for remediation advice")
-    grounding = build_grounding(row, _source(db, row))
-    focus = build_remediation_focus(row)
+    effective_diagnosis = effective_diagnosis_snapshot(db, row)
+    grounding = build_grounding(row, _source(db, row), db=db)
+    focus = build_remediation_focus(row, db=db)
     exams = original_exams(db, row)
     options = _advisory_options(focus, exams, bool(resources(db, row, staff_id)))
+    weakest_activity_types = sorted({
+        str(item["classwork_type"])
+        for item in grounding["supporting_scored_activities"]
+        if item.get("component") == focus.get("component") and item.get("classwork_type")
+    })
+    evidence_payload = {
+        **grounding,
+        "weakest_component_activity_types": weakest_activity_types,
+    }
     system = ("You advise a teacher on a remediation format and grade treatment. Return only JSON with "
               "recommended_format, recommended_grade_treatment, and reason. Choose one exact pair from eligible_recommendations. "
               "TOS is teacher planning only and is never a student remediation recommendation. Advisory only. "
               "Use only the supplied facts. Question scores support missed concepts; scored competencies support measured weakness. "
               "Activity totals plus coverage allow review suggestions but never prove each covered topic weak. "
               "Component-only evidence supports only component-level advice. "
+              "When both QUIZ and CLASSWORK are eligible for WRITTEN_WORK, weigh the weak supporting activity types and evidence: "
+              "prefer QUIZ when the weak Written Work evidence comes from quizzes or targeted concept-check items, "
+              "and prefer CLASSWORK when the weak Written Work evidence comes from written assignments/activities or calls for guided step-by-step written practice. "
               "Do not select or invent an examination slot, subtype, question, task, lesson, or competency. "
               "Keep reason short and format-level. Refer only to the verified grading component and evidence level. "
               "Do not name a lesson or competency unless it appears under measured_scored_competencies. "
               "When evidence is coverage-only or component-only, do not claim a topic weakness. "
-              "Prefer neutral wording such as 'supports the verified Performance Task focus'.")
+              "Prefer neutral wording such as 'supports the verified Written Work focus'.")
     raw = await Provider.generate_text(json.dumps({
-                                           "evidence": grounding,
+                                           "evidence": evidence_payload,
                                            "deterministic_focus": focus,
                                            "eligible_recommendations": options,
                                        }),
@@ -783,11 +807,11 @@ async def generate_advisory(db: Session, staff_id: str, intervention_id: int) ->
     plan["ai_suggestion"] = {
         **advice.model_dump(),
         "focus": grounding["measured_scored_competencies"],
-        "evidence_used": _basis(row),
+        "evidence_used": _basis(row, diagnosis_override=effective_diagnosis),
     }
     plan.setdefault("teacher_choice", None)
     plan.setdefault("selected_resources", [])
-    plan["evidence_basis"] = _basis(row)
+    plan["evidence_basis"] = _basis(row, diagnosis_override=effective_diagnosis)
     row.remediation_plan = plan
     db.commit()
     return get_workspace(db, staff_id, intervention_id)

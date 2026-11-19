@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   initializeTeacherPracticeAssessment: vi.fn(),
   updateTeacherPracticeAssessment: vi.fn(),
   batchSavePracticeQuestions: vi.fn(),
+  saveTeacherPracticeAssessment: vi.fn(),
   generatePracticeQuestionsAI: vi.fn(),
   importPracticeQuestionsPreview: vi.fn(),
   listTeacherPracticeAttempts: vi.fn(),
@@ -154,7 +155,7 @@ describe("PracticeAssessmentModal AI draft generation", () => {
   it("persists the approved assessment only when Save Draft is clicked", async () => {
     const questions = generatedQuestions("Approved");
     api.generatePracticeQuestionsAI.mockResolvedValue(questions);
-    api.initializeTeacherPracticeAssessment.mockResolvedValue({
+    api.saveTeacherPracticeAssessment.mockResolvedValue({
       practice_assessment_id: 91,
       intervention_id: 46,
       title: "Practice Assessment",
@@ -165,7 +166,6 @@ describe("PracticeAssessmentModal AI draft generation", () => {
       version: 1,
       questions: [],
     });
-    api.batchSavePracticeQuestions.mockResolvedValue(questions);
     render(
       <PracticeAssessmentModal
         isOpen
@@ -180,8 +180,138 @@ describe("PracticeAssessmentModal AI draft generation", () => {
     expect(api.initializeTeacherPracticeAssessment).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
-    await waitFor(() => expect(api.initializeTeacherPracticeAssessment).toHaveBeenCalledTimes(1));
-    expect(api.batchSavePracticeQuestions).toHaveBeenCalledWith(46, questions);
+    await waitFor(() => expect(api.saveTeacherPracticeAssessment).toHaveBeenCalledTimes(1));
+    expect(api.saveTeacherPracticeAssessment).toHaveBeenCalledWith(46, {
+      title: "Practice Assessment",
+      passing_percentage: 75,
+      gatekeeper_policy: "REQUIRE_PASS",
+      questions,
+      publish: false,
+    });
+  });
+
+  it("synchronizes edits, deletions, and ordering on repeated saves and reopen", async () => {
+    let persistedQuestions = generatedQuestions("Original", 3);
+    const assessment = () => ({
+      practice_assessment_id: 92,
+      intervention_id: 47,
+      title: "Practice Assessment",
+      status: "DRAFT",
+      gatekeeper_policy: "REQUIRE_PASS",
+      passing_percentage: 75,
+      shuffle_options: true,
+      version: 1,
+      questions: persistedQuestions,
+    });
+    api.getTeacherPracticeAssessment.mockImplementation(async () => assessment());
+    api.saveTeacherPracticeAssessment.mockImplementation(
+      async (_interventionId, payload: { questions?: PracticeQuestionDraft[] }) => {
+        const questions = payload.questions || persistedQuestions;
+        persistedQuestions = questions.map((question, index) => ({
+          ...question,
+          display_order: index + 1,
+        }));
+        return assessment();
+      },
+    );
+
+    const { rerender } = render(
+      <PracticeAssessmentModal
+        isOpen
+        onClose={vi.fn()}
+        interventionId={47}
+        selectedReadingIds={[11]}
+      />,
+    );
+
+    const initialPrompts = await screen.findAllByPlaceholderText("Enter the question prompt...");
+    expect(initialPrompts).toHaveLength(3);
+    fireEvent.change(initialPrompts[0], { target: { value: "Edited first question" } });
+    fireEvent.click(screen.getAllByTitle("Delete Question")[1]);
+    fireEvent.click(screen.getAllByTitle("Move Down")[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+    await waitFor(() => expect(api.saveTeacherPracticeAssessment).toHaveBeenCalledTimes(1));
+    expect(api.saveTeacherPracticeAssessment).toHaveBeenLastCalledWith(
+      47,
+      expect.objectContaining({
+        questions: expect.arrayContaining([
+          expect.objectContaining({ question_text: "Original question 3" }),
+          expect.objectContaining({ question_text: "Edited first question" }),
+        ]),
+        publish: false,
+      }),
+    );
+    expect(persistedQuestions.map((question) => question.question_text)).toEqual([
+      "Original question 3",
+      "Edited first question",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+    await waitFor(() => expect(api.saveTeacherPracticeAssessment).toHaveBeenCalledTimes(2));
+    expect(persistedQuestions).toHaveLength(2);
+
+    rerender(
+      <PracticeAssessmentModal
+        isOpen={false}
+        onClose={vi.fn()}
+        interventionId={47}
+        selectedReadingIds={[11]}
+      />,
+    );
+    rerender(
+      <PracticeAssessmentModal
+        isOpen
+        onClose={vi.fn()}
+        interventionId={47}
+        selectedReadingIds={[11]}
+      />,
+    );
+
+    const reopenedPrompts = await screen.findAllByPlaceholderText("Enter the question prompt...");
+    expect(reopenedPrompts).toHaveLength(2);
+    expect(reopenedPrompts.map((input) => (input as HTMLTextAreaElement).value)).toEqual([
+      "Original question 3",
+      "Edited first question",
+    ]);
+  });
+
+  it("publishes settings and questions with one atomic request", async () => {
+    const questions = generatedQuestions("Publish", 2);
+    const draft = {
+      practice_assessment_id: 95,
+      intervention_id: 50,
+      title: "Draft assessment",
+      status: "DRAFT",
+      gatekeeper_policy: "REQUIRE_PASS",
+      passing_percentage: 75,
+      version: 1,
+      questions,
+    };
+    api.getTeacherPracticeAssessment.mockResolvedValue(draft);
+    api.saveTeacherPracticeAssessment.mockResolvedValue({ ...draft, status: "PUBLISHED" });
+
+    render(
+      <PracticeAssessmentModal
+        isOpen
+        onClose={vi.fn()}
+        interventionId={50}
+        selectedReadingIds={[11]}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Publish Assessment" }));
+    await waitFor(() => expect(api.saveTeacherPracticeAssessment).toHaveBeenCalledTimes(1));
+    expect(api.saveTeacherPracticeAssessment).toHaveBeenCalledWith(50, {
+      title: "Draft assessment",
+      passing_percentage: 75,
+      gatekeeper_policy: "REQUIRE_PASS",
+      questions,
+      publish: true,
+    });
+    expect(api.updateTeacherPracticeAssessment).not.toHaveBeenCalled();
+    expect(api.batchSavePracticeQuestions).not.toHaveBeenCalled();
+    expect(api.publishTeacherPracticeAssessment).not.toHaveBeenCalled();
   });
 
   it("warns and blocks saving when selected readings change after generation", async () => {
@@ -209,7 +339,130 @@ describe("PracticeAssessmentModal AI draft generation", () => {
     expect(await screen.findByText("Reading materials changed")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
     expect(await screen.findByText(/Regenerate the questions before saving this draft/i)).toBeDefined();
-    expect(api.initializeTeacherPracticeAssessment).not.toHaveBeenCalled();
-    expect(api.batchSavePracticeQuestions).not.toHaveBeenCalled();
+    expect(api.saveTeacherPracticeAssessment).not.toHaveBeenCalled();
+  });
+
+  it("tracks manual settings and question changes and offers continue or discard", async () => {
+    const originalQuestions = generatedQuestions("Original", 3);
+    api.getTeacherPracticeAssessment.mockResolvedValue({
+      practice_assessment_id: 93,
+      intervention_id: 48,
+      title: "Original Assessment",
+      status: "DRAFT",
+      gatekeeper_policy: "REQUIRE_PASS",
+      passing_percentage: 75,
+      shuffle_options: true,
+      version: 1,
+      questions: originalQuestions,
+    });
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <PracticeAssessmentModal
+        isOpen
+        onClose={onClose}
+        interventionId={48}
+        selectedReadingIds={[11]}
+      />,
+    );
+
+    fireEvent.change(await screen.findByLabelText("Assessment Title"), {
+      target: { value: "Teacher Edited Assessment" },
+    });
+    fireEvent.change(screen.getByLabelText(/Passing Percentage/i), {
+      target: { value: "82" },
+    });
+    fireEvent.click(screen.getByText("Optional Practice"));
+    const prompts = screen.getAllByPlaceholderText("Enter the question prompt...");
+    fireEvent.change(prompts[0], { target: { value: "Teacher edited question" } });
+    fireEvent.click(screen.getByRole("button", { name: /Add True \/ False/i }));
+    fireEvent.click(screen.getAllByTitle("Delete Question")[1]);
+    fireEvent.click(screen.getAllByTitle("Move Down")[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByText("Unsaved Practice Assessment Changes")).toBeDefined();
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue Editing" }));
+    expect(screen.queryByText("Unsaved Practice Assessment Changes")).toBeNull();
+    expect((screen.getByLabelText("Assessment Title") as HTMLInputElement).value).toBe(
+      "Teacher Edited Assessment",
+    );
+    expect(screen.getByDisplayValue("Teacher edited question")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard Changes" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <PracticeAssessmentModal
+        isOpen={false}
+        onClose={onClose}
+        interventionId={48}
+        selectedReadingIds={[11]}
+      />,
+    );
+    rerender(
+      <PracticeAssessmentModal
+        isOpen
+        onClose={onClose}
+        interventionId={48}
+        selectedReadingIds={[11]}
+      />,
+    );
+
+    await waitFor(() => expect(api.getTeacherPracticeAssessment).toHaveBeenCalledTimes(2));
+    expect((await screen.findByLabelText("Assessment Title") as HTMLInputElement).value).toBe(
+      "Original Assessment",
+    );
+    expect(screen.getAllByPlaceholderText("Enter the question prompt...")).toHaveLength(3);
+  });
+
+  it("keeps edits after a failed prompt save and clears dirty state after success", async () => {
+    const questions = generatedQuestions("Saved", 2);
+    const persisted = {
+      practice_assessment_id: 94,
+      intervention_id: 49,
+      title: "Original Assessment",
+      status: "DRAFT",
+      gatekeeper_policy: "REQUIRE_PASS",
+      passing_percentage: 75,
+      shuffle_options: true,
+      version: 1,
+      questions,
+    };
+    api.getTeacherPracticeAssessment.mockResolvedValue(persisted);
+    api.saveTeacherPracticeAssessment
+      .mockRejectedValueOnce(new Error("Save unavailable"))
+      .mockResolvedValueOnce({ ...persisted, title: "Edited Assessment" });
+    const onClose = vi.fn();
+    render(
+      <PracticeAssessmentModal
+        isOpen
+        onClose={onClose}
+        interventionId={49}
+        selectedReadingIds={[11]}
+      />,
+    );
+
+    fireEvent.change(await screen.findByLabelText("Assessment Title"), {
+      target: { value: "Edited Assessment" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save Changes" }));
+
+    expect(await screen.findByText("Save unavailable")).toBeDefined();
+    expect(screen.getByText("Unsaved Practice Assessment Changes")).toBeDefined();
+    expect((screen.getByLabelText("Assessment Title") as HTMLInputElement).value).toBe(
+      "Edited Assessment",
+    );
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(api.saveTeacherPracticeAssessment).toHaveBeenCalledWith(49, expect.objectContaining({
+      title: "Edited Assessment",
+      questions,
+      publish: false,
+    }));
   });
 });

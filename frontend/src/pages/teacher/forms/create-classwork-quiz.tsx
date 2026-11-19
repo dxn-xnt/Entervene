@@ -606,12 +606,16 @@ export default function CreateClassworkQuizModal({
             setCreateStep("quiz");
             return;
         }
-        setSelectedClassIds((current) => {
-            const validIds = new Set(
-                selectedSubjectLoads.map((load) => load.class_id),
-            );
-            return current.filter((id) => validIds.has(id));
-        });
+        if (remediationTarget) {
+            setSelectedClassIds([remediationTarget.class_id]);
+        } else {
+            setSelectedClassIds((current) => {
+                const validIds = new Set(
+                    selectedSubjectLoads.map((load) => load.class_id),
+                );
+                return current.filter((id) => validIds.has(id));
+            });
+        }
         setCreateError("");
         setCreateStep("assign");
     };
@@ -867,8 +871,11 @@ export default function CreateClassworkQuizModal({
                     l.subject_id === Number(draft.subject_id) &&
                     selectedClassIds.includes(l.class_id),
             );
-            if (selectedLoad?.academic_period_id) {
-                formData.append("academic_period_id", String(selectedLoad.academic_period_id));
+            const academicPeriodId =
+                remediationTarget?.academic_period_id ??
+                selectedLoad?.academic_period_id;
+            if (academicPeriodId) {
+                formData.append("academic_period_id", String(academicPeriodId));
             }
 
             const createResponse = await apiFetch(
@@ -889,7 +896,13 @@ export default function CreateClassworkQuizModal({
                     ).join("; ");
                     throw new Error(msgs || "Validation error");
                 }
-                throw new Error(typeof detail === "string" ? detail : "Unable to create quiz.");
+                throw new Error(
+                    typeof detail === "string"
+                        ? detail
+                        : detail && typeof detail === "object" && typeof detail.message === "string"
+                            ? detail.message
+                            : "Unable to create quiz.",
+                );
             }
 
             await createResponse.json();

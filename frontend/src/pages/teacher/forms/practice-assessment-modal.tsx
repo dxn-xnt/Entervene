@@ -32,17 +32,15 @@ import {
   type PracticeGatekeeperPolicy,
   type PracticeQuestionDraft,
   type PracticeQuestionType,
-  batchSavePracticeQuestions,
   generatePracticeQuestionsAI,
   getTeacherPracticeAssessment,
   importPracticeQuestionsPreview,
-  initializeTeacherPracticeAssessment,
   listTeacherPracticeAttempts,
-  publishTeacherPracticeAssessment,
+  saveTeacherPracticeAssessment,
   archiveTeacherPracticeAssessment,
-  updateTeacherPracticeAssessment,
 } from "@/lib/practice-assessment-api";
 import { getRemediationWorkspace } from "@/lib/teacher-interventions-api";
+import { formSnapshot } from "@/lib/form-changes";
 
 interface PracticeAssessmentModalProps {
   isOpen: boolean;
@@ -79,6 +77,30 @@ const POLICY_OPTIONS: Array<{
     },
   ];
 
+const practiceAssessmentDraftSnapshot = (
+  title: string,
+  passingPercentage: number,
+  gatekeeperPolicy: PracticeGatekeeperPolicy,
+  questions: PracticeQuestionDraft[],
+) => formSnapshot({
+  title: title.trim() || "Practice Assessment",
+  passing_percentage: passingPercentage,
+  gatekeeper_policy: gatekeeperPolicy,
+  questions: questions.map((question, questionIndex) => ({
+    question_text: question.question_text.trim(),
+    question_type: question.question_type,
+    points: Number(question.points),
+    explanation: question.explanation?.trim() || null,
+    display_order: questionIndex + 1,
+    is_ai_generated: question.is_ai_generated ?? false,
+    options: question.options.map((option, optionIndex) => ({
+      option_text: option.option_text.trim(),
+      is_correct: option.is_correct,
+      option_order: optionIndex + 1,
+    })),
+  })),
+});
+
 export default function PracticeAssessmentModal({
   isOpen,
   onClose,
@@ -91,7 +113,7 @@ export default function PracticeAssessmentModal({
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadedInterventionRef = useRef<number | null>(null);
-  const hasLocalDraftRef = useRef(false);
+  const hasUnsavedChangesRef = useRef(false);
 
   const [loadedReadingIds, setLoadedReadingIds] = useState<number[]>([]);
   const effectiveApprovedReadings = selectedReadingIds ?? savedReadingIds ?? loadedReadingIds;
@@ -106,6 +128,7 @@ export default function PracticeAssessmentModal({
   const [gatekeeperPolicy, setGatekeeperPolicy] = useState<PracticeGatekeeperPolicy>("REQUIRE_PASS");
   const [questions, setQuestions] = useState<PracticeQuestionDraft[]>([]);
   const [attempts, setAttempts] = useState<PracticeAttemptSummary[]>([]);
+  const [savedDraftSnapshot, setSavedDraftSnapshot] = useState<string | null>(null);
 
   // UI state
   const [isLoading, setIsLoading] = useState(false);
@@ -114,6 +137,7 @@ export default function PracticeAssessmentModal({
   const [isArchiving, setIsArchiving] = useState(false);
   const [activeTab, setActiveTab] = useState<"questions" | "attempts">("questions");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false);
 
   // AI Generation Drawer State
   const [showAiDrawer, setShowAiDrawer] = useState(false);
@@ -130,16 +154,25 @@ export default function PracticeAssessmentModal({
   const isLocked = attempts.length > 0;
   const generatedSourcesAreStale =
     generatedSourceSignature !== null && generatedSourceSignature !== currentReadingSignature;
+  const currentDraftSnapshot = practiceAssessmentDraftSnapshot(
+    title,
+    passingPercentage,
+    gatekeeperPolicy,
+    questions,
+  );
+  const hasUnsavedChanges = savedDraftSnapshot !== null && currentDraftSnapshot !== savedDraftSnapshot;
+  hasUnsavedChangesRef.current = hasUnsavedChanges;
+  const shouldLoadReadingsFromWorkspace = selectedReadingIds == null && savedReadingIds == null;
 
   // Load existing assessment and attempts
   useEffect(() => {
     if (!isOpen) return;
 
-    // Keep an unsaved generated/imported draft when the teacher briefly closes
-    // this modal or moves between intervention wizard steps.
+    // A parent workflow can temporarily hide this editor without using its
+    // close controls. Never replace a local teacher draft in that case.
     if (
       loadedInterventionRef.current === interventionId &&
-      hasLocalDraftRef.current
+      hasUnsavedChangesRef.current
     ) {
       return;
     }
@@ -153,7 +186,6 @@ export default function PracticeAssessmentModal({
         const existing = await getTeacherPracticeAssessment(interventionId);
         if (!mounted) return;
         loadedInterventionRef.current = interventionId;
-        hasLocalDraftRef.current = false;
         setGeneratedSourceSignature(null);
 
         if (existing) {
@@ -162,6 +194,12 @@ export default function PracticeAssessmentModal({
           setPassingPercentage(Number(existing.passing_percentage));
           setGatekeeperPolicy(existing.gatekeeper_policy);
           setQuestions(existing.questions || []);
+          setSavedDraftSnapshot(practiceAssessmentDraftSnapshot(
+            existing.title,
+            Number(existing.passing_percentage),
+            existing.gatekeeper_policy,
+            existing.questions || [],
+          ));
 
           // Load student attempts
           const attemptList = await listTeacherPracticeAttempts(interventionId);
@@ -174,9 +212,15 @@ export default function PracticeAssessmentModal({
           setGatekeeperPolicy("REQUIRE_PASS");
           setQuestions([]);
           setAttempts([]);
+          setSavedDraftSnapshot(practiceAssessmentDraftSnapshot(
+            "Practice Assessment",
+            75,
+            "REQUIRE_PASS",
+            [],
+          ));
         }
 
-        if (selectedReadingIds == null && savedReadingIds == null) {
+        if (shouldLoadReadingsFromWorkspace) {
           try {
             const workspace = await getRemediationWorkspace(interventionId);
             if (mounted && workspace?.plan?.selected_resources) {
@@ -203,7 +247,7 @@ export default function PracticeAssessmentModal({
     return () => {
       mounted = false;
     };
-  }, [isOpen, interventionId]);
+  }, [isOpen, interventionId, shouldLoadReadingsFromWorkspace]);
 
   // Question CRUD handlers
   const handleAddQuestion = (type: PracticeQuestionType) => {
@@ -322,7 +366,6 @@ export default function PracticeAssessmentModal({
       const preview = await importPracticeQuestionsPreview(interventionId, file);
       if (preview.questions.length > 0) {
         setQuestions((prev) => [...prev, ...preview.questions]);
-        hasLocalDraftRef.current = true;
         if (preview.warnings && preview.warnings.length > 0) {
           toast.warning({
             title: "Import Warnings",
@@ -381,7 +424,6 @@ export default function PracticeAssessmentModal({
         // clicks (or regenerating an existing five-question draft) to become ten.
         setQuestions(generated);
         setGeneratedSourceSignature(currentReadingSignature);
-        hasLocalDraftRef.current = true;
         setShowAiDrawer(false);
         setAiGuidance("");
         toast.success({
@@ -430,49 +472,46 @@ export default function PracticeAssessmentModal({
   };
 
   // Save Draft
-  const handleSaveDraft = async () => {
+  const handleSaveDraft = async (): Promise<boolean> => {
     if (generatedSourcesAreStale) {
       setErrorMessage(
         "Selected reading materials changed after AI generation. Regenerate the questions before saving this draft."
       );
-      return;
+      return false;
     }
     setIsSaving(true);
     setErrorMessage(null);
     try {
-      // 1. Ensure or update assessment record
-      let currentAssessment = assessment;
-      if (!currentAssessment) {
-        currentAssessment = await initializeTeacherPracticeAssessment(interventionId, {
-          title: title.trim() || "Practice Assessment",
-          passing_percentage: passingPercentage,
-          gatekeeper_policy: gatekeeperPolicy,
-        });
-      } else {
-        currentAssessment = await updateTeacherPracticeAssessment(interventionId, {
-          title: title.trim() || "Practice Assessment",
-          passing_percentage: passingPercentage,
-          gatekeeper_policy: gatekeeperPolicy,
-        });
-      }
-
-      // 2. Batch save questions if not locked
-      if (!isLocked) {
-        const savedQuestions = await batchSavePracticeQuestions(interventionId, questions);
-        currentAssessment = { ...currentAssessment, questions: savedQuestions };
-      }
+      const currentAssessment = await saveTeacherPracticeAssessment(interventionId, {
+        title: title.trim() || "Practice Assessment",
+        passing_percentage: passingPercentage,
+        gatekeeper_policy: gatekeeperPolicy,
+        questions: isLocked ? undefined : questions,
+        publish: false,
+      });
 
       setAssessment(currentAssessment);
-      hasLocalDraftRef.current = false;
+      setTitle(currentAssessment.title);
+      setPassingPercentage(Number(currentAssessment.passing_percentage));
+      setGatekeeperPolicy(currentAssessment.gatekeeper_policy);
+      setQuestions(currentAssessment.questions || []);
+      setSavedDraftSnapshot(practiceAssessmentDraftSnapshot(
+        currentAssessment.title,
+        Number(currentAssessment.passing_percentage),
+        currentAssessment.gatekeeper_policy,
+        currentAssessment.questions || [],
+      ));
       if (onAssessmentUpdated) onAssessmentUpdated(currentAssessment);
 
       toast.success({
         title: "Draft Saved",
         description: "Practice Assessment configuration and questions saved.",
       });
+      return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save practice assessment draft.";
       setErrorMessage(msg);
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -495,30 +534,24 @@ export default function PracticeAssessmentModal({
     setIsPublishing(true);
     setErrorMessage(null);
     try {
-      // 1. Ensure or update assessment record
-      if (!assessment) {
-        await initializeTeacherPracticeAssessment(interventionId, {
-          title: title.trim() || "Practice Assessment",
-          passing_percentage: passingPercentage,
-          gatekeeper_policy: gatekeeperPolicy,
-        });
-      } else {
-        await updateTeacherPracticeAssessment(interventionId, {
-          title: title.trim() || "Practice Assessment",
-          passing_percentage: passingPercentage,
-          gatekeeper_policy: gatekeeperPolicy,
-        });
-      }
-
-      // 2. Batch save questions only if not locked
-      if (!isLocked) {
-        await batchSavePracticeQuestions(interventionId, questions);
-      }
-
-      // 3. Publish
-      const published = await publishTeacherPracticeAssessment(interventionId);
+      const published = await saveTeacherPracticeAssessment(interventionId, {
+        title: title.trim() || "Practice Assessment",
+        passing_percentage: passingPercentage,
+        gatekeeper_policy: gatekeeperPolicy,
+        questions: isLocked ? undefined : questions,
+        publish: true,
+      });
       setAssessment(published);
-      hasLocalDraftRef.current = false;
+      setTitle(published.title);
+      setPassingPercentage(Number(published.passing_percentage));
+      setGatekeeperPolicy(published.gatekeeper_policy);
+      setQuestions(published.questions || []);
+      setSavedDraftSnapshot(practiceAssessmentDraftSnapshot(
+        published.title,
+        Number(published.passing_percentage),
+        published.gatekeeper_policy,
+        published.questions || [],
+      ));
       if (onAssessmentUpdated) onAssessmentUpdated(published);
 
       toast.success({
@@ -554,8 +587,33 @@ export default function PracticeAssessmentModal({
     }
   };
 
+  const requestClose = () => {
+    if (isSaving || isPublishing || isArchiving) return;
+    if (hasUnsavedChanges) {
+      setShowUnsavedPrompt(true);
+      return;
+    }
+    onClose();
+  };
+
+  const discardAndClose = () => {
+    hasUnsavedChangesRef.current = false;
+    loadedInterventionRef.current = null;
+    setShowUnsavedPrompt(false);
+    setSavedDraftSnapshot(currentDraftSnapshot);
+    onClose();
+  };
+
+  const saveAndClose = async () => {
+    const saved = await handleSaveDraft();
+    if (!saved) return;
+    setShowUnsavedPrompt(false);
+    onClose();
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && requestClose()}>
       <Dialog.Content size="3xl" className="max-h-[90vh] flex flex-col p-0 overflow-hidden">
         {/* Header */}
         <Dialog.Header asChild className="px-5 py-4 border-b-2 border-border">
@@ -1175,7 +1233,7 @@ export default function PracticeAssessmentModal({
             size="sm"
             className="mr-auto"
             disabled={isSaving || isPublishing || isArchiving}
-            onClick={onClose}
+            onClick={requestClose}
           >
             <ArrowLeft className="size-4" />
             Back
@@ -1217,5 +1275,49 @@ export default function PracticeAssessmentModal({
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
+    <Dialog open={showUnsavedPrompt} onOpenChange={setShowUnsavedPrompt}>
+      <Dialog.Content
+        size="md"
+        portalContainer={typeof document === "undefined" ? undefined : document.body}
+        style={{ zIndex: 1101 }}
+        overlay={{
+          forceRender: true,
+          style: { zIndex: 1100, backgroundColor: "rgb(0 0 0 / 0.6)" },
+        }}
+      >
+        <Dialog.Header position="static">
+          <Dialog.Title className="text-xl font-black">Unsaved Practice Assessment Changes</Dialog.Title>
+        </Dialog.Header>
+        <div className="p-4">
+          <Alert status="warning">
+            <Alert.Title>Save before leaving?</Alert.Title>
+            <Alert.Description>
+              Your question and assessment setting changes have not been saved.
+            </Alert.Description>
+          </Alert>
+        </div>
+        <Dialog.Footer position="static" className="flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => setShowUnsavedPrompt(false)}
+            disabled={isSaving}
+          >
+            Continue Editing
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={discardAndClose}
+            disabled={isSaving}
+          >
+            Discard Changes
+          </Button>
+          <Button onClick={() => void saveAndClose()} disabled={isSaving}>
+            {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            Save Changes
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+    </>
   );
 }

@@ -98,6 +98,18 @@ class PracticeAssessmentUpdate(BaseModel):
     shuffle_options: bool | None = None
 
 
+class PracticeAssessmentSaveRequest(BaseModel):
+    """Atomically save assessment configuration and its complete question set."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+    title: str = Field(default="Practice Assessment", min_length=1, max_length=255)
+    passing_percentage: Decimal = Field(default=Decimal("75.00"), ge=Decimal("0.00"), le=Decimal("100.00"))
+    gatekeeper_policy: PracticePolicy = "REQUIRE_PASS"
+    shuffle_options: bool | None = None
+    questions: list[PracticeQuestionCreate] | None = Field(default=None, min_length=1)
+    publish: bool = False
+
+
 class PracticeAssessmentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     practice_assessment_id: int

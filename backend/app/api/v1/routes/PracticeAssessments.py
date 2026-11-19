@@ -24,6 +24,7 @@ from app.schemas.PracticeAssessment import (
     AIGeneratePracticeQuestionsRequest,
     PracticeAssessmentCreate,
     PracticeAssessmentRead,
+    PracticeAssessmentSaveRequest,
     PracticeAssessmentUpdate,
     PracticeAttemptFeedbackResponse,
     PracticeAttemptDraftSaveResponse,
@@ -62,6 +63,7 @@ from app.services.intervention.PracticeAssessmentService import (
     publish_assessment,
     reorder_questions,
     save_attempt_draft,
+    save_assessment,
     start_or_resume_attempt,
     submit_attempt,
     update_assessment_config,
@@ -125,6 +127,18 @@ def update_teacher_assessment_config(
     db: Session = Depends(get_db),
 ):
     assessment = update_assessment_config(db, staff_id, intervention_id, payload)
+    return format_assessment_read(assessment)
+
+
+@teacher_practice_router.put("/save", response_model=PracticeAssessmentRead)
+def save_teacher_assessment(
+    intervention_id: int,
+    payload: PracticeAssessmentSaveRequest,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    assessment = save_assessment(db, staff_id, intervention_id, payload)
     return format_assessment_read(assessment)
 
 

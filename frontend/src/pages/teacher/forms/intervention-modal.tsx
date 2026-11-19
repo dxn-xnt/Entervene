@@ -216,7 +216,7 @@ export default function InterventionModal({
     }
     setSavingAdjustments(true);
     try {
-      const saved = await supportMaterialsRef.current.saveAdjustments();
+      const saved = await supportMaterialsRef.current.saveAdjustments({ readingsOnly: true });
       if (saved) setSupportHasChanges(false);
       return saved;
     } finally {

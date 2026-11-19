@@ -77,7 +77,17 @@ def test_workspace_recommends_traceable_material_and_keeps_manual_browse(candida
                      created_by_staff_id=_staff(ctx), is_published=False)
     unrelated = Lesson(title="Geometry", subject_id=ctx["subject"].subject_id,
                        created_by_staff_id=_staff(ctx), is_published=False)
-    db.add_all([matched, unrelated]); db.flush()
+    matched_reading = Classwork(
+        title="Fractions Reading", classwork_type="READING", is_graded=False,
+        subject_id=ctx["subject"].subject_id, created_by_staff_id=_staff(ctx),
+    )
+    unrelated_reading = Classwork(
+        title="Geometry Reading", classwork_type="READING", is_graded=False,
+        subject_id=ctx["subject"].subject_id, created_by_staff_id=_staff(ctx),
+    )
+    matched_reading.lessons.append(matched)
+    unrelated_reading.lessons.append(unrelated)
+    db.add_all([matched, unrelated, matched_reading, unrelated_reading]); db.flush()
     snapshot = deepcopy(snapshot)
     snapshot["lowest_supported_competencies"][0]["supporting_scores"][0]["lesson_id"] = matched.lesson_id
     row.diagnosis_snapshot = snapshot
@@ -86,12 +96,13 @@ def test_workspace_recommends_traceable_material_and_keeps_manual_browse(candida
     workspace = get_workspace(db, _staff(ctx), _id(ctx))
     assert row.diagnosis_snapshot == frozen_before
     items = {item["title"]: item for item in workspace["resources"]}
-    assert items["Fractions"]["recommended"] is True
-    assert items["Fractions"]["match_level"] == "LESSON"
-    assert "Matched lesson" in items["Fractions"]["match_reason"]
-    assert items["Fractions"]["ai_read"] == "METADATA_ONLY"
-    assert items["Geometry"]["recommended"] is False
-    assert items["Geometry"]["match_reason"] is None
+    assert items["Fractions Reading"]["recommended"] is True
+    assert items["Fractions Reading"]["match_level"] == "LESSON"
+    assert "Matched lesson" in items["Fractions Reading"]["match_reason"]
+    assert items["Fractions Reading"]["ai_read"] == "METADATA_ONLY"
+    assert items["Geometry Reading"]["recommended"] is False
+    assert items["Geometry Reading"]["match_reason"] is None
+    assert workspace["plan"]["selected_resources"] == []
     assert workspace["focus"]["basis"] == "FROZEN_TRIGGER_DIAGNOSIS"
     assert workspace["progress"]["status"] == "ACTIVE"
 
@@ -113,7 +124,46 @@ def test_source_assessment_is_related_evidence_not_recommended_learning_material
     ctx["candidate"].diagnosis_snapshot = snapshot
     db.commit()
     workspace = get_workspace(db, _staff(ctx), _id(ctx))
-    source = next(item for item in workspace["resources"] if item["id"] == work.classwork_id and item["kind"] == "CLASSWORK")
-    assert source["match_level"] == "SOURCE_ACTIVITY"
-    assert source["recommended"] is False
-    assert "file contents were not analyzed" in source["match_reason"]
+    assert not any(
+        item["id"] == work.classwork_id and item["kind"] == "CLASSWORK"
+        for item in workspace["resources"]
+    )
+
+
+def test_component_only_focus_returns_available_readings_as_non_recommended(candidate_context):
+    ctx = candidate_context
+    db = ctx["db"]
+    _activate(ctx)
+    row = ctx["candidate"]
+    snapshot = deepcopy(row.diagnosis_snapshot)
+    snapshot["weakest_supported_components"] = ["WRITTEN_WORK"]
+    snapshot["lowest_supported_competencies"] = []
+    snapshot["manual_assessment_coverage"] = []
+    row.diagnosis_snapshot = snapshot
+
+    lesson = Lesson(
+        title="Basic Geometric Figures",
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=_staff(ctx),
+        is_published=True,
+    )
+    reading = Classwork(
+        title="Points and Lines Reading",
+        classwork_type="READING",
+        is_graded=False,
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=_staff(ctx),
+        is_published=True,
+    )
+    reading.lessons.append(lesson)
+    db.add_all([lesson, reading])
+    db.commit()
+
+    workspace = get_workspace(db, _staff(ctx), _id(ctx))
+    assert workspace["focus"]["evidence_level"] == "COMPONENT_ONLY"
+    items = {item["title"]: item for item in workspace["resources"]}
+    assert "Points and Lines Reading" in items
+    assert items["Points and Lines Reading"]["recommended"] is False
+    assert items["Points and Lines Reading"]["match_level"] is None
+    assert items["Points and Lines Reading"]["match_reason"] is None
+

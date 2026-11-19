@@ -107,6 +107,7 @@ export default function Classworks() {
   const remediationTitle = routeParams.get("title") || undefined;
   const remediationInstructions = routeParams.get("instructions") || undefined;
   const remediationOriginalAssignmentId = Number(routeParams.get("original_exam_assignment_id"));
+  const remediationOriginalClassworkId = Number(routeParams.get("original_classwork_assignment_id"));
   const interventionId = Number(routeParams.get("intervention_id"));
   const [remediationTarget, setRemediationTarget] =
     useState<TeacherInterventionDetail | null>(null);
@@ -236,9 +237,7 @@ export default function Classworks() {
 
             setRemediationOriginalTargets(resolvedTargets);
 
-            const urlTargetId = Number(
-              routeParams.get("original_classwork_assignment_id")
-            );
+            const urlTargetId = remediationOriginalClassworkId;
             if (urlTargetId && targetIds.includes(urlTargetId)) {
               setInitialTargetAssignmentId(urlTargetId);
             } else {
@@ -266,7 +265,7 @@ export default function Classworks() {
     return () => {
       live = false;
     };
-  }, [interventionId, remediationType, remediationSubject, remediationOriginalAssignmentId]);
+  }, [interventionId, remediationType, remediationSubject, remediationOriginalAssignmentId, remediationOriginalClassworkId]);
   const {
     classes: loads,
     isLoading: loadingClasses,

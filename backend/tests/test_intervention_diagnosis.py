@@ -502,3 +502,82 @@ def test_manual_coverage_and_grades_are_frozen_in_candidate_snapshot(current_per
     submission.grade = Decimal("0")
     ctx["db"].commit()
     assert _diagnosis(ctx) == frozen
+
+
+def test_single_lesson_quiz_without_answers_supports_competency_and_records_classwork_type(
+    current_period_context, monkeypatch,
+):
+    ctx = current_period_context
+    model, assignments = _prepare(ctx, monkeypatch)
+    competency, lesson = _link_competency(ctx, assignments[0])
+    db = ctx["db"]
+    assignments[0].classwork.classwork_type = "QUIZ"
+    quiz = Quiz(classwork_id=assignments[0].classwork_id, total_items=2, status="PUBLISHED")
+    db.add(quiz)
+    db.flush()
+    for order in (1, 2):
+        q = Question(
+            question_text=f"Mapped Q{order}",
+            question_type="MULTIPLE_CHOICE",
+            points=Decimal("5"),
+            lesson_id=lesson.lesson_id,
+        )
+        db.add(q)
+        db.flush()
+        db.add(QuizQuestion(quiz_id=quiz.quiz_id, question_id=q.question_id, display_order=order))
+    db.commit()
+
+    # No QuizAnswer rows exist (teacher entered quiz total directly)
+    _run(ctx, model.model_version_id)
+    diagnosis = _diagnosis(ctx)
+    assert any(
+        act["classwork_id"] == assignments[0].classwork_id and act["classwork_type"] == "QUIZ"
+        for act in diagnosis["supporting_activities"]
+    )
+    assert diagnosis["competency_detail_status"] == "AVAILABLE"
+    assert len(diagnosis["lowest_supported_competencies"]) == 1
+    item = diagnosis["lowest_supported_competencies"][0]
+    assert item["competency_id"] == competency.competency_id
+    assert item["supporting_scores"][0]["source_type"] == "CLASSWORK_SINGLE_LESSON"
+    assert item["supporting_scores"][0]["lesson_id"] == lesson.lesson_id
+    row = db.query(Intervention).one()
+    focus = build_remediation_focus(row, db=db)
+    assert focus["evidence_level"] == "SCORED_COMPETENCY"
+    assert focus["lesson_ids"] == [lesson.lesson_id]
+    assert focus["competency_ids"] == [competency.competency_id]
+
+
+def test_partially_unmapped_quiz_without_answers_stays_component_only(
+    current_period_context, monkeypatch,
+):
+    ctx = current_period_context
+    model, assignments = _prepare(ctx, monkeypatch)
+    _competency, lesson = _link_competency(ctx, assignments[0])
+    db = ctx["db"]
+    assignments[0].classwork.classwork_type = "QUIZ"
+    quiz = Quiz(classwork_id=assignments[0].classwork_id, total_items=2, status="PUBLISHED")
+    db.add(quiz)
+    db.flush()
+    q_mapped = Question(
+        question_text="Mapped Q1", question_type="MULTIPLE_CHOICE",
+        points=Decimal("5"), lesson_id=lesson.lesson_id,
+    )
+    q_unmapped = Question(
+        question_text="Unmapped Q2", question_type="MULTIPLE_CHOICE",
+        points=Decimal("5"), lesson_id=None,
+    )
+    db.add_all([q_mapped, q_unmapped])
+    db.flush()
+    db.add_all([
+        QuizQuestion(quiz_id=quiz.quiz_id, question_id=q_mapped.question_id, display_order=1),
+        QuizQuestion(quiz_id=quiz.quiz_id, question_id=q_unmapped.question_id, display_order=2),
+    ])
+    db.commit()
+
+    _run(ctx, model.model_version_id)
+    diagnosis = _diagnosis(ctx)
+    assert diagnosis["lowest_supported_competencies"] == []
+    assert diagnosis["competency_detail_status"] == "UNAVAILABLE_NO_TRACEABLE_SCORES"
+    row = db.query(Intervention).one()
+    assert build_remediation_focus(row, db=db)["evidence_level"] == "COMPONENT_ONLY"
+

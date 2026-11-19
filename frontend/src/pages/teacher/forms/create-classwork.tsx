@@ -681,10 +681,13 @@ export default function CreateClassworkModal({
           l.subject_id === Number(draft.subject_id) &&
           selectedClassIds.includes(l.class_id),
       );
-      if (selectedLoad?.academic_period_id) {
+      const academicPeriodId =
+        remediationTarget?.academic_period_id ??
+        selectedLoad?.academic_period_id;
+      if (academicPeriodId) {
         formData.append(
           "academic_period_id",
-          String(selectedLoad.academic_period_id),
+          String(academicPeriodId),
         );
       }
 
@@ -711,7 +714,11 @@ export default function CreateClassworkModal({
           throw new Error(msgs || "Validation error");
         }
         throw new Error(
-          typeof detail === "string" ? detail : "Unable to create classwork.",
+          typeof detail === "string"
+            ? detail
+            : detail && typeof detail === "object" && typeof detail.message === "string"
+              ? detail.message
+              : "Unable to create classwork.",
         );
       }
       const createdData = await createResponse.json();
