@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from difflib import SequenceMatcher
 import logging
+import re
 from typing import Any
+import unicodedata
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -24,6 +27,7 @@ from app.schemas.PracticeAssessment import (
     PracticeQuestionCreate,
 )
 from app.services.ai.AIQuizGeneratorService import generate_quiz_questions
+from app.services.ai.question_quality_validation import option_text_issue
 from app.services.intervention.InterventionGenerationEvidenceScopeService import (
     resolve_generation_evidence_scope,
 )
@@ -33,6 +37,70 @@ from app.services.intervention.InterventionRemediationMaterialContextService imp
 from app.services.intervention.PracticeAssessmentService import _require_teacher_scope
 
 logger = logging.getLogger(__name__)
+
+_MAX_GENERATION_ATTEMPTS = 3
+
+
+def _normalize_question_text(value: str) -> str:
+    """Normalize presentation differences without erasing meaningful words."""
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    normalized = re.sub(r"[^\w\s]", " ", normalized, flags=re.UNICODE)
+    return " ".join(normalized.split())
+
+
+def _question_tokens(value: str) -> set[str]:
+    return set(_normalize_question_text(value).split())
+
+
+def _correct_answer_text(question: dict[str, Any]) -> str:
+    answers = [
+        _normalize_question_text(str(option.get("option_text", "")))
+        for option in question.get("options", [])
+        if option.get("is_correct")
+    ]
+    return "|".join(sorted(answer for answer in answers if answer))
+
+
+def _is_effective_duplicate(
+    candidate: dict[str, Any],
+    accepted: list[dict[str, Any]],
+) -> bool:
+    """Reject exact and strongly similar items while allowing the same topic."""
+    candidate_text = _normalize_question_text(str(candidate.get("question_text", "")))
+    candidate_tokens = _question_tokens(candidate_text)
+    candidate_answer = _correct_answer_text(candidate)
+
+    for existing in accepted:
+        existing_text = _normalize_question_text(str(existing.get("question_text", "")))
+        if candidate_text == existing_text:
+            return True
+
+        sequence_similarity = SequenceMatcher(None, candidate_text, existing_text).ratio()
+        existing_tokens = _question_tokens(existing_text)
+        union = candidate_tokens | existing_tokens
+        token_similarity = len(candidate_tokens & existing_tokens) / len(union) if union else 1.0
+
+        if sequence_similarity >= 0.94 or token_similarity >= 0.90:
+            return True
+
+        existing_answer = _correct_answer_text(existing)
+        if (
+            candidate_answer
+            and candidate_answer == existing_answer
+            and (sequence_similarity >= 0.82 or token_similarity >= 0.78)
+        ):
+            return True
+
+    return False
+
+
+def _is_usable_candidate(question: dict[str, Any]) -> bool:
+    options = question.get("options") or []
+    if not str(question.get("question_text", "")).strip():
+        return False
+    if len(options) < 2 or sum(bool(option.get("is_correct")) for option in options) != 1:
+        return False
+    return option_text_issue(options, "MULTIPLE_CHOICE") is None
 
 
 async def generate_practice_questions_ai(
@@ -142,21 +210,48 @@ async def generate_practice_questions_ai(
     subject_row = db.get(Subject, intervention.subject_id)
     subject_name = subject_row.subject_name if subject_row else "General Subject"
 
-    # 4. Call AI Generator (strictly MULTIPLE_CHOICE)
-    test_parts = [
-        {
-            "type": "MULTIPLE_CHOICE",
-            "count": payload.target_count,
-            "points_per_item": 1.0,
-        }
-    ]
+    # 4. Call AI Generator (strictly MULTIPLE_CHOICE). Providers sometimes
+    # return too few, too many, or repeated items. Keep a bounded retry loop and
+    # never return a partial or inflated assessment to the teacher.
+    raw_questions: list[dict[str, Any]] = []
+    for attempt in range(1, _MAX_GENERATION_ATTEMPTS + 1):
+        remaining = payload.target_count - len(raw_questions)
+        if remaining <= 0:
+            break
 
-    raw_questions = await generate_quiz_questions(
-        subject=subject_name,
-        lessons=lesson_titles or ["Assigned Intervention Reading Materials"],
-        content_text=combined_text,
-        test_parts=test_parts,
-    )
+        generated_batch = await generate_quiz_questions(
+            subject=subject_name,
+            lessons=lesson_titles or ["Assigned Intervention Reading Materials"],
+            content_text=combined_text,
+            test_parts=[
+                {
+                    "type": "MULTIPLE_CHOICE",
+                    "count": remaining,
+                    "points_per_item": 1.0,
+                }
+            ],
+        )
+
+        for candidate in generated_batch:
+            if not _is_usable_candidate(candidate):
+                logger.info("Discarding unusable AI practice question on attempt %s", attempt)
+                continue
+            if _is_effective_duplicate(candidate, raw_questions):
+                logger.info("Discarding duplicate AI practice question on attempt %s", attempt)
+                continue
+            raw_questions.append(candidate)
+            if len(raw_questions) == payload.target_count:
+                break
+
+    if len(raw_questions) != payload.target_count:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "AI could not produce the requested number of distinct, valid practice questions "
+                f"after {_MAX_GENERATION_ATTEMPTS} attempts. No questions were added; try again "
+                "or reduce the requested count."
+            ),
+        )
 
     # 5. Transform to PracticeQuestionCreate
     converted: list[PracticeQuestionCreate] = []

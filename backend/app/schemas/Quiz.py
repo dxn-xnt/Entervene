@@ -97,6 +97,21 @@ class QuizResultsSettingsResponse(BaseModel):
     has_mixed_visibility: bool
 
 
+class QuizConfigurationUpdate(BaseModel):
+    """Question-independent quiz settings that remain editable before attempts."""
+
+    duration_minutes: Optional[int] = Field(default=None, gt=0)
+    is_shuffle_questions: bool
+    enable_per_question_scoring: bool
+    enable_per_question_time_limits: bool
+    max_attempts: int = Field(ge=1)
+
+
+class QuizConfigurationResponse(QuizConfigurationUpdate):
+    classwork_id: int
+    has_attempts: bool
+
+
 class QuizBuilderResponse(BaseModel):
     quiz_id: int
     classwork_id: int
@@ -110,6 +125,7 @@ class QuizBuilderResponse(BaseModel):
     questions: list[QuizQuestionOut] = Field(default_factory=list)
     is_publish_ready: bool
     readiness_errors: list[str] = Field(default_factory=list)
+    has_attempts: bool = False
     created_at: Optional[datetime] = None
 
 

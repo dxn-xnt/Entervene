@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.academic.LessonDelivery import LessonDelivery
@@ -26,13 +27,28 @@ def _utc(value: datetime) -> datetime:
 
 def _original_cutoff(row: Intervention) -> datetime:
     raw = (row.diagnosis_snapshot or {}).get("evidence_cutoff_at")
-    return _utc(datetime.fromisoformat(raw))
+    if isinstance(raw, str):
+        try:
+            return _utc(datetime.fromisoformat(raw))
+        except (ValueError, TypeError):
+            pass
+    elif isinstance(raw, datetime):
+        return _utc(raw)
+    if row.activated_at:
+        return _utc(row.activated_at)
+    if row.created_at:
+        return _utc(row.created_at)
+    return datetime.now(timezone.utc)
 
 
 def _latest(db: Session, intervention_id: int) -> RemediationGenerationEvidenceSnapshot | None:
-    return db.query(RemediationGenerationEvidenceSnapshot).filter_by(
-        intervention_id=intervention_id,
-    ).order_by(RemediationGenerationEvidenceSnapshot.version.desc()).first()
+    try:
+        return db.query(RemediationGenerationEvidenceSnapshot).filter_by(
+            intervention_id=intervention_id,
+        ).order_by(RemediationGenerationEvidenceSnapshot.version.desc()).first()
+    except Exception:
+        db.rollback()
+        return None
 
 
 def _active_delivery(db: Session, row: Intervention, lesson_id: int) -> LessonDelivery | None:
@@ -46,7 +62,15 @@ def resolve_remediation_generation_eligibility(db: Session, row: Intervention) -
     original = _original_cutoff(row)
     persisted = _latest(db, row.intervention_id)
     active = _utc(persisted.active_remediation_cutoff_at) if persisted else original
-    scope = resolve_generation_evidence_scope(db, row, teaching_as_of=active)
+    try:
+        scope = resolve_generation_evidence_scope(db, row, teaching_as_of=active)
+    except (HTTPException, Exception):
+        scope = {
+            "scope_version": 1,
+            "status": "UNCONSTRAINED",
+            "lessons": [],
+            "competencies": [],
+        }
     eligible = [dict(item) for item in scope.get("lessons") or [] if item.get("is_taught") is True]
     blocked = []
     refresh_available = False
@@ -89,7 +113,15 @@ def refresh_remediation_generation_eligibility(
     row = db.query(Intervention).filter_by(intervention_id=row.intervention_id).with_for_update().one()
     before = resolve_remediation_generation_eligibility(db, row)
     now = datetime.now(timezone.utc)
-    refreshed_scope = resolve_generation_evidence_scope(db, row, teaching_as_of=now)
+    try:
+        refreshed_scope = resolve_generation_evidence_scope(db, row, teaching_as_of=now)
+    except (HTTPException, Exception):
+        refreshed_scope = {
+            "scope_version": 1,
+            "status": "UNCONSTRAINED",
+            "lessons": [],
+            "competencies": [],
+        }
     refreshed_lessons = refreshed_scope.get("lessons") or []
     eligible_items = [dict(item) for item in refreshed_lessons if item.get("is_taught") is True]
     eligible = sorted(item["lesson_id"] for item in eligible_items)

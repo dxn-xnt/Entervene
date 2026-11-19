@@ -84,7 +84,10 @@ export function scoreBand(points: number | null | undefined, ratio: number) {
 /** Resolve a stored upper score threshold into its contiguous inclusive range. */
 export function rubricPointBounds(points: number, levelPoints: number[]) {
   const lowerLevels = levelPoints.filter((value) => value < points);
-  const previous = lowerLevels.length ? Math.max(...lowerLevels) : 0;
+  if (lowerLevels.length === 0) {
+    return { minimum: Math.min(0, points), maximum: points };
+  }
+  const previous = Math.max(...lowerLevels);
   const increment = levelPoints.every(Number.isInteger) ? 1 : 0.01;
   const minimum = Math.min(points, Number((previous + increment).toFixed(2)));
   return { minimum, maximum: points };
@@ -94,6 +97,27 @@ export function rubricPointBounds(points: number, levelPoints: number[]) {
 export function rubricPointRange(points: number, levelPoints: number[]) {
   const { minimum, maximum } = rubricPointBounds(points, levelPoints);
   return minimum === maximum ? `${maximum}` : `${maximum}–${minimum}`;
+}
+
+export function scaleRubricLevels(
+  levels: ActivityRubricLevel[],
+  targetMax: number,
+): ActivityRubricLevel[] {
+  if (!levels.length || !Number.isFinite(targetMax) || targetMax <= 0) return levels;
+  const currentMax = activityRubricMaximum(levels);
+  if (currentMax <= 0) return levels;
+  if (currentMax === targetMax) return levels;
+
+  return levels.map((level) => {
+    if (Number(level.points) === currentMax) {
+      return { ...level, points: targetMax };
+    }
+    const ratio = Number(level.points) / currentMax;
+    const scaled = targetMax * ratio;
+    const roundedInt = Math.round(scaled);
+    const points = Math.abs(scaled - roundedInt) < 1e-6 ? roundedInt : Number(scaled.toFixed(2));
+    return { ...level, points };
+  });
 }
 
 export function isReadingType(value?: string | null) {
