@@ -179,8 +179,8 @@ def test_targeted_assignment_is_private_across_existing_student_surfaces(authz_c
     assert "intervention" not in f"{notifications[0].title} {notifications[0].body}".lower()
     assert c["assignment"].publish_date is not None
     assert notifications[0].action_url == (
-        f"/student/classworks/{assignment_id}"
-        "?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D9999"
+        "/student/interventions/view?intervention=9999"
+        f"&activity={assignment_id}"
     )
 
 

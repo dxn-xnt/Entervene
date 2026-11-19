@@ -312,6 +312,10 @@ def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int)
         row.activated_at = datetime.now(timezone.utc)
         row.activated_by_staff_id = staff_id
         transaction.flush()
+        from app.services.intervention.StudySupportReminderService import (
+            stage_intervention_study_support_available,
+        )
+        stage_intervention_study_support_available(transaction, row)
 
     try:
         generate_and_persist_development_current_term(

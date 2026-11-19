@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, time, timedelta, timezone
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import String, and_, cast, exists, literal, or_
@@ -34,6 +35,14 @@ DELIVERY_END = time(17, 0)
 
 
 def study_support_action_url(assignment: ClassworkAssignment) -> str:
+    return (
+        "/student/interventions/view"
+        f"?intervention={assignment.source_intervention_id}"
+        f"&activity={assignment.classwork_assignment_id}"
+    )
+
+
+def legacy_study_support_action_url(assignment: ClassworkAssignment) -> str:
     return_path = (
         "%2Fstudent%2Finterventions%2Fview%3Fintervention%3D"
         f"{assignment.source_intervention_id}"
@@ -42,6 +51,114 @@ def study_support_action_url(assignment: ClassworkAssignment) -> str:
         f"/student/classworks/{assignment.classwork_assignment_id}"
         f"?from={return_path}"
     )
+
+
+def _study_support_action_urls(assignment: ClassworkAssignment) -> tuple[str, str]:
+    return (
+        study_support_action_url(assignment),
+        legacy_study_support_action_url(assignment),
+    )
+
+
+def intervention_study_support_action_url(intervention_id: int) -> str:
+    return f"/student/interventions/view?intervention={intervention_id}"
+
+
+def stage_intervention_study_support_available(db: Session, intervention: Intervention) -> bool:
+    """Stage one durable notification for an activated Study Support record."""
+    if intervention.status != "ACTIVE":
+        return False
+    locked = (
+        db.query(Intervention.intervention_id, Intervention.status)
+        .filter(Intervention.intervention_id == intervention.intervention_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if locked is None or locked.status != "ACTIVE":
+        return False
+    student = db.get(Student, intervention.student_id)
+    account = db.get(UserAccount, student.user_id) if student and student.user_id else None
+    if account is None or account.account_status != "active":
+        return False
+
+    action_url = intervention_study_support_action_url(intervention.intervention_id)
+    if db.query(Notification.notification_id).filter_by(
+        user_id=account.user_id,
+        notification_type="study_support_available",
+        action_url=action_url,
+    ).first() is not None:
+        return False
+
+    subject_name = intervention.subject.subject_name if intervention.subject else "your subject"
+    stage_notification(db, NotificationCreate(
+        user_id=account.user_id,
+        notification_type="study_support_available",
+        title="New Study Support Available",
+        body=f"Study Support for {subject_name} is ready for you.",
+        action_url=action_url,
+    ))
+    return True
+
+
+def _has_any_intervention_study_support_notification(
+    db: Session,
+    user_id: UUID,
+    intervention_id: int,
+) -> bool:
+    action_url = intervention_study_support_action_url(intervention_id)
+    return db.query(Notification.notification_id).filter(
+        Notification.user_id == user_id,
+        Notification.notification_type == "study_support_available",
+        or_(
+            Notification.action_url == action_url,
+            Notification.action_url.like(f"{action_url}&%"),
+            Notification.action_url.like(
+                f"/student/classworks/%?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D{intervention_id}"
+            ),
+        ),
+    ).first() is not None
+
+
+def backfill_active_study_support_notifications_for_user(
+    db: Session,
+    user_id: UUID | str,
+) -> int:
+    """Idempotently backfill missing Study Support alerts for a student's active interventions."""
+    user_uuid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
+    student = db.query(Student).filter(Student.user_id == user_uuid).first()
+    if student is None:
+        return 0
+    account = db.get(UserAccount, user_uuid)
+    if account is None or account.account_status != "active":
+        return 0
+
+    active_interventions = (
+        db.query(Intervention)
+        .filter(
+            Intervention.student_id == student.student_id,
+            Intervention.status == "ACTIVE",
+        )
+        .order_by(Intervention.intervention_id.asc())
+        .all()
+    )
+    if not active_interventions:
+        return 0
+
+    staged = 0
+    try:
+        for intervention in active_interventions:
+            if _has_any_intervention_study_support_notification(
+                db, user_uuid, intervention.intervention_id,
+            ):
+                continue
+            if stage_intervention_study_support_available(db, intervention):
+                staged += 1
+        if staged:
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return staged
 
 
 def _utc(value: datetime | None) -> datetime:
@@ -84,10 +201,11 @@ def stage_study_support_available(
         return False
 
     action_url = study_support_action_url(assignment)
-    existing = db.query(Notification).filter_by(
-        user_id=account.user_id,
-        notification_type="study_support_available",
-        action_url=action_url,
+    action_urls = _study_support_action_urls(assignment)
+    existing = db.query(Notification).filter(
+        Notification.user_id == account.user_id,
+        Notification.notification_type == "study_support_available",
+        Notification.action_url.in_(action_urls),
     ).first()
     if assignment.publish_date is None:
         assignment.publish_date = aware_utc(existing.created_at) if existing and existing.created_at else _utc(now)
@@ -109,14 +227,14 @@ def _publication_anchor(
     db: Session,
     assignment: ClassworkAssignment,
     user_id,
-    action_url: str,
+    action_urls: tuple[str, ...],
 ) -> datetime | None:
     if assignment.publish_date is not None:
         return aware_utc(assignment.publish_date)
-    initial = db.query(Notification.created_at).filter_by(
-        user_id=user_id,
-        notification_type="study_support_available",
-        action_url=action_url,
+    initial = db.query(Notification.created_at).filter(
+        Notification.user_id == user_id,
+        Notification.notification_type == "study_support_available",
+        Notification.action_url.in_(action_urls),
     ).first()
     return aware_utc(initial[0]) if initial and initial[0] else None
 
@@ -197,7 +315,8 @@ def _stage_due_reminder(db: Session, assignment: ClassworkAssignment, now: datet
         return "ineligible"
     account, _intervention = recipient
     action_url = study_support_action_url(assignment)
-    published_at = _publication_anchor(db, assignment, account.user_id, action_url)
+    action_urls = _study_support_action_urls(assignment)
+    published_at = _publication_anchor(db, assignment, account.user_id, action_urls)
     if published_at is None or now < published_at + FIRST_REMINDER_AFTER:
         return "not_due"
     if assignment.publish_date is None:
@@ -212,10 +331,10 @@ def _stage_due_reminder(db: Session, assignment: ClassworkAssignment, now: datet
         title = "Study Support Reminder"
         body = f"Your Study Support for {assignment.classwork.subject.subject_name} is ready when you are."
 
-    if db.query(Notification.notification_id).filter_by(
-        user_id=account.user_id,
-        notification_type=notification_type,
-        action_url=action_url,
+    if db.query(Notification.notification_id).filter(
+        Notification.user_id == account.user_id,
+        Notification.notification_type == notification_type,
+        Notification.action_url.in_(action_urls),
     ).first() is not None:
         return "duplicate"
     stage_notification(db, NotificationCreate(
@@ -252,6 +371,12 @@ def scan_study_support_reminders(
     first_cutoff = current - FIRST_REMINDER_AFTER
     final_cutoff = current - FINAL_REMINDER_AFTER
     action_url_expression = (
+        literal("/student/interventions/view?intervention=")
+        + cast(ClassworkAssignment.source_intervention_id, String)
+        + literal("&activity=")
+        + cast(ClassworkAssignment.classwork_assignment_id, String)
+    )
+    legacy_action_url_expression = (
         literal("/student/classworks/")
         + cast(ClassworkAssignment.classwork_assignment_id, String)
         + literal("?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D")
@@ -262,7 +387,10 @@ def scan_study_support_reminders(
         return exists().where(
             Notification.user_id == Student.user_id,
             Notification.notification_type == notification_type,
-            Notification.action_url == action_url_expression,
+            Notification.action_url.in_((
+                action_url_expression,
+                legacy_action_url_expression,
+            )),
         )
 
     candidate_ids = [row[0] for row in (

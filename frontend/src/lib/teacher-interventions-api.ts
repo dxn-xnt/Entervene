@@ -211,11 +211,50 @@ export interface RemediationFocus {
   question_evidence: Array<{ quiz_question_id: number | null; score: number; possible_score: number }>;
   coverage_is_context_only: boolean;
 }
+export type RemediationActivityLifecycleStatus =
+  | "NOT_ASSIGNED"
+  | "DRAFT"
+  | "ASSIGNED"
+  | "SUBMITTED"
+  | "GRADED";
+
 export interface RemediationProgress {
   triggering_projection: number; latest_projection: number | null; latest_revision: number | null;
+  passing_threshold?: number | null;
+  remediation_status?: RemediationActivityLifecycleStatus;
   completed_remediation: Array<{ title: string; assignment_id: number; grade: number | null; total_points: number | null }>;
   assigned_remediation?: Array<{ title: string; assignment_id: number; classwork_id?: number; classwork_type?: string; is_published?: boolean; component: string | null; is_graded: boolean; submission_status: string | null; grade: number | null; total_points: number | null; original_assignment_id?: number | null; original_title?: string | null; original_grade?: number | null; effective_grade?: number | null; exam_subtype?: string | null }>;
   status: string; status_reason: string;
+}
+
+export interface RemediationPredictionImpactTarget {
+  assignment_id: number;
+  title: string;
+  component: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
+  original_score: number;
+  current_effective_score: number;
+  max_points: number;
+  cap_percentage: number;
+  effective_max_score: number;
+  possible_score_gain: number;
+  hypothetical_predicted_grade: number | null;
+  predicted_gain: number | null;
+}
+
+export interface RemediationPredictionImpact {
+  status: "AVAILABLE" | "UNAVAILABLE";
+  is_official_grade: false;
+  is_guaranteed: false;
+  is_practice_only: boolean;
+  model_version_id?: number | null;
+  model_name?: string | null;
+  current_predicted_grade: number | null;
+  max_remediation_predicted_grade: number | null;
+  predicted_gain: number | null;
+  passing_threshold?: number | null;
+  score_adjustment_cap?: number | null;
+  targets: RemediationPredictionImpactTarget[];
+  unavailable_reasons: ProjectionUnavailableReason[];
 }
 export interface RemediationPlan {
   teacher_choice: RemediationFormat | null;
@@ -260,6 +299,7 @@ export interface RemediationWorkspace {
   resources: RemediationResource[];
   focus: RemediationFocus;
   progress: RemediationProgress;
+  prediction_impact?: RemediationPredictionImpact | null;
   original_exams: OriginalExamination[];
   score_previews?: ClassworkScorePreview[];
   generation_eligibility: RemediationGenerationEligibility;

@@ -188,6 +188,7 @@ def prepare_development_current_term(
     cutoff_at: datetime | None = None,
     model_name: str | None = None,
     hypothetical_ww_pt_scores: Mapping[int, float] | None = None,
+    hypothetical_exam_scores: Mapping[int, float] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     model_name = require_development_model_name(model_name or selected_development_model_name())
     result = partial(_base_result, model_name=model_name)
@@ -259,6 +260,7 @@ def prepare_development_current_term(
         source_period_id,
         cutoff_at=cutoff_at,
         hypothetical_ww_pt_scores=hypothetical_ww_pt_scores,
+        hypothetical_exam_scores=hypothetical_exam_scores,
     )
     if scope["supported"]:
         built["features"] = canonicalize_v3_features(built["features"], scope)
@@ -376,6 +378,7 @@ def predict_development_current_term(
     model_name: str | None = None,
     scored_features_out: dict[str, Any] | None = None,
     hypothetical_ww_pt_scores: Mapping[int, float] | None = None,
+    hypothetical_exam_scores: Mapping[int, float] | None = None,
 ) -> dict[str, Any]:
     prediction, prepared = prepare_development_current_term(
         db,
@@ -387,6 +390,7 @@ def predict_development_current_term(
         cutoff_at=cutoff_at,
         model_name=model_name,
         hypothetical_ww_pt_scores=hypothetical_ww_pt_scores,
+        hypothetical_exam_scores=hypothetical_exam_scores,
     )
     if prepared is None:
         return prediction

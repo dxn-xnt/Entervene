@@ -114,15 +114,31 @@ const Notifications = () => {
       }
     }
 
-    // Specific deep link in action_url (e.g. /student/subjects/... or /student/interventions/view?...)
-    if (item.action_url && item.action_url.trim() && item.action_url !== "/student/notifications") {
-      navigate(item.action_url);
+    if (isStudentStudySupportType(item.notification_type)) {
+      const actionUrl = item.action_url?.trim();
+      if (actionUrl?.startsWith(routes.student.interventions)) {
+        navigate(actionUrl);
+        return;
+      }
+
+      // Older targeted-activity notifications linked to classwork with the
+      // Study Support return path encoded in `from`.
+      if (actionUrl?.startsWith("/student/classworks/")) {
+        const returnPath = new URLSearchParams(actionUrl.split("?", 2)[1] ?? "").get("from");
+        if (returnPath?.startsWith(routes.student.interventions)) {
+          navigate(returnPath);
+          return;
+        }
+      }
+
+      // Never let a Study Support event use a stale Subject/Classwork link.
+      navigate(routes.student.interventions);
       return;
     }
 
-    // Fallback based on structured notification event type
-    if (isStudentStudySupportType(item.notification_type)) {
-      navigate(routes.student.interventions);
+    // Specific deep link for non-Study Support notifications.
+    if (item.action_url && item.action_url.trim() && item.action_url !== "/student/notifications") {
+      navigate(item.action_url);
       return;
     }
 
