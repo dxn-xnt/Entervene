@@ -23,6 +23,7 @@ import {
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { InterventionPredictionHistory } from "@/components/teacher/intervention-prediction-history";
 import { getTeacherRiskDisplay } from "@/components/predictions/teacher-risk-display";
+import { describeActivationConflict } from "@/lib/intervention-activation-conflict";
 import InterventionModal from "./forms/intervention-modal";
 import {
   activateTeacherCandidate,
@@ -341,15 +342,14 @@ export default function TeacherInterventions() {
           : "Unable to approve intervention. Please try again.";
       let alertMsg = message;
       if (error instanceof InterventionApiError && error.status === 409) {
-        setReviewStale(true);
-        alertMsg = /improved|at least 85/i.test(message)
-          ? "The current prediction improved. This candidate can no longer be approved. Refresh the list to see its current state."
-          : /evidence|ready|unavailable|invalid/i.test(message)
-            ? "Current prediction evidence is insufficient or unavailable. Approval was not completed."
-            : `Candidate state changed: ${message}`;
+        const conflict = describeActivationConflict(message);
+        alertMsg = conflict.message;
+        if (conflict.stale) {
+          setReviewStale(true);
+          void refresh();
+          void refreshActive();
+        }
         setActionError(alertMsg);
-        void refresh();
-        void refreshActive();
       } else if (
         error instanceof InterventionApiError &&
         (error.status === 401 || error.status === 403)
@@ -359,10 +359,6 @@ export default function TeacherInterventions() {
       } else {
         setActionError(message);
       }
-      toast.error({
-        title: "Unable to approve intervention",
-        description: alertMsg,
-      });
     } finally {
       setActivating(false);
     }

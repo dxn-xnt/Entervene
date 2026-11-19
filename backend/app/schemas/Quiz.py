@@ -159,6 +159,7 @@ class QuizAttemptQuestionOut(BaseModel):
 
 class QuizAttemptResponse(BaseModel):
     quiz_id: int
+    submission_id: Optional[int] = None
     classwork_assignment_id: int
     classwork_id: int
     title: str

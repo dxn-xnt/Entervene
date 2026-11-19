@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from hashlib import sha256
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -31,6 +32,7 @@ from app.models.classwork.RemediationAssignmentLink import RemediationAssignment
 from app.services.grading.RemedialClassworkResolver import resolve_student_classwork_scores
 from app.services.student_record.StudentRecordService import resolve_subject_grading_weights
 from app.services.grading.RemedialExamination import effective_exam_scores
+from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME, schema_path
 
 
 MODEL_NAME = "entervene_current_period_grade_rf_v1"
@@ -39,6 +41,8 @@ MODEL_TYPE = "REGRESSOR"
 MODELS_DIR = Path(__file__).resolve().parents[3] / "data" / "models"
 SCHEMA_PATH = MODELS_DIR / f"{MODEL_NAME}_feature_schema.json"
 MODEL_PATH = MODELS_DIR / f"{MODEL_NAME}.joblib"
+CORRECTED_SCHEMA_PATH = schema_path(CORRECTED_MODEL_NAME)
+CORRECTED_FEATURE_ORDER_SHA256 = "6b3ff7c43c9e98ce77763b73edacdf2e0411bb641262d2238cbc3ff255e203aa"
 
 
 @dataclass
@@ -170,7 +174,32 @@ def _weight_pattern(weights: dict[str, float]) -> str:
 
 
 def load_current_period_feature_schema() -> dict[str, Any]:
-    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    if SCHEMA_PATH.is_file():
+        return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    if not CORRECTED_SCHEMA_PATH.is_file():
+        raise ValueError(
+            "The current-term feature schema is unavailable."
+        )
+    schema = json.loads(CORRECTED_SCHEMA_PATH.read_text(encoding="utf-8"))
+    columns = list(schema.get("feature_columns") or [])
+    order_digest = sha256(json.dumps(columns, separators=(",", ":")).encode("utf-8")).hexdigest()
+    if len(columns) != 31 or order_digest != CORRECTED_FEATURE_ORDER_SHA256:
+        raise ValueError("The checked-in current-term feature schema has an invalid feature contract.")
+
+    weight_patterns = []
+    for pattern in schema.get("supported_weight_patterns") or []:
+        parts = str(pattern).split("/")
+        if len(parts) != 3 or any(not part.isdigit() for part in parts):
+            raise ValueError("The checked-in current-term feature schema has an invalid weight contract.")
+        weight_patterns.append(f"WW{parts[0]}_PT{parts[1]}_QA{parts[2]}")
+
+    return {
+        **schema,
+        "raw_feature_columns": columns,
+        "validated_subjects": list(schema.get("supported_subjects") or []),
+        "validated_weight_combinations": weight_patterns,
+        "feature_support_envelopes": schema.get("feature_support_envelopes") or {},
+    }
 
 
 def prepare_current_period_frame(features: dict[str, Any], schema: dict[str, Any] | None = None) -> pd.DataFrame:

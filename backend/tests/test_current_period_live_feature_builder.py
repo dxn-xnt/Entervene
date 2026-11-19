@@ -26,6 +26,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.prediction import CurrentPeriodFeatureBuilderService as feature_builder
 from app.services.prediction.CurrentPeriodFeatureBuilderService import (
     MODEL_PURPOSE,
     build_current_period_features_from_records,
@@ -35,6 +36,25 @@ from app.services.prediction.CurrentPeriodFeatureBuilderService import (
 )
 from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME
 from app.services.prediction.PredictionFeatureBuilderService import build_prediction_features_from_records
+
+
+def test_missing_feature_schema_reports_incomplete_runtime_bundle(tmp_path, monkeypatch):
+    monkeypatch.setattr(feature_builder, "SCHEMA_PATH", tmp_path / "missing-schema.json")
+    monkeypatch.setattr(feature_builder, "CORRECTED_SCHEMA_PATH", tmp_path / "missing-corrected-schema.json")
+
+    with pytest.raises(ValueError, match="current-term feature schema is unavailable"):
+        feature_builder.load_current_period_feature_schema()
+
+
+def test_checked_in_corrected_schema_is_adapted_for_live_feature_building(tmp_path, monkeypatch):
+    monkeypatch.setattr(feature_builder, "SCHEMA_PATH", tmp_path / "missing-legacy-schema.json")
+
+    schema = feature_builder.load_current_period_feature_schema()
+
+    assert schema["raw_feature_columns"] == schema["feature_columns"]
+    assert len(schema["raw_feature_columns"]) == 31
+    assert schema["validated_subjects"] == schema["supported_subjects"]
+    assert schema["validated_weight_combinations"] == ["WW20_PT50_QA30", "WW20_PT60_QA20"]
 
 
 @pytest.fixture

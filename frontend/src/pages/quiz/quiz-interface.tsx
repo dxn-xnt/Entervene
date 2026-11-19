@@ -78,6 +78,8 @@ const StudentQuizTake = () => {
 
         const normalizedStatus = (data.status || "").toLowerCase();
         const completed = isCompletedQuizStatus(normalizedStatus);
+        const startsFreshInterventionRetake = Boolean(data.is_intervention_quiz && completed);
+        const previousSubmissionId = data.submission_id;
 
         // Already submitted or passed and no further attempts permitted -> go directly to results
         if (!data.can_submit && (completed || data.is_passed)) {
@@ -96,6 +98,13 @@ const StudentQuizTake = () => {
         // Start a fresh attempt only when not started or beginning a permitted retake
         if (normalizedStatus === "not_started" || completed) {
           data = await startQuizAttempt(aid);
+          if (
+            startsFreshInterventionRetake &&
+            previousSubmissionId != null &&
+            (data.submission_id == null || data.submission_id === previousSubmissionId)
+          ) {
+            throw new Error("The retake did not start a new quiz attempt.");
+          }
         }
 
         if (cancelled) return;
@@ -103,12 +112,14 @@ const StudentQuizTake = () => {
 
         // Pre-fill saved answers if resuming
         const saved = new Map<number, { selected_option_id?: number | null; answer_text?: string | null }>();
-        for (const q of data.questions) {
-          if (q.selected_option_id != null || q.answer_text) {
-            saved.set(q.quiz_question_id, {
-              selected_option_id: q.selected_option_id,
-              answer_text: q.answer_text,
-            });
+        if (!startsFreshInterventionRetake) {
+          for (const q of data.questions) {
+            if (q.selected_option_id != null || q.answer_text) {
+              saved.set(q.quiz_question_id, {
+                selected_option_id: q.selected_option_id,
+                answer_text: q.answer_text,
+              });
+            }
           }
         }
         setAnswers(saved);

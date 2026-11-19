@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TeacherInterventionSummary } from "@/lib/teacher-interventions-api";
+import { describeActivationConflict } from "@/lib/intervention-activation-conflict";
 import TeacherInterventions from "./interventions";
 
 const apiMocks = vi.hoisted(() => ({
@@ -16,6 +17,25 @@ const apiMocks = vi.hoisted(() => ({
   getTeacherResolved: vi.fn(),
   activateTeacherCandidate: vi.fn(),
 }));
+
+describe("activation conflict messages", () => {
+  it("keeps runtime model failures retryable", () => {
+    const conflict = describeActivationConflict(
+      "The V3 scorer artifact is missing from backend/data/models.",
+    );
+
+    expect(conflict.stale).toBe(false);
+    expect(conflict.message).toContain("Prediction service unavailable");
+    expect(conflict.message).not.toContain("Candidate state changed");
+  });
+
+  it("marks changed prediction evidence stale", () => {
+    const conflict = describeActivationConflict("Current prediction evidence is not READY");
+
+    expect(conflict.stale).toBe(true);
+    expect(conflict.message).toContain("evidence is insufficient or unavailable");
+  });
+});
 
 vi.mock("@/lib/teacher-interventions-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/teacher-interventions-api")>();

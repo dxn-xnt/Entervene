@@ -9,6 +9,7 @@ import pytest
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
+from app.services.prediction import DevelopmentCurrentTermModelResolver as model_resolver
 from app.services.prediction import DevelopmentCurrentTermPredictionPersistenceService as persistence
 from app.services.prediction.DevelopmentCurrentTermModelSelection import (
     CORRECTED_MODEL_NAME, LEGACY_MODEL_NAME, artifact_path,
@@ -57,6 +58,43 @@ def test_corrected_package_and_selector(monkeypatch):
     assert selected_development_model_name() == CORRECTED_MODEL_NAME
     monkeypatch.setattr(selection.settings, "development_current_term_model_name", LEGACY_MODEL_NAME)
     assert selected_development_model_name() == LEGACY_MODEL_NAME
+
+
+def test_missing_runtime_artifact_is_reported_separately_from_path_mismatch(current_period_context, monkeypatch):
+    ctx = current_period_context
+    schema = scorer.load_development_current_term_schema(CORRECTED_MODEL_NAME)
+    schema_digest = sha256(json.dumps(schema, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    row = AIModelVersion(
+        model_name=CORRECTED_MODEL_NAME,
+        model_type="REGRESSOR",
+        model_purpose="CURRENT_TERM_FINAL_GRADE_PROJECTION",
+        algorithm="RandomForestRegressor",
+        target_column="target_final_period_grade",
+        lifecycle_status="DEVELOPMENT",
+        production_validated=False,
+        independent_three_term_validation=False,
+        is_active=False,
+        artifact_path=f"data/models/{CORRECTED_MODEL_NAME}.joblib",
+        feature_schema_json=schema,
+        registry_metadata_json={
+            "supported_subjects": ["CREATIVE_TECHNOLOGY", "ENGLISH", "ICT", "MATHEMATICS", "SCIENCE"],
+            "supported_weight_patterns": ["20/50/30", "20/60/20"],
+            "period_semantics": "SOURCE_EQUALS_TARGET_SAME_TERM",
+            "feature_schema_sha256": schema_digest,
+        },
+    )
+    ctx["db"].add(row)
+    ctx["db"].commit()
+
+    expected = artifact_path(CORRECTED_MODEL_NAME).resolve()
+    original_is_file = model_resolver.Path.is_file
+    monkeypatch.setattr(
+        model_resolver.Path,
+        "is_file",
+        lambda path: False if path.resolve() == expected else original_is_file(path),
+    )
+    with pytest.raises(ValueError, match="artifact is missing from backend/data/models"):
+        model_resolver.require_current_term_model(ctx["db"], row.model_version_id)
 
 
 def test_separate_histories_and_fail_closed_registry(current_period_context, monkeypatch):
