@@ -149,6 +149,8 @@ interface IDialogContentProps
   VariantProps<typeof dialogVariants> {
   overlay?: IDialogBackgroupProps;
   portalContainer?: React.ComponentProps<typeof BaseDialog.Portal>["container"];
+  initialFocus?: React.ComponentPropsWithoutRef<typeof BaseDialog.Popup>["initialFocus"];
+  finalFocus?: React.ComponentPropsWithoutRef<typeof BaseDialog.Popup>["finalFocus"];
 }
 
 const DialogContent = (inputProps: IDialogContentProps & { ref?: React.Ref<HTMLDivElement> }) => {

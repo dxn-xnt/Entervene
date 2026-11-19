@@ -23,6 +23,12 @@ from app.schemas.Activity import (
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
+from app.services.grading.GradeabilityService import (
+    ONLINE_SUBMISSION_REQUIRED,
+    can_enter_grade,
+    is_manual_activity,
+    require_gradeable_submission,
+)
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 
 
@@ -219,12 +225,23 @@ def get_activity_scores(db: Session, staff_id: str, activity_id: int, class_id: 
         assigned = assignment_allows_student(assignment, s.student_id)
         sub = sub_map.get(str(s.student_id)) if assigned else None
         score = float(sub.grade) if (sub and sub.grade is not None) else None
+        gradeable = assigned and can_enter_grade(classwork, sub)
         student_items.append(
             StudentActivityScoreItem(
                 student_id=str(s.student_id),
                 name=f"{s.first_name} {s.last_name}".strip(),
                 score=score,
                 assigned=assigned,
+                can_enter_score=gradeable,
+                score_entry_reason=(
+                    None
+                    if gradeable
+                    else (
+                        "Not assigned to this classwork."
+                        if not assigned
+                        else ONLINE_SUBMISSION_REQUIRED
+                    )
+                ),
             )
         )
 
@@ -253,7 +270,11 @@ def bulk_update_activity_scores(
     enrolled_ids = {row.student_id for row in db.query(StudentClass).filter_by(
         class_id=payload.class_id, enrollment_status="enrolled",
     ).all()}
+    requested_student_ids: set[UUID] = set()
     for item in payload.scores:
+        if item.student_id in requested_student_ids:
+            raise HTTPException(status_code=400, detail="Each student's score may be submitted only once")
+        requested_student_ids.add(item.student_id)
         if item.student_id not in enrolled_ids or not assignment_allows_student(assignment, item.student_id):
             raise HTTPException(status_code=403, detail="Student is not assigned to this activity")
         ensure_remedial_period_open(db, assignment, item.student_id)
@@ -265,7 +286,18 @@ def bulk_update_activity_scores(
         [item.student_id for item in payload.scores],
     )
 
-    # Validate each score input before modifying database
+    # Fetch existing submissions before validating changes. No mutation occurs
+    # until every requested score and submission is known to be gradeable.
+    existing_subs = (
+        db.query(StudentSubmission)
+        .filter(StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id)
+        .all()
+    )
+    sub_map = {str(sub.student_id): sub for sub in existing_subs}
+
+    changed_student_ids: set[str] = set()
+
+    # Validate each score input before modifying database.
     for item in payload.scores:
         if item.score is not None:
             if item.score < 0:
@@ -278,14 +310,12 @@ def bulk_update_activity_scores(
                     status_code=400,
                     detail=f"Score ({item.score}) exceeds maximum score ({max_score}) for student ID {item.student_id}",
                 )
-
-    # Fetch existing submissions
-    existing_subs = (
-        db.query(StudentSubmission)
-        .filter(StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id)
-        .all()
-    )
-    sub_map = {str(sub.student_id): sub for sub in existing_subs}
+        sub = sub_map.get(str(item.student_id))
+        current_score = float(sub.grade) if sub is not None and sub.grade is not None else None
+        requested_score = float(item.score) if item.score is not None else None
+        if requested_score != current_score:
+            require_gradeable_submission(classwork, sub)
+            changed_student_ids.add(str(item.student_id))
     original_grades = {
         str(item.student_id): sub_map[str(item.student_id)].grade if str(item.student_id) in sub_map else None
         for item in payload.scores
@@ -295,6 +325,8 @@ def bulk_update_activity_scores(
 
     for item in payload.scores:
         sid_str = str(item.student_id)
+        if sid_str not in changed_student_ids:
+            continue
         sub = sub_map.get(sid_str)
         if sub is None:
             try:
@@ -315,7 +347,9 @@ def bulk_update_activity_scores(
             sub.graded_by_staff_id = staff_id
         else:
             sub.grade = None
-            sub.status = "pending"
+            # Clearing an online grade does not erase the completed attempt.
+            # Manual/offline rows have no submitted lifecycle to preserve.
+            sub.status = "pending" if is_manual_activity(classwork) else "submitted"
 
     db.commit()
 

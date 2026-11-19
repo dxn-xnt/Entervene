@@ -448,10 +448,15 @@ async def submit_student_work(
                     title=link.title,
                     position=position,
                 ))
+        if assignment.source_intervention_id is not None and classwork.is_graded:
+            from app.services.intervention.InterventionNotificationService import (
+                stage_intervention_assessment_submitted,
+            )
+            stage_intervention_assessment_submitted(db, assignment, submission)
         db.commit()
         db.refresh(submission)
 
-        if is_late and classwork and classwork.created_by_staff_id:
+        if is_late and classwork and classwork.created_by_staff_id and assignment.source_intervention_id is None:
             try:
                 from app.models.people.AcademicStaff import AcademicStaff
                 from app.models.academic.Subject import Subject
@@ -946,6 +951,9 @@ def grade_student_submission(
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first() if assignment else None
     if classwork and (classwork.classwork_type or "").upper() == "READING":
         raise HTTPException(status_code=400, detail="Reading classworks cannot be graded")
+    if classwork:
+        from app.services.grading.GradeabilityService import require_gradeable_submission
+        require_gradeable_submission(classwork, submission)
     if body.grade < 0:
         raise HTTPException(status_code=400, detail="Grade cannot be negative")
     if classwork and classwork.total_points is not None and body.grade > float(classwork.total_points):
@@ -1004,6 +1012,13 @@ def grade_student_submission(
         staff_id,
         focus_points=validated_focus_points,
     )
+
+    if assignment.source_intervention_id is not None and classwork and classwork.is_graded:
+        from app.services.intervention.InterventionNotificationService import (
+            stage_intervention_assessment_result_or_submission,
+        )
+        db.flush()
+        stage_intervention_assessment_result_or_submission(db, assignment, submission)
 
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()

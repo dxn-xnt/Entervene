@@ -81,7 +81,7 @@ export default function StudentInterventions() {
         activeRes.status === "rejected" ||
         resolvedRes.status === "rejected"
       ) {
-        setLoadError("Some study support could not be loaded. Please try again later.");
+        setLoadError("Some Study Support could not be loaded. Please try again later.");
       }
     } catch (err) {
       console.warn("Unable to load live interventions", err);
@@ -89,7 +89,7 @@ export default function StudentInterventions() {
       setResolvedInterventions([]);
       setActiveLoadFailed(true);
       setResolvedLoadFailed(true);
-      setLoadError("Study support could not be loaded. Please try again later.");
+      setLoadError("Study Support could not be loaded. Please try again later.");
     } finally {
       setLoading(false);
     }
@@ -419,7 +419,7 @@ export default function StudentInterventions() {
                     <StudentEmptyState
                       icon={<Shield />}
                       title="No active support"
-                      description="You don't have any active intervention support right now."
+                      description="You don't have any active Study Support right now."
                     />
                   ) : (
                     <div className="flex flex-col gap-4">

@@ -113,7 +113,7 @@ const Notifications = () => {
     if (activeTab === "repost") return n.notification_type.startsWith("repost_");
     if (activeTab === "announcements") return n.notification_type === "announcement";
     if (activeTab === "submissions") return n.notification_type === "submission_graded" || n.notification_type === "assignment_due";
-    if (activeTab === "interventions") return n.notification_type === "risk_alert" || n.notification_type === "intervention_candidate" || n.notification_type === "intervention_resolved";
+    if (activeTab === "interventions") return n.notification_type === "risk_alert" || n.notification_type.startsWith("intervention_");
     return true;
   });
 

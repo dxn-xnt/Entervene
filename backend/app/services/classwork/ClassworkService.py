@@ -244,22 +244,9 @@ def notify_students_for_classwork(
 
 
 def _stage_targeted_assignment_notification(db: Session, assignment: ClassworkAssignment, classwork: Classwork, subject_id: int) -> None:
-    from app.models.people.Student import Student
-    from app.schemas.Notification import NotificationCreate
-    from app.services.NotificationService import stage_notification
+    from app.services.intervention.StudySupportReminderService import stage_study_support_available
 
-    student = db.query(Student).filter_by(student_id=assignment.recipient_student_id).first()
-    if not student or not student.user_id:
-        return
-    subject = db.query(Subject).filter_by(subject_id=subject_id).first()
-    subject_name = subject.subject_name if subject else "your subject"
-    stage_notification(db, NotificationCreate(
-        user_id=student.user_id,
-        notification_type="assignment_due",
-        title=f"{subject_name}: {classwork.title}",
-        body=f"Your teacher assigned additional {subject_name} practice for you.",
-        action_url=f"/student/subjects/{assignment.class_id}/{subject_id}?tab=classwork&classworkAssignmentId={assignment.classwork_assignment_id}",
-    ))
+    stage_study_support_available(db, assignment, classwork, subject_id)
 
 
 
@@ -1362,11 +1349,11 @@ def assign_classwork_to_classes(
                     remediation_assignment_id=targeted.classwork_assignment_id,
                     items=items,
                 )
+        if targeted:
+            classwork.is_published = bool(body.is_published)
         if targeted and body.is_published and not was_targeted_published:
             db.flush()
             _stage_targeted_assignment_notification(db, targeted, classwork, classwork.subject_id)
-        if targeted:
-            classwork.is_published = bool(body.is_published)
         if body.is_published:
             ensure_published_quiz_student_ready(db, classwork)
         db.commit()
