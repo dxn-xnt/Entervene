@@ -77,6 +77,8 @@ const pendingAttempt: QuizAttemptResponse = {
   duration_minutes: null,
   max_attempts: 1,
   attempt_count: 0,
+  attempts_used: 0,
+  attempts_remaining: 1,
   status: "pending",
   started_at: "2026-11-20T00:00:00Z",
   server_time: "2026-11-20T00:01:00Z",
@@ -106,6 +108,8 @@ const pendingAttempt: QuizAttemptResponse = {
 const gradedAttempt: QuizAttemptResponse = {
   ...pendingAttempt,
   attempt_count: 1,
+  attempts_used: 1,
+  attempts_remaining: 0,
   status: "graded",
   submitted_at: "2026-11-20T00:05:00Z",
   grade: 7,

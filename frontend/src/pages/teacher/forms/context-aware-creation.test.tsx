@@ -19,7 +19,7 @@ vi.mock("@/context/AcademicPeriodContext", () => ({
     selectedPeriodId: 1,
     selectedYearId: 1,
   }),
-  useRegisterDirtyGuard: () => {},
+  useRegisterDirtyGuard: () => { },
 }));
 
 const mockClasses = [
@@ -464,8 +464,8 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     expect(shuffleSwitch.disabled).toBe(true);
 
     // A single, clear explanation describes all locked quiz controls.
-    expect(screen.getByText("Quiz settings locked")).toBeInTheDocument();
-    expect(screen.getByText(/A student has already started this quiz/)).toBeInTheDocument();
+    expect(screen.getByText("Quiz settings locked")).toBeTruthy();
+    expect(screen.getByText(/A student has already started this quiz/)).toBeTruthy();
 
     // Result release controls remain editable
     const showResultsSwitch = screen.getByRole("switch", { name: /Show quiz results to students/i }) as HTMLButtonElement;
