@@ -217,10 +217,9 @@ function AdminCurrentTermDashboard() {
           </div>
           <Button
             variant="outline"
-            size="sm"
+            size="header"
             onClick={handleExportCsv}
             disabled={isExporting || !selectedPeriodId}
-            className="gap-1.5"
             data-testid="export-risk-summary-csv-button"
           >
             {isExporting ? (
@@ -447,10 +446,9 @@ function TeacherCurrentTermDashboard() {
           </div>
           <Button
             variant="outline"
-            size="sm"
+            size="header"
             onClick={handleExportCsv}
             disabled={isExporting || !selectedPeriodId}
-            className="gap-1.5"
             data-testid="export-risk-summary-csv-button"
           >
             {isExporting ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCheck, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/teacher/button";
@@ -1818,13 +1819,13 @@ export default function CreateClassworkQuizModal({
 
                                     {quizSettings.summary_release_mode === "SCHEDULED" ? (
                                         <Field label="Release Date & Time" isRequired>
-                                            <Input
-                                                type="datetime-local"
+                                            <DatePicker
+                                                includeTime
                                                 value={quizSettings.summary_release_at}
-                                                onChange={(event) =>
+                                                onValueChange={(value) =>
                                                     setQuizSettings((current) => ({
                                                         ...current,
-                                                        summary_release_at: event.target.value,
+                                                        summary_release_at: value,
                                                     }))
                                                 }
                                                 disabled={isCreating}
@@ -1899,14 +1900,14 @@ export default function CreateClassworkQuizModal({
 
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <Field label="Due Date" isRequired={quizSettings.summary_release_mode === "AFTER_DUE_DATE"}>
-                                        <Input
-                                            type="datetime-local"
+                                        <DatePicker
+                                            includeTime
                                             value={draft.due_date}
-                                            onChange={(event) => {
-                                                if (event.target.value && createError.startsWith("A due date is required")) setCreateError("");
+                                            onValueChange={(value) => {
+                                                if (value && createError.startsWith("A due date is required")) setCreateError("");
                                                 setDraft((current) => ({
                                                     ...current,
-                                                    due_date: event.target.value,
+                                                    due_date: value,
                                                 }));
                                             }}
                                             disabled={isCreating}
@@ -1989,13 +1990,13 @@ export default function CreateClassworkQuizModal({
 
                                 <div className="grid gap-4 sm:grid-cols-2 mt-4">
                                     <Field label="Locked Until">
-                                        <Input
-                                            type="datetime-local"
+                                        <DatePicker
+                                            includeTime
                                             value={draft.lock_date}
-                                            onChange={(event) =>
+                                            onValueChange={(value) =>
                                                 setDraft((current) => ({
                                                     ...current,
-                                                    lock_date: event.target.value,
+                                                    lock_date: value,
                                                 }))
                                             }
                                             disabled={isCreating || !draft.is_published}

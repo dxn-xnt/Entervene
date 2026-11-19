@@ -106,7 +106,7 @@ export default function AdminNotifications() {
                   Notifications
                 </h1>
               </div>
-              <Button variant="default" size="md" onClick={handleMarkAll} disabled={markingAll || notifications.every((n) => n.is_read)} className="shrink-0 whitespace-nowrap">
+              <Button variant="default" size="md" onClick={handleMarkAll} disabled={markingAll || notifications.every((n) => n.is_read)} className="shrink-0 gap-2 whitespace-nowrap">
                 {markingAll ? <Loader2 className="size-4 animate-spin" /> : null}
                 <span className="hidden sm:inline">Mark All as Read</span>
                 <span className="sm:hidden">Read All</span>

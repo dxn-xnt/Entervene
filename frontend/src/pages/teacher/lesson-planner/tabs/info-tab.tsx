@@ -1,3 +1,4 @@
+import { DatePicker } from "@/components/retroui/DatePicker";
 import React from "react";
 import { Input } from "@/components/retroui/Input";
 import { Label } from "@/components/retroui/Label";
@@ -108,11 +109,10 @@ export const InfoTab: React.FC<InfoTabProps> = ({
           </FormField>
 
           <FormField label="Date">
-            <Input
+            <DatePicker
               id="lesson-date"
-              type="date"
               value={draft.date}
-              onChange={(e) => onChange("date", e.target.value)}
+              onValueChange={(value) => onChange("date", value)}
               className="border-black shadow-none"
             />
           </FormField>
