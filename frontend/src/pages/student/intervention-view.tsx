@@ -707,15 +707,17 @@ export default function StudentInterventionView() {
                                       )}
                                       {act.submission_status && (
                                         <Badge
-                                          variant={finished ? "solid" : "outline"}
+                                          variant={act.is_passed ? "success" : finished ? "solid" : "outline"}
                                           size="sm"
                                           className="capitalize"
                                         >
-                                          {act.submission_status === "graded"
-                                            ? "Completed"
-                                            : act.submission_status === "submitted"
-                                              ? "Submitted"
-                                              : act.submission_status}
+                                          {act.is_passed
+                                            ? "Passed"
+                                            : act.submission_status === "graded"
+                                              ? "Completed"
+                                              : act.submission_status === "submitted"
+                                                ? "Submitted"
+                                                : act.submission_status}
                                         </Badge>
                                       )}
                                       <Badge

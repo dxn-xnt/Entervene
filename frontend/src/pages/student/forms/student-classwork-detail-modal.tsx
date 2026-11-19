@@ -8,6 +8,7 @@ import {
   GraduationCap,
   Paperclip,
 } from "lucide-react";
+import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/student/button";
 import { Card } from "@/components/retroui/Card";
@@ -18,6 +19,7 @@ import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import { API_URL } from "@/lib/api";
+import { STUDY_SUPPORT_QUIZ_PASSED_MESSAGE } from "@/lib/quiz-api";
 import type {
   ClassworkDetail,
   QuizAttempt,
@@ -448,10 +450,14 @@ export default function StudentClassworkDetailModal({
                           <Card className="block w-full border-black bg-white p-3 text-sm shadow-none hover:shadow-none">
                             <div className="flex items-center justify-between gap-3">
                               <span className="font-bold capitalize">
-                                {statusLabel(selectedQuizAttempt.status)}
+                                {selectedQuizAttempt.is_passed
+                                  ? "Passed"
+                                  : statusLabel(selectedQuizAttempt.status)}
                               </span>
                               <span className="font-semibold">
-                                Attempts used {selectedQuizAttempt.attempts_used ?? selectedQuizAttempt.attempt_count} · Remaining {selectedQuizAttempt.attempts_remaining ?? Math.max(0, selectedQuizAttempt.max_attempts - selectedQuizAttempt.attempt_count)} · Total {selectedQuizAttempt.max_attempts}
+                                {selectedQuizAttempt.is_passed
+                                  ? `Attempts used ${selectedQuizAttempt.attempts_used ?? selectedQuizAttempt.attempt_count}`
+                                  : `Attempts used ${selectedQuizAttempt.attempts_used ?? selectedQuizAttempt.attempt_count} · Remaining ${selectedQuizAttempt.attempts_remaining ?? Math.max(0, selectedQuizAttempt.max_attempts - selectedQuizAttempt.attempt_count)} · Total ${selectedQuizAttempt.max_attempts}`}
                               </span>
                             </div>
                             <Card className="mt-2 flex w-full flex-wrap gap-2 border-black bg-white p-2 text-sm font-semibold text-gray-600 shadow-none hover:shadow-none">
@@ -472,19 +478,38 @@ export default function StudentClassworkDetailModal({
                             </Card>
                             {selectedQuizAttempt.grade !== null &&
                             selectedQuizAttempt.grade !== undefined ? (
+                              <div className="mt-2 space-y-1 text-sm font-bold">
+                                <p>
+                                  {selectedClasswork.show_scores &&
+                                  selectedQuizAttempt.show_scores !== false ? (
+                                    <>
+                                      Score: {selectedQuizAttempt.grade}/
+                                      {selectedQuizAttempt.total_points ??
+                                        selectedClasswork.total_points ??
+                                        0}
+                                    </>
+                                  ) : (
+                                    <span className="rounded-full bg-gray-200 px-2 py-1 text-sm text-gray-700">
+                                      Score hidden
+                                    </span>
+                                  )}
+                                </p>
+                                {selectedClasswork.show_scores &&
+                                  selectedQuizAttempt.show_scores !== false &&
+                                  selectedQuizAttempt.is_intervention_quiz &&
+                                  selectedQuizAttempt.passing_threshold != null && (
+                                    <p className="text-xs font-semibold text-gray-600">
+                                      Passing score: {selectedQuizAttempt.passing_threshold}%
+                                    </p>
+                                  )}
+                              </div>
+                            ) : selectedQuizAttempt.status === "graded" &&
+                              (!selectedClasswork.show_scores ||
+                                selectedQuizAttempt.show_scores === false) ? (
                               <p className="mt-2 text-sm font-bold">
-                                {selectedClasswork.show_scores ? (
-                                  <>
-                                    Score: {selectedQuizAttempt.grade}/
-                                    {selectedQuizAttempt.total_points ??
-                                      selectedClasswork.total_points ??
-                                      0}
-                                  </>
-                                ) : (
-                                  <span className="rounded-full bg-gray-200 px-2 py-1 text-sm text-gray-700">
-                                    Score hidden
-                                  </span>
-                                )}
+                                <span className="rounded-full bg-gray-200 px-2 py-1 text-sm text-gray-700">
+                                  Score hidden
+                                </span>
                               </p>
                             ) : null}
                           </Card>
@@ -521,20 +546,29 @@ export default function StudentClassworkDetailModal({
                                       : "Summary Scheduled"}
                                 </Button>
                               ) : null}
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={onStartQuiz}
-                                disabled={
-                                  !selectedQuizAttempt.can_submit ||
-                                  isQuizSubmitting
-                                }
-                                className="w-full gap-2 rounded border-black bg-success text-sm font-bold text-black hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {selectedQuizAttempt.status === "not_started"
-                                  ? "Start Quiz"
-                                  : "Retake Quiz"}
-                              </Button>
+                              {selectedQuizAttempt.is_passed ? (
+                                <Alert status="success">
+                                  <Alert.Title>Passed</Alert.Title>
+                                  <Alert.Description>
+                                    {STUDY_SUPPORT_QUIZ_PASSED_MESSAGE}
+                                  </Alert.Description>
+                                </Alert>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={onStartQuiz}
+                                  disabled={
+                                    !selectedQuizAttempt.can_submit ||
+                                    isQuizSubmitting
+                                  }
+                                  className="w-full gap-2 rounded border-black bg-success text-sm font-bold text-black hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {selectedQuizAttempt.status === "not_started"
+                                    ? "Start Quiz"
+                                    : "Retake Quiz"}
+                                </Button>
+                              )}
                             </div>
                           ) : (
                             <>

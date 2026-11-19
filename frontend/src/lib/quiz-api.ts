@@ -32,6 +32,9 @@ export type QuizAttemptQuestion = {
   explanation?: string | null;
 };
 
+export const STUDY_SUPPORT_QUIZ_PASSED_MESSAGE =
+  "You've successfully completed this Study Support assessment. No further attempts are needed.";
+
 export type QuizAttemptResponse = {
   quiz_id: number;
   classwork_assignment_id: number;
@@ -50,6 +53,10 @@ export type QuizAttemptResponse = {
   submitted_at?: string | null;
   grade?: number | null;
   can_submit: boolean;
+  is_intervention_quiz?: boolean;
+  is_passed?: boolean;
+  passing_threshold?: number | null;
+  show_scores?: boolean;
   summary_available: boolean;
   summary_release_mode: string;
   summary_release_at?: string | null;

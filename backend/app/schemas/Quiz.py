@@ -175,6 +175,10 @@ class QuizAttemptResponse(BaseModel):
     submitted_at: Optional[datetime] = None
     grade: Optional[float] = None
     can_submit: bool
+    is_intervention_quiz: bool = False
+    is_passed: bool = False
+    passing_threshold: Optional[float] = None
+    show_scores: bool = True
     summary_available: bool = False
     summary_release_mode: str = "IMMEDIATE"
     summary_release_at: Optional[datetime] = None

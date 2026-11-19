@@ -19,6 +19,7 @@ import {
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
+import { Alert } from "@/components/retroui/Alert";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/student/button";
@@ -40,7 +41,11 @@ import StudentQuizFullscreen from "./forms/student-quiz-fullscreen";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { useToast } from "@/components/retroui/Toast";
 import { API_URL, apiFetch } from "@/lib/api";
-import { getQuizAttempt, type QuizAttemptResponse } from "@/lib/quiz-api";
+import {
+  getQuizAttempt,
+  STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
+  type QuizAttemptResponse,
+} from "@/lib/quiz-api";
 import {
   listInterventionReadingReviews,
   reviewInterventionReading,
@@ -825,11 +830,20 @@ export default function StudentClassworkView() {
                       </p>
                     ) : quiz ? (
                       <div className="space-y-3 text-sm">
-                        <p className="capitalize">
-                          Status: {statusLabel(quiz.status)}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="capitalize">
+                            Status: {quiz.is_passed ? "Passed" : statusLabel(quiz.status)}
+                          </span>
+                          {quiz.is_passed && (
+                            <Badge variant="success" size="sm">
+                              Passed
+                            </Badge>
+                          )}
+                        </div>
                         <p>
-                          Attempts used: {quiz.attempts_used ?? quiz.attempt_count} · Remaining: {quiz.attempts_remaining ?? Math.max(0, quiz.max_attempts - quiz.attempt_count)} · Total: {quiz.max_attempts}
+                          {quiz.is_passed
+                            ? `Attempts used: ${quiz.attempts_used ?? quiz.attempt_count}`
+                            : `Attempts used: ${quiz.attempts_used ?? quiz.attempt_count} · Remaining: ${quiz.attempts_remaining ?? Math.max(0, quiz.max_attempts - quiz.attempt_count)} · Total: ${quiz.max_attempts}`}
                         </p>
                         <p>
                           {quiz.questions.length} questions ·{" "}
@@ -838,12 +852,27 @@ export default function StudentClassworkView() {
                         {quiz.duration_minutes && (
                           <p>{quiz.duration_minutes} minutes</p>
                         )}
-                        {quiz.grade != null && (
-                          <p className="font-bold">
-                            {detail.show_scores
-                              ? `Score: ${quiz.grade}/${quiz.total_points ?? detail.total_points ?? 0}`
-                              : "Score hidden"}
-                          </p>
+                        {(quiz.grade != null ||
+                          (quiz.status === "graded" &&
+                            (detail.show_scores === false ||
+                              quiz.show_scores === false))) && (
+                          <div className="space-y-1">
+                            <p className="font-bold">
+                              {detail.show_scores &&
+                              quiz.show_scores !== false &&
+                              quiz.grade != null
+                                ? `Score: ${quiz.grade}/${quiz.total_points ?? detail.total_points ?? 0}`
+                                : "Score hidden"}
+                            </p>
+                            {detail.show_scores &&
+                              quiz.show_scores !== false &&
+                              quiz.is_intervention_quiz &&
+                              quiz.passing_threshold != null && (
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  Passing score: {quiz.passing_threshold}%
+                                </p>
+                              )}
+                          </div>
                         )}
                         {quiz.summary_message && (
                           <p className="text-muted-foreground">
@@ -869,19 +898,40 @@ export default function StudentClassworkView() {
                                   : "Summary Scheduled"}
                             </Button>
                           )}
-                        {quiz.can_submit && isWritableContext && (
-                          <Button
-                            size="sm"
-                            className="w-full gap-2"
-                            onClick={() => navigate(quizLink)}
-                          >
-                            {quiz.status === "pending"
-                              ? "Continue Quiz"
-                              : quiz.status === "not_started"
-                                ? "Start Quiz"
-                                : "Retake Quiz"}
-                          </Button>
-                        )}
+                        {quiz.is_passed ? (
+                          <Alert status="success">
+                            <Alert.Title>Passed</Alert.Title>
+                            <Alert.Description>
+                              {STUDY_SUPPORT_QUIZ_PASSED_MESSAGE}
+                            </Alert.Description>
+                          </Alert>
+                        ) : quiz.can_submit && isWritableContext ? (
+                          <div className="space-y-2">
+                            {quiz.is_intervention_quiz && quiz.status === "graded" && (
+                              <Alert status="warning">
+                                <Alert.Title>Passing score not reached yet</Alert.Title>
+                                <Alert.Description>
+                                  {detail.show_scores &&
+                                  quiz.show_scores !== false &&
+                                  quiz.passing_threshold != null
+                                    ? `You need at least ${quiz.passing_threshold}% to pass this Study Support assessment. Review the material and retake the quiz when you're ready.`
+                                    : "You haven't reached the passing score for this Study Support assessment yet. Review the material and retake the quiz when you're ready."}
+                                </Alert.Description>
+                              </Alert>
+                            )}
+                            <Button
+                              size="sm"
+                              className="w-full gap-2"
+                              onClick={() => navigate(quizLink)}
+                            >
+                              {quiz.status === "pending"
+                                ? "Continue Quiz"
+                                : quiz.status === "not_started"
+                                  ? "Start Quiz"
+                                  : "Retake Quiz"}
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">

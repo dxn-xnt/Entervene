@@ -67,9 +67,21 @@ const StudentQuizTake = () => {
       try {
         // Try fetching existing attempt first
         let data = await getQuizAttempt(aid);
+        if (cancelled) return;
 
-        // If no attempt exists yet (status NOT_STARTED), start one
-        if (data.status === "NOT_STARTED" || data.attempt_count === 0) {
+        if (!data.can_submit) {
+          navigate(
+            quizPathWithContext(
+              routes.student.quizResult.replace(":assignmentId", String(aid)),
+              location.search,
+            ),
+            { replace: true },
+          );
+          return;
+        }
+
+        // Start a new attempt when not currently in progress (initial attempt or retake)
+        if (data.status !== "pending") {
           data = await startQuizAttempt(aid);
         }
 
@@ -107,7 +119,7 @@ const StudentQuizTake = () => {
 
     init();
     return () => { cancelled = true; };
-  }, [aid]);
+  }, [aid, location.search, navigate]);
 
   // --------------------------------------------------
   // Countdown timer

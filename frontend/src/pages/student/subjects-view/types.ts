@@ -146,6 +146,10 @@ export interface QuizAttempt {
   submitted_at?: string | null;
   grade?: number | null;
   can_submit: boolean;
+  is_intervention_quiz?: boolean;
+  is_passed?: boolean;
+  passing_threshold?: number | null;
+  show_scores?: boolean;
   summary_available: boolean;
   summary_release_mode:
     | "IMMEDIATE"
