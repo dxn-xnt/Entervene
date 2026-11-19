@@ -2342,11 +2342,20 @@ export type ConflictItem = {
   subject_id?: number | null;
   staff_id?: string | null;
   day?: string | null;
+  days?: string[];
+  start_time?: string | null;
+  end_time?: string | null;
+  slot_id?: number | null;
+  subject_load_id?: number | null;
   affected_key?: string | null;
   affected_keys?: string[];
   related_class_id?: number | null;
   related_subject_id?: number | null;
   related_affected_key?: string | null;
+  related_start_time?: string | null;
+  related_end_time?: string | null;
+  related_slot_id?: number | null;
+  related_subject_load_id?: number | null;
 };
 
 export type TeacherWorkloadItem = {
@@ -2418,19 +2427,6 @@ export async function getSubjectLoadStudioData(periodId?: number): Promise<Subje
   return (await response.json()) as SubjectLoadStudioData;
 }
 
-export type AutoScheduleResponse = {
-  is_valid: boolean;
-  conflicts: ConflictItem[];
-  teacher_workloads: TeacherWorkloadItem[];
-  scheduled_loads: SubjectLoadItem[];
-  unscheduled_loads?: Array<{
-    class_id: number;
-    subject_id: number;
-    staff_id?: string | null;
-    reason: string;
-  }>;
-};
-
 export async function validateSubjectLoads(periodId: number, loads: SubjectLoadItem[]): Promise<ValidationResultResponse> {
   const response = await apiFetch("/api/v1/subject-loads/validate", {
     method: "POST",
@@ -2441,23 +2437,6 @@ export async function validateSubjectLoads(periodId: number, loads: SubjectLoadI
     throw new ApiRequestError("Failed to validate subject loads", response.status, null);
   }
   return (await response.json()) as ValidationResultResponse;
-}
-
-export async function autoScheduleSubjectLoads(
-  periodId: number,
-  loads: SubjectLoadItem[],
-  mode: "standard" | "teacher_swap" = "standard"
-): Promise<AutoScheduleResponse> {
-  const query = mode === "teacher_swap" ? "?mode=teacher_swap" : "";
-  const response = await apiFetch(`/api/v1/subject-loads/auto-schedule${query}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ academic_period_id: periodId, loads }),
-  });
-  if (!response.ok) {
-    throw new ApiRequestError("Failed to auto-schedule subject loads", response.status, null);
-  }
-  return (await response.json()) as AutoScheduleResponse;
 }
 
 export async function batchSaveSubjectLoads(
