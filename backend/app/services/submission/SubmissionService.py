@@ -215,7 +215,9 @@ def authorize_submission_access(submission: StudentSubmission, current_user: dic
                 ClassworkAssignment.classwork_assignment_id == submission.classwork_assignment_id
             ).first()
             if assignment:
-                require_remediation_prerequisite(db, assignment, student)
+                require_remediation_prerequisite(
+                    db, assignment, student, allow_completed_resolved_review=True,
+                )
             return
     if role == "teacher":
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == current_user_id).first()

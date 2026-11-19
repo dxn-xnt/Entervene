@@ -76,7 +76,9 @@ def get_student_quiz_attempt(
     assignment_id: int,
 ) -> QuizAttemptResponse:
     assignment, classwork, quiz = _student_quiz_scope(db, student, assignment_id)
-    require_remediation_prerequisite(db, assignment, student)
+    require_remediation_prerequisite(
+        db, assignment, student, allow_completed_resolved_review=True,
+    )
     submission = _submission_for(db, student, assignment_id)
     return _attempt_response(db, assignment, classwork, quiz, submission)
 
@@ -91,7 +93,6 @@ def start_student_quiz_attempt(
     require_remediation_prerequisite(db, assignment, student)
     _ensure_before_due(assignment)
     ensure_remedial_period_open(db, assignment, student.student_id)
-
     _lock_assignment_row(db, assignment_id)
     submission = _submission_for(db, student, assignment_id, lock_for_update=True)
     previous_grade = submission.grade if submission else None
@@ -686,6 +687,16 @@ def _can_submit(
 ) -> bool:
     if is_passed:
         return False
+    if assignment.source_intervention_id is not None:
+        from app.models.intervention.Intervention import Intervention
+
+        intervention_status = (
+            db.query(Intervention.status)
+            .filter(Intervention.intervention_id == assignment.source_intervention_id)
+            .scalar()
+        )
+        if intervention_status != "ACTIVE":
+            return False
     due_date = aware_utc(assignment.due_date)
     if due_date and datetime.now(timezone.utc) > due_date and not (
         submission and submission.status == "pending" and _pending_started_before_due(submission, due_date)

@@ -1,6 +1,6 @@
 """Teacher-only review of corrected development Interventions."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -256,20 +256,22 @@ def project_subject_grade_endpoint(
 
 @router.get("/candidates", response_model=TeacherInterventionList)
 def list_candidates_endpoint(
+    academic_period_id: int | None = Query(None, gt=0),
     _teacher: dict = Depends(require_intervention_teacher),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    return list_teacher_candidates(db, staff_id)
+    return list_teacher_candidates(db, staff_id, academic_period_id)
 
 
 @router.get("/active", response_model=TeacherInterventionList)
 def list_active_endpoint(
+    academic_period_id: int | None = Query(None, gt=0),
     _teacher: dict = Depends(require_intervention_teacher),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    return list_teacher_active(db, staff_id)
+    return list_teacher_active(db, staff_id, academic_period_id)
 
 
 @router.get("/active/{intervention_id}", response_model=TeacherInterventionDetail)
@@ -284,10 +286,11 @@ def get_active_endpoint(
 
 @router.get("/resolved", response_model=TeacherInterventionList)
 def list_resolved_endpoint(
+    academic_period_id: int | None = Query(None, gt=0),
     _teacher: dict = Depends(require_intervention_teacher),
     staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db),
 ):
-    return list_teacher_resolved(db, staff_id)
+    return list_teacher_resolved(db, staff_id, academic_period_id)
 
 
 @router.get("/resolved/{intervention_id}", response_model=TeacherResolvedInterventionDetail)

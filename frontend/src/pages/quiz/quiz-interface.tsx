@@ -26,6 +26,12 @@ function formatTime(totalSeconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+const COMPLETED_QUIZ_STATUSES = new Set(["submitted", "late", "graded"]);
+
+function isCompletedQuizStatus(status?: string | null): boolean {
+  return COMPLETED_QUIZ_STATUSES.has((status || "").toLowerCase());
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -45,6 +51,7 @@ const StudentQuizTake = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [flagged, setFlagged] = useState<Set<number>>(new Set());
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   // Answer tracking: quiz_question_id -> selected_option_id or answer_text
   const [answers, setAnswers] = useState<Map<number, { selected_option_id?: number | null; answer_text?: string | null }>>(new Map());
@@ -69,19 +76,25 @@ const StudentQuizTake = () => {
         let data = await getQuizAttempt(aid);
         if (cancelled) return;
 
-        if (!data.can_submit) {
+        const normalizedStatus = (data.status || "").toLowerCase();
+        const completed = isCompletedQuizStatus(normalizedStatus);
+
+        // Already submitted or passed and no further attempts permitted -> go directly to results
+        if (!data.can_submit && (completed || data.is_passed)) {
           navigate(
-            quizPathWithContext(
-              routes.student.quizResult.replace(":assignmentId", String(aid)),
-              location.search,
-            ),
-            { replace: true },
+            quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search),
+            { replace: true, state: { submittedAttempt: data } },
           );
           return;
         }
 
-        // Start a new attempt when not currently in progress (initial attempt or retake)
-        if (data.status !== "pending") {
+        if (!data.can_submit) {
+          setError("This quiz is closed and can no longer be taken.");
+          return;
+        }
+
+        // Start a fresh attempt only when not started or beginning a permitted retake
+        if (normalizedStatus === "not_started" || completed) {
           data = await startQuizAttempt(aid);
         }
 
@@ -181,7 +194,8 @@ const StudentQuizTake = () => {
   // Submit
   // --------------------------------------------------
   const handleSubmit = useCallback(async () => {
-    if (!quiz || submitting) return;
+    if (!quiz || submitting || submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
 
     try {
@@ -194,14 +208,18 @@ const StudentQuizTake = () => {
         };
       });
 
-      await submitQuizAttempt(aid, payload);
+      const submitted = await submitQuizAttempt(aid, payload);
       toast.success({ title: "Quiz submitted" });
 
-      // Navigate to result page
-      navigate(quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search), { replace: true });
+      // Navigate to result page with the saved attempt while result page verifies canonical state
+      navigate(
+        quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search),
+        { replace: true, state: { submittedAttempt: submitted } },
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit quiz.");
       toast.error({ title: "Failed to submit quiz", description: err instanceof Error ? err.message : undefined });
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }, [quiz, answers, aid, navigate, location.search, submitting, toast]);
@@ -233,12 +251,6 @@ const StudentQuizTake = () => {
         <Button autoIcon={false} onClick={() => navigate(-1)}>Go Back</Button>
       </div>
     );
-  }
-
-  // Already submitted
-  if (!quiz.can_submit && quiz.status === "SUBMITTED") {
-    navigate(quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search), { replace: true });
-    return null;
   }
 
   return (

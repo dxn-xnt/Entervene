@@ -190,6 +190,7 @@ export default function InterventionModal({
   startSetup = false,
 }: InterventionModalProps) {
   const [supportPage, setSupportPage] = useState<"overview" | "plan">("overview");
+  const [supportMode, setSupportMode] = useState<"configure" | "edit">("edit");
   const [savingAdjustments, setSavingAdjustments] = useState(false);
   const [supportHasChanges, setSupportHasChanges] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
@@ -198,7 +199,13 @@ export default function InterventionModal({
   const interventionId = detail?.intervention_id;
 
   useEffect(() => {
-    setSupportPage(startSetup && selectedKind === "active" ? "plan" : "overview");
+    if (startSetup && selectedKind === "active") {
+      setSupportPage("plan");
+      setSupportMode("configure");
+    } else {
+      setSupportPage("overview");
+      setSupportMode("edit");
+    }
     setWizardStep(1);
   }, [isOpen, interventionId, startSetup, selectedKind]);
 
@@ -256,7 +263,9 @@ export default function InterventionModal({
               ? "Resolved Intervention"
               : selectedKind === "active"
                 ? supportPage === "plan"
-                  ? "Edit Support"
+                  ? supportMode === "configure"
+                    ? "Configure Support"
+                    : "Edit Support"
                   : "Active Intervention"
                 : "Candidate Review"}
           </Dialog.Title>
@@ -822,6 +831,7 @@ export default function InterventionModal({
                   }
                 } else {
                   setWizardStep(1);
+                  setSupportMode("edit");
                   setSupportPage("plan");
                 }
               }}

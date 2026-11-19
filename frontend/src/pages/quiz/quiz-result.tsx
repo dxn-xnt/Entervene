@@ -55,15 +55,30 @@ function questionStatusClass(status: QuestionStatus): string {
   }
 }
 
+type QuizResultNavigationState = {
+  submittedAttempt?: QuizAttemptResponse;
+} | null;
+
 const StudentQuizResult = () => {
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const aid = Number(assignmentId);
   const origin = quizReturnContext(location.search);
+  const navState = (location.state as QuizResultNavigationState) ?? null;
+  const initialSubmittedAttempt =
+    navState?.submittedAttempt &&
+    navState.submittedAttempt.classwork_assignment_id === aid
+      ? {
+          ...navState.submittedAttempt,
+          questions: Array.isArray(navState.submittedAttempt.questions)
+            ? navState.submittedAttempt.questions
+            : [],
+        }
+      : null;
 
-  const [quiz, setQuiz] = useState<QuizAttemptResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [quiz, setQuiz] = useState<QuizAttemptResponse | null>(initialSubmittedAttempt);
+  const [loading, setLoading] = useState(!initialSubmittedAttempt);
   const [error, setError] = useState<string | null>(null);
   const [showIncorrectOnly, setShowIncorrectOnly] = useState(false);
 
@@ -76,13 +91,15 @@ const StudentQuizResult = () => {
 
     let cancelled = false;
     async function loadResult() {
-      setLoading(true);
+      if (!initialSubmittedAttempt) {
+        setLoading(true);
+      }
       setError(null);
       try {
         const data = await getQuizAttempt(aid);
         if (!cancelled) setQuiz(data);
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && !initialSubmittedAttempt) {
           setError(err instanceof Error ? err.message : "Failed to load quiz results.");
         }
       } finally {
@@ -94,7 +111,7 @@ const StudentQuizResult = () => {
     return () => {
       cancelled = true;
     };
-  }, [aid]);
+  }, [aid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isQuestionIncorrect = (q: QuizAttemptQuestion) => q.is_correct === false;
 

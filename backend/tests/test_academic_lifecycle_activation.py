@@ -442,3 +442,62 @@ def test_admin_can_configure_future_year_periods_without_affecting_active_state(
     )
     assert len(new_periods) == 3
     assert all(not p.is_active for p in new_periods)
+
+
+def test_admin_cannot_change_period_while_active_term_is_ongoing(lifecycle_context):
+    c = lifecycle_context
+    # Set current active period's end date to future so it is still ongoing
+    current_p = c["db"].get(AcademicPeriod, c["current_period"].academic_period_id)
+    current_p.end_date = date(2099, 12, 31)
+    c["db"].commit()
+
+    # Create target period in the same active year
+    target_p = AcademicPeriod(
+        academic_year_id=c["current"].academic_year_id,
+        period_name="Term 3",
+        period_type="TERM",
+        period_sequence=3,
+        total_periods_in_year=3,
+        start_date=date(2026, 2, 16),
+        end_date=date(2026, 5, 31),
+        is_active=False,
+    )
+    c["db"].add(target_p)
+    c["db"].commit()
+
+    resp = c["client"].put(f"/api/v1/settings/active-period/{target_p.academic_period_id}")
+    assert resp.status_code == 400
+    assert "still ongoing" in resp.json()["detail"]
+    assert "Cannot change academic period" in resp.json()["detail"]
+
+    # Active period remains unchanged
+    c["db"].expire_all()
+    assert resolve_active_academic_period(c["db"]).academic_period_id == current_p.academic_period_id
+
+
+def test_admin_can_change_period_after_active_term_ends(lifecycle_context):
+    c = lifecycle_context
+    # Set current active period's dates to past (both start and end)
+    current_p = c["db"].get(AcademicPeriod, c["current_period"].academic_period_id)
+    current_p.start_date = date(2020, 1, 1)
+    current_p.end_date = date(2020, 5, 31)
+    c["db"].commit()
+
+    target_p = AcademicPeriod(
+        academic_year_id=c["current"].academic_year_id,
+        period_name="Term 3 (Ended)",
+        period_type="TERM",
+        period_sequence=3,
+        total_periods_in_year=3,
+        start_date=date(2026, 2, 16),
+        end_date=date(2026, 5, 31),
+        is_active=False,
+    )
+    c["db"].add(target_p)
+    c["db"].commit()
+
+    resp = c["client"].put(f"/api/v1/settings/active-period/{target_p.academic_period_id}")
+    assert resp.status_code == 200
+    assert resp.json()["academic_period_id"] == target_p.academic_period_id
+    c["db"].expire_all()
+    assert resolve_active_academic_period(c["db"]).academic_period_id == target_p.academic_period_id

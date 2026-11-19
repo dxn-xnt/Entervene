@@ -21,7 +21,11 @@ interface QuizGradingModalProps {
   eligibilityRevision?: string | number;
 }
 
-type QuestionGradingStatus = "correct" | "incorrect" | "needs_grading" | "neutral";
+type QuestionGradingStatus =
+  | "correct"
+  | "incorrect"
+  | "needs_grading"
+  | "neutral";
 
 function formatQuestionType(type?: string): string {
   if (!type) return "";
@@ -40,7 +44,9 @@ export default function QuizGradingModal({
   eligibilityRevision,
 }: QuizGradingModalProps) {
   const toast = useToast();
-  const [detail, setDetail] = useState<TeacherQuizSubmissionDetail | null>(null);
+  const [detail, setDetail] = useState<TeacherQuizSubmissionDetail | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -83,7 +89,9 @@ export default function QuizGradingModal({
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load submission.");
+        setError(
+          err instanceof Error ? err.message : "Failed to load submission.",
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -101,7 +109,10 @@ export default function QuizGradingModal({
     }, 0);
   };
 
-  const getQuestionStatus = (quizQuestionId: number, maxPoints: number): QuestionGradingStatus => {
+  const getQuestionStatus = (
+    quizQuestionId: number,
+    maxPoints: number,
+  ): QuestionGradingStatus => {
     const rawVal = scores[quizQuestionId];
     if (rawVal === undefined || rawVal === "") {
       return "needs_grading";
@@ -130,29 +141,37 @@ export default function QuizGradingModal({
       const answerPayload = detail.answers.map((ans) => {
         const inputVal = scores[ans.quiz_question_id];
         const numVal = parseFloat(inputVal || "0");
-        const finalVal = isNaN(numVal) ? 0 : Math.min(Math.max(0, numVal), ans.max_points);
+        const finalVal = isNaN(numVal)
+          ? 0
+          : Math.min(Math.max(0, numVal), ans.max_points);
         return {
           quiz_question_id: ans.quiz_question_id,
           points_awarded: finalVal,
-          is_correct: finalVal === ans.max_points ? true : finalVal === 0 ? false : null,
+          is_correct:
+            finalVal === ans.max_points ? true : finalVal === 0 ? false : null,
         };
       });
 
-      const response = await apiFetch(`/api/v1/quizzes/submission/${submissionId}/grade`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          answers: answerPayload,
-          feedback: feedback.trim() || undefined,
-          expected_feedback_fingerprint: detail.feedback_fingerprint,
-        }),
-      });
+      const response = await apiFetch(
+        `/api/v1/quizzes/submission/${submissionId}/grade`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            answers: answerPayload,
+            feedback: feedback.trim() || undefined,
+            expected_feedback_fingerprint: detail.feedback_fingerprint,
+          }),
+        },
+      );
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         const responseDetail = body.detail;
         const message =
-          responseDetail && typeof responseDetail === "object" && typeof responseDetail.message === "string"
+          responseDetail &&
+          typeof responseDetail === "object" &&
+          typeof responseDetail.message === "string"
             ? responseDetail.message
             : typeof responseDetail === "string"
               ? responseDetail
@@ -164,32 +183,46 @@ export default function QuizGradingModal({
       onSuccess();
       onClose();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save grades.";
+      const message =
+        err instanceof Error ? err.message : "Failed to save grades.";
       setError(message);
-      toast.error({ title: "Unable to save quiz grades", description: message });
+      toast.error({
+        title: "Unable to save quiz grades",
+        description: message,
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  const renderQuestionCard = (ans: TeacherQuizSubmissionDetail["answers"][0], idx: number) => {
+  const renderQuestionCard = (
+    ans: TeacherQuizSubmissionDetail["answers"][0],
+    idx: number,
+  ) => {
     const maxPts = ans.max_points;
     const currentScoreStr = scores[ans.quiz_question_id] ?? "";
-    const isUngraded = ans.points_awarded === null || ans.points_awarded === undefined;
+    const isUngraded =
+      ans.points_awarded === null || ans.points_awarded === undefined;
     const status = getQuestionStatus(ans.quiz_question_id, maxPts);
     const qType = (ans.question_type || "").toLowerCase();
     const studentAnswerText = ans.student_answer_text ?? ans.answer_text ?? "";
     const correctAnswerText =
       ans.correct_answer_text ??
-      ans.options?.filter((opt) => opt.is_correct).map((opt) => opt.option_text).join(" / ") ??
+      ans.options
+        ?.filter((opt) => opt.is_correct)
+        .map((opt) => opt.option_text)
+        .join(" / ") ??
       "";
 
     return (
       <Card
         key={ans.quiz_question_id}
         id={`quiz-question-card-${idx}`}
-        className={`block w-full p-5 ${isUngraded && currentScoreStr === "" ? "bg-[#FFD08A]/10 border-[#FFD08A]" : "bg-card"
-          }`}
+        className={`block w-full p-5 ${
+          isUngraded && currentScoreStr === ""
+            ? "bg-[#FFD08A]/10 border-[#FFD08A]"
+            : "bg-card"
+        }`}
       >
         {/* Question Header */}
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -204,74 +237,104 @@ export default function QuizGradingModal({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge size="sm" variant={status === "correct" ? "success" : status === "incorrect" ? "destructive" : "secondary"}>
-              {status === "correct" ? "Correct" : status === "incorrect" ? "Incorrect" : "Needs Grading"}
+            <Badge
+              size="sm"
+              variant={
+                status === "correct"
+                  ? "success"
+                  : status === "incorrect"
+                    ? "destructive"
+                    : "secondary"
+              }
+            >
+              {status === "correct"
+                ? "Correct"
+                : status === "incorrect"
+                  ? "Incorrect"
+                  : "Needs Grading"}
             </Badge>
 
             <Badge size="sm" variant="secondary" className="font-medium!">
-              Max: <span className="text-xs font-bold text-black ml-1">{maxPts} pts</span>
+              Max:{" "}
+              <span className="text-xs font-bold text-black ml-1">
+                {maxPts} pts
+              </span>
             </Badge>
           </div>
         </div>
 
         {/* Answer Options / Responses Breakdown */}
         <div className="mt-4 space-y-3">
-          {(qType === "multiple_choice" || qType === "multiplechoice") && ans.options && (
-            <div className="space-y-2">
-              <div className="flex flex-col gap-2">
-                {ans.options.map((opt) => {
-                  const isSelected =
-                    opt.option_id === ans.selected_option_id ||
-                    (studentAnswerText && opt.option_text === studentAnswerText);
-                  const isCorrect = opt.is_correct;
+          {(qType === "multiple_choice" || qType === "multiplechoice") &&
+            ans.options && (
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2">
+                  {ans.options.map((opt) => {
+                    const isSelected =
+                      opt.option_id === ans.selected_option_id ||
+                      (studentAnswerText &&
+                        opt.option_text === studentAnswerText);
+                    const isCorrect = opt.is_correct;
 
-                  return (
-                    <Card
-                      key={opt.option_id}
-                      className={`rounded border-2! p-3 text-sm font-semibold transition-all ${isCorrect
-                        ? "border-success/100! bg-success/40 text-black"
-                        : isSelected && !isCorrect
-                          ? "border-destructive bg-destructive/40 text-black"
-                          : isSelected
-                            ? "border-black bg-[#F6E9B2] text-black"
-                            : "border-muted-border text-gray-700"
+                    return (
+                      <Card
+                        key={opt.option_id}
+                        className={`rounded border-2! p-3 text-sm font-semibold transition-all ${
+                          isCorrect
+                            ? "border-success/100! bg-success/40 text-black"
+                            : isSelected && !isCorrect
+                              ? "border-destructive bg-destructive/40 text-black"
+                              : isSelected
+                                ? "border-black bg-[#F6E9B2] text-black"
+                                : "border-muted-border text-gray-700"
                         }`}
-                    >
-                      <div className="flex items-start justify-between gap-2 min-w-0">
-                        <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] leading-snug">
-                          {opt.option_text}
-                        </span>
-                      </div>
-                    </Card>
-                  );
-                })}
+                      >
+                        <div className="flex items-start justify-between gap-2 min-w-0">
+                          <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] leading-snug">
+                            {opt.option_text}
+                          </span>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {qType === "true_false" && (
             <div className="space-y-2">
-              <p className="text-xs font-bold    text-gray-600">Student Response:</p>
+              <p className="text-xs font-bold    text-gray-600">
+                Student Response:
+              </p>
               <div className="flex flex-wrap items-center gap-3">
                 <div
-                  className={`rounded border-2 px-4 py-2 text-sm font-bold ${studentAnswerText.toLowerCase() === "true"
-                    ? "border-black bg-[#F6E9B2] text-black"
-                    : "border-gray-200 bg-gray-50 text-gray-400"
-                    }`}
+                  className={`rounded border-2 px-4 py-2 text-sm font-bold ${
+                    studentAnswerText.toLowerCase() === "true"
+                      ? "border-black bg-[#F6E9B2] text-black"
+                      : "border-gray-200 bg-gray-50 text-gray-400"
+                  }`}
                 >
-                  True {studentAnswerText.toLowerCase() === "true" && "(Student Selected)"}
+                  True{" "}
+                  {studentAnswerText.toLowerCase() === "true" &&
+                    "(Student Selected)"}
                 </div>
                 <div
-                  className={`rounded border-2 px-4 py-2 text-sm font-bold ${studentAnswerText.toLowerCase() === "false"
-                    ? "border-black bg-[#F6E9B2] text-black"
-                    : "border-gray-200 bg-gray-50 text-gray-400"
-                    }`}
+                  className={`rounded border-2 px-4 py-2 text-sm font-bold ${
+                    studentAnswerText.toLowerCase() === "false"
+                      ? "border-black bg-[#F6E9B2] text-black"
+                      : "border-gray-200 bg-gray-50 text-gray-400"
+                  }`}
                 >
-                  False {studentAnswerText.toLowerCase() === "false" && "(Student Selected)"}
+                  False{" "}
+                  {studentAnswerText.toLowerCase() === "false" &&
+                    "(Student Selected)"}
                 </div>
                 {correctAnswerText && (
                   <span className="text-xs font-bold text-gray-600">
-                    Correct Key: <span className="font-extrabold text-black   ">{correctAnswerText}</span>
+                    Correct Key:{" "}
+                    <span className="font-extrabold text-black   ">
+                      {correctAnswerText}
+                    </span>
                   </span>
                 )}
               </div>
@@ -281,32 +344,54 @@ export default function QuizGradingModal({
           {(qType === "identification" || qType === "fill_in_the_blank") && (
             <div className="space-y-2">
               <div className="rounded border-2 border-black bg-gray-50 p-3">
-                <p className="text-xs font-bold    text-gray-600">Student Written Answer:</p>
+                <p className="text-xs font-bold    text-gray-600">
+                  Student Written Answer:
+                </p>
                 <p className="mt-1 text-sm font-bold text-black">
-                  {studentAnswerText || <span className="italic text-gray-400 font-normal">No answer submitted</span>}
+                  {studentAnswerText || (
+                    <span className="italic text-gray-400 font-normal">
+                      No answer submitted
+                    </span>
+                  )}
                 </p>
               </div>
               {correctAnswerText && (
                 <div className="rounded border-2 border-dashed border-[#8BCB88] bg-[#8BCB88]/10 p-3">
-                  <p className="text-xs font-bold    text-[#3A6D38]">Expected Key Answer:</p>
-                  <p className="mt-1 text-sm font-bold text-black">{correctAnswerText}</p>
+                  <p className="text-xs font-bold    text-[#3A6D38]">
+                    Expected Key Answer:
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-black">
+                    {correctAnswerText}
+                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {(qType === "essay" || qType === "short_answer" || qType === "shortanswer") && (
+          {(qType === "essay" ||
+            qType === "short_answer" ||
+            qType === "shortanswer") && (
             <div className="space-y-2">
               <div className="rounded border-2 border-black bg-gray-50 p-4">
-                <p className="text-xs font-bold    text-gray-600">Student Response:</p>
+                <p className="text-xs font-bold    text-gray-600">
+                  Student Response:
+                </p>
                 <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-black">
-                  {studentAnswerText || <span className="italic text-gray-400">No response written</span>}
+                  {studentAnswerText || (
+                    <span className="italic text-gray-400">
+                      No response written
+                    </span>
+                  )}
                 </p>
               </div>
               {correctAnswerText && (
                 <div className="rounded border-2 border-dashed border-[#8BCB88] bg-[#8BCB88]/10 p-3">
-                  <p className="text-xs font-bold    text-[#3A6D38]">Expected Key / Reference Answer:</p>
-                  <p className="mt-1 text-sm font-bold text-black">{correctAnswerText}</p>
+                  <p className="text-xs font-bold    text-[#3A6D38]">
+                    Expected Key / Reference Answer:
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-black">
+                    {correctAnswerText}
+                  </p>
                 </div>
               )}
             </div>
@@ -316,13 +401,17 @@ export default function QuizGradingModal({
         {/* Manual Scoring Control */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-700">Quick Score:</span>
+            <span className="text-xs font-bold text-gray-700">
+              Quick Score:
+            </span>
             <Button
               type="button"
               variant="outline"
               size="sm"
               autoIcon={false}
-              onClick={() => handleScoreChange(ans.quiz_question_id, String(maxPts))}
+              onClick={() =>
+                handleScoreChange(ans.quiz_question_id, String(maxPts))
+              }
               className="bg-success/80 px-2.5 py-1 text-xs text-black hover:bg-success"
             >
               Full <span className="font-bold ml-1">({maxPts} pts)</span>
@@ -333,10 +422,18 @@ export default function QuizGradingModal({
                 variant="outline"
                 size="sm"
                 autoIcon={false}
-                onClick={() => handleScoreChange(ans.quiz_question_id, String(Math.round(maxPts / 2)))}
+                onClick={() =>
+                  handleScoreChange(
+                    ans.quiz_question_id,
+                    String(Math.round(maxPts / 2)),
+                  )
+                }
                 className="bg-primary/80 px-2.5 py-1 text-xs text-black hover:bg-primary"
               >
-                Half <span className="font-bold ml-1">({Math.round(maxPts / 2)} pts)</span>
+                Half{" "}
+                <span className="font-bold ml-1">
+                  ({Math.round(maxPts / 2)} pts)
+                </span>
               </Button>
             )}
             <Button
@@ -352,7 +449,10 @@ export default function QuizGradingModal({
           </div>
 
           <div className="flex items-center gap-2">
-            <label htmlFor={`score-input-${ans.quiz_question_id}`} className="text-xs font-bold text-gray-700   ">
+            <label
+              htmlFor={`score-input-${ans.quiz_question_id}`}
+              className="text-xs font-bold text-gray-700   "
+            >
               Points:
             </label>
             <input
@@ -362,18 +462,24 @@ export default function QuizGradingModal({
               max={maxPts}
               step="0.5"
               value={currentScoreStr}
-              onChange={(e) => handleScoreChange(ans.quiz_question_id, e.target.value)}
+              onChange={(e) =>
+                handleScoreChange(ans.quiz_question_id, e.target.value)
+              }
               placeholder="0"
               className="w-24 rounded! border-2 border-black px-3 py-1.5 text-sm font-bold text-black focus:outline-none focus:ring-2 focus:ring-black"
             />
-            <span className="text-sm font-bold text-gray-700">/ {maxPts} pts</span>
+            <span className="text-sm font-bold text-gray-700">
+              / {maxPts} pts
+            </span>
           </div>
         </div>
       </Card>
     );
   };
 
-  const studentDisplayName = detail ? formatStudentRosterName(detail) : "Student";
+  const studentDisplayName = detail
+    ? formatStudentRosterName(detail)
+    : "Student";
 
   return (
     <Dialog
@@ -384,7 +490,10 @@ export default function QuizGradingModal({
         }
       }}
     >
-      <Dialog.Content size="3xl" className="max-h-[92vh] flex flex-col border-2 border-black">
+      <Dialog.Content
+        size="3xl"
+        className="max-h-[92vh] flex flex-col border-2 border-black"
+      >
         {/* Header */}
         <Dialog.Header position="fixed" asChild>
           <div className="flex w-full items-center justify-between">
@@ -421,10 +530,13 @@ export default function QuizGradingModal({
             </div>
           </div>
         ) : detail ? (
-          <form onSubmit={handleSaveGrade} className="flex flex-col flex-1 overflow-hidden">
+          <form
+            onSubmit={handleSaveGrade}
+            className="flex flex-col flex-1 overflow-hidden"
+          >
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* Submission Summary Banner */}
-              <Card className="font-sans bg-primary flex flex-wrap items-center justify-between shadow-none">
+              <Card className="font-sans bg-primary flex flex-wrap items-start gap-3 shadow-none">
                 <div className="flex items-center gap-3">
                   <Avatar variant="student" className="size-10 shrink-0">
                     <Avatar.Image
@@ -436,7 +548,9 @@ export default function QuizGradingModal({
                     </Avatar.Fallback>
                   </Avatar>
                   <div className="flex flex-col">
-                    <p className="text-lg font-extrabold text-black">{studentDisplayName}</p>
+                    <p className="text-lg font-extrabold text-black">
+                      {studentDisplayName}
+                    </p>
                     {detail.submitted_at && (
                       <p className="text-xs font-normal text-foreground">
                         Submitted on {formatDate(detail.submitted_at)}
@@ -444,21 +558,19 @@ export default function QuizGradingModal({
                     )}
                   </div>
                 </div>
-                <div>
+                <div className="ml-auto flex shrink-0 items-center gap-2">
                   <Badge
                     size="sm"
-                    className="text-sm"
                     variant={detail.needs_grading ? "default" : "solid"}
                   >
-                    {detail.needs_grading ? "Needs Grading" : formatToTitleCase(detail.status)}
+                    {detail.needs_grading
+                      ? "Needs Grading"
+                      : formatToTitleCase(detail.status)}
                   </Badge>
-                </div>
-                <div>
-                  <Badge size="sm" variant="outline" className="text-sm font-bold">
+                  <Badge size="sm" variant="outline" className="font-bold">
                     {calculateTotal()} pts
                   </Badge>
                 </div>
-
               </Card>
 
               {/* Question Navigation Chips */}
@@ -472,7 +584,9 @@ export default function QuizGradingModal({
                     <SegmentedControl
                       size="sm"
                       value={viewMode}
-                      onValueChange={(val) => setViewMode(val as "single" | "all")}
+                      onValueChange={(val) =>
+                        setViewMode(val as "single" | "all")
+                      }
                     >
                       <SegmentedControl.Item value="single">
                         Single Question
@@ -489,7 +603,10 @@ export default function QuizGradingModal({
                   className="pl-1 flex flex-wrap gap-2 max-h-36 sm:max-h-40 overflow-y-auto py-1 pr-1"
                 >
                   {detail.answers.map((ans, idx) => {
-                    const status = getQuestionStatus(ans.quiz_question_id, ans.max_points);
+                    const status = getQuestionStatus(
+                      ans.quiz_question_id,
+                      ans.max_points,
+                    );
                     const isActive = activeQuestionIndex === idx;
 
                     return (
@@ -499,18 +616,24 @@ export default function QuizGradingModal({
                         onClick={() => {
                           setActiveQuestionIndex(idx);
                           if (viewMode === "all") {
-                            const el = document.getElementById(`quiz-question-card-${idx}`);
-                            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                            const el = document.getElementById(
+                              `quiz-question-card-${idx}`,
+                            );
+                            el?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "center",
+                            });
                           }
                         }}
-                        className={`relative flex h-8 min-w-8 items-center rounded! justify-center rounded border-2 border-black px-2 text-xs font-black transition cursor-pointer hover:translate-y-1 active:translate-y-2 ${isActive
-                          ? "bg-primary text-black z-10"
-                          : status === "correct"
-                            ? "bg-success/40 text-black opacity-90 hover:opacity-100"
-                            : status === "incorrect"
-                              ? "bg-destructive/40 text-black opacity-90 hover:opacity-100"
-                              : "bg-primary/40 text-black opacity-90 hover:opacity-100"
-                          }`}
+                        className={`relative flex h-8 min-w-8 items-center rounded! justify-center rounded border-2 border-black px-2 text-xs font-black transition cursor-pointer hover:translate-y-1 active:translate-y-2 ${
+                          isActive
+                            ? "bg-primary text-black z-10"
+                            : status === "correct"
+                              ? "bg-success/40 text-black opacity-90 hover:opacity-100"
+                              : status === "incorrect"
+                                ? "bg-destructive/40 text-black opacity-90 hover:opacity-100"
+                                : "bg-primary/40 text-black opacity-90 hover:opacity-100"
+                        }`}
                         title={`Q${idx + 1}: ${status.replace("_", " ")}`}
                       >
                         {idx + 1}
@@ -529,7 +652,9 @@ export default function QuizGradingModal({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setActiveQuestionIndex((prev) => Math.max(0, prev - 1))}
+                      onClick={() =>
+                        setActiveQuestionIndex((prev) => Math.max(0, prev - 1))
+                      }
                       disabled={activeQuestionIndex === 0}
                       className="gap-1 border-2 border-black font-bold disabled:opacity-40 pl-2"
                     >
@@ -540,8 +665,14 @@ export default function QuizGradingModal({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setActiveQuestionIndex((prev) => Math.min(detail.answers.length - 1, prev + 1))}
-                      disabled={activeQuestionIndex === detail.answers.length - 1}
+                      onClick={() =>
+                        setActiveQuestionIndex((prev) =>
+                          Math.min(detail.answers.length - 1, prev + 1),
+                        )
+                      }
+                      disabled={
+                        activeQuestionIndex === detail.answers.length - 1
+                      }
                       className="gap-1 border-2 border-black font-bold disabled:opacity-40 pr-2"
                     >
                       Next Question
@@ -551,24 +682,38 @@ export default function QuizGradingModal({
 
                   {/* Active Question Card */}
                   {detail.answers[activeQuestionIndex] &&
-                    renderQuestionCard(detail.answers[activeQuestionIndex], activeQuestionIndex)}
+                    renderQuestionCard(
+                      detail.answers[activeQuestionIndex],
+                      activeQuestionIndex,
+                    )}
                 </div>
               ) : (
                 /* View All Mode */
                 <div className="space-y-4">
-                  {detail.answers.map((ans, idx) => renderQuestionCard(ans, idx))}
+                  {detail.answers.map((ans, idx) =>
+                    renderQuestionCard(ans, idx),
+                  )}
                 </div>
               )}
 
               {/* Overall Feedback Box — single Teacher Feedback editor with inline AI controls */}
               <Card className="block w-full space-y-2 p-0 border-none px-1">
-                <label htmlFor={`quiz-teacher-feedback-${submissionId}`} className="text-sm font-semibold text-foreground flex items-center justify-between mb-1">
+                <label
+                  htmlFor={`quiz-teacher-feedback-${submissionId}`}
+                  className="text-sm font-semibold text-foreground flex items-center justify-between mb-1"
+                >
                   <span className="flex items-center gap-2">
                     Teacher Feedback
-                    <span className="text-xs font-normal text-gray-500 pb-1">(Optional)</span>
+                    <span className="text-xs font-normal text-gray-500 pb-1">
+                      (Optional)
+                    </span>
                   </span>
                   {aiReviewing && (
-                    <Badge size="sm" variant="outline" className="gap-1 bg-white font-bold">
+                    <Badge
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 bg-white font-bold"
+                    >
                       <Sparkles aria-hidden="true" className="size-3" />
                       AI-generated
                     </Badge>
@@ -587,7 +732,10 @@ export default function QuizGradingModal({
                   key={submissionId}
                   submissionId={submissionId}
                   eligibilityRevision={eligibilityRevision}
-                  fullyGraded={!detail.needs_grading && detail.status.toLowerCase() === "graded"}
+                  fullyGraded={
+                    !detail.needs_grading &&
+                    detail.status.toLowerCase() === "graded"
+                  }
                   existingFeedback={detail.feedback ?? ""}
                   feedbackDraft={feedback}
                   onFeedbackDraftChange={setFeedback}
@@ -596,11 +744,15 @@ export default function QuizGradingModal({
                   onPublishingChange={setAiPublishing}
                   onPublished={(savedFeedback, savedFeedbackFingerprint) => {
                     setFeedback(savedFeedback);
-                    setDetail((current) => current ? {
-                      ...current,
-                      feedback: savedFeedback,
-                      feedback_fingerprint: savedFeedbackFingerprint,
-                    } : current);
+                    setDetail((current) =>
+                      current
+                        ? {
+                            ...current,
+                            feedback: savedFeedback,
+                            feedback_fingerprint: savedFeedbackFingerprint,
+                          }
+                        : current,
+                    );
                   }}
                 />
               </Card>
@@ -624,7 +776,9 @@ export default function QuizGradingModal({
                 disabled={saving || aiReviewing || aiPublishing}
               >
                 <Save size={16} />
-                {saving ? "Saving Grade..." : `Save Grade (${calculateTotal()} pts)`}
+                {saving
+                  ? "Saving Grade..."
+                  : `Save Grade (${calculateTotal()} pts)`}
               </Button>
             </Dialog.Footer>
           </form>
