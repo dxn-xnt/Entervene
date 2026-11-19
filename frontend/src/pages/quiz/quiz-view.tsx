@@ -10,7 +10,10 @@ import { Card } from "@/components/retroui/Card";
 import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
 import { getQuizAttempt, type QuizAttemptResponse } from "@/lib/quiz-api";
-import { quizPathWithContext, quizReturnContext } from "@/lib/student-quiz-navigation";
+import {
+  quizPathWithContext,
+  quizReturnContext,
+} from "@/lib/student-quiz-navigation";
 
 const StudentQuizView = () => {
   const { assignmentId } = useParams<{ assignmentId: string }>();
@@ -39,7 +42,9 @@ const StudentQuizView = () => {
         if (!cancelled) setQuiz(data);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load quiz details.");
+          setError(
+            err instanceof Error ? err.message : "Failed to load quiz details.",
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -52,7 +57,10 @@ const StudentQuizView = () => {
     };
   }, [aid]);
 
-  const isCompleted = quiz?.status === "submitted" || quiz?.status === "graded" || quiz?.status === "late";
+  const isCompleted =
+    quiz?.status === "submitted" ||
+    quiz?.status === "graded" ||
+    quiz?.status === "late";
   const isPending = quiz?.status === "pending";
 
   return (
@@ -82,35 +90,49 @@ const StudentQuizView = () => {
               </Breadcrumb>
             </header>
 
-            <div className="-mt-[1px] flex min-w-0 flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+            <div className="-mt-[1px] flex min-w-0 flex-1 flex-col gap-4 border-t-2 border-border px-3 py-2 sm:px-4 md:px-6">
               {loading ? (
                 <LoadingPanel label="Loading quiz..." />
               ) : error || !quiz ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
                   <AlertCircle className="w-10 h-10 text-red-500" />
-                  <p className="text-lg font-bold text-center text-red-600">{error || "Quiz not found."}</p>
+                  <p className="text-lg font-bold text-center text-red-600">
+                    {error || "Quiz not found."}
+                  </p>
                   <Button onClick={() => navigate(origin.path)}>Go Back</Button>
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-1 flex-col gap-4 py-4">
+                  <div className="flex flex-1 flex-col gap-3">
                     {/* Instructions Card */}
                     {quiz.instructions && (
                       <Card className="bg-white">
-                        <h3 className="font-bold text-sm text-black/70 uppercase tracking-wide mb-1">Instructions</h3>
-                        <p className="text-sm text-black/80 whitespace-pre-wrap">{quiz.instructions}</p>
+                        <h3 className="font-bold text-sm text-black/70 uppercase tracking-wide mb-1">
+                          Instructions
+                        </h3>
+                        <p className="text-sm text-black/80 whitespace-pre-wrap">
+                          {quiz.instructions}
+                        </p>
                       </Card>
                     )}
 
                     {(isCompleted || isPending) && (
                       <div className="flex items-center justify-end">
                         {isCompleted && (
-                          <Badge variant="outline" size="md" className="bg-white px-3 py-1.5 text-sm">
+                          <Badge
+                            variant="outline"
+                            size="md"
+                            className="bg-white px-3 py-1.5 text-sm"
+                          >
                             Completed
                           </Badge>
                         )}
                         {isPending && (
-                          <Badge variant="outline" size="md" className="bg-white px-3 py-1.5 text-sm">
+                          <Badge
+                            variant="outline"
+                            size="md"
+                            className="bg-white px-3 py-1.5 text-sm"
+                          >
                             In Progress
                           </Badge>
                         )}
@@ -118,51 +140,74 @@ const StudentQuizView = () => {
                     )}
 
                     {/* Stats Overview Grid */}
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
-                      <Card className="bg-white flex flex-col items-center justify-center p-6 text-center">
-                        <HelpCircle className="w-6 h-6 mb-2 text-black/70" />
-                        <span className="text-3xl font-extrabold">{quiz.questions.length}</span>
-                        <span className="text-xs font-semibold text-black/70 uppercase tracking-wider mt-1">
-                          {quiz.questions.length === 1 ? "Question" : "Questions"}
+                    <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
+                      <Card className="flex min-h-48 w-full flex-col items-center justify-center rounded-lg bg-white p-6 text-center shadow-md hover:shadow-md">
+                        <HelpCircle className="mb-3 size-7 text-black/65" />
+                        <span className="text-3xl font-extrabold">
+                          {quiz.questions.length}
+                        </span>
+                        <span className="mt-2 text-xs font-semibold uppercase tracking-wider text-black/65">
+                          {quiz.questions.length === 1
+                            ? "Question"
+                            : "Questions"}
                         </span>
                       </Card>
 
-                      <Card className="bg-white flex flex-col items-center justify-center p-6 text-center">
-                        <Clock className="w-6 h-6 mb-2 text-black/70" />
+                      <Card className="flex min-h-48 w-full flex-col items-center justify-center rounded-lg bg-white p-6 text-center shadow-md hover:shadow-md">
+                        <Clock className="mb-3 size-7 text-black/65" />
                         <span className="text-3xl font-extrabold">
-                          {quiz.duration_minutes ? `${quiz.duration_minutes}m` : "∞"}
+                          {quiz.duration_minutes
+                            ? `${quiz.duration_minutes}m`
+                            : "∞"}
                         </span>
-                        <span className="text-xs font-semibold text-black/70 uppercase tracking-wider mt-1">
-                          {quiz.duration_minutes ? "Time Limit" : "No Time Limit"}
+                        <span className="mt-2 text-xs font-semibold uppercase tracking-wider text-black/65">
+                          {quiz.duration_minutes
+                            ? "Time Limit"
+                            : "No Time Limit"}
                         </span>
                       </Card>
 
-                      <Card className="bg-white flex flex-col items-center justify-center p-6 text-center">
-                        <Award className="w-6 h-6 mb-2 text-black/70" />
+                      <Card className="flex min-h-48 w-full flex-col items-center justify-center rounded-lg bg-white p-6 text-center shadow-md hover:shadow-md">
+                        <Award className="mb-3 size-7 text-black/65" />
                         <span className="text-3xl font-extrabold">
-                          {quiz.total_points != null ? quiz.total_points : quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0)}
+                          {quiz.total_points != null
+                            ? quiz.total_points
+                            : quiz.questions.reduce(
+                                (sum, q) => sum + (q.points || 1),
+                                0,
+                              )}
                         </span>
-                        <span className="text-xs font-semibold text-black/70 uppercase tracking-wider mt-1">
+                        <span className="mt-2 text-xs font-semibold uppercase tracking-wider text-black/65">
                           Total Points
                         </span>
                       </Card>
 
-                      <Card className="bg-white flex flex-col items-center justify-center p-6 text-center">
-                        <RotateCcw className="w-6 h-6 mb-2 text-black/70" />
+                      <Card className="flex min-h-48 w-full flex-col items-center justify-center rounded-lg bg-white p-6 text-center shadow-md hover:shadow-md">
+                        <RotateCcw className="mb-3 size-7 text-black/65" />
                         <span className="text-3xl font-extrabold">
                           {quiz.attempt_count} / {quiz.max_attempts}
                         </span>
-                        <span className="text-xs font-semibold text-black/70 uppercase tracking-wider mt-1">
+                        <span className="mt-2 text-xs font-semibold uppercase tracking-wider text-black/65">
                           Attempts Used
                         </span>
                       </Card>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-center gap-3">
+                    <div className="mt-6 flex w-full flex-wrap items-center justify-center gap-3 sm:mt-8 lg:mt-12">
                       {isCompleted && (
                         <Button
                           variant="outline"
-                          onClick={() => navigate(quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search))}
+                          onClick={() =>
+                            navigate(
+                              quizPathWithContext(
+                                routes.student.quizResult.replace(
+                                  ":assignmentId",
+                                  String(aid),
+                                ),
+                                location.search,
+                              ),
+                            )
+                          }
                           className="hover:shadow-none transition-all cursor-pointer font-bold"
                         >
                           View Results
@@ -172,13 +217,30 @@ const StudentQuizView = () => {
                       {quiz.can_submit ? (
                         <Button
                           autoIcon={false}
-                          onClick={() => navigate(quizPathWithContext(routes.student.quizTake.replace(":assignmentId", String(aid)), location.search))}
-                          className="hover:shadow-none transition-all cursor-pointer font-bold"
+                          onClick={() =>
+                            navigate(
+                              quizPathWithContext(
+                                routes.student.quizTake.replace(
+                                  ":assignmentId",
+                                  String(aid),
+                                ),
+                                location.search,
+                              ),
+                            )
+                          }
+                          className="hover:shadow-none transition-all cursor-pointer font-bold mt-24"
                         >
-                          {isPending ? "Resume Quiz" : isCompleted ? "Retake Quiz" : "Take Quiz"}
+                          {isPending
+                            ? "Resume Quiz"
+                            : isCompleted
+                              ? "Retake Quiz"
+                              : "Take Quiz"}
                         </Button>
                       ) : !isCompleted ? (
-                        <Button disabled className="opacity-50 cursor-not-allowed">
+                        <Button
+                          disabled
+                          className="opacity-50 cursor-not-allowed"
+                        >
                           Quiz Closed
                         </Button>
                       ) : null}
@@ -188,15 +250,32 @@ const StudentQuizView = () => {
                     {isCompleted && quiz.grade != null && (
                       <Card className="bg-white p-6 flex flex-col md:flex-row items-center justify-between gap-4">
                         <div>
-                          <h3 className="font-bold text-lg">Your Latest Score</h3>
+                          <h3 className="font-bold text-lg">
+                            Your Latest Score
+                          </h3>
                           <p className="text-sm text-black/60">
-                            Submitted on {quiz.submitted_at ? new Date(quiz.submitted_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
+                            Submitted on{" "}
+                            {quiz.submitted_at
+                              ? new Date(quiz.submitted_at).toLocaleString(
+                                  undefined,
+                                  { dateStyle: "medium", timeStyle: "short" },
+                                )
+                              : "N/A"}
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="text-4xl font-extrabold">
                             {quiz.grade}
-                            <span className="text-xl text-black/50 font-normal"> / {quiz.total_points ?? quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0)} pts</span>
+                            <span className="text-xl text-black/50 font-normal">
+                              {" "}
+                              /{" "}
+                              {quiz.total_points ??
+                                quiz.questions.reduce(
+                                  (sum, q) => sum + (q.points || 1),
+                                  0,
+                                )}{" "}
+                              pts
+                            </span>
                           </span>
                         </div>
                       </Card>
