@@ -439,9 +439,9 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     expect(attempts.disabled).toBe(true);
     expect(shuffleSwitch.disabled).toBe(true);
 
-    // Clear explanation is displayed beside/under disabled controls
-    const lockedExplanations = screen.getAllByText("Locked because students have already attempted this quiz.");
-    expect(lockedExplanations.length).toBeGreaterThanOrEqual(1);
+    // A single, clear explanation describes all locked quiz controls.
+    expect(screen.getByText("Quiz settings locked")).toBeInTheDocument();
+    expect(screen.getByText(/A student has already started this quiz/)).toBeInTheDocument();
 
     // Result release controls remain editable
     const showResultsSwitch = screen.getByRole("switch", { name: /Show quiz results to students/i }) as HTMLButtonElement;
