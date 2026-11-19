@@ -24,8 +24,9 @@ const alertVariants = cva("relative w-full rounded border-2 p-4", {
 });
 
 interface IAlertProps
-  extends HtmlHTMLAttributes<HTMLDivElement>,
-  VariantProps<typeof alertVariants> {
+  extends
+    HtmlHTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof alertVariants> {
   onClose?: () => void;
   duration?: number;
   position?: "inline" | "top-right";
@@ -62,7 +63,7 @@ const Alert = ({
         alertVariants({ variant, status }),
         onClose && "pr-10",
         positionClasses,
-        className
+        className,
       )}
       {...props}
     >
@@ -82,14 +83,13 @@ const Alert = ({
 };
 Alert.displayName = "Alert";
 
-interface IAlertTitleProps extends HtmlHTMLAttributes<HTMLHeadingElement> { }
+interface IAlertTitleProps extends HtmlHTMLAttributes<HTMLHeadingElement> {}
 const AlertTitle = ({ className, ...props }: IAlertTitleProps) => (
   <Text as="h5" className={cn(className)} {...props} />
 );
 AlertTitle.displayName = "AlertTitle";
 
-interface IAlertDescriptionProps
-  extends HtmlHTMLAttributes<HTMLParagraphElement> { }
+interface IAlertDescriptionProps extends HtmlHTMLAttributes<HTMLParagraphElement> {}
 const AlertDescription = ({ className, ...props }: IAlertDescriptionProps) => (
   <div className={cn("text-muted-foreground", className)} {...props} />
 );

@@ -7,7 +7,11 @@ import { cn } from "@/lib/utils";
 
 const Accordion = BaseAccordion.Root;
 
-const AccordionItem = ({ className, ref, ...props }: BaseAccordion.Item.Props) => (
+const AccordionItem = ({
+  className,
+  ref,
+  ...props
+}: BaseAccordion.Item.Props) => (
   <BaseAccordion.Item
     ref={ref}
     className={cn(
@@ -18,7 +22,12 @@ const AccordionItem = ({ className, ref, ...props }: BaseAccordion.Item.Props) =
   />
 );
 
-const AccordionHeader = ({ className, children, ref, ...props }: BaseAccordion.Trigger.Props) => (
+const AccordionHeader = ({
+  className,
+  children,
+  ref,
+  ...props
+}: BaseAccordion.Trigger.Props) => (
   <BaseAccordion.Header className="flex">
     <BaseAccordion.Trigger
       ref={ref}
@@ -34,7 +43,12 @@ const AccordionHeader = ({ className, children, ref, ...props }: BaseAccordion.T
   </BaseAccordion.Header>
 );
 
-const AccordionContent = ({ className, children, ref, ...props }: BaseAccordion.Panel.Props) => (
+const AccordionContent = ({
+  className,
+  children,
+  ref,
+  ...props
+}: BaseAccordion.Panel.Props) => (
   <BaseAccordion.Panel
     ref={ref}
     className="overflow-hidden bg-background font-body text-foreground data-[open]:animate-accordion-down data-[closed]:animate-accordion-up"
