@@ -23,15 +23,15 @@ export function OfferingRow({
   readOnlyReason?: string;
 }) {
   return (
-    <RetroCard className="group relative flex min-w-90 flex-col justify-between shadow-none p-3 hover:-translate-y-1">
+    <RetroCard className="group relative flex min-w-64 w-80 shrink-0 flex-col justify-between shadow-none p-3 hover:-translate-y-1">
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-2xl font-bold leading-tight mr-5">{offering.subject.subject_name}</p>
+          <div className="min-w-0">
+            <p className="text-xl font-bold leading-tight break-words">{offering.subject.subject_name}</p>
             <p className="text-sm font-semibold">{subjectCode(offering.subject)}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant={offering.status === "active" ? "secondary" : "default"}>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge size="sm" variant={offering.status === "active" ? "secondary" : "default"}>
               {offering.status === "active" ? "Active" : "Archived"}
             </Badge>
             <DropdownMenu>
@@ -41,7 +41,7 @@ export function OfferingRow({
                     <Button
                       size="sm"
                       variant="secondary"
-                      className="p-2 shadow-none"
+                      className="p-1 shadow-none"
                       aria-label="More options"
                       disabled={readOnly}
                     >
@@ -51,12 +51,12 @@ export function OfferingRow({
                 </span>} />
                 <TooltipContent>{readOnly ? readOnlyReason || "Read-only" : "Offering actions"}</TooltipContent>
               </Tooltip>
-              <DropdownMenuContent align="end" className="border-2">
+              <DropdownMenuContent align="end" className="rounded border-2">
                 {onEdit ? (
                   <DropdownMenuItem
                     onClick={() => onEdit(offering)}
                     disabled={readOnly}
-                    className="gap-2"
+                    className="gap-2 rounded"
                   >
                     <PenIcon className="size-4" /> Edit
                   </DropdownMenuItem>
@@ -65,7 +65,7 @@ export function OfferingRow({
                   <DropdownMenuItem
                     onClick={() => onArchive(offering)}
                     disabled={readOnly}
-                    className="gap-2"
+                    className="gap-2 rounded"
                   >
                     <ArchiveIcon className="size-4" /> Archive
                   </DropdownMenuItem>
@@ -74,7 +74,7 @@ export function OfferingRow({
                   <DropdownMenuItem
                     onClick={() => onRestore(offering)}
                     disabled={readOnly}
-                    className="gap-2"
+                    className="gap-2 rounded"
                   >
                     <RotateCcw className="size-4" /> Restore
                   </DropdownMenuItem>
@@ -83,10 +83,10 @@ export function OfferingRow({
             </DropdownMenu>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs">
           <span className="font-semibold">{offering.academic_level.level_name} • {offering.academic_period.period_name}</span>
           <span className="text-right font-semibold text-black/70">{offering.academic_year.year_label}</span>
-          <span className="col-span-2 line-clamp-1">{pathwayLabel(offering.pathway)}</span>
+          <span className="w-full break-words">{pathwayLabel(offering.pathway)}</span>
         </div>
       </div>
     </RetroCard>

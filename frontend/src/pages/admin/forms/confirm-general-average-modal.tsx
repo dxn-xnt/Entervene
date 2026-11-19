@@ -96,7 +96,7 @@ export default function ConfirmGeneralAverageModal({
           attempt={validationAttempt}
         />
 
-        <div className="flex flex-col gap-2 rounded border-2 border-black bg-muted/40 p-3">
+        <div className="flex flex-col gap-2 rounded! border-2 border-black bg-muted/40 p-3">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold text-muted-foreground">Academic Year:</span>
             <Badge variant="outline" className="font-bold">
