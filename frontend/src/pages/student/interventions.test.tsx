@@ -143,7 +143,7 @@ describe("Student Study Support", () => {
 
     expect(await screen.findByText("Enhanced Mathematics 9 Support")).toBeDefined();
     expect(screen.getByText("Constructing Parallel & Perpendicular Lines")).toBeDefined();
-    expect(screen.getByText("Some study support could not be loaded. Please try again later.")).toBeDefined();
+    expect(screen.getByText("Some Study Support could not be loaded. Please try again later.")).toBeDefined();
     expect(screen.queryByText("No active support")).toBeNull();
   });
 });

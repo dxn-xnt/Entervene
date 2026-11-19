@@ -448,10 +448,15 @@ async def submit_student_work(
                     title=link.title,
                     position=position,
                 ))
+        if assignment.source_intervention_id is not None and classwork.is_graded:
+            from app.services.intervention.InterventionNotificationService import (
+                stage_intervention_assessment_submitted,
+            )
+            stage_intervention_assessment_submitted(db, assignment, submission)
         db.commit()
         db.refresh(submission)
 
-        if is_late and classwork and classwork.created_by_staff_id:
+        if is_late and classwork and classwork.created_by_staff_id and assignment.source_intervention_id is None:
             try:
                 from app.models.people.AcademicStaff import AcademicStaff
                 from app.models.academic.Subject import Subject
@@ -460,16 +465,19 @@ async def submit_student_work(
 
                 staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == classwork.created_by_staff_id).first()
                 if staff and staff.user_id:
+                    from app.services.classwork.ClassworkService import _format_subject_prefixed_title
+
                     subj = db.query(Subject).filter(Subject.subject_id == classwork.subject_id).first()
                     subject_name = subj.subject_name if subj else "Subject"
                     s_name = f"{student.first_name} {student.last_name}"
+                    prefixed_title = _format_subject_prefixed_title(subject_name, classwork.title, separator=" - ")
 
                     create_notification(
                         db,
                         NotificationCreate(
                             user_id=staff.user_id,
                             notification_type="assignment_due",
-                            title=f"Late Submission: {subject_name} - {classwork.title}",
+                            title=f"Late Submission: {prefixed_title}",
                             body=f"{s_name} turned in their work late after the due date.",
                             action_url=f"/teacher/classworks/{classwork.classwork_id}",
                         ),
@@ -946,6 +954,9 @@ def grade_student_submission(
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first() if assignment else None
     if classwork and (classwork.classwork_type or "").upper() == "READING":
         raise HTTPException(status_code=400, detail="Reading classworks cannot be graded")
+    if classwork:
+        from app.services.grading.GradeabilityService import require_gradeable_submission
+        require_gradeable_submission(classwork, submission)
     if body.grade < 0:
         raise HTTPException(status_code=400, detail="Grade cannot be negative")
     if classwork and classwork.total_points is not None and body.grade > float(classwork.total_points):
@@ -1005,6 +1016,13 @@ def grade_student_submission(
         focus_points=validated_focus_points,
     )
 
+    if assignment.source_intervention_id is not None and classwork and classwork.is_graded:
+        from app.services.intervention.InterventionNotificationService import (
+            stage_intervention_assessment_result_or_submission,
+        )
+        db.flush()
+        stage_intervention_assessment_result_or_submission(db, assignment, submission)
+
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
@@ -1033,8 +1051,10 @@ def grade_student_submission(
             staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id).first()
             teacher_name = f"{staff.first_name} {staff.last_name}".strip() if staff else "Teacher"
 
+            from app.services.classwork.ClassworkService import _format_subject_prefixed_title
+
             cw_title = classwork.title if classwork else "Classwork"
-            notif_title = f"{subject_name}: {cw_title}"
+            notif_title = _format_subject_prefixed_title(subject_name, cw_title)
             notif_body = f"Graded by {teacher_name} • Score: {body.grade} points."
 
             assignment = (

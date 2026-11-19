@@ -178,3 +178,15 @@ def test_reviewer_accepts_bounded_groq_json_wrapping_without_relaxing_evidence()
     bad = {**REVIEWER, "body": "You are weak in Compare fractions. " + REVIEWER["body"]}
     with pytest.raises(Exception):
         _validate_output("```json\n" + json.dumps(bad) + "\n```", grounding)
+
+
+@pytest.mark.parametrize("field", ("title", "introduction", "body"))
+def test_generated_reviewer_rejects_internal_student_terminology(field):
+    grounding = {
+        "measured_scored_competencies": [],
+        "unranked_manual_coverage_context": [],
+    }
+    unsafe = {**REVIEWER, field: f"{REVIEWER[field]} This intervention will help you study."}
+
+    with pytest.raises(Exception, match="internal terminology"):
+        _validate_output(json.dumps(unsafe), grounding)

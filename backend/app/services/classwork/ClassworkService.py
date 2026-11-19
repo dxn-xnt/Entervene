@@ -145,6 +145,33 @@ def _replace_reference_links(db: Session, classwork: Classwork, links: list[Clas
     )
 
 
+def _title_starts_with_subject(subject_name: str, title: str) -> bool:
+    clean_subject = (subject_name or "").strip()
+    clean_title = (title or "").strip()
+    if not clean_subject or not clean_title:
+        return False
+    lower_subject = clean_subject.lower()
+    lower_title = clean_title.lower()
+    if lower_title == lower_subject:
+        return True
+    if not lower_title.startswith(lower_subject):
+        return False
+    remainder = clean_title[len(clean_subject):].lstrip()
+    return bool(remainder) and remainder[0] in {":", "-", "–", "—"}
+
+
+def _format_subject_prefixed_title(subject_name: str, title: str, separator: str = ": ") -> str:
+    clean_subject = (subject_name or "").strip()
+    clean_title = (title or "").strip()
+    if not clean_subject:
+        return clean_title
+    if not clean_title:
+        return clean_subject
+    if _title_starts_with_subject(clean_subject, clean_title):
+        return clean_title
+    return f"{clean_subject}{separator}{clean_title}"
+
+
 def build_classwork_notification_details(
     db: Session,
     classwork_title: str,
@@ -169,12 +196,26 @@ def build_classwork_notification_details(
         lessons = db.query(Lesson.title).filter(Lesson.lesson_id.in_(lesson_ids)).all()
         titles = [l[0] for l in lessons if l[0]]
         if titles:
-            lesson_str = f"{', '.join(titles)}"
+            lesson_str = ", ".join(titles)
 
-    due_str = f" • Due: {due_date.strftime('%b %d, %Y')}" if due_date else ""
+    action_key = (action_type or "").strip().lower()
+    if action_key == "assigned":
+        lead = f"Classwork assigned by {teacher_name}"
+    elif action_key == "updated":
+        lead = f"Classwork updated by {teacher_name}"
+    elif action_key == "new":
+        lead = f"New classwork posted by {teacher_name}"
+    else:
+        lead = f"{action_type.strip() or 'Classwork'} by {teacher_name}"
 
-    notif_title = f"{subject_name}: {classwork_title}"
-    notif_body = f"{action_type} classwork assigned by {teacher_name} attached to {lesson_str}{due_str}."
+    parts = [lead]
+    if lesson_str:
+        parts.append(f"Lesson: {lesson_str}")
+    if due_date:
+        parts.append(f"Due: {due_date.strftime('%b %d, %Y')}")
+
+    notif_title = _format_subject_prefixed_title(subject_name, classwork_title)
+    notif_body = f"{' • '.join(parts)}."
 
     return notif_title, notif_body
 
@@ -244,22 +285,9 @@ def notify_students_for_classwork(
 
 
 def _stage_targeted_assignment_notification(db: Session, assignment: ClassworkAssignment, classwork: Classwork, subject_id: int) -> None:
-    from app.models.people.Student import Student
-    from app.schemas.Notification import NotificationCreate
-    from app.services.NotificationService import stage_notification
+    from app.services.intervention.StudySupportReminderService import stage_study_support_available
 
-    student = db.query(Student).filter_by(student_id=assignment.recipient_student_id).first()
-    if not student or not student.user_id:
-        return
-    subject = db.query(Subject).filter_by(subject_id=subject_id).first()
-    subject_name = subject.subject_name if subject else "your subject"
-    stage_notification(db, NotificationCreate(
-        user_id=student.user_id,
-        notification_type="assignment_due",
-        title=f"{subject_name}: {classwork.title}",
-        body=f"Your teacher assigned additional {subject_name} practice for you.",
-        action_url=f"/student/subjects/{assignment.class_id}/{subject_id}?tab=classwork&classworkAssignmentId={assignment.classwork_assignment_id}",
-    ))
+    stage_study_support_available(db, assignment, classwork, subject_id)
 
 
 
@@ -1386,11 +1414,11 @@ def assign_classwork_to_classes(
                     remediation_assignment_id=targeted.classwork_assignment_id,
                     items=items,
                 )
+        if targeted:
+            classwork.is_published = bool(body.is_published)
         if targeted and body.is_published and not was_targeted_published:
             db.flush()
             _stage_targeted_assignment_notification(db, targeted, classwork, classwork.subject_id)
-        if targeted:
-            classwork.is_published = bool(body.is_published)
         if body.is_published:
             ensure_published_quiz_student_ready(db, classwork)
         db.commit()

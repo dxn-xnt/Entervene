@@ -1,11 +1,11 @@
 import { AcademicSelectItem } from "@/components/academic-option-label";
 import { activeFirst } from "@/lib/active-first";
-import * as React from "react"
-import { Link } from "react-router-dom"
+import * as React from "react";
+import { Link } from "react-router-dom";
 
-import { NavMain } from "@/components/nav-main"
-import { NavUser } from "@/components/nav-user"
-import { AICreditsWidget } from "@/components/teacher/ai-credits-widget"
+import { NavMain } from "@/components/nav-main";
+import { NavUser } from "@/components/nav-user";
+import { AICreditsWidget } from "@/components/teacher/ai-credits-widget";
 import {
   Sidebar,
   SidebarContent,
@@ -14,17 +14,17 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
-import { EnterveneLogo } from "@/components/logo"
-import { useAuth } from "@/context/AuthContext"
-import { Select } from "./retroui/Select"
-import { SidebarConfigs } from "@/context/sidebar-config"
-import { useAcademicPeriod } from "@/context/AcademicPeriodContext"
-import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count"
+} from "@/components/ui/sidebar";
+import { EnterveneLogo } from "@/components/logo";
+import { useAuth } from "@/context/AuthContext";
+import { Select } from "./retroui/Select";
+import { SidebarConfigs } from "@/context/sidebar-config";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { role } = useAuth()
-  const navRole = (role ?? "student") as keyof typeof SidebarConfigs
+  const { role } = useAuth();
+  const navRole = (role ?? "student") as keyof typeof SidebarConfigs;
   const {
     academicYears,
     selectedYearId,
@@ -34,8 +34,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     setSelectedPeriodId,
     selectedYear,
     selectedPeriod,
-  } = useAcademicPeriod()
-  const unreadNotificationCount = useUnreadNotificationCount()
+  } = useAcademicPeriod();
+  const unreadNotificationCount = useUnreadNotificationCount(role !== "admin");
 
   return (
     <Sidebar collapsible="offcanvas" className="no-scrollbar" {...props}>
@@ -49,8 +49,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <Link to="#" className="group/brand flex items-center gap-3">
                 <EnterveneLogo className="size-10! drop-shadow-[0px_4px_0px_#000] transition-all duration-150 ease-out group-active/brand:translate-y-1 group-active/brand:drop-shadow-none" />
                 <div className="flex flex-col gap-0! -mb-1">
-                  <span className="text-3xl! font-bold font-head -mb-1.5">Entervene</span>
-                  <span className="text-sm font-semibold font-sans ">MNSTS Learning Hub</span>
+                  <span className="text-3xl! font-bold font-head -mb-1.5">
+                    Entervene
+                  </span>
+                  <span className="text-sm font-semibold font-sans ">
+                    MNSTS Learning Hub
+                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -59,12 +63,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
 
       <SidebarContent>
-        <div data-academic-selectors className="grid grid-cols-2 border-y-2 border-border mb-1">
+        <div
+          data-academic-selectors
+          className="grid grid-cols-2 border-y-2 border-border mb-1"
+        >
           <Select
             value={selectedYearId ? String(selectedYearId) : undefined}
             onValueChange={(val) => {
-              const nextId = Number(val)
-              if (!isNaN(nextId)) setSelectedYearId(nextId)
+              const nextId = Number(val);
+              if (!isNaN(nextId)) setSelectedYearId(nextId);
             }}
           >
             <Select.Trigger
@@ -85,7 +92,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Select.Content className="w-max! max-w-[calc(100vw-2rem)]! min-w-64">
               <Select.Group>
                 {activeFirst(academicYears).map((year) => (
-                  <AcademicSelectItem key={year.academic_year_id} value={String(year.academic_year_id)} label={year.year_label} active={year.is_active} />
+                  <AcademicSelectItem
+                    key={year.academic_year_id}
+                    value={String(year.academic_year_id)}
+                    label={year.year_label}
+                    active={year.is_active}
+                  />
                 ))}
               </Select.Group>
             </Select.Content>
@@ -94,8 +106,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <Select
             value={selectedPeriodId ? String(selectedPeriodId) : undefined}
             onValueChange={(val) => {
-              const nextId = Number(val)
-              if (!isNaN(nextId)) setSelectedPeriodId(nextId)
+              const nextId = Number(val);
+              if (!isNaN(nextId)) setSelectedPeriodId(nextId);
             }}
             disabled={periods.length === 0}
           >
@@ -106,7 +118,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <span className="flex! min-w-0 items-center gap-1.5 overflow-visible! whitespace-nowrap!">
                 <Select.Value
                   className="text-xs"
-                  placeholder={periods.length === 0 ? "No terms available" : "Active Period"}
+                  placeholder={
+                    periods.length === 0
+                      ? "No terms available"
+                      : "Active Period"
+                  }
                 />
                 {selectedPeriod?.is_active && (
                   <span
@@ -120,7 +136,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Select.Content className="w-max! max-w-[calc(100vw-2rem)]! min-w-64">
               <Select.Group>
                 {activeFirst(periods).map((period) => (
-                  <AcademicSelectItem key={period.id} value={String(period.id)} label={period.period} active={period.is_active} />
+                  <AcademicSelectItem
+                    key={period.id}
+                    value={String(period.id)}
+                    label={period.period}
+                    active={period.is_active}
+                  />
                 ))}
               </Select.Group>
             </Select.Content>
@@ -139,5 +160,5 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavUser />
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

@@ -84,6 +84,8 @@ def test_classwide_score_path_remains_available(authz_context, monkeypatch):
     c = authz_context
     other = _targeted(c)
     assignment: ClassworkAssignment = c["assignment"]
+    c["classwork"].classwork_type = "ACTIVITY"
+    c["classwork"].activity_mode = "MANUAL"
     assignment.recipient_student_id = None
     assignment.source_intervention_id = None
     assignment.remediation_request_id = None

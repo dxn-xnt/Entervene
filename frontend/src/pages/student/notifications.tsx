@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Button } from "@/components/student/button";
 import { NotificationCard } from "@/components/notification-card";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Bell, Loader2 } from "lucide-react";
+import { Bell, ClipboardList, Clock, Shield, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { Alert } from "@/components/retroui/Alert";
@@ -16,9 +17,52 @@ import {
   markNotificationAsRead,
   type NotificationItem,
 } from "@/lib/notifications-api";
+import {
+  formatNotificationBody,
+  formatNotificationTitle,
+  getStudentNotificationBadgeLabel,
+  isExcludedNotification,
+  isStudentStudySupportType,
+  matchesStudentNotificationTab,
+  type StudentNotificationTab,
+} from "@/lib/notification-formatting";
+
+const studentNotificationTabs: Array<TabItem<StudentNotificationTab>> = [
+  { id: "all", label: "All", icon: Bell },
+  { id: "classwork", label: "Classwork", icon: ClipboardList },
+  { id: "deadlines", label: "Deadlines", icon: Clock },
+  { id: "study_support", label: "Study Support", icon: Shield },
+];
+
+const emptyStateByTab: Record<
+  StudentNotificationTab,
+  { icon: ReactNode; title: string; description: string }
+> = {
+  all: {
+    icon: <Bell />,
+    title: "No notifications yet",
+    description: "Updates from your classes will appear here when available.",
+  },
+  classwork: {
+    icon: <ClipboardList />,
+    title: "No classwork notifications",
+    description: "New or updated classwork and grade releases will appear here.",
+  },
+  deadlines: {
+    icon: <Clock />,
+    title: "No deadline notifications",
+    description: "Upcoming and overdue classwork deadline reminders will appear here.",
+  },
+  study_support: {
+    icon: <Shield />,
+    title: "No Study Support notifications",
+    description: "New Study Support activities and reminders will appear here.",
+  },
+};
 
 const Notifications = () => {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<StudentNotificationTab>("all");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -29,7 +73,7 @@ const Notifications = () => {
       setLoading(true);
       setLoadError(false);
       const data = await getNotifications(false, 50);
-      setNotifications(data.notifications);
+      setNotifications(data.notifications.filter((item) => !isExcludedNotification(item)));
     } catch (err) {
       console.error("Failed to load notifications:", err);
       setLoadError(true);
@@ -70,71 +114,51 @@ const Notifications = () => {
       }
     }
 
-    // Tiered deep-link resolver
-    // 1. Announcements: simplest fallback (stay in place)
-    if (item.notification_type === "announcement") {
-      return;
-    }
-
-    // 2. Specific deep link in action_url (e.g. /student/subjects/... or /student/todo)
+    // Specific deep link in action_url (e.g. /student/subjects/... or /student/interventions/view?...)
     if (item.action_url && item.action_url.trim() && item.action_url !== "/student/notifications") {
       navigate(item.action_url);
       return;
     }
 
-    // 3. Fallback based on notification role / type
-    if (item.notification_type === "risk_alert" || item.notification_type === "intervention_reviewer_available") {
+    // Fallback based on structured notification event type
+    if (isStudentStudySupportType(item.notification_type)) {
       navigate(routes.student.interventions);
       return;
     }
 
-    // Default fallback for classwork and grades
     navigate(routes.student.todo);
   };
 
-  const getNotificationType = (item: NotificationItem): string => {
-    // 1. Explicit notification types
-    if (item.notification_type === "risk_alert") {
-      return "Intervention";
+  const unreadCounts = useMemo<Partial<Record<StudentNotificationTab, number>>>(() => {
+    const counts: Record<StudentNotificationTab, number> = {
+      all: 0,
+      classwork: 0,
+      deadlines: 0,
+      study_support: 0,
+    };
+    for (const item of notifications) {
+      if (item.is_read) continue;
+      counts.all += 1;
+      if (matchesStudentNotificationTab(item.notification_type, "classwork")) {
+        counts.classwork += 1;
+      } else if (matchesStudentNotificationTab(item.notification_type, "deadlines")) {
+        counts.deadlines += 1;
+      } else if (matchesStudentNotificationTab(item.notification_type, "study_support")) {
+        counts.study_support += 1;
+      }
     }
-    if (item.notification_type === "announcement") {
-      return "Announcement";
-    }
-    if (
-      item.notification_type === "assignment_due" ||
-      item.notification_type === "submission_graded" ||
-      item.notification_type === "grade_released" ||
-      item.action_url?.toLowerCase().includes("tab=classwork")
-    ) {
-      return "Classwork";
-    }
+    return counts;
+  }, [notifications]);
 
-    // 2. Explicit lesson URL checks
-    if (
-      item.action_url?.toLowerCase().includes("tab=lesson") ||
-      item.action_url?.toLowerCase().includes("/lessons")
-    ) {
-      return "Lesson";
-    }
+  const filteredNotifications = useMemo(
+    () =>
+      notifications.filter((item) =>
+        matchesStudentNotificationTab(item.notification_type, activeTab),
+      ),
+    [notifications, activeTab],
+  );
 
-    // 3. Keyword fallback matching in title/body
-    if (
-      item.title.toLowerCase().includes("classwork") ||
-      item.title.toLowerCase().includes("assignment") ||
-      item.title.toLowerCase().includes("quiz") ||
-      item.title.toLowerCase().includes("activity")
-    ) {
-      return "Classwork";
-    }
-    if (
-      item.title.toLowerCase().includes("lesson") ||
-      item.body?.toLowerCase().includes("lesson")
-    ) {
-      return "Lesson";
-    }
-
-    return "Classwork";
-  };
+  const activeEmptyState = emptyStateByTab[activeTab];
 
   const markAllDisabled = markingAll || notifications.every((n) => n.is_read);
   const markAllButton = (
@@ -150,39 +174,58 @@ const Notifications = () => {
       <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
-                  Notifications
-                </h1>
+            <div data-page-tabs-sticky-region>
+              <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+                <div className="flex items-center gap-3">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
+                    Notifications
+                  </h1>
+                </div>
+                {markAllDisabled ? (
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex" tabIndex={0} aria-label={markingAll ? "Marking notifications as read" : "No unread notifications"}>{markAllButton}</span>} />
+                    <TooltipContent>{markingAll ? "Marking notifications as read" : "No unread notifications"}</TooltipContent>
+                  </Tooltip>
+                ) : markAllButton}
+              </header>
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs<StudentNotificationTab>
+                  tabs={studentNotificationTabs}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                  counts={unreadCounts}
+                  ariaLabel="Notification categories"
+                />
               </div>
-              {markAllDisabled ? (
-                <Tooltip>
-                  <TooltipTrigger render={<span className="inline-flex" tabIndex={0} aria-label={markingAll ? "Marking notifications as read" : "No unread notifications"}>{markAllButton}</span>} />
-                  <TooltipContent>{markingAll ? "Marking notifications as read" : "No unread notifications"}</TooltipContent>
-                </Tooltip>
-              ) : markAllButton}
-            </header>
+            </div>
 
-            <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+            <div
+              role="tabpanel"
+              aria-label={studentNotificationTabs.find((tab) => tab.id === activeTab)?.label}
+              className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6"
+            >
               {loading ? (
                 <LoadingPanel label="Loading notifications..." />
               ) : loadError ? (
                 <Alert status="error">Unable to load notifications. <Button size="sm" variant="outline" className="ml-2 gap-2" onClick={() => void fetchNotifications()}>Retry</Button></Alert>
-              ) : notifications.length === 0 ? (
-                <StudentEmptyState icon={<Bell />} title="No notifications yet" description="Updates from your classes will appear here when available." />
+              ) : filteredNotifications.length === 0 ? (
+                <StudentEmptyState
+                  icon={activeEmptyState.icon}
+                  title={activeEmptyState.title}
+                  description={activeEmptyState.description}
+                />
               ) : (
                 <div className="flex flex-col gap-3 w-full">
-                  {notifications.map((card) => (
+                  {filteredNotifications.map((card) => (
                     <div
                       key={card.notification_id}
                       onClick={() => handleCardClick(card)}
                       className="cursor-pointer w-full"
                     >
                       <NotificationCard
-                        title={card.title}
-                        description={card.body ?? ""}
+                        title={formatNotificationTitle(card.title)}
+                        description={formatNotificationBody(card.body)}
                         date={
                           card.created_at
                             ? new Date(
@@ -190,7 +233,7 @@ const Notifications = () => {
                             ).toLocaleDateString()
                             : ""
                         }
-                        type={getNotificationType(card)}
+                        type={getStudentNotificationBadgeLabel(card.notification_type)}
                         badge={card.is_read ? undefined : "Unread"}
                         isRead={card.is_read}
                       />
