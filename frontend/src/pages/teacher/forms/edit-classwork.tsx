@@ -519,7 +519,7 @@ export default function EditClassworkModal({
       classes: unorderedValues([...new Set(classwork.assignments?.map(item => item.class_id) ?? [])]),
       lessons: unorderedValues(classwork.linked_lessons?.map(item => item.lesson_id) ?? []),
       files: [],
-      referenceLinks: isQuizType(classwork.classwork_type) ? [] : editReferenceLinks(classwork),
+      referenceLinks: editReferenceLinks(classwork),
     },
     values: {
       draft: draftValues(editDraft, rubricLevels),
@@ -528,7 +528,7 @@ export default function EditClassworkModal({
       classes: unorderedValues([...new Set(selectedClassIds)]),
       lessons: unorderedValues(selectedLessonIds),
       files: editMaterials.map(file => [file.name, file.size, file.lastModified, file.type]),
-      referenceLinks: isQuizType(editDraft.classwork_type) ? [] : referenceLinks,
+      referenceLinks,
     },
   });
   const saveClassworkEdit = async (
@@ -552,12 +552,10 @@ export default function EditClassworkModal({
       setFormError("Classwork title is required.");
       return;
     }
-    if (!isQuizType(editDraft.classwork_type)) {
-      const linksError = validateReferenceLinks(referenceLinks);
-      if (linksError) {
-        setFormError(linksError);
-        return;
-      }
+    const linksError = validateReferenceLinks(referenceLinks);
+    if (linksError) {
+      setFormError(linksError);
+      return;
     }
     if (
       totalPoints !== null &&
@@ -680,9 +678,7 @@ export default function EditClassworkModal({
             show_scores: isQuiz ? undefined : editDraft.show_scores,
             auto_ai_feedback_enabled: autoAiSupported ? editDraft.auto_ai_feedback_enabled : false,
             lesson_ids: selectedLessonIds,
-            reference_links: isQuizType(editDraft.classwork_type)
-              ? undefined
-              : JSON.stringify(referenceLinks) === JSON.stringify(editReferenceLinks(currentClasswork))
+            reference_links: JSON.stringify(referenceLinks) === JSON.stringify(editReferenceLinks(currentClasswork))
                 ? undefined
                 : referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null })),
           }),
@@ -898,8 +894,18 @@ export default function EditClassworkModal({
               </Text>
             </Dialog.Header>
 
-            <section className="flex flex-col gap-4 py-4 px-5 pr-3">
-              <div className="grid gap-3">
+            <section
+              data-testid="edit-classwork-modal-body"
+              className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4 pr-3"
+            >
+              <div className="contents">
+                <section aria-labelledby="edit-classwork-basic-information" className="order-0 grid gap-3">
+                  <h3
+                    id="edit-classwork-basic-information"
+                    className="border-b-2 border-border pb-2 text-base font-bold"
+                  >
+                    Basic Information
+                  </h3>
                 <Field label="Link Lesson">
                   <Select
                     value={selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""}
@@ -1095,9 +1101,20 @@ export default function EditClassworkModal({
                   </div>
                 )}
 
-                {!isQuizType(editDraft.classwork_type) && (
+                </section>
+
+                <section
+                  aria-labelledby="edit-classwork-reference-materials"
+                  className="order-2 space-y-3 border-t-2 border-border pt-4"
+                >
+                  <h3
+                    id="edit-classwork-reference-materials"
+                    className="text-base font-bold"
+                  >
+                    Reference Links / Materials
+                  </h3>
+
                   <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isSavingEdit} />
-                )}
 
                 <Field label="Upload Material">
                   {currentClasswork.attachments.length === 0 &&
@@ -1232,28 +1249,38 @@ export default function EditClassworkModal({
                       </label>
                     </div>
                   )}
-                </Field>
+                  </Field>
+                </section>
 
                 {(editDraft.classwork_type === "ACTIVITY" ||
                   editDraft.classwork_type === "ASSIGNMENT") && (
-                    <div className="space-y-3">
-                      {currentClasswork.has_graded_submissions && (
-                        <Alert status="warning">
-                          <Alert.Description>
-                            This rubric is locked because a submission has already been graded. Existing scores keep their original denominator.
-                          </Alert.Description>
-                        </Alert>
-                      )}
+                    <section
+                      aria-label="Scoring Rubric"
+                      className="order-3 space-y-3 border-t-2 border-border pt-4"
+                    >
                       <ActivityRubricEditor
                         levels={rubricLevels}
                         onChange={setRubricLevels}
                         disabled={isSavingEdit || Boolean(currentClasswork.has_graded_submissions)}
+                        disabledReason={currentClasswork.has_graded_submissions
+                          ? "This rubric is locked because a submission has already been graded. Existing scores keep their original denominator."
+                          : undefined}
                       />
-                    </div>
+                    </section>
                   )}
               </div>
 
-              <div className="space-y-4">
+              <div className="contents">
+                <section
+                  aria-labelledby="edit-classwork-editable-settings"
+                  className="order-1 space-y-4 border-t-2 border-border pt-4"
+                >
+                  <h3
+                    id="edit-classwork-editable-settings"
+                    className="text-base font-bold"
+                  >
+                    Editable Settings
+                  </h3>
                 <div
                   className={`grid gap-4 ${isReadingType(editDraft.classwork_type)
                     ? ""
@@ -1278,6 +1305,21 @@ export default function EditClassworkModal({
                       />
                     </Field>
                   )}
+
+                  <Field label="Locked Until">
+                    <DatePicker
+                      includeTime
+                      value={editDraft.lock_date}
+                      onValueChange={(value) =>
+                        setEditDraft((current) => ({
+                          ...current,
+                          lock_date: value,
+                        }))
+                      }
+                      disabled={isSavingEdit || !editDraft.is_published}
+                      className="w-full bg-white border-2 border-black rounded shadow-md"
+                    />
+                  </Field>
 
                   <Field label="Publish Status">
                     <Select
@@ -1305,21 +1347,6 @@ export default function EditClassworkModal({
                         Future-term planning remains unpublished until the term is active.
                       </p>
                     )}
-                  </Field>
-
-                  <Field label="Locked Until">
-                    <DatePicker
-                      includeTime
-                      value={editDraft.lock_date}
-                      onValueChange={(value) =>
-                        setEditDraft((current) => ({
-                          ...current,
-                          lock_date: value,
-                        }))
-                      }
-                      disabled={isSavingEdit || !editDraft.is_published}
-                      className="w-full bg-white border-2 border-black rounded shadow-md"
-                    />
                   </Field>
 
                   {isQuizType(editDraft.classwork_type) && (
@@ -1539,8 +1566,12 @@ export default function EditClassworkModal({
                       />
                     )}
                 </div>
+                </section>
 
-                <div className="mt-6">
+                <section
+                  aria-label={targetedAssignment ? "Assigned student" : "Assign to Sections"}
+                  className="order-4 border-t-2 border-border pt-4"
+                >
                   {targetedAssignment ? (
                     <Field label="Assigned student">
                       <Card className="flex items-center gap-3 border-2 border-primary bg-primary/10 p-3 shadow-none">
@@ -1558,7 +1589,7 @@ export default function EditClassworkModal({
                       </Card>
                     </Field>
                   ) : (
-                    <Field label="Assign to sections">
+                    <Field label="Assign to Sections">
                       {selectedSubjectLoads.length > 0 && (
                         <div className="flex items-center justify-end -mt-8 mb-2">
                           <Button
@@ -1643,7 +1674,7 @@ export default function EditClassworkModal({
                       )}
                     </Field>
                   )}
-                </div>
+                </section>
               </div>
             </section>
 
