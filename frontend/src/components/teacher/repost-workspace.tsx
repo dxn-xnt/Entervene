@@ -92,18 +92,25 @@ export function RepostWorkspace({
   // URL query parameter resolution
   const urlBox = searchParams.get("box");
   const urlTab = searchParams.get("tab") as RepostWorkspaceTab | null;
-  const urlRequestId = searchParams.get("request_id") || searchParams.get("requestId") || "";
+  const urlRequestId =
+    searchParams.get("request_id") || searchParams.get("requestId") || "";
 
   const computedInitialTab = useMemo<RepostWorkspaceTab>(() => {
     if (urlBox === "incoming") return "received";
     if (urlBox === "outgoing") return "sent";
-    if (urlTab === "reuse" || urlTab === "request" || urlTab === "received" || urlTab === "sent") {
+    if (
+      urlTab === "reuse" ||
+      urlTab === "request" ||
+      urlTab === "received" ||
+      urlTab === "sent"
+    ) {
       return urlTab;
     }
     return initialTab;
   }, [urlBox, urlTab, initialTab]);
 
-  const [activeTab, setActiveTab] = useState<RepostWorkspaceTab>(computedInitialTab);
+  const [activeTab, setActiveTab] =
+    useState<RepostWorkspaceTab>(computedInitialTab);
 
   // Sync tab with URL parameter changes if not in dialog context
   useEffect(() => {
@@ -115,7 +122,9 @@ export function RepostWorkspace({
   }, [urlBox, urlTab, isDialogContext]);
 
   // Destination scopes state (when opened without direct props)
-  const [availableScopes, setAvailableScopes] = useState<DestinationScope[]>([]);
+  const [availableScopes, setAvailableScopes] = useState<DestinationScope[]>(
+    [],
+  );
   const [loadingScopes, setLoadingScopes] = useState(false);
   const [selectedScopeKey, setSelectedScopeKey] = useState<string>("");
 
@@ -126,7 +135,9 @@ export function RepostWorkspace({
         .then((scopes) => {
           setAvailableScopes(scopes || []);
           if (scopes && scopes.length > 0) {
-            setSelectedScopeKey(`${scopes[0].class_id}:${scopes[0].subject_id}:${scopes[0].academic_period_id}`);
+            setSelectedScopeKey(
+              `${scopes[0].class_id}:${scopes[0].subject_id}:${scopes[0].academic_period_id}`,
+            );
           }
         })
         .catch(() => {})
@@ -148,7 +159,9 @@ export function RepostWorkspace({
     }
     if (availableScopes.length > 0) {
       const match = availableScopes.find(
-        (s) => `${s.class_id}:${s.subject_id}:${s.academic_period_id}` === selectedScopeKey,
+        (s) =>
+          `${s.class_id}:${s.subject_id}:${s.academic_period_id}` ===
+          selectedScopeKey,
       );
       if (match) {
         return {
@@ -178,11 +191,14 @@ export function RepostWorkspace({
   // -------------------------------------------------------------------------
   const [selfLoading, setSelfLoading] = useState(false);
   const [selfError, setSelfError] = useState("");
-  const [selfMaterials, setSelfMaterials] = useState<OwnerEligibleMaterialItem[]>([]);
+  const [selfMaterials, setSelfMaterials] = useState<
+    OwnerEligibleMaterialItem[]
+  >([]);
   const [selfItemTypeFilter, setSelfItemTypeFilter] = useState<string>("ALL");
   const [selectedTokens, setSelectedTokens] = useState<Set<string>>(new Set());
   const [cloningInProgress, setCloningInProgress] = useState(false);
-  const [cloneSuccessResult, setCloneSuccessResult] = useState<ContentCloneOperation | null>(null);
+  const [cloneSuccessResult, setCloneSuccessResult] =
+    useState<ContentCloneOperation | null>(null);
 
   const loadSelfMaterials = useCallback(async () => {
     if (!activeDestination) return;
@@ -198,10 +214,16 @@ export function RepostWorkspace({
         destination_subject_id: activeDestination.subjectId,
         destination_academic_period_id: activeDestination.periodId,
       });
-      if (sequence === selfLoadSequence.current) setSelfMaterials(res.items || []);
+      if (sequence === selfLoadSequence.current)
+        setSelfMaterials(res.items || []);
     } catch (error: unknown) {
       if (sequence === selfLoadSequence.current) {
-        setSelfError(errorMessage(error, "Unable to load prior materials for self-cloning."));
+        setSelfError(
+          errorMessage(
+            error,
+            "Unable to load prior materials for self-cloning.",
+          ),
+        );
       }
     } finally {
       if (sequence === selfLoadSequence.current) setSelfLoading(false);
@@ -216,7 +238,9 @@ export function RepostWorkspace({
 
   const filteredSelfMaterials = useMemo(() => {
     if (selfItemTypeFilter === "ALL") return selfMaterials;
-    return selfMaterials.filter((item) => item.item_type === selfItemTypeFilter);
+    return selfMaterials.filter(
+      (item) => item.item_type === selfItemTypeFilter,
+    );
   }, [selfMaterials, selfItemTypeFilter]);
 
   const toggleItemSelection = (token: string) => {
@@ -231,7 +255,9 @@ export function RepostWorkspace({
   const selectAllFiltered = () => {
     setSelectedTokens((prev) => {
       const next = new Set(prev);
-      filteredSelfMaterials.forEach((item) => next.add(item.source_revision_token));
+      filteredSelfMaterials.forEach((item) =>
+        next.add(item.source_revision_token),
+      );
       return next;
     });
   };
@@ -248,18 +274,23 @@ export function RepostWorkspace({
           source_entity_id: item.source_entity_id,
           source_revision_token: item.source_revision_token,
         }));
-      const selectedSourcePeriodIds = Array.from(new Set(
-        selfMaterials
-          .filter((item) => selectedTokens.has(item.source_revision_token))
-          .map((item) => item.academic_period_id)
-          .filter((periodId): periodId is number => Number.isInteger(periodId)),
-      ));
-      const periodMappings = selectedSourcePeriodIds.length > 1
-        ? selectedSourcePeriodIds.map((sourcePeriodId) => ({
-            source_academic_period_id: sourcePeriodId,
-            destination_academic_period_id: activeDestination.periodId,
-          }))
-        : undefined;
+      const selectedSourcePeriodIds = Array.from(
+        new Set(
+          selfMaterials
+            .filter((item) => selectedTokens.has(item.source_revision_token))
+            .map((item) => item.academic_period_id)
+            .filter((periodId): periodId is number =>
+              Number.isInteger(periodId),
+            ),
+        ),
+      );
+      const periodMappings =
+        selectedSourcePeriodIds.length > 1
+          ? selectedSourcePeriodIds.map((sourcePeriodId) => ({
+              source_academic_period_id: sourcePeriodId,
+              destination_academic_period_id: activeDestination.periodId,
+            }))
+          : undefined;
 
       const op = await cloneSelfMaterials({
         destination_class_id: activeDestination.classId,
@@ -281,19 +312,29 @@ export function RepostWorkspace({
   // -------------------------------------------------------------------------
   // TAB 2: Request from Another Teacher
   // -------------------------------------------------------------------------
-  const [scopeMode, setScopeMode] = useState<"ANY" | "ALL_TERMS" | "PERIOD">("ANY");
+  const [scopeMode, setScopeMode] = useState<"ANY" | "ALL_TERMS" | "PERIOD">(
+    "ANY",
+  );
   const [selectedSourceYearId, setSelectedSourceYearId] = useState<string>("");
-  const [selectedSourcePeriodId, setSelectedSourcePeriodId] = useState<string>("");
+  const [selectedSourcePeriodId, setSelectedSourcePeriodId] =
+    useState<string>("");
 
-  const [allAcademicYears, setAllAcademicYears] = useState<AcademicYearSettingItem[]>([]);
-  const [allAcademicPeriods, setAllAcademicPeriods] = useState<AcademicPeriodSettingItem[]>([]);
+  const [allAcademicYears, setAllAcademicYears] = useState<
+    AcademicYearSettingItem[]
+  >([]);
+  const [allAcademicPeriods, setAllAcademicPeriods] = useState<
+    AcademicPeriodSettingItem[]
+  >([]);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
 
   // Load calendar settings (years and periods) to build dynamic selectors
   useEffect(() => {
     let active = true;
     setLoadingCalendar(true);
-    Promise.all([getAcademicYearsSettings(), getAcademicPeriodsSettings(undefined, true)])
+    Promise.all([
+      getAcademicYearsSettings(),
+      getAcademicPeriodsSettings(undefined, true),
+    ])
       .then(([years, periods]) => {
         if (!active) return;
         setAllAcademicYears(years || []);
@@ -311,7 +352,9 @@ export function RepostWorkspace({
   // Determine threshold: destination period start date (in ms)
   const destinationPeriodStartDateMs = useMemo(() => {
     if (!activeDestination || allAcademicPeriods.length === 0) return null;
-    const destPeriod = allAcademicPeriods.find((p) => p.id === activeDestination.periodId);
+    const destPeriod = allAcademicPeriods.find(
+      (p) => p.id === activeDestination.periodId,
+    );
     if (destPeriod && destPeriod.startDate) {
       return new Date(destPeriod.startDate).getTime();
     }
@@ -322,7 +365,9 @@ export function RepostWorkspace({
   const eligibleHistoricalPeriods = useMemo(() => {
     if (!destinationPeriodStartDateMs) {
       // Fallback: exclude the active destination period itself
-      return allAcademicPeriods.filter((p) => p.id !== activeDestination?.periodId);
+      return allAcademicPeriods.filter(
+        (p) => p.id !== activeDestination?.periodId,
+      );
     }
     return allAcademicPeriods.filter((p) => {
       if (!p.endDate) return false;
@@ -333,15 +378,21 @@ export function RepostWorkspace({
 
   // Valid historical academic years (must contain at least one eligible period)
   const eligibleHistoricalYears = useMemo(() => {
-    const eligibleYearIds = new Set(eligibleHistoricalPeriods.map((p) => p.academic_year_id));
-    return allAcademicYears.filter((y) => eligibleYearIds.has(y.academic_year_id));
+    const eligibleYearIds = new Set(
+      eligibleHistoricalPeriods.map((p) => p.academic_year_id),
+    );
+    return allAcademicYears.filter((y) =>
+      eligibleYearIds.has(y.academic_year_id),
+    );
   }, [allAcademicYears, eligibleHistoricalPeriods]);
 
   // Filtered periods for the currently selected source year (for PERIOD mode)
   const periodsForSelectedYear = useMemo(() => {
     if (!selectedSourceYearId) return [];
     const yearIdNum = Number(selectedSourceYearId);
-    return eligibleHistoricalPeriods.filter((p) => p.academic_year_id === yearIdNum);
+    return eligibleHistoricalPeriods.filter(
+      (p) => p.academic_year_id === yearIdNum,
+    );
   }, [eligibleHistoricalPeriods, selectedSourceYearId]);
 
   // Reset dependent selections when search mode changes
@@ -355,23 +406,32 @@ export function RepostWorkspace({
     } else if (newMode === "ALL_TERMS") {
       setSelectedSourcePeriodId("");
       if (!selectedSourceYearId && eligibleHistoricalYears.length > 0) {
-        setSelectedSourceYearId(String(eligibleHistoricalYears[0].academic_year_id));
+        setSelectedSourceYearId(
+          String(eligibleHistoricalYears[0].academic_year_id),
+        );
       }
     } else if (newMode === "PERIOD") {
       if (!selectedSourceYearId && eligibleHistoricalYears.length > 0) {
-        setSelectedSourceYearId(String(eligibleHistoricalYears[0].academic_year_id));
+        setSelectedSourceYearId(
+          String(eligibleHistoricalYears[0].academic_year_id),
+        );
       }
     }
   };
 
   // Ensure a valid historical year is selected in ALL_TERMS or PERIOD mode
   useEffect(() => {
-    if ((scopeMode === "ALL_TERMS" || scopeMode === "PERIOD") && eligibleHistoricalYears.length > 0) {
+    if (
+      (scopeMode === "ALL_TERMS" || scopeMode === "PERIOD") &&
+      eligibleHistoricalYears.length > 0
+    ) {
       const currentYearValid = eligibleHistoricalYears.some(
         (y) => String(y.academic_year_id) === selectedSourceYearId,
       );
       if (!currentYearValid) {
-        setSelectedSourceYearId(String(eligibleHistoricalYears[0].academic_year_id));
+        setSelectedSourceYearId(
+          String(eligibleHistoricalYears[0].academic_year_id),
+        );
       }
     }
   }, [scopeMode, eligibleHistoricalYears, selectedSourceYearId]);
@@ -390,13 +450,19 @@ export function RepostWorkspace({
         setSelectedSourcePeriodId("");
       }
     }
-  }, [scopeMode, selectedSourceYearId, periodsForSelectedYear, selectedSourcePeriodId]);
+  }, [
+    scopeMode,
+    selectedSourceYearId,
+    periodsForSelectedYear,
+    selectedSourcePeriodId,
+  ]);
 
   // Determine whether current source scope parameters are valid according to backend contract
   const isSourceScopeValid = useMemo(() => {
     if (scopeMode === "ANY") return true;
     if (scopeMode === "ALL_TERMS") return Boolean(selectedSourceYearId);
-    if (scopeMode === "PERIOD") return Boolean(selectedSourceYearId && selectedSourcePeriodId);
+    if (scopeMode === "PERIOD")
+      return Boolean(selectedSourceYearId && selectedSourcePeriodId);
     return false;
   }, [scopeMode, selectedSourceYearId, selectedSourcePeriodId]);
 
@@ -407,7 +473,8 @@ export function RepostWorkspace({
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
   const [requestMessage, setRequestMessage] = useState("");
   const [sendingRequest, setSendingRequest] = useState(false);
-  const [requestSentSuccess, setRequestSentSuccess] = useState<ContentShareRequest | null>(null);
+  const [requestSentSuccess, setRequestSentSuccess] =
+    useState<ContentShareRequest | null>(null);
 
   const loadSourceTeachers = useCallback(async () => {
     if (!activeDestination) return;
@@ -430,8 +497,12 @@ export function RepostWorkspace({
         destination_subject_id: activeDestination.subjectId,
         destination_academic_period_id: activeDestination.periodId,
         source_scope_mode: scopeMode,
-        source_academic_year_id: selectedSourceYearId ? Number(selectedSourceYearId) : undefined,
-        source_academic_period_id: selectedSourcePeriodId ? Number(selectedSourcePeriodId) : undefined,
+        source_academic_year_id: selectedSourceYearId
+          ? Number(selectedSourceYearId)
+          : undefined,
+        source_academic_period_id: selectedSourcePeriodId
+          ? Number(selectedSourcePeriodId)
+          : undefined,
       });
       if (sequence === teacherLoadSequence.current) {
         setSourceTeachers(teachers || []);
@@ -439,12 +510,20 @@ export function RepostWorkspace({
       }
     } catch (error: unknown) {
       if (sequence === teacherLoadSequence.current) {
-        setTeachersError(errorMessage(error, "Unable to check eligible teachers."));
+        setTeachersError(
+          errorMessage(error, "Unable to check eligible teachers."),
+        );
       }
     } finally {
       if (sequence === teacherLoadSequence.current) setTeachersLoading(false);
     }
-  }, [activeDestination, isSourceScopeValid, scopeMode, selectedSourceYearId, selectedSourcePeriodId]);
+  }, [
+    activeDestination,
+    isSourceScopeValid,
+    scopeMode,
+    selectedSourceYearId,
+    selectedSourcePeriodId,
+  ]);
 
   useEffect(() => {
     if (activeTab === "request" && activeDestination) {
@@ -461,8 +540,12 @@ export function RepostWorkspace({
         source_owner_staff_id: selectedTeacherId,
         subject_id: activeDestination.subjectId,
         source_scope_mode: scopeMode,
-        source_academic_year_id: selectedSourceYearId ? Number(selectedSourceYearId) : undefined,
-        source_academic_period_id: selectedSourcePeriodId ? Number(selectedSourcePeriodId) : undefined,
+        source_academic_year_id: selectedSourceYearId
+          ? Number(selectedSourceYearId)
+          : undefined,
+        source_academic_period_id: selectedSourcePeriodId
+          ? Number(selectedSourcePeriodId)
+          : undefined,
         destination_class_id: activeDestination.classId,
         destination_subject_id: activeDestination.subjectId,
         destination_academic_period_id: activeDestination.periodId,
@@ -479,29 +562,35 @@ export function RepostWorkspace({
   // -------------------------------------------------------------------------
   // TABS 3 & 4: Received Requests and Sent Requests (Global across subjects)
   // -------------------------------------------------------------------------
-  const [incomingData, setIncomingData] = useState<ContentShareRequestListResponse | null>(null);
-  const [outgoingData, setOutgoingData] = useState<ContentShareRequestListResponse | null>(null);
+  const [incomingData, setIncomingData] =
+    useState<ContentShareRequestListResponse | null>(null);
+  const [outgoingData, setOutgoingData] =
+    useState<ContentShareRequestListResponse | null>(null);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [requestsError, setRequestsError] = useState("");
 
-  const loadRequests = useCallback(async (boxToLoad: "incoming" | "outgoing") => {
-    const sequence = ++requestLoadSequence.current[boxToLoad];
-    setLoadingRequests(true);
-    setRequestsError("");
-    try {
-      const data = await getContentRequests(boxToLoad, 1, 50);
-      if (sequence === requestLoadSequence.current[boxToLoad]) {
-        if (boxToLoad === "incoming") setIncomingData(data);
-        else setOutgoingData(data);
+  const loadRequests = useCallback(
+    async (boxToLoad: "incoming" | "outgoing") => {
+      const sequence = ++requestLoadSequence.current[boxToLoad];
+      setLoadingRequests(true);
+      setRequestsError("");
+      try {
+        const data = await getContentRequests(boxToLoad, 1, 50);
+        if (sequence === requestLoadSequence.current[boxToLoad]) {
+          if (boxToLoad === "incoming") setIncomingData(data);
+          else setOutgoingData(data);
+        }
+      } catch (error: unknown) {
+        if (sequence === requestLoadSequence.current[boxToLoad]) {
+          setRequestsError(errorMessage(error, "Failed to load requests."));
+        }
+      } finally {
+        if (sequence === requestLoadSequence.current[boxToLoad])
+          setLoadingRequests(false);
       }
-    } catch (error: unknown) {
-      if (sequence === requestLoadSequence.current[boxToLoad]) {
-        setRequestsError(errorMessage(error, "Failed to load requests."));
-      }
-    } finally {
-      if (sequence === requestLoadSequence.current[boxToLoad]) setLoadingRequests(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (activeTab === "received") void loadRequests("incoming");
@@ -509,27 +598,37 @@ export function RepostWorkspace({
   }, [activeTab, loadRequests]);
 
   // Modal states for packaging / preview / decline
-  const [packagingRequest, setPackagingRequest] = useState<ContentShareRequest | null>(null);
-  const [eligibleMaterials, setEligibleMaterials] = useState<OwnerEligibleMaterialItem[]>([]);
+  const [packagingRequest, setPackagingRequest] =
+    useState<ContentShareRequest | null>(null);
+  const [eligibleMaterials, setEligibleMaterials] = useState<
+    OwnerEligibleMaterialItem[]
+  >([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
-  const [packagingTokens, setPackagingTokens] = useState<Set<string>>(new Set());
+  const [packagingTokens, setPackagingTokens] = useState<Set<string>>(
+    new Set(),
+  );
   const [submittingPackage, setSubmittingPackage] = useState(false);
   const [packageError, setPackageError] = useState("");
 
-  const [previewRequest, setPreviewRequest] = useState<ContentShareRequest | null>(null);
-  const [packagePreview, setPackagePreview] = useState<RequesterVisiblePackageSummary | null>(null);
+  const [previewRequest, setPreviewRequest] =
+    useState<ContentShareRequest | null>(null);
+  const [packagePreview, setPackagePreview] =
+    useState<RequesterVisiblePackageSummary | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const [decisionInProgress, setDecisionInProgress] = useState(false);
-  const [cloneOperationResult, setCloneOperationResult] = useState<ContentCloneOperation | null>(null);
+  const [cloneOperationResult, setCloneOperationResult] =
+    useState<ContentCloneOperation | null>(null);
 
-  const [declineTarget, setDeclineTarget] = useState<ContentShareRequest | null>(null);
+  const [declineTarget, setDeclineTarget] =
+    useState<ContentShareRequest | null>(null);
   const [decliningInProgress, setDecliningInProgress] = useState(false);
 
   // Auto-open requested item from URL query parameter (deep-link support)
   useEffect(() => {
     if (!urlRequestId) return;
-    const currentList = activeTab === "received" ? incomingData?.items : outgoingData?.items;
+    const currentList =
+      activeTab === "received" ? incomingData?.items : outgoingData?.items;
     if (!currentList || currentList.length === 0) return;
 
     const matched = currentList.find((r) => r.request_id === urlRequestId);
@@ -551,10 +650,13 @@ export function RepostWorkspace({
     setLoadingMaterials(true);
     try {
       const res = await getEligibleMaterials(req.request_id);
-      if (sequence === materialLoadSequence.current) setEligibleMaterials(res.items || []);
+      if (sequence === materialLoadSequence.current)
+        setEligibleMaterials(res.items || []);
     } catch (error: unknown) {
       if (sequence === materialLoadSequence.current) {
-        setPackageError(errorMessage(error, "Unable to load eligible materials."));
+        setPackageError(
+          errorMessage(error, "Unable to load eligible materials."),
+        );
       }
     } finally {
       if (sequence === materialLoadSequence.current) setLoadingMaterials(false);
@@ -562,7 +664,9 @@ export function RepostWorkspace({
   };
 
   const handleSelectAllPackaging = () => {
-    setPackagingTokens(new Set(eligibleMaterials.map((m) => m.source_revision_token)));
+    setPackagingTokens(
+      new Set(eligibleMaterials.map((m) => m.source_revision_token)),
+    );
   };
 
   const handleSendPackage = async () => {
@@ -586,7 +690,9 @@ export function RepostWorkspace({
       setPackagingRequest(null);
       void loadRequests("incoming");
     } catch (error: unknown) {
-      setPackageError(errorMessage(error, "Failed to freeze and send package."));
+      setPackageError(
+        errorMessage(error, "Failed to freeze and send package."),
+      );
     } finally {
       setSubmittingPackage(false);
     }
@@ -620,12 +726,16 @@ export function RepostWorkspace({
       const res = await decidePackage(previewRequest.request_id, {
         decision: "ACCEPT",
         expected_version: previewRequest.version,
-        period_mappings: packagePreview.source_academic_period_ids.length > 1
-          ? packagePreview.source_academic_period_ids.map((sourcePeriodId) => ({
-              source_academic_period_id: sourcePeriodId,
-              destination_academic_period_id: previewRequest.destination_academic_period_id,
-            }))
-          : undefined,
+        period_mappings:
+          packagePreview.source_academic_period_ids.length > 1
+            ? packagePreview.source_academic_period_ids.map(
+                (sourcePeriodId) => ({
+                  source_academic_period_id: sourcePeriodId,
+                  destination_academic_period_id:
+                    previewRequest.destination_academic_period_id,
+                }),
+              )
+            : undefined,
       });
       if ("operation_id" in res) {
         setCloneOperationResult(res as ContentCloneOperation);
@@ -633,7 +743,9 @@ export function RepostWorkspace({
       void loadRequests("outgoing");
       onClonedSuccess?.();
     } catch (error: unknown) {
-      setPreviewError(errorMessage(error, "Failed to accept and clone package."));
+      setPreviewError(
+        errorMessage(error, "Failed to accept and clone package."),
+      );
     } finally {
       setDecisionInProgress(false);
     }
@@ -661,7 +773,10 @@ export function RepostWorkspace({
     if (!declineTarget) return;
     setDecliningInProgress(true);
     try {
-      await declineContentRequest(declineTarget.request_id, declineTarget.version);
+      await declineContentRequest(
+        declineTarget.request_id,
+        declineTarget.version,
+      );
       setDeclineTarget(null);
       void loadRequests("incoming");
     } catch (error: unknown) {
@@ -670,7 +785,6 @@ export function RepostWorkspace({
       setDecliningInProgress(false);
     }
   };
-
 
   // Navigation tab switcher (updates URL query params if route-backed)
   const handleTabSwitch = (tab: RepostWorkspaceTab) => {
@@ -724,14 +838,19 @@ export function RepostWorkspace({
           </Badge>
         );
       default:
-        return <Badge size="sm" variant="outline">{status}</Badge>;
+        return (
+          <Badge size="sm" variant="outline">
+            {status}
+          </Badge>
+        );
     }
   };
 
   const reuseFooterAction = (
     <>
       <span className="text-sm text-muted-foreground">
-        {selectedTokens.size} material{selectedTokens.size === 1 ? "" : "s"} ready to clone
+        {selectedTokens.size} material{selectedTokens.size === 1 ? "" : "s"}{" "}
+        ready to clone
       </span>
       <Button
         type="button"
@@ -739,8 +858,14 @@ export function RepostWorkspace({
         disabled={selfLoading || cloningInProgress || selectedTokens.size === 0}
         onClick={handleSelfCloneExecute}
       >
-        {cloningInProgress ? <Loader2 className="size-4 animate-spin" /> : <FolderSync className="size-4" />}
-        {cloningInProgress ? "Reusing Materials..." : `Reuse Selected Materials (${selectedTokens.size})`}
+        {cloningInProgress ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <FolderSync className="size-4" />
+        )}
+        {cloningInProgress
+          ? "Reusing Materials..."
+          : `Reuse Selected Materials (${selectedTokens.size})`}
       </Button>
     </>
   );
@@ -757,15 +882,21 @@ export function RepostWorkspace({
             {activeDestination ? (
               <div className="flex items-center gap-2">
                 <h4 className="truncate text-base font-semibold text-foreground sm:text-lg">
-                  {activeDestination.subjectName} &middot; {activeDestination.sectionName}
+                  {activeDestination.subjectName} &middot;{" "}
+                  {activeDestination.sectionName}
                 </h4>
-                <Badge variant="outline" size="sm" className="border-black font-bold shrink-0">
+                <Badge
+                  variant="outline"
+                  size="sm"
+                  className="border-black font-bold shrink-0"
+                >
                   {activeDestination.periodName}
                 </Badge>
               </div>
             ) : loadingScopes ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="size-3 animate-spin" /> Loading your teaching loads...
+                <Loader2 className="size-3 animate-spin" /> Loading your
+                teaching loads...
               </div>
             ) : availableScopes.length > 0 ? (
               <div className="flex items-center gap-2">
@@ -779,7 +910,8 @@ export function RepostWorkspace({
                       key={`${s.class_id}:${s.subject_id}:${s.academic_period_id}`}
                       value={`${s.class_id}:${s.subject_id}:${s.academic_period_id}`}
                     >
-                      {s.subject_name} &middot; {s.section_name} ({s.period_name})
+                      {s.subject_name} &middot; {s.section_name} (
+                      {s.period_name})
                     </option>
                   ))}
                 </select>
@@ -794,14 +926,20 @@ export function RepostWorkspace({
       </div>
 
       {/* ── Unified 4-Tab Bar ── */}
-      <div role="tablist" aria-label="Repost sections" className="flex shrink-0 gap-2 overflow-x-auto border-b-2 border-border bg-background px-4 pt-2 sm:px-6">
+      <div
+        role="tablist"
+        aria-label="Repost sections"
+        className="flex shrink-0 gap-2 overflow-x-auto border-b-2 border-border bg-background px-4 pt-2 sm:px-6"
+      >
         <button
           type="button"
           onClick={() => handleTabSwitch("reuse")}
           role="tab"
           aria-selected={activeTab === "reuse"}
           className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)]! border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
-            activeTab === "reuse" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
+            activeTab === "reuse"
+              ? "bg-primary text-primary-foreground"
+              : "bg-background text-foreground hover:bg-accent"
           }`}
         >
           <FolderSync className="size-4 shrink-0" />
@@ -813,7 +951,9 @@ export function RepostWorkspace({
           role="tab"
           aria-selected={activeTab === "request"}
           className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)]! border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
-            activeTab === "request" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
+            activeTab === "request"
+              ? "bg-primary text-primary-foreground"
+              : "bg-background text-foreground hover:bg-accent"
           }`}
         >
           <Send className="size-4 shrink-0" />
@@ -825,7 +965,9 @@ export function RepostWorkspace({
           role="tab"
           aria-selected={activeTab === "received"}
           className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)]! border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
-            activeTab === "received" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
+            activeTab === "received"
+              ? "bg-primary text-primary-foreground"
+              : "bg-background text-foreground hover:bg-accent"
           }`}
         >
           <Inbox className="size-4 shrink-0" />
@@ -842,7 +984,9 @@ export function RepostWorkspace({
           role="tab"
           aria-selected={activeTab === "sent"}
           className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)]! border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
-            activeTab === "sent" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
+            activeTab === "sent"
+              ? "bg-primary text-primary-foreground"
+              : "bg-background text-foreground hover:bg-accent"
           }`}
         >
           <PackageCheck className="size-4 shrink-0" />
@@ -866,7 +1010,10 @@ export function RepostWorkspace({
               <p className="font-semibold">Reuse Previous Materials</p>
               <p className="text-muted-foreground">
                 Copy previous competencies, lessons, and classworks into{" "}
-                <strong>{activeDestination?.sectionName || "your destination section"}</strong> as unpublished drafts.
+                <strong>
+                  {activeDestination?.sectionName || "your destination section"}
+                </strong>{" "}
+                as unpublished drafts.
               </p>
             </div>
 
@@ -875,19 +1022,31 @@ export function RepostWorkspace({
                 <div className="flex size-12 mx-auto items-center justify-center rounded-full border-2 border-black bg-emerald-400">
                   <CheckCircle2 className="size-7 text-black" />
                 </div>
-                <h4 className="text-xl font-bold text-emerald-900 font-head">Materials Successfully Reused!</h4>
+                <h4 className="text-xl font-bold text-emerald-900 font-head">
+                  Materials Successfully Reused!
+                </h4>
                 <p className="text-sm text-emerald-800">
                   New copies have been added as drafts in{" "}
                   <strong>{activeDestination?.sectionName}</strong>.
                 </p>
                 <div className="flex justify-center gap-2 pt-2">
-                  <Badge variant="solid" className="border border-black bg-white text-black font-bold">
-                    {cloneSuccessResult.summary.competency_count ?? 0} Competencies
+                  <Badge
+                    variant="solid"
+                    className="border border-black bg-white text-black font-bold"
+                  >
+                    {cloneSuccessResult.summary.competency_count ?? 0}{" "}
+                    Competencies
                   </Badge>
-                  <Badge variant="solid" className="border border-black bg-white text-black font-bold">
+                  <Badge
+                    variant="solid"
+                    className="border border-black bg-white text-black font-bold"
+                  >
                     {cloneSuccessResult.summary.lesson_count ?? 0} Lessons
                   </Badge>
-                  <Badge variant="solid" className="border border-black bg-white text-black font-bold">
+                  <Badge
+                    variant="solid"
+                    className="border border-black bg-white text-black font-bold"
+                  >
                     {cloneSuccessResult.summary.classwork_count ?? 0} Classworks
                   </Badge>
                 </div>
@@ -897,13 +1056,18 @@ export function RepostWorkspace({
                     onClick={() => {
                       if (activeDestination) {
                         onCloseDialog?.();
-                        navigate(`/teacher/classes/${activeDestination.classId}/${activeDestination.subjectId}`);
+                        navigate(
+                          `/teacher/classes/${activeDestination.classId}/${activeDestination.subjectId}`,
+                        );
                       }
                     }}
                   >
                     View Cloned Materials
                   </Button>
-                  <Button variant="outline" onClick={() => setCloneSuccessResult(null)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCloneSuccessResult(null)}
+                  >
                     Reuse More Materials
                   </Button>
                 </div>
@@ -921,24 +1085,35 @@ export function RepostWorkspace({
                 {/* Filter and select toolbar */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-muted-foreground">Type:</span>
-                    {(["ALL", "COMPETENCY", "LESSON", "CLASSWORK"] as const).map((t) => (
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Type:
+                    </span>
+                    {(
+                      ["ALL", "COMPETENCY", "LESSON", "CLASSWORK"] as const
+                    ).map((t) => (
                       <Button
+                        className="shadow-none"
                         key={t}
                         type="button"
                         size="sm"
                         autoIcon={false}
-                        variant={selfItemTypeFilter === t ? "default" : "outline"}
+                        variant={
+                          selfItemTypeFilter === t ? "default" : "outline"
+                        }
                         onClick={() => setSelfItemTypeFilter(t)}
                       >
-                        {t === "ALL" ? "All" : t.charAt(0) + t.slice(1).toLowerCase() + "s"}
+                        {t === "ALL"
+                          ? "All"
+                          : t.charAt(0) + t.slice(1).toLowerCase() + "s"}
                       </Button>
                     ))}
                   </div>
 
                   {selfMaterials.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <Button size="sm" autoIcon={false}
+                      <Button
+                        size="sm"
+                        autoIcon={false}
                         type="button"
                         className="gap-2 shadow-none hover:shadow-none active:shadow-none"
                         onClick={selectAllFiltered}
@@ -947,7 +1122,8 @@ export function RepostWorkspace({
                         Select All
                       </Button>
                       <span className="text-muted-foreground font-semibold">
-                        {selectedTokens.size} of {filteredSelfMaterials.length} selected
+                        {selectedTokens.size} of {filteredSelfMaterials.length}{" "}
+                        selected
                       </span>
                     </div>
                   )}
@@ -957,48 +1133,71 @@ export function RepostWorkspace({
                 {selfLoading ? (
                   <div className="py-16 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                     <Loader2 className="size-6 animate-spin text-foreground" />
-                    <p className="text-xs font-bold">Loading your prior teaching records...</p>
+                    <p className="text-xs font-bold">
+                      Loading your prior teaching records...
+                    </p>
                   </div>
                 ) : filteredSelfMaterials.length === 0 ? (
                   <TeacherEmptyState
                     icon={<FolderSync />}
-                    title={selfMaterials.length === 0 ? "No Prior Materials Found" : "No Materials Match This Type"}
-                    description={selfMaterials.length === 0
-                      ? "You do not have any published teaching records for this subject in previous academic years."
-                      : "Try another material type to see available records."}
+                    title={
+                      selfMaterials.length === 0
+                        ? "No Prior Materials Found"
+                        : "No Materials Match This Type"
+                    }
+                    description={
+                      selfMaterials.length === 0
+                        ? "You do not have any published teaching records for this subject in previous academic years."
+                        : "Try another material type to see available records."
+                    }
                     compact
                   />
                 ) : (
                   <div className="border-2 border-border rounded! divide-y divide-border max-h-96 overflow-y-auto bg-card shadow-none">
                     {filteredSelfMaterials.map((item) => {
-                      const isSelected = selectedTokens.has(item.source_revision_token);
+                      const isSelected = selectedTokens.has(
+                        item.source_revision_token,
+                      );
                       return (
                         <div
                           key={item.source_revision_token}
-                          onClick={() => toggleItemSelection(item.source_revision_token)}
+                          onClick={() =>
+                            toggleItemSelection(item.source_revision_token)
+                          }
                           className={`flex items-center justify-between p-3 cursor-pointer transition-colors ${
-                            isSelected ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                            isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-accent"
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0 pr-2">
                             <div
                               className={`size-5 rounded border-2 border-black flex items-center justify-center shrink-0 ${
-                                isSelected ? "bg-primary text-black" : "bg-white"
+                                isSelected
+                                  ? "bg-primary text-black"
+                                  : "bg-white"
                               }`}
                             >
-                              {isSelected && <Check className="size-3.5 stroke-[3]" />}
+                              {isSelected && (
+                                <Check className="size-3.5 stroke-[3]" />
+                              )}
                             </div>
                             <div className="min-w-0">
                               <p className="text-xs sm:text-sm font-bold text-foreground truncate">
                                 {item.safe_title}
                               </p>
                               <p className="text-[11px] text-muted-foreground font-medium truncate">
-                                {item.academic_period_name} &middot; Token: {item.source_revision_token.slice(0, 10)}...
+                                {item.academic_period_name} &middot; Token:{" "}
+                                {item.source_revision_token.slice(0, 10)}...
                               </p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <Badge variant="outline" size="sm" className="border-black text-[10px] font-bold">
+                            <Badge
+                              variant="outline"
+                              size="sm"
+                              className="border-black text-[10px] font-bold"
+                            >
                               {item.item_type}
                             </Badge>
                           </div>
@@ -1025,10 +1224,13 @@ export function RepostWorkspace({
         {activeTab === "request" && (
           <div className="space-y-5">
             <div className="space-y-1 text-sm">
-              <p className="font-bold">Request Course Materials from a Colleague</p>
+              <p className="font-bold">
+                Request Course Materials from a Colleague
+              </p>
               <p className="mt-1 text-gray-600">
-                Ask another teacher who handled {activeDestination?.subjectName || "this subject"} in a completed
-                prior term to share their curriculum materials.
+                Ask another teacher who handled{" "}
+                {activeDestination?.subjectName || "this subject"} in a
+                completed prior term to share their curriculum materials.
               </p>
             </div>
 
@@ -1037,16 +1239,26 @@ export function RepostWorkspace({
                 <div className="flex size-12 mx-auto items-center justify-center rounded-full border-2 border-black bg-emerald-400">
                   <CheckCircle2 className="size-7 text-black" />
                 </div>
-                <h4 className="text-xl font-bold text-emerald-900 font-head">Repost Request Sent!</h4>
+                <h4 className="text-xl font-bold text-emerald-900 font-head">
+                  Repost Request Sent!
+                </h4>
                 <p className="text-sm text-emerald-800">
-                  Your request has been delivered to <strong>{requestSentSuccess.source_owner_name}</strong>.
-                  You will receive an in-app notification as soon as materials are prepared.
+                  Your request has been delivered to{" "}
+                  <strong>{requestSentSuccess.source_owner_name}</strong>. You
+                  will receive an in-app notification as soon as materials are
+                  prepared.
                 </p>
                 <div className="pt-2 flex justify-center gap-3">
-                  <Button variant="default" onClick={() => handleTabSwitch("sent")}>
+                  <Button
+                    variant="default"
+                    onClick={() => handleTabSwitch("sent")}
+                  >
                     View in Sent Requests
                   </Button>
-                  <Button variant="outline" onClick={() => setRequestSentSuccess(null)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setRequestSentSuccess(null)}
+                  >
                     Send Another Request
                   </Button>
                 </div>
@@ -1061,11 +1273,29 @@ export function RepostWorkspace({
                     Source Search Mode
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {([
-                      { mode: "ANY", label: "Any Prior Term", desc: "Search all historical teaching records" },
-                      { mode: "ALL_TERMS", label: "Any Term in Year", desc: "Filter by academic year" },
-                      { mode: "PERIOD", label: "Specific Term", desc: "Exact academic period match" },
-                    ] satisfies Array<{ mode: "ANY" | "ALL_TERMS" | "PERIOD"; label: string; desc: string }>).map((item) => (
+                    {(
+                      [
+                        {
+                          mode: "ANY",
+                          label: "Any Prior Term",
+                          desc: "Search all historical teaching records",
+                        },
+                        {
+                          mode: "ALL_TERMS",
+                          label: "Any Term in Year",
+                          desc: "Filter by academic year",
+                        },
+                        {
+                          mode: "PERIOD",
+                          label: "Specific Term",
+                          desc: "Exact academic period match",
+                        },
+                      ] satisfies Array<{
+                        mode: "ANY" | "ALL_TERMS" | "PERIOD";
+                        label: string;
+                        desc: string;
+                      }>
+                    ).map((item) => (
                       <button
                         key={item.mode}
                         type="button"
@@ -1077,7 +1307,9 @@ export function RepostWorkspace({
                         }`}
                       >
                         <p className="text-sm font-bold">{item.label}</p>
-                        <p className="text-xs text-gray-600 leading-tight mt-0.5">{item.desc}</p>
+                        <p className="text-xs text-gray-600 leading-tight mt-0.5">
+                          {item.desc}
+                        </p>
                       </button>
                     ))}
                   </div>
@@ -1091,23 +1323,37 @@ export function RepostWorkspace({
                     </label>
                     {loadingCalendar ? (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Loader2 className="size-3 animate-spin" /> Loading academic calendar...
+                        <Loader2 className="size-3 animate-spin" /> Loading
+                        academic calendar...
                       </div>
                     ) : eligibleHistoricalYears.length === 0 ? (
                       <div className="text-xs text-amber-800 bg-amber-50 p-2.5 border border-amber-300 rounded! font-medium">
-                        No prior completed academic years exist relative to this destination term.
+                        No prior completed academic years exist relative to this
+                        destination term.
                       </div>
                     ) : (
                       <Select
                         value={selectedSourceYearId}
                         onValueChange={setSelectedSourceYearId}
                       >
-                        <Select.Trigger className="w-full rounded!" aria-label="Select prior academic year"><Select.Value placeholder="Select academic year" /></Select.Trigger>
-                        <Select.Content className="rounded!"><Select.Group>
-                        {activeFirst(eligibleHistoricalYears).map((y) => (
-                          <AcademicSelectItem key={y.academic_year_id} value={String(y.academic_year_id)} label={`${y.year_label}${y.is_active ? "" : " (Archived)"}`} active={y.is_active} />
-                        ))}
-                        </Select.Group></Select.Content>
+                        <Select.Trigger
+                          className="w-full rounded!"
+                          aria-label="Select prior academic year"
+                        >
+                          <Select.Value placeholder="Select academic year" />
+                        </Select.Trigger>
+                        <Select.Content className="rounded!">
+                          <Select.Group>
+                            {activeFirst(eligibleHistoricalYears).map((y) => (
+                              <AcademicSelectItem
+                                key={y.academic_year_id}
+                                value={String(y.academic_year_id)}
+                                label={`${y.year_label}${y.is_active ? "" : " (Archived)"}`}
+                                active={y.is_active}
+                              />
+                            ))}
+                          </Select.Group>
+                        </Select.Content>
                       </Select>
                     )}
                   </div>
@@ -1128,12 +1374,24 @@ export function RepostWorkspace({
                           value={selectedSourceYearId}
                           onValueChange={setSelectedSourceYearId}
                         >
-                          <Select.Trigger className="w-full rounded!" aria-label="Select prior academic year"><Select.Value placeholder="Select academic year" /></Select.Trigger>
-                          <Select.Content className="rounded!"><Select.Group>
-                          {activeFirst(eligibleHistoricalYears).map((y) => (
-                            <AcademicSelectItem key={y.academic_year_id} value={String(y.academic_year_id)} label={`${y.year_label}${y.is_active ? "" : " (Archived)"}`} active={y.is_active} />
-                          ))}
-                          </Select.Group></Select.Content>
+                          <Select.Trigger
+                            className="w-full rounded!"
+                            aria-label="Select prior academic year"
+                          >
+                            <Select.Value placeholder="Select academic year" />
+                          </Select.Trigger>
+                          <Select.Content className="rounded!">
+                            <Select.Group>
+                              {activeFirst(eligibleHistoricalYears).map((y) => (
+                                <AcademicSelectItem
+                                  key={y.academic_year_id}
+                                  value={String(y.academic_year_id)}
+                                  label={`${y.year_label}${y.is_active ? "" : " (Archived)"}`}
+                                  active={y.is_active}
+                                />
+                              ))}
+                            </Select.Group>
+                          </Select.Content>
                         </Select>
                       )}
                     </div>
@@ -1151,14 +1409,21 @@ export function RepostWorkspace({
                           value={selectedSourcePeriodId}
                           onValueChange={setSelectedSourcePeriodId}
                         >
-                          <Select.Trigger className="w-full rounded!" aria-label="Select specific historical term"><Select.Value placeholder="Select term" /></Select.Trigger>
-                          <Select.Content className="rounded!"><Select.Group>
-                          {activeFirst(periodsForSelectedYear).map((p) => (
-                            <Select.Item key={p.id} value={String(p.id)}>
-                              {p.period} (Sequence {p.period_sequence})
-                            </Select.Item>
-                          ))}
-                          </Select.Group></Select.Content>
+                          <Select.Trigger
+                            className="w-full rounded!"
+                            aria-label="Select specific historical term"
+                          >
+                            <Select.Value placeholder="Select term" />
+                          </Select.Trigger>
+                          <Select.Content className="rounded!">
+                            <Select.Group>
+                              {activeFirst(periodsForSelectedYear).map((p) => (
+                                <Select.Item key={p.id} value={String(p.id)}>
+                                  {p.period} (Sequence {p.period_sequence})
+                                </Select.Item>
+                              ))}
+                            </Select.Group>
+                          </Select.Content>
                         </Select>
                       )}
                     </div>
@@ -1172,16 +1437,20 @@ export function RepostWorkspace({
                   </label>
                   {!isSourceScopeValid ? (
                     <div className="border border-gray-300 bg-gray-50 p-3 rounded! text-xs text-gray-600 font-medium">
-                      Please select an academic year and term above to see eligible teachers.
+                      Please select an academic year and term above to see
+                      eligible teachers.
                     </div>
                   ) : teachersLoading ? (
                     <div className="py-3 flex items-center gap-2 text-gray-600 text-xs font-bold">
-                      <Loader2 className="size-4 animate-spin" /> Looking for verified subject teachers...
+                      <Loader2 className="size-4 animate-spin" /> Looking for
+                      verified subject teachers...
                     </div>
                   ) : sourceTeachers.length === 0 ? (
                     <div className="border border-amber-300 bg-amber-50 p-3 rounded! text-xs text-amber-900 font-medium">
-                      No other verified teachers found with published teaching records for{" "}
-                      <strong>{activeDestination?.subjectName}</strong> in the selected scope.
+                      No other verified teachers found with published teaching
+                      records for{" "}
+                      <strong>{activeDestination?.subjectName}</strong> in the
+                      selected scope.
                     </div>
                   ) : (
                     <select
@@ -1217,7 +1486,6 @@ export function RepostWorkspace({
                     {teachersError}
                   </div>
                 )}
-
               </>
             )}
           </div>
@@ -1234,7 +1502,8 @@ export function RepostWorkspace({
                   Requests Received from Colleagues
                 </h4>
                 <p className="text-xs text-muted-foreground font-medium">
-                  Colleagues asking for your published competencies, lessons, and classworks.
+                  Colleagues asking for your published competencies, lessons,
+                  and classworks.
                 </p>
               </div>
               <Button
@@ -1244,7 +1513,9 @@ export function RepostWorkspace({
                 disabled={loadingRequests}
                 className="flex items-center gap-1.5"
               >
-                <RefreshCw className={`size-3.5 ${loadingRequests ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`size-3.5 ${loadingRequests ? "animate-spin" : ""}`}
+                />
                 Refresh
               </Button>
             </div>
@@ -1258,10 +1529,17 @@ export function RepostWorkspace({
             {loadingRequests ? (
               <div className="py-16 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                 <Loader2 className="size-6 animate-spin text-foreground" />
-                <p className="text-xs font-bold">Loading received requests...</p>
+                <p className="text-xs font-bold">
+                  Loading received requests...
+                </p>
               </div>
             ) : !incomingData || incomingData.items.length === 0 ? (
-              <TeacherEmptyState icon={<Inbox />} title="No Received Requests" description="You have not received any material requests from other teachers." compact />
+              <TeacherEmptyState
+                icon={<Inbox />}
+                title="No Received Requests"
+                description="You have not received any material requests from other teachers."
+                compact
+              />
             ) : (
               <div className="grid grid-cols-1 gap-3">
                 {incomingData.items.map((req) => (
@@ -1271,14 +1549,21 @@ export function RepostWorkspace({
                   >
                     <div className="space-y-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-black text-foreground">{req.requester_name}</span>
-                        <span className="text-xs text-muted-foreground">requested</span>
-                        <span className="text-xs font-bold underline text-foreground">{req.subject_name}</span>
+                        <span className="text-sm font-black text-foreground">
+                          {req.requester_name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          requested
+                        </span>
+                        <span className="text-xs font-bold underline text-foreground">
+                          {req.subject_name}
+                        </span>
                         {renderStatusBadge(req.status)}
                       </div>
                       <p className="text-xs text-gray-600 font-medium">
-                        Target Section: <strong>{req.destination_section_name}</strong> &middot; Term:{" "}
-                        {req.destination_period_name}
+                        Target Section:{" "}
+                        <strong>{req.destination_section_name}</strong> &middot;
+                        Term: {req.destination_period_name}
                       </p>
                       {req.message && (
                         <p className="text-xs italic bg-gray-50 border border-gray-200 p-2 rounded text-gray-700 mt-1">
@@ -1286,7 +1571,9 @@ export function RepostWorkspace({
                         </p>
                       )}
                       <p className="text-[10px] text-muted-foreground">
-                        Received on {new Date(req.created_at).toLocaleDateString()} &middot; ID: {req.request_id.slice(0, 8)}...
+                        Received on{" "}
+                        {new Date(req.created_at).toLocaleDateString()} &middot;
+                        ID: {req.request_id.slice(0, 8)}...
                       </p>
                     </div>
 
@@ -1340,7 +1627,9 @@ export function RepostWorkspace({
                 disabled={loadingRequests}
                 className="flex items-center gap-1.5"
               >
-                <RefreshCw className={`size-3.5 ${loadingRequests ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`size-3.5 ${loadingRequests ? "animate-spin" : ""}`}
+                />
                 Refresh
               </Button>
             </div>
@@ -1357,7 +1646,12 @@ export function RepostWorkspace({
                 <p className="text-xs font-bold">Loading sent requests...</p>
               </div>
             ) : !outgoingData || outgoingData.items.length === 0 ? (
-              <TeacherEmptyState icon={<Send />} title="No Sent Requests" description="You have not sent any requests to other teachers yet." compact />
+              <TeacherEmptyState
+                icon={<Send />}
+                title="No Sent Requests"
+                description="You have not sent any requests to other teachers yet."
+                compact
+              />
             ) : (
               <div className="grid grid-cols-1 gap-3">
                 {outgoingData.items.map((req) => (
@@ -1368,15 +1662,22 @@ export function RepostWorkspace({
                     <div className="space-y-2 min-w-0">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-                          <span className="font-bold text-foreground">{req.source_owner_name}</span>
-                          <span className="text-muted-foreground">&middot;</span>
-                          <span className="font-medium text-foreground">{req.subject_name}</span>
+                          <span className="font-bold text-foreground">
+                            {req.source_owner_name}
+                          </span>
+                          <span className="text-muted-foreground">
+                            &middot;
+                          </span>
+                          <span className="font-medium text-foreground">
+                            {req.subject_name}
+                          </span>
                         </div>
                         {renderStatusBadge(req.status)}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Target Section: <strong>{req.destination_section_name}</strong> &middot; Term:{" "}
-                        {req.destination_period_name}
+                        Target Section:{" "}
+                        <strong>{req.destination_section_name}</strong> &middot;
+                        Term: {req.destination_period_name}
                       </p>
                       {req.message && (
                         <p className="break-words text-sm italic text-muted-foreground">
@@ -1384,7 +1685,8 @@ export function RepostWorkspace({
                         </p>
                       )}
                       <p className="text-sm text-muted-foreground">
-                        Sent on {new Date(req.created_at).toLocaleDateString()} &middot; ID: {req.request_id.slice(0, 8)}...
+                        Sent on {new Date(req.created_at).toLocaleDateString()}{" "}
+                        &middot; ID: {req.request_id.slice(0, 8)}...
                       </p>
                     </div>
 
@@ -1396,7 +1698,8 @@ export function RepostWorkspace({
                           onClick={() => void openPreviewModal(req)}
                           className="gap-2"
                         >
-                          <PackageCheck className="size-3.5" /> Review &amp; Clone
+                          <PackageCheck className="size-3.5" /> Review &amp;
+                          Clone
                         </Button>
                       )}
                       {req.status === "ACCEPTED" && (
@@ -1405,11 +1708,14 @@ export function RepostWorkspace({
                           size="sm"
                           onClick={() => {
                             onCloseDialog?.();
-                            navigate(`/teacher/classes/${req.destination_class_id}/${req.destination_subject_id}`);
+                            navigate(
+                              `/teacher/classes/${req.destination_class_id}/${req.destination_subject_id}`,
+                            );
                           }}
                           className="gap-2"
                         >
-                          <ExternalLink className="size-3.5" /> View Cloned Materials
+                          <ExternalLink className="size-3.5" /> View Cloned
+                          Materials
                         </Button>
                       )}
                     </div>
@@ -1443,7 +1749,11 @@ export function RepostWorkspace({
             }
             onClick={handleSendRequest}
           >
-            {sendingRequest ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            {sendingRequest ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
             {sendingRequest ? "Sending Request..." : "Send Repost Request"}
           </Button>
         </Dialog.Footer>
@@ -1465,7 +1775,11 @@ export function RepostWorkspace({
             }
             onClick={handleSendRequest}
           >
-            {sendingRequest ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            {sendingRequest ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
             {sendingRequest ? "Sending Request..." : "Send Repost Request"}
           </Button>
         </div>
@@ -1481,9 +1795,14 @@ export function RepostWorkspace({
         }}
       >
         <Dialog.Content size="xl" className="max-h-[90vh] flex flex-col p-0">
-          <Dialog.Header position="fixed" className="bg-primary border-b-2 border-black px-6 py-4">
+          <Dialog.Header
+            position="fixed"
+            className="bg-primary border-b-2 border-black px-6 py-4"
+          >
             <div className="pr-6">
-              <h3 className="text-xl font-bold font-head">Prepare Material Package</h3>
+              <h3 className="text-xl font-bold font-head">
+                Prepare Material Package
+              </h3>
               <p className="text-xs text-black/80 font-semibold">
                 Select competencies, lessons, and classworks to package for{" "}
                 <strong>{packagingRequest?.requester_name}</strong>
@@ -1493,8 +1812,9 @@ export function RepostWorkspace({
 
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
             <div className="bg-amber-50 border-2 border-black p-3 rounded text-xs text-gray-800">
-              <strong>Immutable Package Notice:</strong> Once sent, this package is frozen into an immutable
-              snapshot. The requester will review safe titles and counts before choosing to clone.
+              <strong>Immutable Package Notice:</strong> Once sent, this package
+              is frozen into an immutable snapshot. The requester will review
+              safe titles and counts before choosing to clone.
             </div>
 
             {packageError && (
@@ -1507,7 +1827,9 @@ export function RepostWorkspace({
             {eligibleMaterials.length > 0 && (
               <div className="flex items-center justify-between text-xs font-bold px-1">
                 <div className="flex items-center gap-2">
-                  <Button size="sm" autoIcon={false}
+                  <Button
+                    size="sm"
+                    autoIcon={false}
                     type="button"
                     className="gap-2 shadow-none hover:shadow-none active:shadow-none"
                     onClick={handleSelectAllPackaging}
@@ -1525,21 +1847,31 @@ export function RepostWorkspace({
             {loadingMaterials ? (
               <div className="py-12 flex flex-col items-center justify-center gap-2 text-gray-500">
                 <Loader2 className="size-6 animate-spin text-black" />
-                <p className="text-xs font-bold">Loading your eligible materials...</p>
+                <p className="text-xs font-bold">
+                  Loading your eligible materials...
+                </p>
               </div>
             ) : eligibleMaterials.length === 0 ? (
-              <TeacherEmptyState icon={<Package />} title="No Eligible Materials" description="You do not have any published, owned materials matching this request scope." compact />
+              <TeacherEmptyState
+                icon={<Package />}
+                title="No Eligible Materials"
+                description="You do not have any published, owned materials matching this request scope."
+                compact
+              />
             ) : (
               <div className="border-2 border-black rounded divide-y divide-black max-h-80 overflow-y-auto bg-white">
                 {eligibleMaterials.map((item) => {
-                  const isSelected = packagingTokens.has(item.source_revision_token);
+                  const isSelected = packagingTokens.has(
+                    item.source_revision_token,
+                  );
                   return (
                     <div
                       key={item.source_revision_token}
                       onClick={() => {
                         setPackagingTokens((prev) => {
                           const next = new Set(prev);
-                          if (next.has(item.source_revision_token)) next.delete(item.source_revision_token);
+                          if (next.has(item.source_revision_token))
+                            next.delete(item.source_revision_token);
                           else next.add(item.source_revision_token);
                           return next;
                         });
@@ -1554,16 +1886,24 @@ export function RepostWorkspace({
                             isSelected ? "bg-primary text-black" : "bg-white"
                           }`}
                         >
-                          {isSelected && <Check className="size-3.5 stroke-[3]" />}
+                          {isSelected && (
+                            <Check className="size-3.5 stroke-[3]" />
+                          )}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs sm:text-sm font-bold text-foreground truncate">{item.safe_title}</p>
+                          <p className="text-xs sm:text-sm font-bold text-foreground truncate">
+                            {item.safe_title}
+                          </p>
                           <p className="text-[11px] text-muted-foreground font-medium truncate">
                             {item.academic_period_name}
                           </p>
                         </div>
                       </div>
-                      <Badge variant="outline" size="sm" className="border-black text-[10px] font-bold shrink-0">
+                      <Badge
+                        variant="outline"
+                        size="sm"
+                        className="border-black text-[10px] font-bold shrink-0"
+                      >
                         {item.item_type}
                       </Badge>
                     </div>
@@ -1573,12 +1913,20 @@ export function RepostWorkspace({
             )}
           </div>
 
-          <Dialog.Footer position="fixed" className="border-t-2 border-black bg-gray-50 px-6 py-3 flex items-center justify-between">
+          <Dialog.Footer
+            position="fixed"
+            className="border-t-2 border-black bg-gray-50 px-6 py-3 flex items-center justify-between"
+          >
             <span className="text-xs font-bold text-muted-foreground">
-              {packagingTokens.size} item{packagingTokens.size === 1 ? "" : "s"} selected
+              {packagingTokens.size} item{packagingTokens.size === 1 ? "" : "s"}{" "}
+              selected
             </span>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPackagingRequest(null)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPackagingRequest(null)}
+              >
                 Cancel
               </Button>
               <Button
@@ -1590,11 +1938,13 @@ export function RepostWorkspace({
               >
                 {submittingPackage ? (
                   <>
-                    <Loader2 className="size-4 animate-spin" /> Freezing Snapshot...
+                    <Loader2 className="size-4 animate-spin" /> Freezing
+                    Snapshot...
                   </>
                 ) : (
                   <>
-                    <Send className="size-4" /> Send Package ({packagingTokens.size})
+                    <Send className="size-4" /> Send Package (
+                    {packagingTokens.size})
                   </>
                 )}
               </Button>
@@ -1613,11 +1963,17 @@ export function RepostWorkspace({
         }}
       >
         <Dialog.Content size="xl" className="max-h-[90vh] flex flex-col p-0">
-          <Dialog.Header position="fixed" className="bg-primary border-b-2 border-black px-6 py-4">
+          <Dialog.Header
+            position="fixed"
+            className="bg-primary border-b-2 border-black px-6 py-4"
+          >
             <div className="pr-6">
-              <h3 className="text-xl font-bold font-head">Review Packaged Materials</h3>
+              <h3 className="text-xl font-bold font-head">
+                Review Packaged Materials
+              </h3>
               <p className="text-xs text-black/80 font-semibold">
-                Prepared by <strong>{previewRequest?.source_owner_name}</strong> for {previewRequest?.destination_section_name}
+                Prepared by <strong>{previewRequest?.source_owner_name}</strong>{" "}
+                for {previewRequest?.destination_section_name}
               </p>
             </div>
           </Dialog.Header>
@@ -1629,20 +1985,34 @@ export function RepostWorkspace({
                   <CheckCircle2 className="size-7 text-black" />
                 </div>
                 <div>
-                  <h4 className="text-xl font-bold text-emerald-900 font-head">Materials Successfully Cloned!</h4>
+                  <h4 className="text-xl font-bold text-emerald-900 font-head">
+                    Materials Successfully Cloned!
+                  </h4>
                   <p className="text-sm text-emerald-800 mt-1">
-                    Independent copies have been created in your destination section ({previewRequest?.destination_section_name}).
+                    Independent copies have been created in your destination
+                    section ({previewRequest?.destination_section_name}).
                   </p>
                 </div>
                 <div className="flex justify-center gap-3 pt-2">
-                  <Badge variant="solid" className="border border-black bg-white text-black font-bold">
-                    {cloneOperationResult.summary.competency_count ?? 0} Competencies
+                  <Badge
+                    variant="solid"
+                    className="border border-black bg-white text-black font-bold"
+                  >
+                    {cloneOperationResult.summary.competency_count ?? 0}{" "}
+                    Competencies
                   </Badge>
-                  <Badge variant="solid" className="border border-black bg-white text-black font-bold">
+                  <Badge
+                    variant="solid"
+                    className="border border-black bg-white text-black font-bold"
+                  >
                     {cloneOperationResult.summary.lesson_count ?? 0} Lessons
                   </Badge>
-                  <Badge variant="solid" className="border border-black bg-white text-black font-bold">
-                    {cloneOperationResult.summary.classwork_count ?? 0} Classworks
+                  <Badge
+                    variant="solid"
+                    className="border border-black bg-white text-black font-bold"
+                  >
+                    {cloneOperationResult.summary.classwork_count ?? 0}{" "}
+                    Classworks
                   </Badge>
                 </div>
                 <div className="pt-4 flex justify-center gap-3">
@@ -1660,7 +2030,10 @@ export function RepostWorkspace({
                   >
                     View Cloned Materials
                   </Button>
-                  <Button variant="outline" onClick={() => setPreviewRequest(null)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setPreviewRequest(null)}
+                  >
                     Close
                   </Button>
                 </div>
@@ -1676,32 +2049,54 @@ export function RepostWorkspace({
                 {loadingPreview ? (
                   <div className="py-12 flex flex-col items-center justify-center gap-2 text-gray-500">
                     <Loader2 className="size-6 animate-spin text-black" />
-                    <p className="text-xs font-bold">Verifying package snapshot...</p>
+                    <p className="text-xs font-bold">
+                      Verifying package snapshot...
+                    </p>
                   </div>
                 ) : packagePreview ? (
                   <>
                     {packagePreview.source_academic_period_ids.length > 1 && (
                       <div className="border-2 border-black bg-muted p-3 text-xs font-semibold">
-                        Materials from {packagePreview.source_academic_period_ids.length} historical terms will be
-                        mapped to {previewRequest?.destination_period_name || "the authorized destination term"}.
+                        Materials from{" "}
+                        {packagePreview.source_academic_period_ids.length}{" "}
+                        historical terms will be mapped to{" "}
+                        {previewRequest?.destination_period_name ||
+                          "the authorized destination term"}
+                        .
                       </div>
                     )}
                     <div className="grid grid-cols-4 gap-2">
                       <div className="border-2 border-black p-2.5 rounded bg-white text-center">
-                        <p className="text-xs text-gray-500 font-bold">Competencies</p>
-                        <p className="text-xl font-black font-head">{packagePreview.summary.competency_count}</p>
+                        <p className="text-xs text-gray-500 font-bold">
+                          Competencies
+                        </p>
+                        <p className="text-xl font-black font-head">
+                          {packagePreview.summary.competency_count}
+                        </p>
                       </div>
                       <div className="border-2 border-black p-2.5 rounded bg-white text-center">
-                        <p className="text-xs text-gray-500 font-bold">Lessons</p>
-                        <p className="text-xl font-black font-head">{packagePreview.summary.lesson_count}</p>
+                        <p className="text-xs text-gray-500 font-bold">
+                          Lessons
+                        </p>
+                        <p className="text-xl font-black font-head">
+                          {packagePreview.summary.lesson_count}
+                        </p>
                       </div>
                       <div className="border-2 border-black p-2.5 rounded bg-white text-center">
-                        <p className="text-xs text-gray-500 font-bold">Classworks</p>
-                        <p className="text-xl font-black font-head">{packagePreview.summary.classwork_count}</p>
+                        <p className="text-xs text-gray-500 font-bold">
+                          Classworks
+                        </p>
+                        <p className="text-xl font-black font-head">
+                          {packagePreview.summary.classwork_count}
+                        </p>
                       </div>
                       <div className="border-2 border-black p-2.5 rounded bg-white text-center">
-                        <p className="text-xs text-gray-500 font-bold">Attachments</p>
-                        <p className="text-xl font-black font-head">{packagePreview.summary.attachment_count}</p>
+                        <p className="text-xs text-gray-500 font-bold">
+                          Attachments
+                        </p>
+                        <p className="text-xl font-black font-head">
+                          {packagePreview.summary.attachment_count}
+                        </p>
                       </div>
                     </div>
 
@@ -1711,9 +2106,18 @@ export function RepostWorkspace({
                       </h4>
                       <div className="border-2 border-black rounded divide-y divide-black bg-white max-h-64 overflow-y-auto">
                         {packagePreview.items.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-2.5 text-xs">
-                            <span className="font-bold text-foreground truncate mr-2">{item.safe_title}</span>
-                            <Badge variant="outline" size="sm" className="shrink-0 text-[10px]">
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-2.5 text-xs"
+                          >
+                            <span className="font-bold text-foreground truncate mr-2">
+                              {item.safe_title}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0 text-[10px]"
+                            >
                               {item.item_type}
                             </Badge>
                           </div>
@@ -1722,9 +2126,13 @@ export function RepostWorkspace({
                     </div>
 
                     <div className="bg-amber-50 border border-black p-3 rounded text-xs text-gray-800">
-                      <strong>Cloning Behavior:</strong> Accepting will copy all packaged items into{" "}
-                      <strong>{previewRequest?.destination_section_name}</strong>. Created lessons and classworks
-                      will initially be locked and unpublished drafts for you to review and customize.
+                      <strong>Cloning Behavior:</strong> Accepting will copy all
+                      packaged items into{" "}
+                      <strong>
+                        {previewRequest?.destination_section_name}
+                      </strong>
+                      . Created lessons and classworks will initially be locked
+                      and unpublished drafts for you to review and customize.
                     </div>
                   </>
                 ) : null}
@@ -1733,7 +2141,10 @@ export function RepostWorkspace({
           </div>
 
           {!cloneOperationResult && (
-            <Dialog.Footer position="fixed" className="border-t-2 border-black bg-gray-50 px-6 py-3 flex items-center justify-between">
+            <Dialog.Footer
+              position="fixed"
+              className="border-t-2 border-black bg-gray-50 px-6 py-3 flex items-center justify-between"
+            >
               <Button
                 variant="outline"
                 size="sm"
@@ -1744,13 +2155,19 @@ export function RepostWorkspace({
                 Decline Package
               </Button>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPreviewRequest(null)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPreviewRequest(null)}
+                >
                   Cancel
                 </Button>
                 <Button
                   variant="default"
                   size="sm"
-                  disabled={decisionInProgress || loadingPreview || !packagePreview}
+                  disabled={
+                    decisionInProgress || loadingPreview || !packagePreview
+                  }
                   onClick={handleAcceptPackage}
                   className="bg-yellow-400 text-black border-2 border-black font-bold flex items-center gap-1.5"
                 >
@@ -1780,22 +2197,36 @@ export function RepostWorkspace({
         }}
       >
         <Dialog.Content size="md" className="p-0">
-          <Dialog.Header position="fixed" className="bg-red-600 text-white border-b-2 border-black px-6 py-4">
+          <Dialog.Header
+            position="fixed"
+            className="bg-red-600 text-white border-b-2 border-black px-6 py-4"
+          >
             <div className="pr-6">
-              <h3 className="text-lg font-bold font-head">Decline Material Request</h3>
+              <h3 className="text-lg font-bold font-head">
+                Decline Material Request
+              </h3>
             </div>
           </Dialog.Header>
           <div className="p-5 text-sm space-y-3">
             <p>
               Are you sure you want to decline this request from{" "}
-              <strong>{declineTarget?.requester_name}</strong> for {declineTarget?.subject_name}?
+              <strong>{declineTarget?.requester_name}</strong> for{" "}
+              {declineTarget?.subject_name}?
             </p>
             <p className="text-xs text-muted-foreground">
-              The requester will be notified that you are unable to share materials for this request.
+              The requester will be notified that you are unable to share
+              materials for this request.
             </p>
           </div>
-          <Dialog.Footer position="fixed" className="border-t-2 border-black bg-gray-50 px-6 py-3 flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setDeclineTarget(null)}>
+          <Dialog.Footer
+            position="fixed"
+            className="border-t-2 border-black bg-gray-50 px-6 py-3 flex justify-end gap-2"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeclineTarget(null)}
+            >
               Cancel
             </Button>
             <Button
