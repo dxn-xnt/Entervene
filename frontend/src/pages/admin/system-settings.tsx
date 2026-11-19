@@ -8,6 +8,8 @@ import { useNavigate } from "react-router-dom";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
+import { Alert } from "@/components/retroui/Alert";
+import { formatDate } from "@/lib/formatters";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
@@ -68,6 +70,18 @@ type Template = {
   status: string;
   passing_threshold: number;
   updated_at: string;
+};
+
+const isPeriodOngoing = (endDateStr?: string | null): boolean => {
+  if (!endDateStr) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const datePart = endDateStr.split("T")[0];
+  const [year, month, day] = datePart.split("-").map(Number);
+  if (!year || !month || !day) return false;
+  const endDate = new Date(year, month - 1, day);
+  endDate.setHours(23, 59, 59, 999);
+  return today <= endDate;
 };
 
 export default function AdminSystemSettings() {
@@ -555,9 +569,23 @@ export default function AdminSystemSettings() {
     setPendingPeriodId(periodIdStr);
   };
 
+  const currentlyActivePeriod = academicPeriods.find((p) => p.is_active);
+  const isActiveTermOngoing = isPeriodOngoing(currentlyActivePeriod?.endDate);
+  const isOngoingPolicyBlocked = Boolean(
+    currentlyActivePeriod &&
+    isActiveTermOngoing &&
+    pendingPeriodId &&
+    Number(pendingPeriodId) !== currentlyActivePeriod.id
+  );
+
   const confirmPeriodChange = async () => {
     if (pendingPeriodId) {
       const periodId = Number(pendingPeriodId);
+      if (currentlyActivePeriod && isActiveTermOngoing && periodId !== currentlyActivePeriod.id) {
+        showToast("Cannot change period while the active term is still ongoing.", "error");
+        setPendingPeriodId(null);
+        return;
+      }
       try {
         await setActivePeriod(periodId);
         setSelectedPeriodId(pendingPeriodId);
@@ -574,7 +602,7 @@ export default function AdminSystemSettings() {
         );
       } catch (err) {
         console.error("Failed to change academic period", err);
-        showToast("Failed to change academic period.", "error");
+        showToast(err instanceof Error ? err.message : "Failed to change academic period.", "error");
       }
     }
     setPendingPeriodId(null);
@@ -973,9 +1001,16 @@ export default function AdminSystemSettings() {
                     </div>
 
                     <div className="flex flex-col gap-2">
-                      <Text as="h6" className="font-sans font-medium">
-                        Active Period
-                      </Text>
+                      <div className="flex items-center justify-between">
+                        <Text as="h6" className="font-sans font-medium">
+                          Active Period
+                        </Text>
+                        {currentlyActivePeriod && isActiveTermOngoing && (
+                          <Badge size="sm" variant="outline" className="text-xs">
+                            Term Ongoing
+                          </Badge>
+                        )}
+                      </div>
                       <Select
                         value={selectedPeriodId}
                         onValueChange={handlePeriodSelect}
@@ -997,6 +1032,11 @@ export default function AdminSystemSettings() {
                           </Select.Group>
                         </Select.Content>
                       </Select>
+                      {currentlyActivePeriod && isActiveTermOngoing && currentlyActivePeriod.endDate && (
+                        <Text as="p" className="font-sans text-xs text-muted-foreground">
+                          Scheduled through {formatDate(currentlyActivePeriod.endDate)}. Period changes are locked while the active term is ongoing.
+                        </Text>
+                      )}
                     </div>
                   </div>
 
@@ -1450,24 +1490,41 @@ export default function AdminSystemSettings() {
         <Dialog.Content size="md">
           <Dialog.Header position="static">
             <Text as="h5" className="font-sans text-xl font-bold">
-              Confirm Period Change
+              {isOngoingPolicyBlocked ? "Period Change Prohibited" : "Confirm Period Change"}
             </Text>
           </Dialog.Header>
           <section className="flex flex-col gap-4 p-4 text-sm">
-            <p>
-              Change the active academic period to{" "}
-              <strong>
-                {academicPeriods.find((p) => String(p.id) === pendingPeriodId)
-                  ?.period || "selected period"}
-              </strong>
-              ? This will update the active term system-wide across all student,
-              teacher, and admin views.
-            </p>
+            {isOngoingPolicyBlocked ? (
+              <div className="flex flex-col gap-3">
+                <Alert status="warning" title="Active Term Ongoing Policy">
+                  No administrator can change the period while an active term is still ongoing based on the date set to the term.
+                  The current active term (<strong>{currentlyActivePeriod?.period}</strong>) is scheduled from{" "}
+                  {currentlyActivePeriod?.startDate ? formatDate(currentlyActivePeriod.startDate) : "start date"} to{" "}
+                  {currentlyActivePeriod?.endDate ? formatDate(currentlyActivePeriod.endDate) : "end date"}.
+                </Alert>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Under system policy, the active grading period cannot be switched or advanced until the ongoing term has concluded after{" "}
+                  <strong>{currentlyActivePeriod?.endDate ? formatDate(currentlyActivePeriod.endDate) : "its scheduled end date"}</strong>.
+                </p>
+              </div>
+            ) : (
+              <p>
+                Change the active academic period to{" "}
+                <strong>
+                  {academicPeriods.find((p) => String(p.id) === pendingPeriodId)
+                    ?.period || "selected period"}
+                </strong>
+                ? This will update the active term system-wide across all student,
+                teacher, and admin views.
+              </p>
+            )}
           </section>
           <Dialog.Footer position="static">
-            <Button onClick={confirmPeriodChange}>Confirm</Button>
+            {!isOngoingPolicyBlocked && (
+              <Button onClick={confirmPeriodChange}>Confirm</Button>
+            )}
             <Button variant="outline" onClick={() => setPendingPeriodId(null)}>
-              Cancel
+              {isOngoingPolicyBlocked ? "Close" : "Cancel"}
             </Button>
           </Dialog.Footer>
         </Dialog.Content>

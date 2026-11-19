@@ -111,6 +111,47 @@ describe("intervention support wizard navigation", () => {
     await waitFor(() => expect(supportMocks.saveAdjustments).toHaveBeenCalledOnce());
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("displays Configure Support when triggered via startSetup and Edit Support when opened from edit support button", () => {
+    const { unmount } = render(
+      <InterventionModal
+        isOpen
+        startSetup
+        selectedKind="active"
+        detail={detail}
+        detailLoading={false}
+        detailError={null}
+        actionError={null}
+        activating={false}
+        reviewStale={false}
+        onActivate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Configure Support")).toBeDefined();
+    unmount();
+
+    render(
+      <InterventionModal
+        isOpen
+        startSetup={false}
+        selectedKind="active"
+        detail={detail}
+        detailLoading={false}
+        detailError={null}
+        actionError={null}
+        activating={false}
+        reviewStale={false}
+        onActivate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Active Intervention")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Support" }));
+    expect(screen.getByText("Edit Support")).toBeDefined();
+  });
 });
 
 describe("resolved intervention detail modal", () => {
