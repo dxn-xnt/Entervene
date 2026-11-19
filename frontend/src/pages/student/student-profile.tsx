@@ -276,16 +276,12 @@ const StudentProfile = () => {
                     </p>
                   </div>
 
-                  <Card className="flex flex-col gap-3 border-black bg-white p-4 shadow-md hover:shadow-none">
+                  <Card className="flex flex-col gap-3 p-4">
                     <div className="flex flex-row items-center justify-between">
                       <p className="font-semibold">{monthLabel}</p>
-                      <Badge
-                        variant="secondary"
-                        size="sm"
-                        className="rounded border border-black bg-primary text-sm font-bold text-black"
-                      >
+                      <button className="rounded border px-2 py-1 text-xs text-muted-foreground">
                         Today
-                      </Badge>
+                      </button>
                     </div>
 
                     <div className="grid grid-cols-7 gap-1 text-center text-sm text-muted-foreground">
@@ -303,9 +299,9 @@ const StudentProfile = () => {
                           {week.map((day) => (
                             <span
                               key={day.key}
-                              className={`flex items-center justify-center py-1 ${
+                              className={`flex items-center justify-center rounded py-1 ${
                                 weekIdx === currentWeekIndex
-                                  ? "bg-black font-semibold text-white"
+                                  ? "bg-green-400 font-semibold"
                                   : ""
                               } ${
                                 !day.isCurrentMonth &&
