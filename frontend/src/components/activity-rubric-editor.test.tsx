@@ -193,5 +193,47 @@ describe("ActivityRubricEditor", () => {
     expect(screen.queryByRole("button", { name: "Maximum score" })).toBeNull();
     expect(screen.getByText("100 pts")).toBeDefined();
     expect(screen.queryByLabelText("Maximum score")).toBeNull();
+
+    // Choose Template is disabled
+    const chooseBtn = screen.getByRole("button", { name: /Choose Template/i });
+    expect(chooseBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("renders compact neutral locked notice and accessible explanations when disabledReason is provided", () => {
+    const onChange = vi.fn();
+    const reason = "This rubric is locked because a submission has already been graded. Existing scores keep their original denominator.";
+    render(
+      <ActivityRubricEditor
+        levels={defaultActivityRubric}
+        onChange={onChange}
+        disabled={true}
+        disabledReason={reason}
+      />,
+    );
+
+    // Lock notice is rendered with role="status"
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("Rubric editing locked");
+    expect(notice.textContent).toContain(reason);
+    const noticeId = notice.getAttribute("id");
+    expect(noticeId).toBeTruthy();
+
+    // Choose Template button is disabled with accessible description pointing to notice
+    const chooseBtn = screen.getByRole("button", { name: /Choose Template/i });
+    expect(chooseBtn.getAttribute("disabled")).not.toBeNull();
+    expect(chooseBtn.getAttribute("aria-describedby")).toBe(noticeId);
+    expect(chooseBtn.getAttribute("title")).toBe(reason);
+
+    // Score badge is non-interactive with accessible description pointing to notice
+    expect(screen.queryByRole("button", { name: "Maximum score" })).toBeNull();
+    const badge = screen.getByText("100 pts");
+    expect(badge.getAttribute("aria-describedby")).toBe(noticeId);
+    expect(badge.getAttribute("title")).toBe(reason);
+
+    // Cards and descriptions remain intact
+    expect(screen.getByText("Excellent")).toBeDefined();
+    expect(screen.getByText("100–81 pts")).toBeDefined();
+    expect(screen.getByText("Good")).toBeDefined();
+    expect(screen.getByText("Poor")).toBeDefined();
   });
 });
