@@ -824,7 +824,7 @@ export default function AddUserModal({
                     id="new-user-dob"
                     value={form.dob}
                     onValueChange={(value) => handleField("dob", value)}
-                    className={cn("w-full bg-background border-2", manualErrors.dob ? "border-destructive focus:border-destructive" : "border-black")}
+                    className={cn("w-full bg-background border-2", manualErrors.dob ? "border-destructive focus:border-destructive" : "border-black shadow-none")}
                     aria-invalid={!!manualErrors.dob}
                     aria-describedby={manualErrors.dob ? "new-user-dob-error" : undefined}
                   />
@@ -840,7 +840,7 @@ export default function AddUserModal({
                       onValueChange={(value) =>
                         handleField("hiredDate", value)
                       }
-                      className="w-full bg-background border-2 border-black"
+                      className="w-full shadow-none bg-background border-2 border-black"
                     />
                   </Field>
                   <Field label="Employment Status">

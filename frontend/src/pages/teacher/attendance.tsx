@@ -1,3 +1,4 @@
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useEffect, useState, useMemo, useRef } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -881,7 +882,7 @@ export default function TeacherAttendancePage() {
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="header"
                     onClick={handleExportCsv}
                     disabled={isExporting || !selectedClassId}
                     className="gap-1.5"
@@ -1030,12 +1031,10 @@ export default function TeacherAttendancePage() {
                       <Label className="font-sans text-sm font-semibold">
                         Attendance Date
                       </Label>
-                      <Input
-                        type="date"
+                      <DatePicker
                         aria-label="Attendance date"
                         value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="rounded border-black h-10 w-full bg-white text-md"
+                        onValueChange={(value) => setSelectedDate(value)}
                       />
                     </div>
 
@@ -1120,7 +1119,7 @@ export default function TeacherAttendancePage() {
                     {loadingLogs ? (
                       <LoadingPanel label="Loading student roster..." />
                     ) : filteredStudents.length === 0 ? (
-                      <Empty className="">
+                      <Empty className="shadow-none">
                         <EmptyHeader>
                           <EmptyMedia>
                             <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">

@@ -1,5 +1,6 @@
 "use client";
 
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCheck, FileText, Plus, Trash2, X } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
@@ -916,13 +917,13 @@ export default function CreateClassworkModal({
               <div className={`grid gap-4 ${isReadingType(selectedType) ? "" : "sm:grid-cols-2"}`}>
                 {!isReadingType(selectedType) && (
                   <Field label="Due Date">
-                    <Input
-                      type="datetime-local"
+                    <DatePicker
+                      includeTime
                       value={draft.due_date}
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         setDraft((current) => ({
                           ...current,
-                          due_date: event.target.value,
+                          due_date: value,
                         }))
                       }
                       disabled={isCreating}
@@ -963,13 +964,13 @@ export default function CreateClassworkModal({
               </div>
 
               <Field label="Locked Until">
-                <Input
-                  type="datetime-local"
+                <DatePicker
+                  includeTime
                   value={draft.lock_date}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setDraft((current) => ({
                       ...current,
-                      lock_date: event.target.value,
+                      lock_date: value,
                     }))
                   }
                   disabled={isCreating || !draft.is_published}

@@ -1,5 +1,4 @@
-"use client";
-
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/teacher/button";
 import { useToast } from "@/components/retroui/Toast";
@@ -276,10 +275,9 @@ export default function AddClassworkScoreModal({
           </Field>
 
           <Field label="Date Activity Taken (Optional)">
-            <Input
-              type="date"
+            <DatePicker
               value={dateTaken}
-              onChange={(e) => setDateTaken(e.target.value)}
+              onValueChange={(value) => setDateTaken(value)}
             />
           </Field>
 
