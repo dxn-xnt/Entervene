@@ -219,7 +219,32 @@ export default function EditClassworkModal({
     const showScores = classwork.show_scores ?? true;
     apiFetch(`/api/v1/quizzes/classwork/${classwork.classwork_id}`)
       .then(async (res) => {
-        if (!res.ok || !isActive) return;
+        if (!isActive) return;
+        if (!res.ok) {
+          // If quiz builder row does not exist yet (e.g. draft quiz without questions), allow editing defaults
+          const loadedResults: QuizResultsDraft = {
+            loaded: true,
+            show_quiz_results: showScores,
+            legacy_show_scores: showScores,
+            legacy_show_correct_answers: showScores,
+            summary_release_mode: "IMMEDIATE",
+            summary_release_at: "",
+          };
+          setInitialQuizResults(loadedResults);
+          setQuizResultsDraft(loadedResults);
+          const loadedConfig: QuizConfigurationDraft = {
+            loaded: true,
+            has_attempts: false,
+            duration_minutes: "",
+            is_shuffle_questions: false,
+            enable_per_question_scoring: true,
+            enable_per_question_time_limits: false,
+            max_attempts: classworkToEditDraft(classwork).max_attempts,
+          };
+          setInitialQuizConfiguration(loadedConfig);
+          setQuizConfigurationDraft(loadedConfig);
+          return;
+        }
         const body = (await res.json()) as {
           duration_minutes?: number | null;
           has_attempts?: boolean;
@@ -233,16 +258,17 @@ export default function EditClassworkModal({
             summary_release_at?: string | null;
           };
         };
-        if (!isActive || !body.settings) return;
-        const showCorrectAnswers = Boolean(body.settings.show_correct_answers);
-        const mode = (body.settings.summary_release_mode || "IMMEDIATE") as QuizReleaseMode;
+        if (!isActive) return;
+        const settings = body.settings;
+        const showCorrectAnswers = settings ? Boolean(settings.show_correct_answers) : showScores;
+        const mode = (settings?.summary_release_mode || "IMMEDIATE") as QuizReleaseMode;
         const loaded: QuizResultsDraft = {
           loaded: true,
           show_quiz_results: showScores === showCorrectAnswers ? showScores : null,
           legacy_show_scores: showScores,
           legacy_show_correct_answers: showCorrectAnswers,
           summary_release_mode: mode,
-          summary_release_at: mode === "SCHEDULED" ? toDateTimeLocal(body.settings.summary_release_at) : "",
+          summary_release_at: mode === "SCHEDULED" ? toDateTimeLocal(settings?.summary_release_at) : "",
         };
         setInitialQuizResults(loaded);
         setQuizResultsDraft(loaded);
@@ -250,16 +276,22 @@ export default function EditClassworkModal({
           loaded: true,
           has_attempts: Boolean(body.has_attempts),
           duration_minutes: body.duration_minutes == null ? "" : String(body.duration_minutes),
-          is_shuffle_questions: Boolean(body.settings.is_shuffle_questions),
-          enable_per_question_scoring: body.settings.enable_per_question_scoring !== false,
-          enable_per_question_time_limits: Boolean(body.settings.enable_per_question_time_limits),
-          max_attempts: String(body.settings.max_attempts ?? classworkToEditDraft(classwork).max_attempts),
+          is_shuffle_questions: Boolean(settings?.is_shuffle_questions),
+          enable_per_question_scoring: settings?.enable_per_question_scoring !== false,
+          enable_per_question_time_limits: Boolean(settings?.enable_per_question_time_limits),
+          max_attempts: String(settings?.max_attempts ?? classworkToEditDraft(classwork).max_attempts),
         };
         setInitialQuizConfiguration(configuration);
         setQuizConfigurationDraft(configuration);
         setEditDraft((current) => ({ ...current, max_attempts: configuration.max_attempts }));
       })
-      .catch(() => { });
+      .catch(() => {
+        if (!isActive) return;
+        setInitialQuizResults((current) => ({ ...current, loaded: true }));
+        setQuizResultsDraft((current) => ({ ...current, loaded: true }));
+        setInitialQuizConfiguration((current) => ({ ...current, loaded: true }));
+        setQuizConfigurationDraft((current) => ({ ...current, loaded: true }));
+      });
     return () => {
       isActive = false;
     };
@@ -1290,22 +1322,29 @@ export default function EditClassworkModal({
                   </Field>
 
                   {isQuizType(editDraft.classwork_type) && (
-                    <Field label="Allowed Attempts">
-                      <Input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={editDraft.max_attempts}
-                        onChange={(event) =>
-                          setEditDraft((current) => ({
-                            ...current,
-                            max_attempts: event.target.value,
-                          }))
-                        }
-                        disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
-                        className="w-full bg-white border-2 border-black rounded shadow-md"
-                      />
-                    </Field>
+                    <div>
+                      <Field label="Allowed Attempts">
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={editDraft.max_attempts}
+                          onChange={(event) =>
+                            setEditDraft((current) => ({
+                              ...current,
+                              max_attempts: event.target.value,
+                            }))
+                          }
+                          disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                          className="w-full bg-white border-2 border-black rounded shadow-md"
+                        />
+                      </Field>
+                      {quizConfigurationDraft.has_attempts && (
+                        <p className="text-xs font-medium text-amber-700 mt-1">
+                          Locked because students have already attempted this quiz.
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -1319,21 +1358,28 @@ export default function EditClassworkModal({
                       </Alert>
                     )}
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <Field label="Duration (minutes)">
-                        <Input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={quizConfigurationDraft.duration_minutes}
-                          onChange={(event) => setQuizConfigurationDraft((current) => ({
-                            ...current,
-                            duration_minutes: event.target.value,
-                          }))}
-                          disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
-                          placeholder="No time limit"
-                          className="w-full bg-white border-2 border-black rounded shadow-md"
-                        />
-                      </Field>
+                      <div>
+                        <Field label="Duration (minutes)">
+                          <Input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={quizConfigurationDraft.duration_minutes}
+                            onChange={(event) => setQuizConfigurationDraft((current) => ({
+                              ...current,
+                              duration_minutes: event.target.value,
+                            }))}
+                            disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                            placeholder="No time limit"
+                            className="w-full bg-white border-2 border-black rounded shadow-md"
+                          />
+                        </Field>
+                        {quizConfigurationDraft.has_attempts && (
+                          <p className="text-xs font-medium text-amber-700 mt-1">
+                            Locked because students have already attempted this quiz.
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <ClassworkSettingRow
@@ -1342,6 +1388,7 @@ export default function EditClassworkModal({
                         checked={quizConfigurationDraft.is_shuffle_questions}
                         onCheckedChange={(checked) => setQuizConfigurationDraft((current) => ({ ...current, is_shuffle_questions: checked }))}
                         disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                        disabledReason={quizConfigurationDraft.has_attempts ? "Locked because students have already attempted this quiz." : undefined}
                       />
                       <ClassworkSettingRow
                         label="Per-question scoring"
@@ -1349,6 +1396,7 @@ export default function EditClassworkModal({
                         checked={quizConfigurationDraft.enable_per_question_scoring}
                         onCheckedChange={(checked) => setQuizConfigurationDraft((current) => ({ ...current, enable_per_question_scoring: checked }))}
                         disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                        disabledReason={quizConfigurationDraft.has_attempts ? "Locked because students have already attempted this quiz." : undefined}
                       />
                       <ClassworkSettingRow
                         label="Per-question time limits"
@@ -1356,6 +1404,7 @@ export default function EditClassworkModal({
                         checked={quizConfigurationDraft.enable_per_question_time_limits}
                         onCheckedChange={(checked) => setQuizConfigurationDraft((current) => ({ ...current, enable_per_question_time_limits: checked }))}
                         disabled={isSavingEdit || !quizConfigurationDraft.loaded || quizConfigurationDraft.has_attempts}
+                        disabledReason={quizConfigurationDraft.has_attempts ? "Locked because students have already attempted this quiz." : undefined}
                       />
                     </div>
                   </div>

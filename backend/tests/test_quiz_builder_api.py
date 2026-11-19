@@ -579,3 +579,40 @@ def test_teacher_can_reset_builder_before_attempts_exist(quiz_api_context):
     delete_response = c["client"].delete(f"/api/v1/quizzes/classwork/{classwork_id}")
     assert delete_response.status_code == 200
     assert c["client"].get(f"/api/v1/quizzes/classwork/{classwork_id}").status_code == 404
+
+
+def test_draft_quiz_without_prior_records_can_save_configuration_and_results(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    # Reset builder so quiz and setting rows do not exist
+    c["client"].delete(f"/api/v1/quizzes/classwork/{classwork_id}")
+
+    # Teacher can configure duration, shuffle, per-question scoring, limits, max_attempts
+    config_resp = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/configuration",
+        json={
+            "duration_minutes": 50,
+            "is_shuffle_questions": True,
+            "enable_per_question_scoring": False,
+            "enable_per_question_time_limits": True,
+            "max_attempts": 2,
+        },
+    )
+    assert config_resp.status_code == 200
+    assert config_resp.json()["duration_minutes"] == 50
+    assert config_resp.json()["is_shuffle_questions"] is True
+    assert config_resp.json()["enable_per_question_scoring"] is False
+    assert config_resp.json()["enable_per_question_time_limits"] is True
+    assert config_resp.json()["max_attempts"] == 2
+
+    # Teacher can configure results settings
+    results_resp = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={
+            "show_quiz_results": True,
+            "summary_release_mode": "IMMEDIATE",
+            "confirm_answer_reveal": True,
+        },
+    )
+    assert results_resp.status_code == 200
+    assert results_resp.json()["summary_release_mode"] == "IMMEDIATE"

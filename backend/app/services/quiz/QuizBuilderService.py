@@ -270,7 +270,12 @@ def update_quiz_results_settings(
         .first()
     )
     if setting is None:
-        raise HTTPException(status_code=404, detail="Quiz settings not found")
+        setting = QuizSetting(
+            classwork_id=classwork.classwork_id,
+            show_correct_answers=locked_classwork.show_scores if locked_classwork.show_scores is not None else False,
+        )
+        db.add(setting)
+        db.flush()
 
     release_mode = payload.summary_release_mode.strip().upper()
     if release_mode == "SCHEDULED" and payload.summary_release_at is None:
@@ -346,8 +351,6 @@ def update_quiz_configuration(
         .with_for_update()
         .first()
     )
-    if quiz is None or setting is None:
-        raise HTTPException(status_code=404, detail="Quiz settings not found")
     if classwork_has_quiz_attempts(db, locked_classwork.classwork_id):
         raise HTTPException(
             status_code=409,
@@ -356,6 +359,17 @@ def update_quiz_configuration(
                 "message": "Quiz duration, attempt limits, and question behavior cannot be changed after an attempt has started.",
             },
         )
+    if quiz is None:
+        quiz = Quiz(classwork_id=locked_classwork.classwork_id, status="DRAFT", total_items=0)
+        db.add(quiz)
+        db.flush()
+    if setting is None:
+        setting = QuizSetting(
+            classwork_id=locked_classwork.classwork_id,
+            show_correct_answers=locked_classwork.show_scores if locked_classwork.show_scores is not None else False,
+        )
+        db.add(setting)
+        db.flush()
 
     quiz.duration_minutes = payload.duration_minutes
     setting.is_shuffle_questions = payload.is_shuffle_questions
@@ -396,6 +410,13 @@ def delete_quiz_builder(db: Session, classwork: Classwork) -> None:
 def build_quiz_response(db: Session, classwork: Classwork, quiz: Quiz) -> QuizBuilderResponse:
     quiz = get_quiz_for_classwork(db, classwork.classwork_id) or quiz
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
+    if setting is None:
+        setting = QuizSetting(
+            classwork_id=classwork.classwork_id,
+            show_correct_answers=classwork.show_scores if classwork.show_scores is not None else False,
+        )
+        db.add(setting)
+        db.flush()
     readiness = quiz_readiness(db, classwork, quiz)
 
     return QuizBuilderResponse(
