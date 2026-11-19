@@ -61,6 +61,54 @@ const detail = {
 } as TeacherInterventionDetail;
 
 describe("intervention support wizard navigation", () => {
+  it("shows approval failures in the shared inline alert", () => {
+    const candidateDetail = {
+      intervention_id: 42,
+      student_id: "student-1",
+      student_name: "Test Student",
+      student_lrn: "123456789012",
+      class_id: 8,
+      class_name: "Grade 9 - Einstein",
+      subject_id: 7,
+      subject_name: "Enhanced Mathematics 9",
+      academic_period_id: 1,
+      academic_period_name: "Quarter 1",
+      status: "CANDIDATE",
+      source_prediction_id: 1,
+      source_prediction_revision: 1,
+      triggering_predicted_grade: 82.5,
+      triggering_intervention_level: "MODERATE_RISK",
+      current_prediction_revision: 1,
+      current_predicted_grade: 82.5,
+      current_intervention_level: "MODERATE_RISK",
+      created_at: "2026-11-19T01:00:00+08:00",
+      activated_at: null,
+      activated_by_staff_id: null,
+      resolved_at: null,
+      resolution_reason: null,
+      diagnosis_summary: {},
+      diagnosis_snapshot: {},
+    } as TeacherInterventionDetail;
+
+    render(
+      <InterventionModal
+        isOpen
+        selectedKind="candidate"
+        detail={candidateDetail}
+        detailLoading={false}
+        detailError={null}
+        actionError="Prediction service unavailable."
+        activating={false}
+        reviewStale={false}
+        onActivate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Unable to approve intervention")).toBeDefined();
+    expect(screen.getByText("Prediction service unavailable.")).toBeDefined();
+  });
+
   it("starts intervention activity setup at step 1 without skipping setup", () => {
     render(
       <InterventionModal

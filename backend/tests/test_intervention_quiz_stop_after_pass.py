@@ -364,6 +364,154 @@ def test_fail_first_then_pass_second_blocks_third_attempt(intervention_quiz_env)
     assert third_start.json()["detail"] == STUDY_SUPPORT_QUIZ_PASSED_MESSAGE
 
 
+def test_intervention_retake_starts_with_blank_answers_full_timer_and_new_submission(
+    intervention_quiz_env,
+):
+    env = intervention_quiz_env
+    bundle = env["build_quiz"](is_intervention=True, show_scores=True, max_attempts=3)
+    aid = bundle["assignment"].classwork_assignment_id
+
+    first = env["submit_score"](
+        bundle, q1_correct=True, q2_correct=False, q3_correct=False,
+    )
+    assert first.status_code == 200
+    first_submission = (
+        env["db"].query(StudentSubmission)
+        .filter_by(classwork_assignment_id=aid)
+        .one()
+    )
+    first_submission_id = first_submission.submission_id
+    first_answer_ids = [
+        answer.answer_id
+        for answer in env["db"].query(QuizAnswer)
+        .filter_by(submission_id=first_submission_id)
+        .order_by(QuizAnswer.answer_id)
+        .all()
+    ]
+
+    retake = env["client"].post(f"/api/v1/quizzes/assignment/{aid}/start")
+
+    assert retake.status_code == 200, retake.json()
+    body = retake.json()
+    assert body["status"] == "pending"
+    assert body["attempt_count"] == 1
+    assert all(question["selected_option_id"] is None for question in body["questions"])
+    assert all(question["answer_text"] is None for question in body["questions"])
+    started_at = datetime.fromisoformat(body["started_at"].replace("Z", "+00:00"))
+    server_time = datetime.fromisoformat(body["server_time"].replace("Z", "+00:00"))
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    if server_time.tzinfo is None:
+        server_time = server_time.replace(tzinfo=timezone.utc)
+    remaining_seconds = bundle["quiz"].duration_minutes * 60 - int(
+        (server_time - started_at).total_seconds()
+    )
+    assert remaining_seconds >= bundle["quiz"].duration_minutes * 60 - 5
+
+    submissions = (
+        env["db"].query(StudentSubmission)
+        .filter_by(classwork_assignment_id=aid)
+        .order_by(StudentSubmission.submission_id)
+        .all()
+    )
+    assert len(submissions) == 2
+    assert body["submission_id"] == submissions[1].submission_id
+    assert submissions[1].submission_id != first_submission_id
+    assert submissions[1].quiz_answers == []
+    assert [
+        answer.answer_id
+        for answer in env["db"].query(QuizAnswer)
+        .filter_by(submission_id=first_submission_id)
+        .order_by(QuizAnswer.answer_id)
+        .all()
+    ] == first_answer_ids
+
+
+def test_reopening_ongoing_intervention_retake_restores_only_its_own_state(
+    intervention_quiz_env,
+):
+    env = intervention_quiz_env
+    bundle = env["build_quiz"](is_intervention=True, show_scores=True, max_attempts=3)
+    aid = bundle["assignment"].classwork_assignment_id
+    assert env["submit_score"](
+        bundle, q1_correct=True, q2_correct=False, q3_correct=False,
+    ).status_code == 200
+    assert env["client"].post(f"/api/v1/quizzes/assignment/{aid}/start").status_code == 200
+
+    ongoing = (
+        env["db"].query(StudentSubmission)
+        .filter_by(classwork_assignment_id=aid)
+        .order_by(StudentSubmission.submission_id.desc())
+        .first()
+    )
+    link, _correct, wrong = bundle["links"][0]
+    env["db"].add(QuizAnswer(
+        submission_id=ongoing.submission_id,
+        quiz_question_id=link.quiz_question_id,
+        answer_text=wrong.option_text,
+    ))
+    env["db"].commit()
+    original_started_at = ongoing.created_at
+
+    reopened = env["client"].get(f"/api/v1/quizzes/assignment/{aid}/attempt")
+
+    assert reopened.status_code == 200, reopened.json()
+    body = reopened.json()
+    assert body["status"] == "pending"
+    assert body["questions"][0]["selected_option_id"] == wrong.option_id
+    assert sum(question["selected_option_id"] is not None for question in body["questions"]) == 1
+    assert env["db"].query(StudentSubmission).filter_by(classwork_assignment_id=aid).count() == 2
+    env["db"].refresh(ongoing)
+    assert ongoing.created_at == original_started_at
+
+
+def test_submitting_intervention_retake_preserves_previous_attempt_score_and_answers(
+    intervention_quiz_env,
+):
+    env = intervention_quiz_env
+    bundle = env["build_quiz"](is_intervention=True, show_scores=True, max_attempts=3)
+    aid = bundle["assignment"].classwork_assignment_id
+    assert env["submit_score"](
+        bundle, q1_correct=True, q2_correct=False, q3_correct=False,
+    ).status_code == 200
+    first_submission = env["db"].query(StudentSubmission).filter_by(
+        classwork_assignment_id=aid,
+    ).one()
+    first_submission_id = first_submission.submission_id
+    first_answer_snapshot = [
+        (answer.answer_id, answer.answer_text, answer.points_awarded)
+        for answer in env["db"].query(QuizAnswer)
+        .filter_by(submission_id=first_submission_id)
+        .order_by(QuizAnswer.answer_id)
+        .all()
+    ]
+
+    assert env["client"].post(f"/api/v1/quizzes/assignment/{aid}/start").status_code == 200
+    second = env["submit_score"](
+        bundle, q1_correct=False, q2_correct=False, q3_correct=False,
+    )
+
+    assert second.status_code == 200, second.json()
+    assert second.json()["attempt_count"] == 2
+    submissions = env["db"].query(StudentSubmission).filter_by(
+        classwork_assignment_id=aid,
+    ).order_by(StudentSubmission.submission_id).all()
+    assert len(submissions) == 2
+    assert submissions[0].submission_id == first_submission_id
+    assert submissions[0].grade == Decimal("15.00")
+    assert submissions[0].attempt_count == 1
+    assert [
+        (answer.answer_id, answer.answer_text, answer.points_awarded)
+        for answer in env["db"].query(QuizAnswer)
+        .filter_by(submission_id=first_submission_id)
+        .order_by(QuizAnswer.answer_id)
+        .all()
+    ] == first_answer_snapshot
+    assert submissions[1].submission_id != first_submission_id
+    assert submissions[1].grade == Decimal("0.00")
+    assert submissions[1].attempt_count == 2
+
+
 def test_failing_all_three_attempts_preserves_existing_max_attempts_behavior(intervention_quiz_env):
     env = intervention_quiz_env
     bundle = env["build_quiz"](is_intervention=True, show_scores=True, max_attempts=3)

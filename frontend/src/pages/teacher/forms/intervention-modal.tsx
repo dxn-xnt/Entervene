@@ -780,7 +780,12 @@ export default function InterventionModal({
                   </Accordion>
                 )}
 
-                {actionError && <FormMessage>{actionError}</FormMessage>}
+                {actionError && (
+                  <Alert status="error">
+                    <Alert.Title>Unable to approve intervention</Alert.Title>
+                    <Alert.Description>{actionError}</Alert.Description>
+                  </Alert>
+                )}
               </div>
             )
           )}

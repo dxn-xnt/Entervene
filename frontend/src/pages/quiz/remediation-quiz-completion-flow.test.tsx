@@ -202,6 +202,81 @@ describe("student remediation quiz completion, result retrieval, and resolved re
     expect(quizApiMocks.startQuizAttempt).not.toHaveBeenCalled();
   });
 
+  it("starts an Intervention retake with a new identity, blank answers, and the full timer", async () => {
+    const failedAttempt: QuizAttemptResponse = {
+      ...gradedAttempt,
+      submission_id: 9001,
+      duration_minutes: 30,
+      max_attempts: 3,
+      attempt_count: 1,
+      attempts_used: 1,
+      attempts_remaining: 2,
+      can_submit: true,
+      is_intervention_quiz: true,
+      is_passed: false,
+    };
+    const freshRetake: QuizAttemptResponse = {
+      ...pendingAttempt,
+      submission_id: 9002,
+      duration_minutes: 30,
+      max_attempts: 3,
+      attempt_count: 1,
+      attempts_used: 1,
+      attempts_remaining: 2,
+      can_submit: true,
+      is_intervention_quiz: true,
+      started_at: "2026-11-20T00:10:00Z",
+      server_time: "2026-11-20T00:10:00Z",
+    };
+    quizApiMocks.getQuizAttempt.mockResolvedValue(failedAttempt);
+    quizApiMocks.startQuizAttempt.mockResolvedValue(freshRetake);
+
+    render(
+      <MemoryRouter initialEntries={["/student/quiz/73/take"]}>
+        <Routes>
+          <Route path="/student/quiz/:assignmentId/take" element={<StudentQuizTake />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("30:00")).toBeTruthy();
+    expect(quizApiMocks.startQuizAttempt).toHaveBeenCalledWith(73);
+    expect(screen.getByRole("button", { name: "4" }).className).not.toContain("bg-primary");
+  });
+
+  it("restores answers and remaining time when reopening the ongoing Intervention attempt", async () => {
+    const ongoingAttempt: QuizAttemptResponse = {
+      ...pendingAttempt,
+      submission_id: 9002,
+      duration_minutes: 30,
+      max_attempts: 3,
+      attempt_count: 1,
+      attempts_used: 1,
+      attempts_remaining: 2,
+      is_intervention_quiz: true,
+      started_at: "2026-11-20T00:10:00Z",
+      server_time: "2026-11-20T00:11:00Z",
+      questions: [{
+        ...pendingAttempt.questions[0],
+        selected_option_id: 1,
+        answer_text: "4",
+      }],
+    };
+    quizApiMocks.getQuizAttempt.mockResolvedValue(ongoingAttempt);
+
+    render(
+      <MemoryRouter initialEntries={["/student/quiz/73/take"]}>
+        <Routes>
+          <Route path="/student/quiz/:assignmentId/take" element={<StudentQuizTake />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("29:00")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "4" }).className).toContain("bg-primary");
+    expect(quizApiMocks.startQuizAttempt).not.toHaveBeenCalled();
+  });
+
   it("allows reviewing a completed activity on a resolved intervention while keeping uncompleted activities unavailable", async () => {
     interventionApiMocks.getMyActiveIntervention.mockRejectedValue(new Error("404"));
     interventionApiMocks.getMyResolvedIntervention.mockResolvedValue({

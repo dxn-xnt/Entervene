@@ -81,8 +81,14 @@ def require_current_term_model(
     if version.feature_schema_json != schema or metadata.get("feature_schema_sha256") != _digest_json(schema):
         raise ValueError("The model version's feature schema does not match the V3 scorer.")
     artifact = (Path(__file__).resolve().parents[3] / version.artifact_path).resolve()
-    if artifact != artifact_path(version.model_name).resolve() or not artifact.is_file():
+    expected_artifact = artifact_path(version.model_name).resolve()
+    if artifact != expected_artifact:
         raise ValueError("The model version's artifact path does not match the V3 scorer.")
+    if not artifact.is_file():
+        raise ValueError(
+            "The V3 scorer artifact is missing from backend/data/models. "
+            "Provision the verified local model bundle before approving interventions."
+        )
     if metadata.get("artifact_sha256") != sha256(artifact.read_bytes()).hexdigest():
         raise ValueError("The model version's artifact hash does not match the V3 scorer.")
     return version

@@ -114,12 +114,25 @@ def start_student_quiz_attempt(
         )
         db.add(submission)
     elif submission.status != "pending":
-        submission.status = "pending"
-        submission.submitted_at = None
-        submission.grade = None
-        submission.feedback = None
-        submission.graded_at = None
-        submission.graded_by_staff_id = None
+        if assignment.source_intervention_id is not None:
+            # Intervention retakes are independent attempts. Keep the completed
+            # submission and its answers intact, and give the new attempt its
+            # own identity and start time.
+            submission = StudentSubmission(
+                student_id=student.student_id,
+                classwork_assignment_id=assignment_id,
+                status="pending",
+                attempt_count=submission.attempt_count,
+            )
+            db.add(submission)
+        else:
+            # Preserve the existing single-row behavior for regular quizzes.
+            submission.status = "pending"
+            submission.submitted_at = None
+            submission.grade = None
+            submission.feedback = None
+            submission.graded_at = None
+            submission.graded_by_staff_id = None
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, student.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
@@ -168,6 +181,18 @@ def submit_student_quiz_attempt(
         raise HTTPException(status_code=403, detail="Maximum attempts reached")
     if submission.status == "pending" and submission.attempt_count >= max_attempts:
         raise HTTPException(status_code=403, detail="Maximum attempts reached")
+
+    if assignment.source_intervention_id is not None and submission.status != "pending":
+        # A client may submit a permitted retake without calling /start first.
+        # Never overwrite the completed Intervention attempt in that path.
+        submission = StudentSubmission(
+            student_id=student.student_id,
+            classwork_assignment_id=assignment_id,
+            status="pending",
+            attempt_count=submission.attempt_count,
+        )
+        db.add(submission)
+        db.flush()
 
     now = datetime.now(timezone.utc)
     due_date = aware_utc(assignment.due_date)
@@ -495,7 +520,7 @@ def _submission_for(
     )
     if lock_for_update:
         query = query.with_for_update()
-    return query.first()
+    return query.order_by(StudentSubmission.submission_id.desc()).first()
 
 
 def _max_attempts(db: Session, assignment: ClassworkAssignment, classwork: Classwork) -> int:
@@ -562,6 +587,7 @@ def _attempt_response(
     }
     return QuizAttemptResponse(
         quiz_id=quiz.quiz_id,
+        submission_id=submission.submission_id if submission else None,
         classwork_assignment_id=assignment.classwork_assignment_id,
         classwork_id=classwork.classwork_id,
         title=classwork.title,

@@ -37,6 +37,7 @@ export const STUDY_SUPPORT_QUIZ_PASSED_MESSAGE =
 
 export type QuizAttemptResponse = {
   quiz_id: number;
+  submission_id?: number | null;
   classwork_assignment_id: number;
   classwork_id: number;
   title: string;
