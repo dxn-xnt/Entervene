@@ -1,12 +1,13 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { Tabs } from "@/components/retroui/Tabs";
+import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Button } from "@/components/teacher/button";
+import { Alert } from "@/components/retroui/Alert";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { NotificationCard } from "@/components/notification-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-import { Bell, Megaphone, FileCheck, AlertTriangle, Loader2, Repeat } from "lucide-react";
+import { Bell, FileCheck, AlertTriangle, Loader2, Repeat } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { routes } from "@/../routes";
@@ -16,29 +17,64 @@ import {
   markNotificationAsRead,
   type NotificationItem,
 } from "@/lib/notifications-api";
+import {
+  formatNotificationBody,
+  formatNotificationTitle,
+  isExcludedNotification,
+  matchesTeacherNotificationTab,
+  type TeacherNotificationTab,
+} from "@/lib/notification-formatting";
 
-const tabs = [
+const tabs: Array<TabItem<TeacherNotificationTab>> = [
   { id: "all", label: "All", icon: Bell },
   { id: "repost", label: "Repost Requests", icon: Repeat },
-  { id: "announcements", label: "Announcements", icon: Megaphone },
   { id: "submissions", label: "Submissions", icon: FileCheck },
   { id: "interventions", label: "Interventions", icon: AlertTriangle },
 ];
 
+const emptyStateByTab: Record<
+  TeacherNotificationTab,
+  { icon: ReactNode; title: string; description: string }
+> = {
+  all: {
+    icon: <Bell />,
+    title: "No notifications",
+    description: "New updates will appear here when they arrive.",
+  },
+  repost: {
+    icon: <Repeat />,
+    title: "No repost request notifications",
+    description: "Repost requests and package updates will appear here.",
+  },
+  submissions: {
+    icon: <FileCheck />,
+    title: "No submission notifications",
+    description: "Student submissions and deadline summaries will appear here.",
+  },
+  interventions: {
+    icon: <AlertTriangle />,
+    title: "No intervention notifications",
+    description: "Intervention candidates, assessments, and resolutions will appear here.",
+  },
+};
+
 const Notifications = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("all");
+  const [activeTab, setActiveTab] = useState<TeacherNotificationTab>("all");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(false);
       const data = await getNotifications(false, 50);
-      setNotifications(data.notifications);
+      setNotifications(data.notifications.filter((item) => !isExcludedNotification(item)));
     } catch (err) {
       console.error("Failed to load notifications:", err);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -74,20 +110,14 @@ const Notifications = () => {
       }
     }
 
-    // Tiered deep-link resolver
-    // 1. Announcements: simplest fallback (stay in place)
-    if (item.notification_type === "announcement") {
-      return;
-    }
-
-    // 2. Specific deep link in action_url (e.g. /teacher/classworks/:id or /teacher/grades?academic_period_id=...)
+    // Specific deep link in action_url (e.g. /teacher/classworks/:id or /teacher/grades?academic_period_id=...)
     if (item.action_url && item.action_url.trim() && item.action_url !== "/teacher/notifications") {
       navigate(item.action_url);
       return;
     }
 
-    // 3. Fallback based on notification role / type
-    if (item.notification_type === "risk_alert") {
+    // Fallback based on structured notification event type
+    if (item.notification_type === "risk_alert" || item.notification_type.startsWith("intervention_")) {
       navigate(routes.teacher.interventions);
       return;
     }
@@ -108,14 +138,33 @@ const Notifications = () => {
     navigate(routes.teacher.classworks);
   };
 
-  const filteredNotifications = notifications.filter((n) => {
-    if (activeTab === "all") return true;
-    if (activeTab === "repost") return n.notification_type.startsWith("repost_");
-    if (activeTab === "announcements") return n.notification_type === "announcement";
-    if (activeTab === "submissions") return n.notification_type === "submission_graded" || n.notification_type === "assignment_due";
-    if (activeTab === "interventions") return n.notification_type === "risk_alert" || n.notification_type.startsWith("intervention_");
-    return true;
-  });
+  const unreadCounts = useMemo<Partial<Record<TeacherNotificationTab, number>>>(() => {
+    const counts: Record<TeacherNotificationTab, number> = {
+      all: 0,
+      repost: 0,
+      submissions: 0,
+      interventions: 0,
+    };
+    for (const item of notifications) {
+      if (item.is_read) continue;
+      counts.all += 1;
+      if (matchesTeacherNotificationTab(item.notification_type, "repost")) {
+        counts.repost += 1;
+      } else if (matchesTeacherNotificationTab(item.notification_type, "submissions")) {
+        counts.submissions += 1;
+      } else if (matchesTeacherNotificationTab(item.notification_type, "interventions")) {
+        counts.interventions += 1;
+      }
+    }
+    return counts;
+  }, [notifications]);
+
+  const filteredNotifications = useMemo(
+    () => notifications.filter((n) => matchesTeacherNotificationTab(n.notification_type, activeTab)),
+    [notifications, activeTab],
+  );
+
+  const activeEmptyState = emptyStateByTab[activeTab];
 
   return (
     <AppLayout>
@@ -146,34 +195,44 @@ const Notifications = () => {
                 </Tooltip>
               </header>
               <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-                <Tabs
+                <Tabs<TeacherNotificationTab>
                   tabs={tabs}
                   activeTab={activeTab}
                   onTabChange={setActiveTab}
+                  counts={unreadCounts}
+                  ariaLabel="Notification categories"
                 />
               </div>
 
             </div>
 
-            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-
+            <div
+              role="tabpanel"
+              aria-label={tabs.find((tab) => tab.id === activeTab)?.label}
+              className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6"
+            >
               {loading ? (
                 <LoadingPanel label="Loading notifications..." />
+              ) : loadError ? (
+                <Alert status="error">
+                  Unable to load notifications.
+                  <Button size="sm" variant="outline" className="ml-2 gap-2" onClick={() => void fetchNotifications()}>
+                    Retry
+                  </Button>
+                </Alert>
               ) : filteredNotifications.length === 0 ? (
                 <TeacherEmptyState
-                  icon={activeTab === "all" ? <Bell /> : activeTab === "announcements" ? <Megaphone /> : activeTab === "submissions" ? <FileCheck /> : <AlertTriangle />}
-                  title={activeTab === "all" ? "No notifications" : `No ${activeTab} notifications`}
-                  description={notifications.length
-                    ? "There are no notifications in this category yet."
-                    : "New updates will appear here when they arrive."}
+                  icon={activeEmptyState.icon}
+                  title={activeEmptyState.title}
+                  description={activeEmptyState.description}
                 />
               ) : (
                 <div className="flex flex-col gap-3 w-full">
                   {filteredNotifications.map((card) => (
                     <div key={card.notification_id} onClick={() => handleCardClick(card)} className="cursor-pointer w-full">
                       <NotificationCard
-                        title={card.title}
-                        description={card.body ?? ""}
+                        title={formatNotificationTitle(card.title)}
+                        description={formatNotificationBody(card.body)}
                         date={card.created_at ? new Date(card.created_at).toLocaleDateString() : ""}
                         user={card.notification_type.replace(/_/g, " ")}
                         badge={card.is_read ? undefined : "Unread"}

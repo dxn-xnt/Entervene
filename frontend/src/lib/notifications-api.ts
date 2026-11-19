@@ -4,6 +4,9 @@ export type NotificationItem = {
   notification_id: string;
   notification_type:
     | "assignment_due"
+    | "classwork_due_soon"
+    | "classwork_due_today"
+    | "classwork_overdue"
     | "risk_alert"
     | "announcement"
     | "grade_released"
