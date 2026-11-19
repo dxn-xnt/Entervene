@@ -97,10 +97,35 @@ def _decision(
     )
 
 
+def _has_completed_remediation_submission(
+    db: Session,
+    assignment_id: int,
+    student_id,
+) -> bool:
+    submission = (
+        db.query(StudentSubmission)
+        .filter(
+            StudentSubmission.classwork_assignment_id == assignment_id,
+            StudentSubmission.student_id == student_id,
+        )
+        .order_by(StudentSubmission.submission_id.desc())
+        .first()
+    )
+    if submission is None:
+        return False
+    norm_status = (submission.status or "").lower()
+    return (
+        norm_status in ("submitted", "late", "graded", "returned")
+        or submission.submitted_at is not None
+    )
+
+
 def evaluate_remediation_prerequisite(
     db: Session,
     assignment: ClassworkAssignment,
     student: Student,
+    *,
+    allow_completed_resolved_review: bool = False,
 ) -> RemediationPrerequisiteDecision:
     """Evaluate the dynamic Reading prerequisite for one student assignment.
 
@@ -155,7 +180,10 @@ def evaluate_remediation_prerequisite(
             message="This remediation activity is assigned to another student.",
             intervention_id=intervention.intervention_id,
         )
-    if intervention.status != "ACTIVE":
+    is_resolved_review = (
+        allow_completed_resolved_review and intervention.status == "RESOLVED"
+    )
+    if intervention.status != "ACTIVE" and not is_resolved_review:
         return _decision(
             allowed=False,
             code="INTERVENTION_NOT_ACTIVE",
@@ -193,6 +221,23 @@ def evaluate_remediation_prerequisite(
             allowed=False,
             code="REMEDIATION_UNAVAILABLE",
             message="The remediation activity is not published and accessible to this student.",
+            intervention_id=intervention.intervention_id,
+        )
+
+    if is_resolved_review:
+        if _has_completed_remediation_submission(
+            db, assignment.classwork_assignment_id, student.student_id,
+        ):
+            return _decision(
+                allowed=True,
+                code="PREPARATION_COMPLETE",
+                message="Completed remediation activity is available for read-only review.",
+                intervention_id=intervention.intervention_id,
+            )
+        return _decision(
+            allowed=False,
+            code="INTERVENTION_NOT_ACTIVE",
+            message="The linked intervention is not active.",
             intervention_id=intervention.intervention_id,
         )
 
@@ -504,9 +549,16 @@ def require_remediation_prerequisite(
     db: Session,
     assignment: ClassworkAssignment,
     student: Student,
+    *,
+    allow_completed_resolved_review: bool = False,
 ) -> RemediationPrerequisiteDecision:
     """Raise a consistent denial for a linked activity that fails the policy."""
-    decision = evaluate_remediation_prerequisite(db, assignment, student)
+    decision = evaluate_remediation_prerequisite(
+        db,
+        assignment,
+        student,
+        allow_completed_resolved_review=allow_completed_resolved_review,
+    )
     if decision.allowed:
         return decision
     raise HTTPException(
@@ -548,6 +600,8 @@ def require_remediation_prerequisite_for_attempt(
     db: Session,
     attempt_id: int,
     student: Student,
+    *,
+    allow_completed_resolved_review: bool = False,
 ) -> RemediationPrerequisiteDecision:
     """Resolve the remediation assignment from an attempt ID and verify Reading prerequisites."""
     from app.models.submissions.StudentSubmission import StudentSubmission
@@ -559,5 +613,10 @@ def require_remediation_prerequisite_for_attempt(
     assignment = db.get(ClassworkAssignment, submission.classwork_assignment_id)
     if assignment is None:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    return require_remediation_prerequisite(db, assignment, student)
+    return require_remediation_prerequisite(
+        db,
+        assignment,
+        student,
+        allow_completed_resolved_review=allow_completed_resolved_review,
+    )
 

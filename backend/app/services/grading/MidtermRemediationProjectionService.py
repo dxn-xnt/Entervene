@@ -116,20 +116,29 @@ def calculate_ai_midterm_what_if(
     baseline_grade = float(baseline["projected_final_term_grade"])
     previous_grade = baseline_grade
     overrides: dict[int, float] = {}
+    exam_overrides: dict[int, float] = {}
     estimates: list[dict[str, Any]] = []
     for target in target_projections:
         assignment_id = int(target["assignment_id"])
         maximum = target.get("maximum_hypothetical_effective_score")
         if not target.get("applied") or maximum is None:
             continue
-        if assignment_id in overrides:
+        if assignment_id in overrides or assignment_id in exam_overrides:
             raise ValueError("Each original assignment may be adjusted only once in an AI what-if estimate.")
-        overrides[assignment_id] = float(maximum)
+        if str(target.get("component") or "").upper() in {"EXAMINATION", "ASSESSMENT"}:
+            exam_overrides[assignment_id] = float(maximum)
+        else:
+            overrides[assignment_id] = float(maximum)
+        prepare_kwargs: dict[str, Any] = {
+            **scope,
+            "hypothetical_ww_pt_scores": overrides or None,
+        }
+        if exam_overrides:
+            prepare_kwargs["hypothetical_exam_scores"] = exam_overrides
         try:
             hypothetical, prepared_hypothetical = prepare_development_current_term(
                 db,
-                **scope,
-                hypothetical_ww_pt_scores=overrides,
+                **prepare_kwargs,
             )
         except Exception:
             return _unavailable(

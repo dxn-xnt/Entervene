@@ -667,6 +667,13 @@ export default function StudentInterventionView() {
                             const finished = ["submitted", "graded", "completed"].includes(
                               act.submission_status?.toLowerCase() ?? ""
                             );
+                            const canReviewResolvedCompleted =
+                              actHistorical &&
+                              finished &&
+                              act.prerequisite_code === "INTERVENTION_RESOLVED";
+                            const canOpenActivity =
+                              (!actHistorical && !locked && !preparationBlocked) ||
+                              canReviewResolvedCompleted;
 
                             return (
                               <div key={act.assignment_id} className="space-y-1">
@@ -678,7 +685,7 @@ export default function StudentInterventionView() {
                                     classwork_type: act.classwork_type,
                                   }}
                                   onClick={
-                                    !actHistorical && !locked && !preparationBlocked
+                                    canOpenActivity
                                       ? () =>
                                         navigate(
                                           `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
@@ -711,11 +718,25 @@ export default function StudentInterventionView() {
                                         </Badge>
                                       )}
                                       <Badge
-                                        variant={actHistorical ? "default" : locked ? "solid" : "surface"}
+                                        variant={
+                                          canReviewResolvedCompleted
+                                            ? "outline"
+                                            : actHistorical
+                                              ? "default"
+                                              : locked
+                                                ? "solid"
+                                                : "surface"
+                                        }
                                         size="sm"
                                         className="gap-1"
                                       >
-                                        {actHistorical ? "Unavailable" : locked ? "Locked" : "Ready"}
+                                        {canReviewResolvedCompleted
+                                          ? "Review"
+                                          : actHistorical
+                                            ? "Unavailable"
+                                            : locked
+                                              ? "Locked"
+                                              : "Ready"}
                                       </Badge>
                                     </div>
                                   }
@@ -733,6 +754,10 @@ export default function StudentInterventionView() {
                                       : act.prerequisite_code === "PRACTICE_ATTEMPT_REQUIRED"
                                         ? act.prerequisite_message || "Practice Assessment attempt required before starting this remediation activity."
                                         : act.prerequisite_message || "Complete all Supporting Readings before opening this activity."}
+                                  </p>
+                                ) : canReviewResolvedCompleted ? (
+                                  <p className="text-xs sm:text-sm text-muted-foreground px-1">
+                                    This support has ended. Select this activity to review your saved result.
                                   </p>
                                 ) : actHistorical ? (
                                   <p className="text-xs sm:text-sm text-muted-foreground px-1">

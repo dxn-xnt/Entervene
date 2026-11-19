@@ -11,7 +11,9 @@ from app.models.intervention.PracticeAssessment import PracticeAssessment
 from app.models.intervention.PracticeAttempt import PracticeAttempt
 from app.models.notifications.Notification import Notification
 from app.services.intervention.StudySupportReminderService import (
+    legacy_study_support_action_url,
     scan_study_support_reminders,
+    stage_study_support_available,
     within_manila_school_hours,
 )
 from tests.test_classwork_submission_authorization import authz_context
@@ -93,8 +95,8 @@ def test_first_and_final_reminders_are_student_safe_linked_and_duplicate_safe(au
     assert all("intervention" not in f"{row.title} {row.body}".lower() for row in rows)
     assert all(
         row.action_url == (
-            f"/student/classworks/{assignment.classwork_assignment_id}"
-            "?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D9811"
+            "/student/interventions/view?intervention=9811"
+            f"&activity={assignment.classwork_assignment_id}"
         )
         for row in rows
     )
@@ -184,3 +186,59 @@ def test_reminders_stop_when_support_is_no_longer_actionable(authz_context, stop
 
     assert result["sent"] == 0
     assert _reminders(authz_context) == []
+
+
+def test_legacy_action_url_notifications_prevent_duplicates_and_preserve_anchor(authz_context):
+    _intervention, assignment, _submission = _support(authz_context)
+    db = authz_context["db"]
+    student_user_id = authz_context["accounts"]["student"].user_id
+    legacy_url = legacy_study_support_action_url(assignment)
+
+    # Legacy availability notice acts as publication anchor and deduplicates re-staging.
+    assignment.publish_date = None
+    db.add(Notification(
+        notification_id=uuid4(),
+        user_id=student_user_id,
+        notification_type="study_support_available",
+        title="New Study Support Available",
+        body="New Study Support is ready for you.",
+        action_url=legacy_url,
+        is_read=False,
+        created_at=PUBLISHED_AT,
+    ))
+    db.commit()
+
+    assert stage_study_support_available(
+        db, assignment, assignment.classwork, authz_context["subject"].subject_id, now=FIRST_SCAN,
+    ) is False
+    assert db.query(Notification).filter_by(notification_type="study_support_available").count() == 1
+
+    # Legacy reminder prevents duplicate first reminder.
+    db.add(Notification(
+        notification_id=uuid4(),
+        user_id=student_user_id,
+        notification_type="study_support_reminder",
+        title="Study Support Reminder",
+        body="Your Study Support is ready when you are.",
+        action_url=legacy_url,
+        is_read=False,
+        created_at=FIRST_SCAN - timedelta(hours=1),
+    ))
+    db.commit()
+
+    first = scan_study_support_reminders(db, now=FIRST_SCAN)
+    assert first["sent"] == 0
+    assert len(_reminders(authz_context)) == 1
+
+    # Final reminder still sends once using the canonical URL, and does not duplicate.
+    final = scan_study_support_reminders(db, now=FINAL_SCAN)
+    repeated_final = scan_study_support_reminders(db, now=FINAL_SCAN)
+    assert final["sent"] == 1
+    assert repeated_final["sent"] == 0
+    reminders = _reminders(authz_context)
+    assert len(reminders) == 2
+    assert {row.notification_type for row in reminders} == {
+        "study_support_reminder",
+        "study_support_final_reminder",
+    }
+

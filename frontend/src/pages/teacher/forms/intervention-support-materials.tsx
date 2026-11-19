@@ -69,6 +69,7 @@ import {
   type RemediationResource,
   type RemediationFocus,
   type RemediationProgress,
+  type RemediationPredictionImpact,
   type RemedialDraft,
   type ReviewerDraft,
   type SupportMaterial,
@@ -389,6 +390,7 @@ const InterventionSupportMaterials = forwardRef<
   const [generationEligibility, setGenerationEligibility] = useState<RemediationGenerationEligibility | null>(null);
   const [refreshingEvidence, setRefreshingEvidence] = useState(false);
   const [progress, setProgress] = useState<RemediationProgress | null>(null);
+  const [predictionImpact, setPredictionImpact] = useState<RemediationPredictionImpact | null>(null);
   const [originalExams, setOriginalExams] = useState<OriginalExamination[]>([]);
   const [plan, setPlan] = useState<RemediationPlan>({
     teacher_choice: null,
@@ -713,6 +715,7 @@ const InterventionSupportMaterials = forwardRef<
       setFocus(workspace.focus);
       setGenerationEligibility(workspace.generation_eligibility);
       setProgress(workspace.progress);
+      setPredictionImpact(workspace.prediction_impact ?? null);
       setOriginalExams(workspace.original_exams ?? []);
       const existingReviewer = support.items.find(
         (item) => item.kind === "STUDENT_REVIEWER"
@@ -750,7 +753,7 @@ const InterventionSupportMaterials = forwardRef<
 
   useEffect(() => {
     void load();
-  }, [interventionId]);
+  }, [interventionId, detail.current_prediction_revision, detail.current_predicted_grade]);
 
   useEffect(() => {
     const isAdvisoryView = page === "plan" && (wizardStep == null || wizardStep === 3);
@@ -1283,15 +1286,108 @@ const InterventionSupportMaterials = forwardRef<
         },
       ]
       : persistedAssigned;
-  const phase = progress?.completed_remediation.length
-    ? "Monitoring"
-    : assigned.some((item) => item.is_published !== false)
-      ? "Assigned"
-      : assigned.length
-        ? "Draft Prepared"
-        : plan.teacher_choice
-          ? "Preparing Support"
-          : "Needs Support";
+  const hasSubmittedAwaitingGrading = assigned.some(
+    (item) =>
+      item.is_published !== false &&
+      (item.submission_status === "submitted" || item.submission_status === "late") &&
+      item.grade == null
+  );
+  const hasPublishedAwaitingSubmission = assigned.some(
+    (item) =>
+      item.is_published !== false &&
+      item.submission_status !== "graded" &&
+      item.submission_status !== "submitted" &&
+      item.submission_status !== "late"
+  );
+  const effectiveRemediationStatus =
+    progress?.remediation_status ??
+    (assigned.length === 0
+      ? "NOT_ASSIGNED"
+      : !assigned.some((item) => item.is_published !== false)
+        ? "DRAFT"
+        : hasSubmittedAwaitingGrading
+          ? "SUBMITTED"
+          : hasPublishedAwaitingSubmission
+            ? "ASSIGNED"
+            : "GRADED");
+  const phase =
+    effectiveRemediationStatus === "GRADED"
+      ? "Graded"
+      : effectiveRemediationStatus === "SUBMITTED"
+        ? "Awaiting Grading"
+        : effectiveRemediationStatus === "ASSIGNED"
+          ? "Assigned"
+          : effectiveRemediationStatus === "DRAFT"
+            ? "Draft Prepared"
+            : plan.teacher_choice
+              ? "Preparing Support"
+              : "Needs Support";
+
+  const formatScoreValue = (value: number) =>
+    Number.isInteger(value) ? value.toFixed(0) : value.toFixed(2).replace(/\.?0+$/, "");
+
+  const remediationScoreStatusText = (
+    item: NonNullable<RemediationProgress["assigned_remediation"]>[number]
+  ) => {
+    if (item.is_published === false || item.submission_status === "draft") {
+      return "Draft (Unpublished)";
+    }
+    if (item.submission_status === "graded" && item.grade != null) {
+      return `${formatScoreValue(item.grade)} / ${item.total_points != null ? formatScoreValue(item.total_points) : "—"}`;
+    }
+    if (item.submission_status === "submitted" || item.submission_status === "late") {
+      return "Submitted · Awaiting grading";
+    }
+    return "Awaiting submission";
+  };
+
+  const formatPredictedValue = (value: number | null | undefined) =>
+    value != null && Number.isFinite(value) ? value.toFixed(2) : "Unavailable";
+
+  const outcomeStatusMessage = (() => {
+    if (effectiveRemediationStatus === "DRAFT") {
+      return (
+        progress?.status_reason ||
+        "Remediation draft is prepared and not yet published to the student."
+      );
+    }
+    if (effectiveRemediationStatus === "SUBMITTED") {
+      return (
+        progress?.status_reason ||
+        "Student submitted the remediation activity. Grade the submission to update the AI prediction."
+      );
+    }
+    if (effectiveRemediationStatus === "ASSIGNED") {
+      return (
+        progress?.status_reason ||
+        "Remediation activity is published and awaiting student submission. The AI prediction will update after grading."
+      );
+    }
+    if (effectiveRemediationStatus === "GRADED") {
+      const reason = progress?.status_reason ?? "";
+      return `${reason ? `${reason} ` : ""}Completion alone does not resolve the Intervention.`;
+    }
+    return progress?.status_reason ?? "";
+  })();
+
+  const liveWhatIf =
+    projectionResponse?.ai_midterm_what_if?.status === "AVAILABLE"
+      ? projectionResponse.ai_midterm_what_if
+      : null;
+  const liveWhatIfAfter = liveWhatIf?.target_estimates.at(-1)?.hypothetical_predicted_term_grade ?? null;
+  const displayedCurrentPrediction =
+    hasSavedAssessment
+      ? (predictionImpact?.current_predicted_grade ?? progress?.latest_projection ?? null)
+      : (liveWhatIf?.baseline_predicted_term_grade ?? predictionImpact?.current_predicted_grade ?? progress?.latest_projection ?? null);
+  const displayedMaxScorePrediction =
+    hasSavedAssessment
+      ? (predictionImpact?.status === "AVAILABLE" ? predictionImpact.max_remediation_predicted_grade : null)
+      : (liveWhatIfAfter ?? (predictionImpact?.status === "AVAILABLE" ? predictionImpact.max_remediation_predicted_grade : null));
+  const displayedPredictionDelta =
+    displayedCurrentPrediction != null && displayedMaxScorePrediction != null
+      ? displayedMaxScorePrediction - displayedCurrentPrediction
+      : null;
+  const primaryImpactTarget = predictionImpact?.targets[0] ?? null;
 
   const primaryAssignedAssessment = assigned[0] ?? null;
   const allRemediationGraded =
@@ -1579,6 +1675,10 @@ const InterventionSupportMaterials = forwardRef<
           .filter((r) => r.kind === "CLASSWORK")
           .map((r) => r.id);
         setSavedReadingIds(updatedSavedReadings);
+        if (result.progress) setProgress(result.progress);
+        if (result.prediction_impact !== undefined) {
+          setPredictionImpact(result.prediction_impact ?? null);
+        }
         setResources(result.resources);
         toast.success({ title: "Adjustments saved successfully." });
         return true;
@@ -1690,6 +1790,10 @@ const InterventionSupportMaterials = forwardRef<
         .map((r) => r.id);
       setSavedReadingIds(updatedSavedReadings);
       setResources(result.resources);
+      if (result.progress) setProgress(result.progress);
+      if (result.prediction_impact !== undefined) {
+        setPredictionImpact(result.prediction_impact ?? null);
+      }
       if (result.plan.score_adjustment_cap !== undefined) {
         setCapInput(String(result.plan.score_adjustment_cap));
         setCapError(null);
@@ -1850,6 +1954,8 @@ const InterventionSupportMaterials = forwardRef<
       const refreshed = await refreshRemediationEvidence(interventionId);
       const workspace = await getRemediationWorkspace(interventionId);
       setGenerationEligibility(workspace.generation_eligibility);
+      setProgress(workspace.progress);
+      setPredictionImpact(workspace.prediction_impact ?? null);
       setGenerationError(null);
       toast.success({
         title: refreshed.created ? "Remediation evidence refreshed" : "Remediation evidence is already current",
@@ -2477,35 +2583,79 @@ const InterventionSupportMaterials = forwardRef<
                             <Badge variant="outline" size="sm">{phase}</Badge>
                           </div>
                         </h4>
-                        <Card className="border-2! w-full grid grid-cols-3 p-3 text-base bg-primary border-2 border-border">
+                        <Card className="border-2! w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-3 text-sm bg-primary border-2 border-border">
                           {assigned
                             .filter((item) => item.original_assignment_id)
-                            .map((item) => (
-                              <Fragment key={item.assignment_id}>
-                                <div className="text-foreground">
-                                  <span>
-                                    Remedial: <strong>{item.grade ?? "Pending"} / {item.total_points ?? "—"}</strong>
-                                  </span>
-                                </div>
-                                <div className="text-foreground">
-                                  <span>
-                                    Effective:{" "}
-                                    <strong>
-                                      {item.effective_grade ?? "—"} / {item.total_points ?? "—"}
-                                    </strong>
-                                  </span>
-                                </div>
-                              </Fragment>
-                            ))}
-                          <p>
-                            Latest projected grade:{" "}
-                            <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
+                            .map((item) => {
+                              const targetImpact = predictionImpact?.targets.find(
+                                (t) => t.assignment_id === item.original_assignment_id
+                              );
+                              const targetPreview = scorePreviews.find(
+                                (p) => p.assignment_id === item.original_assignment_id
+                              );
+                              const ceilingPct =
+                                targetImpact?.cap_percentage ??
+                                targetPreview?.cap_percentage ??
+                                (item.exam_subtype ? 100 : (plan.score_adjustment_cap ?? 75));
+                              const effectiveMax =
+                                targetImpact?.effective_max_score ??
+                                targetPreview?.max_adjusted_score ??
+                                null;
+                              const maxPts =
+                                targetImpact?.max_points ??
+                                targetPreview?.max_points ??
+                                item.total_points ??
+                                null;
+                              return (
+                                <Fragment key={item.assignment_id}>
+                                  <div className="text-foreground">
+                                    <span>
+                                      Remedial:{" "}
+                                      <strong>{remediationScoreStatusText(item)}</strong>
+                                    </span>
+                                  </div>
+                                  <div className="text-foreground">
+                                    <span>
+                                      Effective:{" "}
+                                      <strong>
+                                        {item.effective_grade != null
+                                          ? `${formatScoreValue(item.effective_grade)} / ${maxPts != null ? formatScoreValue(maxPts) : "—"}`
+                                          : "—"}
+                                      </strong>
+                                    </span>
+                                  </div>
+                                  <div className="text-foreground">
+                                    <span>
+                                      Target Ceiling:{" "}
+                                      <strong>
+                                        {ceilingPct}%
+                                        {effectiveMax != null && maxPts != null
+                                          ? ` (${formatScoreValue(effectiveMax)}/${formatScoreValue(maxPts)} max)`
+                                          : ""}
+                                      </strong>
+                                    </span>
+                                  </div>
+                                </Fragment>
+                              );
+                            })}
+                          <p className="text-foreground">
+                            Current AI-predicted grade:{" "}
+                            <strong>{formatPredictedValue(displayedCurrentPrediction)}</strong>
+                          </p>
+                          <p className="text-foreground">
+                            AI-predicted grade at max score:{" "}
+                            <strong>
+                              {formatPredictedValue(displayedMaxScorePrediction)}
+                              {displayedPredictionDelta != null && (
+                                <span className="ml-1 text-xs font-semibold">
+                                  ({displayedPredictionDelta >= 0 ? "+" : ""}
+                                  {displayedPredictionDelta.toFixed(2)})
+                                </span>
+                              )}
+                            </strong>
                           </p>
                           <p className="text-sm text-foreground col-span-full">
-                            {progress?.completed_remediation.length
-                              ? "The student completed the support activity. "
-                              : ""}
-                            {progress?.status_reason} Completion alone does not resolve the Intervention.
+                            {outcomeStatusMessage}
                           </p>
                         </Card>
                       </div>
@@ -3667,9 +3817,31 @@ const InterventionSupportMaterials = forwardRef<
                                           </p>
                                         </div>
                                       </div>
+                                      <div className="grid grid-cols-1 gap-3 rounded! border-2 border-border bg-background p-3 sm:grid-cols-2">
+                                        <div className="flex flex-col gap-0.5">
+                                          <p className="text-xs text-muted-foreground font-medium">Current AI-Predicted Grade</p>
+                                          <p className="text-base font-bold">
+                                            {formatPredictedValue(displayedCurrentPrediction)}
+                                          </p>
+                                        </div>
+                                        <div className="flex flex-col gap-0.5">
+                                          <p className="text-xs text-muted-foreground font-medium">AI-Predicted Grade at Max Remediation Score</p>
+                                          <p className="text-base font-bold">
+                                            {projectionLoading && !hasSavedAssessment
+                                              ? "Calculating..."
+                                              : formatPredictedValue(displayedMaxScorePrediction)}
+                                            {displayedPredictionDelta != null && !(projectionLoading && !hasSavedAssessment) && (
+                                              <span className="ml-1 text-xs font-semibold text-muted-foreground">
+                                                ({displayedPredictionDelta >= 0 ? "+" : ""}
+                                                {displayedPredictionDelta.toFixed(2)})
+                                              </span>
+                                            )}
+                                          </p>
+                                        </div>
+                                      </div>
                                       <p className="text-sm text-muted-foreground">
                                         {hasSavedAssessment
-                                          ? `Original max: ${preview?.max_points ?? chosenActivity.possible_score} pts · Target-score ceiling: ${plan.score_adjustment_cap ?? 75}%`
+                                          ? `Original max: ${preview?.max_points ?? chosenActivity.possible_score} pts · Target-score ceiling: ${primaryImpactTarget?.cap_percentage ?? plan.score_adjustment_cap ?? 75}% · Effective max target score: ${preview ? `${preview.max_adjusted_score}/${preview.max_points}` : (primaryImpactTarget ? `${formatScoreValue(primaryImpactTarget.effective_max_score)}/${formatScoreValue(primaryImpactTarget.max_points)}` : "Unavailable")}`
                                           : "The actual adjustment will use this student's remediation score."}
                                       </p>
                                     </Card>
@@ -3681,7 +3853,7 @@ const InterventionSupportMaterials = forwardRef<
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <span className="text-base font-bold">
-                                      {primaryAssignedAssessment?.original_title ?? targetAssignmentSummary}
+                                      {primaryImpactTarget?.title ?? primaryAssignedAssessment?.original_title ?? targetAssignmentSummary}
                                     </span>
                                     <Badge variant="solid" size="sm">
                                       Targeted
@@ -3691,24 +3863,55 @@ const InterventionSupportMaterials = forwardRef<
                                     {componentLabel(activeGradeTreatment)}
                                   </Badge>
                                 </div>
-                                <div className="grid grid-cols-1 gap-3 rounded! border-2 border-border bg-card p-3 sm:grid-cols-2">
+                                <div className="grid grid-cols-1 gap-3 rounded! border-2 border-border bg-card p-3 sm:grid-cols-3">
                                   <div className="flex flex-col gap-0.5">
                                     <p className="text-sm text-muted-foreground">Original</p>
                                     <p className="text-base font-bold">
-                                      {primaryAssignedAssessment?.original_grade != null && primaryAssignedAssessment?.total_points != null
-                                        ? `${primaryAssignedAssessment.original_grade}/${primaryAssignedAssessment.total_points}`
-                                        : "Recorded Score"}
+                                      {primaryImpactTarget
+                                        ? `${formatScoreValue(primaryImpactTarget.original_score)}/${formatScoreValue(primaryImpactTarget.max_points)}`
+                                        : primaryAssignedAssessment?.original_grade != null && primaryAssignedAssessment?.total_points != null
+                                          ? `${primaryAssignedAssessment.original_grade}/${primaryAssignedAssessment.total_points}`
+                                          : "Recorded Score"}
                                     </p>
                                   </div>
                                   <div className="flex flex-col gap-0.5">
                                     <p className="text-xs text-muted-foreground font-medium">Target-Score Ceiling</p>
                                     <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
-                                      {plan.score_adjustment_cap ?? 75}%
+                                      {primaryImpactTarget?.cap_percentage ?? (activeGradeTreatment === "EXAMINATION" ? 100 : (plan.score_adjustment_cap ?? 75))}%
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <p className="text-xs text-muted-foreground font-medium">Effective Max Target Score</p>
+                                    <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                                      {primaryImpactTarget
+                                        ? `${formatScoreValue(primaryImpactTarget.effective_max_score)}/${formatScoreValue(primaryImpactTarget.max_points)}`
+                                        : "Unavailable"}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3 rounded! border-2 border-border bg-background p-3 sm:grid-cols-2">
+                                  <div className="flex flex-col gap-0.5">
+                                    <p className="text-xs text-muted-foreground font-medium">Current AI-Predicted Grade</p>
+                                    <p className="text-base font-bold">
+                                      {formatPredictedValue(displayedCurrentPrediction)}
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <p className="text-xs text-muted-foreground font-medium">AI-Predicted Grade at Max Remediation Score</p>
+                                    <p className="text-base font-bold">
+                                      {formatPredictedValue(displayedMaxScorePrediction)}
+                                      {displayedPredictionDelta != null && (
+                                        <span className="ml-1 text-xs font-semibold text-muted-foreground">
+                                          ({displayedPredictionDelta >= 0 ? "+" : ""}
+                                          {displayedPredictionDelta.toFixed(2)})
+                                        </span>
+                                      )}
                                     </p>
                                   </div>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                  Original target maximum points: {primaryAssignedAssessment?.total_points != null ? `${primaryAssignedAssessment.total_points} points` : "Preserved"}
+                                  Original target maximum points: {primaryImpactTarget ? `${formatScoreValue(primaryImpactTarget.max_points)} points` : (primaryAssignedAssessment?.total_points != null ? `${primaryAssignedAssessment.total_points} points` : "Preserved")}
+                                  {" · "}AI prediction impact is advisory and depends on the student's actual remediation score.
                                 </p>
                               </Card>
                             ) : (

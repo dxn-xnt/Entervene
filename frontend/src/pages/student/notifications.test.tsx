@@ -92,7 +92,7 @@ describe("student Study Support notifications", () => {
         notification_type: "study_support_available",
         title: "New Study Support Available",
         body: "New Study Support for Mathematics is ready for you.",
-        action_url: "/student/classworks/73?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D9",
+        action_url: "/student/interventions/view?intervention=9&activity=73",
         is_read: false,
         created_at: "2026-11-19T00:00:00Z",
         read_at: null,
@@ -116,7 +116,7 @@ describe("student Study Support notifications", () => {
     await waitFor(() => {
       expect(apiMocks.markNotificationAsRead).toHaveBeenCalledWith("notice-2");
       expect(screen.getByTestId("location").textContent).toBe(
-        "/student/classworks/73?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D9",
+        "/student/interventions/view?intervention=9&activity=73",
       );
     });
   });
@@ -153,8 +153,38 @@ describe("student Study Support notifications", () => {
     await waitFor(() => {
       expect(apiMocks.markNotificationAsRead).toHaveBeenCalledWith("notice-3");
       expect(screen.getByTestId("location").textContent).toBe(
-        "/student/classworks/73?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D9",
+        "/student/interventions/view?intervention=9",
       );
+    });
+  });
+
+  it("redirects a legacy Study Support Subject link to Study Support", async () => {
+    apiMocks.getNotifications.mockResolvedValue({
+      unread_count: 1,
+      notifications: [{
+        notification_id: "notice-legacy",
+        notification_type: "study_support_available",
+        title: "New Study Support Available",
+        body: "Study Support is ready.",
+        action_url: "/student/subjects/4/8?tab=classwork",
+        is_read: false,
+        created_at: "2026-11-19T00:00:00Z",
+        read_at: null,
+      }],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/student/notifications"]}>
+        <Routes>
+          <Route path="/student/notifications" element={<><Notifications /><LocationProbe /></>} />
+          <Route path="*" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("New Study Support Available"));
+    await waitFor(() => {
+      expect(screen.getByTestId("location").textContent).toBe("/student/interventions");
     });
   });
 

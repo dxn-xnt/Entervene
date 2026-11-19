@@ -1447,4 +1447,160 @@ describe("InterventionSupportMaterials remediation activity integration regressi
     );
     expect(await screen.findByText("Assessment draft saved")).toBeDefined();
   });
+
+  it("shows accurate awaiting-submission status and real AI prediction impact in Active Summary and locked Step 3, and refreshes on grade updates", async () => {
+    const publishedUnsubmittedWorkspace: RemediationWorkspace = {
+      ...makeWorkspace([101]),
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 85,
+        selected_resources: [],
+        ai_suggestion: null,
+      },
+      progress: {
+        triggering_projection: 81.2,
+        latest_projection: 81.2,
+        latest_revision: 1,
+        passing_threshold: 85,
+        remediation_status: "ASSIGNED",
+        completed_remediation: [],
+        assigned_remediation: [
+          {
+            title: "Remedial Quiz 1",
+            assignment_id: 501,
+            classwork_id: 401,
+            classwork_type: "QUIZ",
+            is_published: true,
+            component: "WRITTEN_WORK",
+            is_graded: true,
+            submission_status: null,
+            grade: null,
+            total_points: 20,
+            original_assignment_id: 101,
+            original_title: "WW 1 - Number Sense",
+            original_grade: 8,
+            effective_grade: 8,
+          },
+        ],
+        status: "ACTIVE",
+        status_reason:
+          "Remediation activity is published and awaiting student submission. The AI prediction will update after grading.",
+      },
+      prediction_impact: {
+        status: "AVAILABLE",
+        is_official_grade: false,
+        is_guaranteed: false,
+        is_practice_only: false,
+        current_predicted_grade: 81.2,
+        max_remediation_predicted_grade: 84.65,
+        predicted_gain: 3.45,
+        passing_threshold: 85,
+        score_adjustment_cap: 85,
+        targets: [
+          {
+            assignment_id: 101,
+            title: "WW 1 - Number Sense",
+            component: "WRITTEN_WORK",
+            original_score: 8,
+            current_effective_score: 8,
+            max_points: 20,
+            cap_percentage: 85,
+            effective_max_score: 17,
+            possible_score_gain: 9,
+            hypothetical_predicted_grade: 84.65,
+            predicted_gain: 3.45,
+          },
+        ],
+        unavailable_reasons: [],
+      },
+    };
+
+    const refreshedAfterGradeWorkspace: RemediationWorkspace = {
+      ...publishedUnsubmittedWorkspace,
+      progress: {
+        ...publishedUnsubmittedWorkspace.progress,
+        latest_projection: 83.1,
+        latest_revision: 2,
+        remediation_status: "GRADED",
+        completed_remediation: [
+          { title: "Remedial Quiz 1", assignment_id: 501, grade: 14, total_points: 20 },
+        ],
+        assigned_remediation: [
+          {
+            ...publishedUnsubmittedWorkspace.progress.assigned_remediation![0],
+            submission_status: "graded",
+            grade: 14,
+            effective_grade: 14,
+          },
+        ],
+        status_reason:
+          "Graded remediation has been applied, and the latest AI-predicted grade remains below 85.",
+      },
+      prediction_impact: {
+        ...publishedUnsubmittedWorkspace.prediction_impact!,
+        current_predicted_grade: 83.1,
+        max_remediation_predicted_grade: 84.65,
+        predicted_gain: 1.55,
+      },
+    };
+
+    apiMocks.getRemediationWorkspace
+      .mockResolvedValueOnce(publishedUnsubmittedWorkspace)
+      .mockResolvedValueOnce(publishedUnsubmittedWorkspace)
+      .mockResolvedValueOnce(refreshedAfterGradeWorkspace);
+
+    // 1. Active Intervention Summary (overview mode)
+    const { rerender } = render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={baseDetail} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Awaiting submission/i)).toBeTruthy();
+    expect(screen.queryByText(/Pending \/ 20/i)).toBeNull();
+    expect(screen.queryByText(/remains below 85/i)).toBeNull();
+    expect(
+      screen.getByText(/Remediation activity is published and awaiting student submission/i)
+    ).toBeTruthy();
+    expect(screen.getByText("81.20")).toBeTruthy();
+    expect(screen.getByText(/84\.65/)).toBeTruthy();
+    expect(screen.getByText(/\+3\.45/)).toBeTruthy();
+    expect(screen.getByText(/85% \(17\/20 max\)/)).toBeTruthy();
+
+    // 2. Reopened locked Step 3 Saved Grade Treatment
+    cleanup();
+    const step3Render = render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={baseDetail} wizardStep={3} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Saved Grade Treatment")).toBeTruthy();
+    expect(screen.getByText("85%")).toBeTruthy();
+    expect(screen.getByText("17/20")).toBeTruthy();
+    expect(screen.getByText("81.20")).toBeTruthy();
+    expect(screen.getByText(/84\.65/)).toBeTruthy();
+
+    // 3. Updating detail revision triggers workspace refresh & updated AI prediction
+    step3Render.rerender(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={{
+            ...baseDetail,
+            current_prediction_revision: 3,
+            current_predicted_grade: 83.1,
+          }}
+          wizardStep={3}
+        />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("83.10").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText(/\+1\.55/)).toBeTruthy();
+    });
+    expect(rerender).toBeDefined();
+  });
 });

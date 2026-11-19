@@ -345,15 +345,344 @@ def progress(db: Session, row: Intervention) -> dict:
             threshold_val = float(res.threshold)
     except Exception:
         pass
+
+    published_assigned = [item for item in assigned if item.get("is_published")]
+    has_submitted_awaiting_grading = any(
+        (item.get("submission_status") or "").lower() in {"submitted", "late"}
+        and item.get("grade") is None
+        for item in published_assigned
+    )
+    has_awaiting_submission = any(
+        (item.get("submission_status") or "").lower() not in {"submitted", "late", "graded"}
+        for item in published_assigned
+    )
+    if not assigned:
+        remediation_status = "NOT_ASSIGNED"
+        status_reason = (
+            f"No remediation activity has been assigned yet. Latest AI-predicted grade is below {threshold_val:g}."
+            if latest_grade is not None and float(latest_grade) < threshold_val
+            else "Latest valid projection is unavailable."
+            if latest_grade is None
+            else "Current status is awaiting reconciliation."
+        )
+    elif not published_assigned:
+        remediation_status = "DRAFT"
+        status_reason = "Remediation draft is prepared and not yet published to the student."
+    elif has_submitted_awaiting_grading:
+        remediation_status = "SUBMITTED"
+        status_reason = (
+            "Student submitted the remediation activity. "
+            "Grade the submission to update the AI prediction."
+        )
+    elif has_awaiting_submission:
+        remediation_status = "ASSIGNED"
+        status_reason = (
+            "Remediation activity is published and awaiting student submission. "
+            "The AI prediction will update after grading."
+        )
+    else:
+        remediation_status = "GRADED"
+        status_reason = (
+            f"Graded remediation has been applied, and the latest AI-predicted grade remains below {threshold_val:g}."
+            if latest_grade is not None and float(latest_grade) < threshold_val
+            else "Latest valid projection is unavailable."
+            if latest_grade is None
+            else "Current status is awaiting reconciliation."
+        )
+
     return {"triggering_projection": float(source_grade if source_grade is not None else source.predicted_period_grade),
             "latest_projection": float(latest_grade) if latest_grade is not None else None,
             "latest_revision": latest.revision if ready else None,
+            "passing_threshold": threshold_val,
+            "remediation_status": remediation_status,
             "completed_remediation": completed,
             "assigned_remediation": assigned,
-            "status_reason": (f"Latest projected final grade remains below {threshold_val:g}." if latest_grade is not None and float(latest_grade) < threshold_val
-                              else "Latest valid projection is unavailable." if latest_grade is None
-                              else "Current status is awaiting reconciliation."),
+            "status_reason": status_reason,
             "status": row.status}
+
+
+def build_remediation_prediction_impact(
+    db: Session,
+    row: Intervention,
+    plan: dict,
+    assigned: list[dict],
+) -> dict:
+    """Compute read-only before/after AI prediction impact using live evidence and locked caps."""
+    with db.no_autoflush:
+        period = db.get(AcademicPeriod, row.academic_period_id)
+        threshold_val = 85.0
+        try:
+            if period:
+                res = require_subject_passing_threshold(
+                    db,
+                    academic_year_id=period.academic_year_id,
+                    subject_id=row.subject_id,
+                )
+                threshold_val = float(res.threshold)
+        except Exception:
+            pass
+
+        grade_treatment = plan.get("grade_treatment")
+        is_practice_only = grade_treatment == "PRACTICE_ONLY" or (
+            bool(assigned) and all(not item.get("is_graded", True) for item in assigned)
+        )
+
+        # Collect locked remediation links first (authoritative cap per linked original),
+        # then any unlinked planned target IDs using the plan's cap.
+        plan_cap = plan.get("score_adjustment_cap")
+        try:
+            resolved_plan_cap = float(
+                validate_cap_percentage(
+                    plan_cap if plan_cap is not None else DEFAULT_REMEDIATION_CAP_PERCENTAGE
+                )
+            )
+        except (TypeError, ValueError):
+            resolved_plan_cap = float(DEFAULT_REMEDIATION_CAP_PERCENTAGE)
+
+        target_specs: list[tuple[int, float, str | None]] = []
+        seen_target_ids: set[int] = set()
+
+        if not is_practice_only:
+            links = (
+                db.query(RemediationAssignmentLink)
+                .filter_by(
+                    source_intervention_id=row.intervention_id,
+                    student_id=row.student_id,
+                )
+                .order_by(RemediationAssignmentLink.remediation_link_id.asc())
+                .all()
+            )
+            for link in links:
+                if link.original_assignment_id not in seen_target_ids:
+                    seen_target_ids.add(link.original_assignment_id)
+                    target_specs.append((
+                        int(link.original_assignment_id),
+                        float(link.score_adjustment_cap),
+                        None,
+                    ))
+
+            for item in assigned:
+                orig_id = item.get("original_assignment_id")
+                if orig_id is None or int(orig_id) in seen_target_ids:
+                    continue
+                if not item.get("is_graded", True):
+                    continue
+                seen_target_ids.add(int(orig_id))
+                comp = "EXAMINATION" if (item.get("exam_subtype") or grade_treatment == "EXAMINATION") else None
+                cap_for_item = 100.0 if comp == "EXAMINATION" else resolved_plan_cap
+                target_specs.append((int(orig_id), cap_for_item, comp))
+
+            planned_targets = list(plan.get("target_assignment_ids") or [])
+            if grade_treatment == "EXAMINATION" and plan.get("original_exam_assignment_id") is not None:
+                exam_id = int(plan["original_exam_assignment_id"])
+                if exam_id not in planned_targets:
+                    planned_targets.insert(0, exam_id)
+            for raw_id in planned_targets:
+                if raw_id is None or int(raw_id) in seen_target_ids:
+                    continue
+                seen_target_ids.add(int(raw_id))
+                comp = "EXAMINATION" if grade_treatment == "EXAMINATION" else None
+                cap_for_item = 100.0 if comp == "EXAMINATION" else resolved_plan_cap
+                target_specs.append((int(raw_id), cap_for_item, comp))
+
+        # Build live target score bounds (using live submissions and any applied remediation).
+        target_details: list[dict] = []
+        what_if_inputs: list[dict] = []
+        for target_id, cap_pct, forced_component in target_specs:
+            assignment = db.get(ClassworkAssignment, target_id)
+            work = assignment.classwork if assignment is not None else None
+            if (
+                assignment is None
+                or work is None
+                or assignment.class_id != row.class_id
+                or assignment.academic_period_id != row.academic_period_id
+                or work.subject_id != row.subject_id
+                or work.is_archived
+                or not work.is_graded
+                or work.total_points is None
+                or float(work.total_points) <= 0
+            ):
+                continue
+
+            sub = (
+                db.query(StudentSubmission)
+                .filter_by(
+                    classwork_assignment_id=target_id,
+                    student_id=row.student_id,
+                )
+                .filter(StudentSubmission.grade.isnot(None))
+                .order_by(StudentSubmission.submission_id.desc())
+                .first()
+            )
+            if sub is None or sub.grade is None:
+                continue
+
+            orig_score = float(sub.grade)
+            max_points = float(work.total_points)
+            classified = classify_classwork_component(
+                work.classwork_type, work.classwork_category, work.exam_subtype,
+            )
+            component = (
+                forced_component
+                if forced_component is not None
+                else (
+                    "EXAMINATION"
+                    if classified == CanonicalGradingComponent.ASSESSMENT
+                    else classified.value
+                )
+            )
+
+            # Determine current effective score (including any already-graded remediation).
+            current_effective = orig_score
+            if component == "EXAMINATION":
+                remedial_exams = db.query(ClassworkAssignment).filter_by(
+                    original_exam_assignment_id=target_id,
+                    recipient_student_id=row.student_id,
+                ).all()
+                for rem_exam in remedial_exams:
+                    rem_sub = (
+                        db.query(StudentSubmission)
+                        .filter_by(
+                            classwork_assignment_id=rem_exam.classwork_assignment_id,
+                            student_id=row.student_id,
+                        )
+                        .filter(StudentSubmission.grade.isnot(None))
+                        .order_by(StudentSubmission.submission_id.desc())
+                        .first()
+                    )
+                    if rem_sub is not None and rem_sub.grade is not None:
+                        current_effective = max(current_effective, float(rem_sub.grade))
+                effective_max = max(current_effective, max_points)
+                applied_cap = 100.0
+            else:
+                link_for_target = db.query(RemediationAssignmentLink).filter_by(
+                    original_assignment_id=target_id,
+                    student_id=row.student_id,
+                ).first()
+                applied_cap = float(link_for_target.score_adjustment_cap) if link_for_target else cap_pct
+                if link_for_target is not None:
+                    rem_sub = (
+                        db.query(StudentSubmission)
+                        .filter_by(
+                            classwork_assignment_id=link_for_target.remediation_assignment_id,
+                            student_id=row.student_id,
+                        )
+                        .filter(StudentSubmission.grade.isnot(None))
+                        .order_by(StudentSubmission.submission_id.desc())
+                        .first()
+                    )
+                    if rem_sub is not None and rem_sub.grade is not None:
+                        applied_adj = adjust_remediation_score(
+                            original_score=orig_score,
+                            remediation_score=float(rem_sub.grade),
+                            original_max_points=max_points,
+                            remediation_max_points=max_points,
+                            cap_percentage=applied_cap,
+                        )
+                        current_effective = float(applied_adj.effective_score)
+                max_adj = adjust_remediation_score(
+                    original_score=orig_score,
+                    remediation_score=max_points,
+                    original_max_points=max_points,
+                    remediation_max_points=max_points,
+                    cap_percentage=applied_cap,
+                )
+                effective_max = max(current_effective, float(max_adj.effective_score))
+
+            target_details.append({
+                "assignment_id": target_id,
+                "title": work.title,
+                "component": component,
+                "original_score": orig_score,
+                "current_effective_score": current_effective,
+                "max_points": max_points,
+                "cap_percentage": applied_cap,
+                "effective_max_score": effective_max,
+                "possible_score_gain": round(max(0.0, effective_max - current_effective), 4),
+                "hypothetical_predicted_grade": None,
+                "predicted_gain": None,
+            })
+            what_if_inputs.append({
+                "assignment_id": target_id,
+                "component": component,
+                "applied": True,
+                "maximum_hypothetical_effective_score": effective_max,
+            })
+
+        source = _source(db, row)
+        version = db.get(AIModelVersion, source.model_version_id)
+        what_if = calculate_ai_midterm_what_if(
+            db,
+            student_id=row.student_id,
+            class_id=row.class_id,
+            subject_id=row.subject_id,
+            academic_period_id=row.academic_period_id,
+            model_version_id=source.model_version_id if version is not None else None,
+            model_name=version.model_name if version is not None else None,
+            target_projections=[] if is_practice_only else what_if_inputs,
+        )
+
+        if what_if["status"] != "AVAILABLE":
+            return {
+                "status": "UNAVAILABLE",
+                "is_official_grade": False,
+                "is_guaranteed": False,
+                "is_practice_only": is_practice_only,
+                "model_version_id": what_if.get("model_version_id"),
+                "model_name": what_if.get("model_name"),
+                "current_predicted_grade": None,
+                "max_remediation_predicted_grade": None,
+                "predicted_gain": None,
+                "passing_threshold": threshold_val,
+                "score_adjustment_cap": (
+                    target_details[0]["cap_percentage"]
+                    if target_details
+                    else (None if is_practice_only else resolved_plan_cap)
+                ),
+                "targets": target_details,
+                "unavailable_reasons": what_if.get("unavailable_reasons") or [],
+            }
+
+        baseline_grade = float(what_if["baseline_predicted_term_grade"])
+        estimates_by_id = {
+            int(est["assignment_id"]): est for est in what_if.get("target_estimates", [])
+        }
+        for detail in target_details:
+            est = estimates_by_id.get(detail["assignment_id"])
+            if est is not None:
+                detail["hypothetical_predicted_grade"] = float(est["hypothetical_predicted_term_grade"])
+                detail["predicted_gain"] = float(est["estimated_difference_from_baseline"])
+
+        if is_practice_only:
+            max_predicted = baseline_grade
+            predicted_gain = 0.0
+        elif what_if.get("target_estimates"):
+            last_est = what_if["target_estimates"][-1]
+            max_predicted = float(last_est["hypothetical_predicted_term_grade"])
+            predicted_gain = float(last_est["estimated_difference_from_baseline"])
+        else:
+            max_predicted = None
+            predicted_gain = None
+
+        return {
+            "status": "AVAILABLE",
+            "is_official_grade": False,
+            "is_guaranteed": False,
+            "is_practice_only": is_practice_only,
+            "model_version_id": what_if.get("model_version_id"),
+            "model_name": what_if.get("model_name"),
+            "current_predicted_grade": baseline_grade,
+            "max_remediation_predicted_grade": max_predicted,
+            "predicted_gain": predicted_gain,
+            "passing_threshold": threshold_val,
+            "score_adjustment_cap": (
+                target_details[0]["cap_percentage"]
+                if target_details
+                else (None if is_practice_only else resolved_plan_cap)
+            ),
+            "targets": target_details,
+            "unavailable_reasons": [],
+        }
 
 
 def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
@@ -397,11 +726,16 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     )
     eligibility = resolve_remediation_generation_eligibility(db, row)
     eligibility.pop("scope", None)
+    progress_data = progress(db, row)
+    prediction_impact = build_remediation_prediction_impact(
+        db, row, plan_data, progress_data["assigned_remediation"],
+    )
     return {"plan": plan_data,
             "resources": resources(db, row, staff_id), "focus": focus,
             "generation_eligibility": eligibility,
             "original_exams": original_exams(db, row),
-            "progress": progress(db, row),
+            "progress": progress_data,
+            "prediction_impact": prediction_impact,
             "score_previews": preview_data.get("previews", [])}
 
 
@@ -749,6 +1083,13 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         "evidence_basis": _basis(row, diagnosis_override=effective_diagnosis_snapshot(db, row)),
     })
     row.remediation_plan = plan
+    if selected:
+        # Backfill active interventions created before activation notifications
+        # existed. The stable intervention URL makes repeated saves idempotent.
+        from app.services.intervention.StudySupportReminderService import (
+            stage_intervention_study_support_available,
+        )
+        stage_intervention_study_support_available(db, row)
     db.commit()
     return get_workspace(db, staff_id, intervention_id)
 
