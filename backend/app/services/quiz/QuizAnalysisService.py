@@ -462,6 +462,9 @@ def grade_teacher_quiz_submission(
     if finalized is not None:
         raise HTTPException(status_code=409, detail="The period grade is finalized")
 
+    from app.services.grading.GradeabilityService import require_gradeable_submission
+    require_gradeable_submission(classwork, submission)
+
     if payload.feedback is not None:
         current_feedback_fingerprint = feedback_fingerprint(submission.feedback)
         expected_feedback_fingerprint = payload.expected_feedback_fingerprint
@@ -572,6 +575,13 @@ def grade_teacher_quiz_submission(
         dispatch_background_draft_processing,
     )
     enqueue_automatic_feedback_draft(db, submission.submission_id, staff_id)
+
+    if assignment.source_intervention_id is not None and classwork.is_graded:
+        from app.services.intervention.InterventionNotificationService import (
+            stage_intervention_assessment_result_or_submission,
+        )
+        db.flush()
+        stage_intervention_assessment_result_or_submission(db, assignment, submission)
 
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()

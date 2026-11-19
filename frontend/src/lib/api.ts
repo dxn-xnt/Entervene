@@ -1151,6 +1151,8 @@ export type StudentActivityScoreItem = {
   name: string;
   score: number | null;
   assigned: boolean;
+  can_enter_score: boolean;
+  score_entry_reason: string | null;
 };
 
 export type ActivityScoresResponse = {
