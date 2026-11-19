@@ -7,6 +7,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import type { DynamicScheduleRow } from "@/lib/api";
 import { getSubjectColor } from "@/lib/subject-colors";
+import { CalendarOff } from "lucide-react";
 
 // Fixed day order matching DepEd school week
 const DAY_ORDER = ["M", "T", "W", "Th", "F"] as const;
@@ -44,6 +45,7 @@ interface DynamicScheduleTableProps {
   isPublished?: boolean;
   isLoading?: boolean;
   emptyMessage?: string;
+  emptyDescription?: string;
   showTeacher?: boolean;
   showSection?: boolean;
   onSubjectClick?: (entry: DynamicScheduleRow) => void;
@@ -72,6 +74,7 @@ export function DynamicScheduleTable({
   isPublished = true,
   isLoading = false,
   emptyMessage = "No published schedule available yet.",
+  emptyDescription = "Your schedule will appear here once it has been published.",
   showTeacher = true,
   showSection = true,
   onSubjectClick,
@@ -83,9 +86,15 @@ export function DynamicScheduleTable({
 
   if (!isPublished || !schedule || schedule.length === 0) {
     return (
-      <Empty>
+      <Empty className="py-8">
         <Empty.Content>
-          <Empty.Title>{emptyMessage}</Empty.Title>
+          <Empty.Icon className="grid size-11 place-items-center rounded-lg border-2 border-border bg-primary p-2">
+            <CalendarOff className="size-6" />
+          </Empty.Icon>
+          <Empty.Title className="text-base md:text-lg">{emptyMessage}</Empty.Title>
+          <Empty.Description className="max-w-md text-sm">
+            {emptyDescription}
+          </Empty.Description>
         </Empty.Content>
       </Empty>
     );
