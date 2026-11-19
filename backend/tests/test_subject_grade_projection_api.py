@@ -23,6 +23,9 @@ from app.services.grading.ComponentMapper import CanonicalGradingComponent, clas
 from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
 from app.services.intervention.TeacherInterventionService import _source
 from app.services.prediction import DevelopmentCurrentTermScoringService as current_term_scorer
+from app.services.prediction.DevelopmentCurrentTermScoringService import (
+    score_development_current_term as score_actual_random_forest,
+)
 from app.services.prediction.DevelopmentCurrentTermPredictionService import predict_development_current_term
 from tests.test_current_period_live_feature_builder import add_activity, current_period_context
 from tests.test_intervention_support_materials import _activate, _http
@@ -532,12 +535,13 @@ def test_non_monotonic_ai_what_if_stays_advisory_when_official_projection_is_una
     assert estimate["is_official_grade"] is False
     assert estimate["is_guaranteed"] is False
     assert estimate["baseline_predicted_term_grade"] == 82.9
-    assert estimate["target_estimates"][0]["hypothetical_predicted_term_grade"] > 82.9
-    assert estimate["target_estimates"][0]["estimated_difference_from_baseline"] > 0
+    assert estimate["target_estimates"][0]["hypothetical_predicted_term_grade"] == 82.5
+    assert estimate["target_estimates"][0]["estimated_difference_from_baseline"] == -0.4
+    assert any("lower or unchanged" in limitation for limitation in estimate["limitations"])
     assert any("does not lower" in limitation for limitation in estimate["limitations"])
 
 
-def test_hybrid_ai_what_if_unchanged_score_different_ceilings_and_sequential_remediation(
+def test_rf_ai_what_if_unchanged_score_different_ceilings_and_sequential_remediation(
     candidate_context,
     monkeypatch,
 ):
@@ -571,7 +575,7 @@ def test_hybrid_ai_what_if_unchanged_score_different_ceilings_and_sequential_rem
         == unchanged_est["baseline_predicted_term_grade"]
     )
 
-    # 2. Different target ceilings (75%, 80%, 85%) on a 4.0/10 score produce strictly increasing hybrid estimates
+    # 2. This deterministic test scorer responds to the actual feature vectors for each ceiling.
     sub_first.grade = Decimal("4.0")
     db.commit()
 
@@ -641,7 +645,7 @@ def test_hybrid_ai_what_if_unchanged_score_different_ceilings_and_sequential_rem
     db.commit()
 
     # 3. Sequential remediation on second_target preserves first_target's graded adjustment in the baseline
-    # and adds only second_target's weighted gain without double-counting first_target.
+    # and applies only second_target's hypothetical override without double-counting first_target.
     seq_res = _http(ctx).post(_path(ctx), json={
         "target_assignment_ids": [second_target.classwork_assignment_id],
         "score_adjustment_cap": 85,
@@ -659,6 +663,88 @@ def test_hybrid_ai_what_if_unchanged_score_different_ceilings_and_sequential_rem
         seq_ai["target_estimates"][0]["step_estimated_difference"]
         == seq_ai["target_estimates"][0]["estimated_difference_from_baseline"]
     )
+
+
+def test_hypothetical_rf_matches_post_grading_rf_when_model_inputs_are_identical(
+    candidate_context,
+    monkeypatch,
+):
+    ctx = candidate_context
+    db = ctx["db"]
+    _activate(ctx)
+    _complete_exams(ctx)
+    target = _focused_targets(ctx)[0]
+    captured_features = []
+
+    def capture_actual_rf(features, model_name=None):
+        captured_features.append(dict(features))
+        return score_actual_random_forest(features, model_name=model_name)
+
+    monkeypatch.setattr(current_term_scorer, "score_development_current_term", capture_actual_rf)
+
+    preview_response = _http(ctx).post(_path(ctx), json={
+        "target_assignment_ids": [target.classwork_assignment_id],
+        "score_adjustment_cap": 85,
+    })
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()["ai_midterm_what_if"]
+    hypothetical_grade = preview["target_estimates"][0]["hypothetical_predicted_term_grade"]
+    hypothetical_features = captured_features[-1]
+    maximum_effective_score = preview["target_estimates"][0]["maximum_hypothetical_effective_score"]
+
+    remediation_work = Classwork(
+        title="Parity remediation",
+        classwork_type=target.classwork.classwork_type,
+        classwork_category=target.classwork.classwork_category,
+        total_points=target.classwork.total_points,
+        is_graded=True,
+        is_published=True,
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=ctx["staff"].staff_id,
+    )
+    db.add(remediation_work)
+    db.flush()
+    remediation_assignment = ClassworkAssignment(
+        classwork_id=remediation_work.classwork_id,
+        class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        assigned_by_staff_id=ctx["staff"].staff_id,
+        recipient_student_id=ctx["student"].student_id,
+        source_intervention_id=_id(ctx),
+        remediation_request_id=uuid4(),
+        is_published=True,
+    )
+    db.add(remediation_assignment)
+    db.flush()
+    db.add(RemediationAssignmentLink(
+        source_intervention_id=_id(ctx),
+        remediation_assignment_id=remediation_assignment.classwork_assignment_id,
+        original_assignment_id=target.classwork_assignment_id,
+        student_id=ctx["student"].student_id,
+        component=build_remediation_focus(ctx["candidate"])["component"],
+        score_adjustment_cap=Decimal("85.00"),
+        created_by_staff_id=ctx["staff"].staff_id,
+    ))
+    db.add(StudentSubmission(
+        student_id=ctx["student"].student_id,
+        classwork_assignment_id=remediation_assignment.classwork_assignment_id,
+        grade=Decimal(str(maximum_effective_score)),
+        status="graded",
+    ))
+    db.commit()
+
+    actual = predict_development_current_term(
+        db,
+        student_id=ctx["student"].student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        source_period_id=ctx["period"].academic_period_id,
+        target_period_id=ctx["period"].academic_period_id,
+        model_name=db.get(AIModelVersion, ctx["model_id"]).model_name,
+    )
+
+    assert captured_features[-1] == hypothetical_features
+    assert actual["projected_final_term_grade"] == pytest.approx(hypothetical_grade, abs=1e-12)
 
 
 
