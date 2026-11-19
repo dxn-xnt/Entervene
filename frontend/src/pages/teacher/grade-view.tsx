@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
 import { Table } from "@/components/retroui/Table";
@@ -184,17 +184,17 @@ const TeacherGradeView = () => {
   const { selectedPeriodId, selectedYearId, selectedYear, isLoading: isContextLoading } = useAcademicPeriod();
   const fetchRequestIdRef = useRef(0);
 
-  const [selectedCategory, setSelectedCategory] = useState<{
-    name: string;
-    items: GradebookCategoryHeader[];
-    studentGrades: { student_id: string; name: string; scores: (number | null)[]; gender?: string | null }[];
-  } | null>(null);
+  const [selectedCategoryName, setSelectedCategoryName] = useState<
+    "Written Works" | "Performance Tasks" | "Exams" | null
+  >(null);
   const [addingCategoryName, setAddingCategoryName] = useState<string | null>(null);
   const [scoringActivity, setScoringActivity] = useState<{
     activityId: number;
     title: string;
     maxScore: number;
+    openedFromBreakdown?: boolean;
   } | null>(null);
+  const breakdownReturnFocusRef = useRef<HTMLElement | null>(null);
 
   const [sendingAll, setSendingAll] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
@@ -417,7 +417,7 @@ const TeacherGradeView = () => {
   }, [section, subject, activeTab, refresh, selectedYearId, isContextLoading]);
 
   useEffect(() => {
-    setSelectedCategory(null);
+    setSelectedCategoryName(null);
     setAddingCategoryName(null);
     setScoringActivity(null);
     setShowBulkConfirm(false);
@@ -425,9 +425,22 @@ const TeacherGradeView = () => {
     setForceResendAll(false);
   }, [activePeriodId, selectedYearId]);
 
-  const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [], exams: [] };
-  const examItems = cg.exams && cg.exams.length > 0 ? cg.exams : (cg.quarterlyAssessment ?? []);
+  const cg = useMemo(
+    () => gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [], exams: [] },
+    [gradebook?.classwork],
+  );
+  const examItems = useMemo(
+    () => (cg.exams && cg.exams.length > 0 ? cg.exams : (cg.quarterlyAssessment ?? [])),
+    [cg.exams, cg.quarterlyAssessment],
+  );
   const raw = gradebook?.studentGrades ?? [];
+  const studentDisplayNames = useMemo(
+    () =>
+      Object.fromEntries(
+        (gradebook?.studentGrades ?? []).map((student) => [student.student_id, student.name]),
+      ),
+    [gradebook?.studentGrades],
+  );
   const missingComponentsCount = raw.filter((s) => {
     const weights = gradebook?.grading_weights;
     if (weights?.template_id == null) return true;
@@ -444,6 +457,44 @@ const TeacherGradeView = () => {
   const filtered = raw
     .filter((sg) => sg.name.toLowerCase().includes(searchTerm.toLowerCase()))
     .sort((a, b) => (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
+
+  const selectedCategory = useMemo(() => {
+    if (!selectedCategoryName) return null;
+    if (selectedCategoryName === "Written Works") {
+      return {
+        name: "Written Works",
+        items: cg.writtenWork,
+        studentGrades: filtered.map((sg) => ({
+          student_id: sg.student_id,
+          name: sg.name,
+          scores: sg.writtenWork,
+          gender: sg.gender,
+        })),
+      };
+    }
+    if (selectedCategoryName === "Performance Tasks") {
+      return {
+        name: "Performance Tasks",
+        items: cg.performanceTask,
+        studentGrades: filtered.map((sg) => ({
+          student_id: sg.student_id,
+          name: sg.name,
+          scores: sg.performanceTask,
+          gender: sg.gender,
+        })),
+      };
+    }
+    return {
+      name: "Exams",
+      items: examItems,
+      studentGrades: filtered.map((sg) => ({
+        student_id: sg.student_id,
+        name: sg.name,
+        scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
+        gender: sg.gender,
+      })),
+    };
+  }, [selectedCategoryName, cg.writtenWork, cg.performanceTask, examItems, filtered]);
 
   const displaySectionName = gradebook?.scope?.section_name ?? termSummary?.scope?.section_name ?? section ?? "Section";
   const displaySubjectName = gradebook?.scope?.subject_name ?? termSummary?.scope?.subject_name ?? subject ?? "Subject";
@@ -781,18 +832,7 @@ const TeacherGradeView = () => {
               <TooltipTrigger render={<Table.Head
                 className="w-[20%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
                 aria-label="View Written Works breakdown"
-                onClick={() =>
-                  setSelectedCategory({
-                    name: "Written Works",
-                    items: cg.writtenWork,
-                    studentGrades: filtered.map((sg) => ({
-                      student_id: sg.student_id,
-                      name: sg.name,
-                      scores: sg.writtenWork,
-                      gender: sg.gender,
-                    })),
-                  })
-                }
+                onClick={() => setSelectedCategoryName("Written Works")}
               >
                 {wwLabel}
               </Table.Head>} />
@@ -802,18 +842,7 @@ const TeacherGradeView = () => {
               <TooltipTrigger render={<Table.Head
                 className="w-[20%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
                 aria-label="View Performance Tasks breakdown"
-                onClick={() =>
-                  setSelectedCategory({
-                    name: "Performance Tasks",
-                    items: cg.performanceTask,
-                    studentGrades: filtered.map((sg) => ({
-                      student_id: sg.student_id,
-                      name: sg.name,
-                      scores: sg.performanceTask,
-                      gender: sg.gender,
-                    })),
-                  })
-                }
+                onClick={() => setSelectedCategoryName("Performance Tasks")}
               >
                 {ptLabel}
               </Table.Head>} />
@@ -823,18 +852,7 @@ const TeacherGradeView = () => {
               <TooltipTrigger render={<Table.Head
                 className="w-[12%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
                 aria-label="View Exams breakdown"
-                onClick={() =>
-                  setSelectedCategory({
-                    name: "Exams",
-                    items: examItems,
-                    studentGrades: filtered.map((sg) => ({
-                      student_id: sg.student_id,
-                      name: sg.name,
-                      scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
-                      gender: sg.gender,
-                    })),
-                  })
-                }
+                onClick={() => setSelectedCategoryName("Exams")}
               >
                 {examsLabel}
               </Table.Head>} />
@@ -855,13 +873,7 @@ const TeacherGradeView = () => {
                   <TooltipTrigger render={<button
                     type="button"
                     aria-label="View Written Works scores"
-                    onClick={() =>
-                      setSelectedCategory({
-                        name: "Written Works",
-                        items: cg.writtenWork,
-                        studentGrades: filtered.map((sg) => ({ student_id: sg.student_id, name: sg.name, scores: sg.writtenWork, gender: sg.gender })),
-                      })
-                    }
+                    onClick={() => setSelectedCategoryName("Written Works")}
                   >
                     <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
                   </button>} />
@@ -905,13 +917,7 @@ const TeacherGradeView = () => {
                   <TooltipTrigger render={<button
                     type="button"
                     aria-label="View Performance Tasks scores"
-                    onClick={() =>
-                      setSelectedCategory({
-                        name: "Performance Tasks",
-                        items: cg.performanceTask,
-                        studentGrades: filtered.map((sg) => ({ student_id: sg.student_id, name: sg.name, scores: sg.performanceTask, gender: sg.gender })),
-                      })
-                    }
+                    onClick={() => setSelectedCategoryName("Performance Tasks")}
                   >
                     <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
                   </button>} />
@@ -955,18 +961,7 @@ const TeacherGradeView = () => {
                   <TooltipTrigger render={<button
                     type="button"
                     aria-label="View Exams scores"
-                    onClick={() =>
-                      setSelectedCategory({
-                        name: "Exams",
-                        items: examItems,
-                        studentGrades: filtered.map((sg) => ({
-                          student_id: sg.student_id,
-                          name: sg.name,
-                          scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
-                          gender: sg.gender,
-                        })),
-                      })
-                    }
+                    onClick={() => setSelectedCategoryName("Exams")}
                   >
                     <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
                   </button>} />
@@ -1251,7 +1246,10 @@ const TeacherGradeView = () => {
       <Dialog
         open={selectedCategory !== null}
         onOpenChange={(open) => {
-          if (!open) setSelectedCategory(null);
+          if (!open) {
+            if (scoringActivity?.openedFromBreakdown) return;
+            setSelectedCategoryName(null);
+          }
         }}
       >
         {selectedCategory && (
@@ -1259,14 +1257,37 @@ const TeacherGradeView = () => {
             categoryName={selectedCategory.name}
             items={selectedCategory.items}
             studentGrades={selectedCategory.studentGrades}
-            onEnterScores={!mutationsDisabled ? (item) => {
-              setSelectedCategory(null);
+            onEnterScores={!mutationsDisabled ? (item, triggerElement) => {
+              breakdownReturnFocusRef.current = triggerElement ?? null;
               setScoringActivity({
                 activityId: item.id,
                 title: item.title,
                 maxScore: item.maxScore,
+                openedFromBreakdown: true,
               });
             } : undefined}
+            nestedModal={
+              <Dialog
+                open={!mutationsDisabled && scoringActivity !== null && Boolean(scoringActivity.openedFromBreakdown)}
+                onOpenChange={(open) => {
+                  if (!open) setScoringActivity(null);
+                }}
+              >
+                {scoringActivity?.openedFromBreakdown && (
+                  <EnterManualScoresModal
+                    activityId={scoringActivity.activityId}
+                    classId={Number(section)}
+                    activityTitle={scoringActivity.title}
+                    maxScore={scoringActivity.maxScore}
+                    studentDisplayNames={studentDisplayNames}
+                    isNested
+                    finalFocus={breakdownReturnFocusRef}
+                    onSuccess={fetchGradebook}
+                    onClose={() => setScoringActivity(null)}
+                  />
+                )}
+              </Dialog>
+            }
           />
         )}
       </Dialog>
@@ -1289,17 +1310,18 @@ const TeacherGradeView = () => {
       </Dialog>
 
       <Dialog
-        open={!mutationsDisabled && scoringActivity !== null}
+        open={!mutationsDisabled && scoringActivity !== null && !scoringActivity.openedFromBreakdown}
         onOpenChange={(open) => {
           if (!open) setScoringActivity(null);
         }}
       >
-        {scoringActivity && (
+        {scoringActivity && !scoringActivity.openedFromBreakdown && (
           <EnterManualScoresModal
             activityId={scoringActivity.activityId}
             classId={Number(section)}
             activityTitle={scoringActivity.title}
             maxScore={scoringActivity.maxScore}
+            studentDisplayNames={studentDisplayNames}
             onSuccess={fetchGradebook}
             onClose={() => setScoringActivity(null)}
           />
