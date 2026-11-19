@@ -361,7 +361,7 @@ export function SubjectGradeProjectionCard({
       {isAiWhatIfAvailable && (
         <div className="space-y-2 border-t-2 border-border pt-3" aria-label="Provisional AI advisory">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-bold">Provisional AI Advisory</p>
+            <p className="text-sm font-bold">Provisional AI-Assisted Remediation Estimate</p>
             <Badge variant="surface" size="sm">Not an Official Grade</Badge>
           </div>
           {hasTargets && aiBaseline != null && aiProjected != null && (
@@ -371,16 +371,16 @@ export function SubjectGradeProjectionCard({
                 <strong className="text-lg">{gradeText(aiBaseline)}</strong>
               </div>
               <div>
-                <p className="text-muted-foreground">AI what-if estimate</p>
+                <p className="text-muted-foreground">AI-assisted what-if estimate</p>
                 <strong className="text-lg">{gradeText(aiProjected)}</strong>
                 {aiDifference != null && (
-                  <span className="ml-2 text-muted-foreground">Model variation {formatProjectionDifference(aiDifference)}</span>
+                  <span className="ml-2 text-muted-foreground">Estimated gain {formatProjectionDifference(aiDifference)}</span>
                 )}
               </div>
             </div>
           )}
           <Alert status="info" className="rounded! py-2 text-xs">
-            This exploratory model estimate may increase or decrease even when the selected classwork score improves. It does not calculate or reduce the student's actual grade and does not determine the official subject grade.
+            Provisional AI-assisted remediation estimate combining the live AI baseline with the selected classwork&apos;s capped weighted component impact. This is not a raw model prediction or an official or guaranteed subject grade, and cannot reduce the student&apos;s actual grade.
           </Alert>
         </div>
       )}

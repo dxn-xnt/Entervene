@@ -425,6 +425,26 @@ async def create_classwork_wizard_record(
                 raise HTTPException(status_code=400, detail="Select the original classwork assignment to link this remediation activity")
             if is_quiz_type(normalized_type) and max_attempts != 1:
                 raise HTTPException(status_code=400, detail="Remedial classwork quiz permits one attempt per activity")
+            if normalized_type in {"ACTIVITY", "ASSIGNMENT"}:
+                from app.services.intervention.RemediationRubricService import (
+                    assert_remediation_rubric_compatible,
+                    original_rubric_inputs,
+                )
+                orig_target_asgn = db.get(ClassworkAssignment, original_classwork_assignment_id)
+                orig_target_work = orig_target_asgn.classwork if orig_target_asgn is not None else None
+                inherited_inputs = original_rubric_inputs(orig_target_work)
+                if inherited_inputs:
+                    if rubric_levels is None:
+                        rubric_levels = inherited_inputs
+                        total_points = max(level.points for level in rubric_levels)
+                    else:
+                        assert_remediation_rubric_compatible(
+                            orig_target_work,
+                            rubric_levels,
+                            candidate_type=normalized_type,
+                            candidate_total_points=total_points,
+                            status_code=400,
+                        )
         elif original_classwork_assignment_id is not None:
             raise HTTPException(status_code=400, detail="Original classwork linkage is available only for WW/PT remediation")
         if treatment == "EXAMINATION":
@@ -955,6 +975,31 @@ def update_classwork_record(
             raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
         if "is_graded" in values and values["is_graded"] != classwork.is_graded:
             raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
+        from app.services.intervention.RemediationRubricService import (
+            assert_remediation_rubric_compatible,
+            resolve_linked_original_classwork,
+            serialize_classwork_rubric_levels,
+        )
+        linked_original = resolve_linked_original_classwork(db, classwork=classwork)
+        if linked_original is not None and serialize_classwork_rubric_levels(linked_original):
+            if "rubric_levels" in values and values["rubric_levels"] is not None:
+                assert_remediation_rubric_compatible(
+                    linked_original,
+                    values["rubric_levels"],
+                    candidate_type=classwork.classwork_type,
+                    candidate_total_points=values.get("total_points"),
+                    status_code=400,
+                )
+            elif (
+                "total_points" in values
+                and values["total_points"] is not None
+                and linked_original.total_points is not None
+                and Decimal(str(values["total_points"])) != Decimal(str(linked_original.total_points))
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Linked remediation maximum points must remain aligned with the original classwork",
+                )
     rubric_levels = values.pop("rubric_levels", None)
     confirm_rubric_change = values.pop("confirm_rubric_change", False)
     if "classwork_type" in values and values["classwork_type"]:

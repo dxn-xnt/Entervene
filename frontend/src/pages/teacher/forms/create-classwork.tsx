@@ -164,6 +164,25 @@ export default function CreateClassworkModal({
   const [isLessonLoading, setIsLessonLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [validationError, setValidationError] = useState("");
+  const inheritedOriginalRubric = useMemo(() => {
+    if (
+      !remediationDraft ||
+      (remediationGradeTreatment !== "WRITTEN_WORK" &&
+        remediationGradeTreatment !== "PERFORMANCE_TASK")
+    ) {
+      return null;
+    }
+    if (!selectedOriginalTarget?.rubric_levels?.length) {
+      return null;
+    }
+    return selectedOriginalTarget.rubric_levels.map((level, index) => ({
+      level_name: level.level_name,
+      description: level.description,
+      points: level.points,
+      display_order: level.display_order ?? index,
+    }));
+  }, [remediationDraft, remediationGradeTreatment, selectedOriginalTarget]);
+
   const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(() => {
     const defaultLevels = defaultActivityRubric.map((level) => ({ ...level }));
     if (
@@ -171,11 +190,52 @@ export default function CreateClassworkModal({
       (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") &&
       remediationOriginalTargets.length
     ) {
-      const target = remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) ?? remediationOriginalTargets[0];
-      return target ? scaleRubricLevels(defaultLevels, target.max_points) : defaultLevels;
+      const target = remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId);
+      if (target?.rubric_levels?.length) {
+        return target.rubric_levels.map((level, index) => ({
+          level_name: level.level_name,
+          description: level.description,
+          points: level.points,
+          display_order: level.display_order ?? index,
+        }));
+      }
+      return target ? scaleRubricToMaxPoints(defaultLevels, target.max_points) : defaultLevels;
     }
     return defaultLevels;
   });
+
+  useEffect(() => {
+    if (
+      !remediationDraft ||
+      (remediationGradeTreatment !== "WRITTEN_WORK" &&
+        remediationGradeTreatment !== "PERFORMANCE_TASK") ||
+      !selectedOriginalTarget
+    ) {
+      return;
+    }
+    if (selectedOriginalTarget.rubric_levels?.length) {
+      const cloned = selectedOriginalTarget.rubric_levels.map((level, index) => ({
+        level_name: level.level_name,
+        description: level.description,
+        points: level.points,
+        display_order: level.display_order ?? index,
+      }));
+      setRubricLevels(cloned);
+      setDraft((cur) => ({
+        ...cur,
+        total_points: String(activityRubricMaximum(cloned)),
+      }));
+      return;
+    }
+    setDraft((cur) => ({
+      ...cur,
+      total_points: String(selectedOriginalTarget.max_points),
+    }));
+    if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
+      const freshDefaults = defaultActivityRubric.map((level) => ({ ...level }));
+      setRubricLevels(scaleRubricToMaxPoints(freshDefaults, selectedOriginalTarget.max_points));
+    }
+  }, [remediationDraft, remediationGradeTreatment, selectedOriginalTarget, selectedType]);
 
   const setFormError = (msg: string) => {
     toast.error({ title: msg });
@@ -558,9 +618,24 @@ export default function CreateClassworkModal({
                     setSelectedTargetId(nextId);
                     const target = remediationOriginalTargets.find((t) => t.assignment_id === nextId);
                     if (target) {
-                      setDraft((cur) => ({ ...cur, total_points: String(target.max_points) }));
-                      if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
-                        setRubricLevels((levels) => scaleRubricLevels(levels, target.max_points));
+                      if (target.rubric_levels?.length) {
+                        const cloned = target.rubric_levels.map((level, index) => ({
+                          level_name: level.level_name,
+                          description: level.description,
+                          points: level.points,
+                          display_order: level.display_order ?? index,
+                        }));
+                        setRubricLevels(cloned);
+                        setDraft((cur) => ({
+                          ...cur,
+                          total_points: String(activityRubricMaximum(cloned)),
+                        }));
+                      } else {
+                        setDraft((cur) => ({ ...cur, total_points: String(target.max_points) }));
+                        if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
+                          const freshDefaults = defaultActivityRubric.map((level) => ({ ...level }));
+                          setRubricLevels(scaleRubricToMaxPoints(freshDefaults, target.max_points));
+                        }
                       }
                     }
                     setValidationError("");
@@ -896,6 +971,12 @@ export default function CreateClassworkModal({
                   levels={rubricLevels}
                   onChange={setRubricLevels}
                   disabled={isCreating}
+                  readOnly={Boolean(inheritedOriginalRubric)}
+                  readOnlyMessage={
+                    selectedOriginalTarget
+                      ? `Inherited from "${selectedOriginalTarget.title}". Criteria, performance levels, score ranges, and maximum points stay aligned with the original classwork; the remediation score cap applies separately to the effective adjusted score.`
+                      : undefined
+                  }
                 />
               )}
             </div>

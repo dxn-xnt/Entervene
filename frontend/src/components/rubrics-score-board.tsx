@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LockKeyhole } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { rubricPointRange, scoreBand } from "@/lib/classwork-utils";
+import { rubricPointBounds, rubricPointRange, scoreBand } from "@/lib/classwork-utils";
 import { cn } from "@/lib/utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
 
@@ -206,42 +206,47 @@ export default function RubricsScoreBoard({
         )}
 
         <div className={cn("flex flex-wrap gap-3", gridClassName)}>
-          {bands.map(({ label, points, description }) => {
-            const ptsNum = Number(points.replace(" pts", ""));
-            const isSelected =
-              selectedScore !== null &&
-              selectedScore !== undefined &&
-              !isNaN(selectedScore) &&
-              selectedScore === ptsNum;
+          {(() => {
+            const allBandPoints = bands.map((band) => Number(band.points.replace(" pts", "")));
+            return bands.map(({ label, points, description }) => {
+              const ptsNum = Number(points.replace(" pts", ""));
+              const { minimum, maximum } = rubricPointBounds(ptsNum, allBandPoints);
+              const isSelected =
+                selectedScore !== null &&
+                selectedScore !== undefined &&
+                !isNaN(selectedScore) &&
+                selectedScore >= minimum &&
+                selectedScore <= maximum;
 
-            return (
-              <div
-                key={label}
-                onClick={() => onSelectScore?.(ptsNum)}
-                className={`flex min-w-0 flex-1 basis-56 flex-col justify-between rounded! border-2 border-black p-3.5 shadow-none transition-all hover:-translate-y-1 ${onSelectScore ? "cursor-pointer" : ""
-                  } ${isSelected
-                    ? "bg-primary text-foreground"
-                    : "bg-white text-foreground hover:bg-retro"
-                  }`}
-                title={onSelectScore ? `Click to set score to ${points}` : undefined}
-              >
-                <div>
-                  <div className="mb-1 flex items-start justify-between gap-2">
-                    <p className="font-bold">{label}</p>
-                    <p className="text-sm font-bold whitespace-nowrap">
-                      {rubricPointRange(ptsNum, bands.map((band) => Number(band.points.replace(" pts", ""))))} pts
+              return (
+                <div
+                  key={label}
+                  onClick={() => onSelectScore?.(ptsNum)}
+                  className={`flex min-w-0 flex-1 basis-56 flex-col justify-between rounded! border-2 border-black p-3.5 shadow-none transition-all hover:-translate-y-1 ${onSelectScore ? "cursor-pointer" : ""
+                    } ${isSelected
+                      ? "bg-primary text-foreground"
+                      : "bg-white text-foreground hover:bg-retro"
+                    }`}
+                  title={onSelectScore ? `Click to set score to ${points}` : undefined}
+                >
+                  <div>
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <p className="font-bold">{label}</p>
+                      <p className="text-sm font-bold whitespace-nowrap">
+                        {rubricPointRange(ptsNum, allBandPoints)} pts
+                      </p>
+                    </div>
+                    <p
+                      className={`text-sm ${isSelected ? "text-foreground" : "text-muted-foreground"
+                        }`}
+                    >
+                      {description}
                     </p>
                   </div>
-                  <p
-                    className={`text-sm ${isSelected ? "text-foreground" : "text-muted-foreground"
-                      }`}
-                  >
-                    {description}
-                  </p>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
       </Card.Content>
     </Card>

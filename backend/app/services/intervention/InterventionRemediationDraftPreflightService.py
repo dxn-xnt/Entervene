@@ -47,6 +47,9 @@ from app.services.intervention.RemediationAssignmentLinkService import (
 from app.services.intervention.RemediationReadingPrerequisiteService import (
     resolve_reading_prerequisite_snapshot_items,
 )
+from app.services.intervention.RemediationRubricService import (
+    assert_remediation_rubric_compatible,
+)
 
 
 def preflight_remediation_draft(
@@ -352,6 +355,19 @@ def preflight_remediation_draft(
                         f"Remedial draft total points ({validated_draft.total_points}) "
                         f"must equal original classwork maximum points ({orig_points})"
                     ),
+                )
+
+            if isinstance(validated_draft, RemediationClassworkDraft):
+                assert_remediation_rubric_compatible(
+                    primary_target.classwork if primary_target else None,
+                    validated_draft.rubric_levels,
+                    candidate_type=(
+                        "ACTIVITY"
+                        if validated_draft.target_component == "PERFORMANCE_TASK"
+                        else "ASSIGNMENT"
+                    ),
+                    candidate_total_points=validated_draft.total_points,
+                    status_code=422,
                 )
 
             assert_progressive_remediation_eligible(

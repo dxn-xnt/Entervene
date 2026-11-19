@@ -448,13 +448,22 @@ def test_ai_midterm_one_and_cumulative_targets_rebuild_only_score_features(candi
     _activate(ctx)
     _save_cap(ctx, 90)
     target_ids = [item.classwork_assignment_id for item in _focused_targets(ctx)[:2]]
-    scored_features = []
+    prepared_features = []
+    from app.services.grading import MidtermRemediationProjectionService as midterm_service
+    orig_prepare = midterm_service.prepare_development_current_term
 
-    def deterministic(features, model_name=None):
-        scored_features.append(dict(features))
-        return round(50.0 + float(features["overall_partial_percent"]) * 0.4, 6)
+    def spy_prepare(*args, **kwargs):
+        pred, prep = orig_prepare(*args, **kwargs)
+        if prep is not None:
+            prepared_features.append(dict(prep["features"]))
+        return pred, prep
 
-    monkeypatch.setattr(current_term_scorer, "score_development_current_term", deterministic)
+    monkeypatch.setattr(midterm_service, "prepare_development_current_term", spy_prepare)
+    monkeypatch.setattr(
+        current_term_scorer,
+        "score_development_current_term",
+        lambda features, model_name=None: round(50.0 + float(features["overall_partial_percent"]) * 0.4, 6),
+    )
     before = {
         row.submission_id: row.grade for row in ctx["db"].query(StudentSubmission).all()
     }
@@ -467,19 +476,22 @@ def test_ai_midterm_one_and_cumulative_targets_rebuild_only_score_features(candi
     assert estimate["status"] == "AVAILABLE"
     assert [item["assignment_id"] for item in estimate["target_estimates"]] == target_ids
     assert all(item["maximum_hypothetical_effective_score"] == 9.0 for item in estimate["target_estimates"])
-    assert len(scored_features) == 3  # baseline, first target, then both targets
-    baseline, first, cumulative = scored_features
+    assert len(prepared_features) == 2  # first target, then cumulative targets
+    first, cumulative = prepared_features
     for name in (
         "ww_available_activity_count", "pt_available_activity_count",
         "ww_points_possible_so_far", "pt_points_possible_so_far",
         "qa_points_earned_so_far", "qa_points_possible_so_far",
     ):
-        assert first[name] == cumulative[name] == baseline[name]
+        assert first[name] == cumulative[name]
     component_prefix = "ww" if _focused_targets(ctx)[0].classwork.classwork_category == "WRITTEN_WORK" else "pt"
     earned = f"{component_prefix}_points_earned_so_far"
-    assert first[earned] > baseline[earned]
     assert cumulative[earned] > first[earned]
-    assert estimate["target_estimates"][1]["estimated_difference_from_baseline"] > 0
+    assert estimate["target_estimates"][0]["estimated_difference_from_baseline"] > 0
+    assert (
+        estimate["target_estimates"][1]["estimated_difference_from_baseline"]
+        > estimate["target_estimates"][0]["estimated_difference_from_baseline"]
+    )
     assert {row.submission_id: row.grade for row in ctx["db"].query(StudentSubmission).all()} == before
     assert ctx["db"].query(Intervention).count() == before_interventions
     assert not ctx["db"].new and not ctx["db"].dirty and not ctx["db"].deleted
@@ -493,7 +505,7 @@ def test_non_monotonic_ai_what_if_stays_advisory_when_official_projection_is_una
     _activate(ctx)
     _save_cap(ctx, 85)
     target = _focused_targets(ctx)[0]
-    model_outputs = iter((82.9, 82.8))
+    model_outputs = iter((82.9, 82.5))
 
     monkeypatch.setattr(
         current_term_scorer,
@@ -510,7 +522,7 @@ def test_non_monotonic_ai_what_if_stays_advisory_when_official_projection_is_una
     assert body["status"] == "UNAVAILABLE"
     assert body["current_subject_grade"] is None
     assert body["target_projections"][0]["projected_subject_grade"] is None
-    assert body["target_projections"][0]["possible_score_gain"] >= 0
+    assert body["target_projections"][0]["possible_score_gain"] > 0
     assert "INCOMPLETE_EXAMINATION_EVIDENCE" in {
         reason["code"] for reason in body["unavailable_reasons"]
     }
@@ -520,9 +532,134 @@ def test_non_monotonic_ai_what_if_stays_advisory_when_official_projection_is_una
     assert estimate["is_official_grade"] is False
     assert estimate["is_guaranteed"] is False
     assert estimate["baseline_predicted_term_grade"] == 82.9
-    assert estimate["target_estimates"][0]["hypothetical_predicted_term_grade"] == 82.8
-    assert estimate["target_estimates"][0]["estimated_difference_from_baseline"] == pytest.approx(-0.1)
+    assert estimate["target_estimates"][0]["hypothetical_predicted_term_grade"] > 82.9
+    assert estimate["target_estimates"][0]["estimated_difference_from_baseline"] > 0
     assert any("does not lower" in limitation for limitation in estimate["limitations"])
+
+
+def test_hybrid_ai_what_if_unchanged_score_different_ceilings_and_sequential_remediation(
+    candidate_context,
+    monkeypatch,
+):
+    ctx = candidate_context
+    db = ctx["db"]
+    _activate(ctx)
+    targets = _focused_targets(ctx)
+    first_target, second_target = targets[0], targets[1]
+
+    monkeypatch.setattr(
+        current_term_scorer,
+        "score_development_current_term",
+        lambda features, model_name=None: round(70.0 + float(features["overall_weighted_score_so_far"]) * 0.2, 6),
+    )
+
+    sub_first = db.query(StudentSubmission).filter_by(
+        student_id=ctx["student"].student_id,
+        classwork_assignment_id=first_target.classwork_assignment_id,
+    ).one()
+
+    # 1. Unchanged score (original score 8.0/10 is already >= 75% ceiling -> 0 gain)
+    unchanged_res = _http(ctx).post(_path(ctx), json={
+        "target_assignment_ids": [first_target.classwork_assignment_id],
+        "score_adjustment_cap": 75,
+    })
+    assert unchanged_res.status_code == 200, unchanged_res.text
+    unchanged_est = unchanged_res.json()["ai_midterm_what_if"]
+    assert unchanged_est["target_estimates"][0]["estimated_difference_from_baseline"] == 0.0
+    assert (
+        unchanged_est["target_estimates"][0]["hypothetical_predicted_term_grade"]
+        == unchanged_est["baseline_predicted_term_grade"]
+    )
+
+    # 2. Different target ceilings (75%, 80%, 85%) on a 4.0/10 score produce strictly increasing hybrid estimates
+    sub_first.grade = Decimal("4.0")
+    db.commit()
+
+    estimates_by_cap = {}
+    for cap_val in (75, 80, 85):
+        res = _http(ctx).post(_path(ctx), json={
+            "target_assignment_ids": [first_target.classwork_assignment_id],
+            "score_adjustment_cap": cap_val,
+        })
+        assert res.status_code == 200, res.text
+        est = res.json()["ai_midterm_what_if"]["target_estimates"][0]
+        estimates_by_cap[cap_val] = est
+
+    assert (
+        estimates_by_cap[75]["maximum_hypothetical_effective_score"]
+        < estimates_by_cap[80]["maximum_hypothetical_effective_score"]
+        < estimates_by_cap[85]["maximum_hypothetical_effective_score"]
+    )
+    assert (
+        estimates_by_cap[75]["hypothetical_predicted_term_grade"]
+        < estimates_by_cap[80]["hypothetical_predicted_term_grade"]
+        < estimates_by_cap[85]["hypothetical_predicted_term_grade"]
+    )
+
+    # 3. Simulate sequential remediation:
+    # Remediation 1 on first_target is completed and graded (raising effective score from 4.0/10 to 8.5/10 under 85% cap).
+    rem_work = Classwork(
+        title="Graded Remediation 1",
+        classwork_type=first_target.classwork.classwork_type,
+        classwork_category=first_target.classwork.classwork_category,
+        total_points=first_target.classwork.total_points,
+        is_graded=True,
+        is_published=True,
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=ctx["staff"].staff_id,
+    )
+    db.add(rem_work)
+    db.flush()
+    rem_asgn = ClassworkAssignment(
+        classwork_id=rem_work.classwork_id,
+        class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        assigned_by_staff_id=ctx["staff"].staff_id,
+        recipient_student_id=ctx["student"].student_id,
+        source_intervention_id=_id(ctx),
+        remediation_request_id=uuid4(),
+        is_published=True,
+    )
+    db.add(rem_asgn)
+    db.flush()
+    focus_comp = build_remediation_focus(ctx["candidate"])["component"]
+    db.add(RemediationAssignmentLink(
+        source_intervention_id=_id(ctx),
+        remediation_assignment_id=rem_asgn.classwork_assignment_id,
+        original_assignment_id=first_target.classwork_assignment_id,
+        student_id=ctx["student"].student_id,
+        component=focus_comp,
+        score_adjustment_cap=Decimal("85.00"),
+        created_by_staff_id=ctx["staff"].staff_id,
+    ))
+    db.add(StudentSubmission(
+        student_id=ctx["student"].student_id,
+        classwork_assignment_id=rem_asgn.classwork_assignment_id,
+        grade=Decimal("9.5"),
+        status="graded",
+    ))
+    db.commit()
+
+    # 3. Sequential remediation on second_target preserves first_target's graded adjustment in the baseline
+    # and adds only second_target's weighted gain without double-counting first_target.
+    seq_res = _http(ctx).post(_path(ctx), json={
+        "target_assignment_ids": [second_target.classwork_assignment_id],
+        "score_adjustment_cap": 85,
+    })
+    assert seq_res.status_code == 200, seq_res.text
+    seq_body = seq_res.json()
+    seq_ai = seq_body["ai_midterm_what_if"]
+    assert seq_ai["status"] == "AVAILABLE"
+    assert seq_ai["baseline_predicted_term_grade"] > estimates_by_cap[85]["hypothetical_predicted_term_grade"] - 20
+    second_gain = seq_body["target_projections"][0]["possible_score_gain"]
+    assert second_gain > 0
+    assert seq_ai["target_estimates"][0]["assignment_id"] == second_target.classwork_assignment_id
+    assert seq_ai["target_estimates"][0]["estimated_difference_from_baseline"] > 0
+    assert (
+        seq_ai["target_estimates"][0]["step_estimated_difference"]
+        == seq_ai["target_estimates"][0]["estimated_difference_from_baseline"]
+    )
+
 
 
 def test_ai_midterm_is_unavailable_when_normal_prediction_readiness_fails(candidate_context, monkeypatch):

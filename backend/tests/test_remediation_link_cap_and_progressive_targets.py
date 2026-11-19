@@ -480,3 +480,268 @@ def test_quiz_remediation_enforces_single_attempt(candidate_context):
     remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
     link = db.query(RemediationAssignmentLink).one()
     assert link.remediation_assignment_id == remediation.classwork_assignment_id
+
+
+@pytest.mark.parametrize("second_creation_mode", ["AI", "MANUAL"])
+def test_end_to_end_progressive_remediation_workflow(candidate_context, second_creation_mode):
+    """End-to-end verification of progressive remediation across AI and manual paths."""
+    from app.schemas.Submission import GradeRequest
+    from app.services.intervention.InterventionHistoryService import targeted_activities
+    from app.services.intervention.InterventionRemediationAssessmentCreationService import (
+        create_remediation_assessment,
+    )
+    from app.services.intervention.InterventionRemediationService import (
+        ResourceRef,
+        get_workspace,
+        project_subject_grade,
+    )
+    from app.services.student_record.StudentRecordService import teacher_student_gradebook
+    from app.services.submission.SubmissionService import grade_student_submission
+    from tests.test_remediation_draft_preflight import (
+        _make_quiz_draft,
+        _setup_intervention_with_targets,
+    )
+    from tests.test_teacher_intervention_review import _other_staff
+
+    c = candidate_context
+    db = c["db"]
+
+    # Classwork A (10/20 = 50% score), taught lesson, and accessible reading
+    competency, lesson, classwork_a, reading = _setup_intervention_with_targets(
+        c, "WRITTEN_WORK", 20.0,
+    )
+    # Classwork B (9/30 = 30% score; 75% ceiling = 22.5 pts -> +13.5 possible gain)
+    classwork_b = _make_classwork_target(
+        c, "Original WW B", category="WRITTEN_WORK", score=9.0, points=30.0,
+    )
+    # Classwork C (18/20 = 90% score; already above 75% ceiling -> 0 possible gain)
+    classwork_c = _make_classwork_target(
+        c, "Original WW C Above Ceiling", category="WRITTEN_WORK", score=18.0, points=20.0,
+    )
+    reading_ref = [ResourceRef(kind="CLASSWORK", id=reading.classwork_id)]
+
+    # Save initial plan targeting Classwork A only
+    save_plan(
+        db, _staff(c), _id(c),
+        PlanUpdate(
+            teacher_choice="QUIZ",
+            grade_treatment="WRITTEN_WORK",
+            target_assignment_ids=[classwork_a.classwork_assignment_id],
+            score_adjustment_cap=75.0,
+            selected_resources=reading_ref,
+        ),
+    )
+
+    # Create Remediation 1 targeting Classwork A
+    draft_1 = _make_quiz_draft(competency.competency_id, lesson.lesson_id, 20.0)
+    created_1 = create_remediation_assessment(
+        db,
+        staff_id=_staff(c),
+        intervention_id=_id(c),
+        remediation_request_id=uuid4(),
+        target_assignment_id=classwork_a.classwork_assignment_id,
+        draft_input=draft_1,
+    )
+    rem_1 = db.get(ClassworkAssignment, created_1.classwork_assignment_id)
+
+    # Requirement 5: While Remediation 1 is ungraded, creating Remediation 2 is blocked
+    save_plan(
+        db, _staff(c), _id(c),
+        PlanUpdate(
+            teacher_choice="QUIZ",
+            grade_treatment="WRITTEN_WORK",
+            target_assignment_ids=[
+                classwork_a.classwork_assignment_id,
+                classwork_b.classwork_assignment_id,
+            ],
+            score_adjustment_cap=75.0,
+            selected_resources=reading_ref,
+        ),
+    )
+    draft_2 = _make_quiz_draft(competency.competency_id, lesson.lesson_id, 30.0)
+    with pytest.raises(HTTPException) as ungraded_block:
+        create_remediation_assessment(
+            db,
+            staff_id=_staff(c),
+            intervention_id=_id(c),
+            remediation_request_id=uuid4(),
+            target_assignment_id=classwork_b.classwork_assignment_id,
+            draft_input=draft_2,
+        )
+    assert ungraded_block.value.status_code == 409
+    assert ungraded_block.value.detail["code"] == "REMEDIATION_RESULT_PENDING"
+
+    # Requirement 5: Unauthorized teacher creation is blocked
+    outsider = _other_staff(c)
+    with pytest.raises(HTTPException) as unauth_exc:
+        create_remediation_assessment(
+            db,
+            staff_id=outsider.staff_id,
+            intervention_id=_id(c),
+            remediation_request_id=uuid4(),
+            target_assignment_id=classwork_b.classwork_assignment_id,
+            draft_input=draft_2,
+        )
+    assert unauth_exc.value.status_code == 404
+
+    # Publish and grade Remediation 1 (19/20 -> capped at 75% of 20 = 15.0)
+    _publish_and_grade(c, rem_1, grade=19.0)
+
+    # Requirement 5: Duplicate target creation for Classwork A is blocked
+    with pytest.raises(HTTPException) as dup_target_exc:
+        create_remediation_assessment(
+            db,
+            staff_id=_staff(c),
+            intervention_id=_id(c),
+            remediation_request_id=uuid4(),
+            target_assignment_id=classwork_a.classwork_assignment_id,
+            draft_input=draft_1,
+        )
+    assert dup_target_exc.value.status_code == 409
+
+    # Teacher selects Classwork B via Add Another Remediation Activity and saves plan
+    saved_plan_ws = save_plan(
+        db, _staff(c), _id(c),
+        PlanUpdate(
+            teacher_choice="QUIZ",
+            grade_treatment="WRITTEN_WORK",
+            target_assignment_ids=[
+                classwork_a.classwork_assignment_id,
+                classwork_b.classwork_assignment_id,
+            ],
+            score_adjustment_cap=75.0,
+            selected_resources=reading_ref,
+        ),
+    )
+    assert saved_plan_ws["plan"]["target_assignment_ids"] == [
+        classwork_a.classwork_assignment_id,
+        classwork_b.classwork_assignment_id,
+    ]
+    assert saved_plan_ws["plan"]["original_exam_assignment_id"] is None
+
+    # Create Remediation 2 targeting Classwork B via AI or MANUAL path
+    if second_creation_mode == "AI":
+        created_2 = create_remediation_assessment(
+            db,
+            staff_id=_staff(c),
+            intervention_id=_id(c),
+            remediation_request_id=uuid4(),
+            target_assignment_id=classwork_b.classwork_assignment_id,
+            draft_input=draft_2,
+        )
+        rem_2 = db.get(ClassworkAssignment, created_2.classwork_assignment_id)
+    else:
+        from tests.test_classwork_submission_authorization import _valid_quiz_payload
+        quiz_payload = _valid_quiz_payload()
+        for q in quiz_payload["questions"]:
+            q["points"] = 15
+        kwargs = _linked_classwork_kwargs(c, uuid4(), classwork_b.classwork_assignment_id)
+        kwargs.update(
+            title="Manual Remediation 2 Quiz",
+            classwork_type="QUIZ",
+            total_points=30,
+            max_attempts=1,
+            quiz_payload=json.dumps(quiz_payload),
+        )
+        created_manual = asyncio.run(create_classwork_wizard_record(**kwargs))
+        rem_2 = db.query(ClassworkAssignment).filter_by(
+            classwork_id=created_manual.classwork_id
+        ).one()
+
+    # Requirement 1: Remediation 2 creates a separate assignment and links exclusively to Classwork B
+    assert rem_2.classwork_assignment_id != rem_1.classwork_assignment_id
+    assert rem_2.classwork_id != rem_1.classwork_id
+    link_1 = db.query(RemediationAssignmentLink).filter_by(
+        remediation_assignment_id=rem_1.classwork_assignment_id
+    ).one()
+    link_2 = db.query(RemediationAssignmentLink).filter_by(
+        remediation_assignment_id=rem_2.classwork_assignment_id
+    ).one()
+    assert link_1.original_assignment_id == classwork_a.classwork_assignment_id
+    assert link_2.original_assignment_id == classwork_b.classwork_assignment_id
+    assert link_1.remediation_link_id != link_2.remediation_link_id
+
+    # Student completes Remediation 2 and teacher grades it (27/30 -> capped at 75% of 30 = 22.5)
+    rem_2.is_published = True
+    rem_2.classwork.is_published = True
+    sub_2 = StudentSubmission(
+        classwork_assignment_id=rem_2.classwork_assignment_id,
+        student_id=c["student"].student_id,
+        status="submitted",
+        attempt_count=1,
+    )
+    db.add(sub_2)
+    db.commit()
+    grade_student_submission(
+        sub_2.submission_id,
+        GradeRequest(grade=27.0, feedback="Completed second remediation"),
+        _staff(c),
+        db,
+    )
+
+    # Requirements 2, 3, 4, 6: Workspace reload preserves both activities, scores, links, and history
+    reopened = get_workspace(db, _staff(c), _id(c))
+    assigned = reopened["progress"]["assigned_remediation"]
+    completed = reopened["progress"]["completed_remediation"]
+    assert len(assigned) == 2
+    assert len(completed) == 2
+
+    by_orig = {item["original_assignment_id"]: item for item in assigned}
+    act_a = by_orig[classwork_a.classwork_assignment_id]
+    act_b = by_orig[classwork_b.classwork_assignment_id]
+
+    assert act_a["assignment_id"] == rem_1.classwork_assignment_id
+    assert act_a["original_grade"] == 10.0
+    assert act_a["grade"] == 19.0
+    assert act_a["effective_grade"] == 15.0
+
+    assert act_b["assignment_id"] == rem_2.classwork_assignment_id
+    assert act_b["original_grade"] == 9.0
+    assert act_b["grade"] == 27.0
+    assert act_b["effective_grade"] == 22.5
+
+    # Verify history view (targeted_activities) also reflects both graded activities accurately
+    row = db.get(Intervention, _id(c))
+    history_items = {
+        item["original_assignment_id"]: item
+        for item in targeted_activities(db, row, student_view=False)
+    }
+    assert history_items[classwork_a.classwork_assignment_id]["effective_grade"] == 15.0
+    assert history_items[classwork_b.classwork_assignment_id]["effective_grade"] == 22.5
+
+    # Verify official gradebook applies each capped remediation adjustment exclusively to its target
+    gb = teacher_student_gradebook(
+        db, _staff(c), c["class"].class_id, c["subject"].subject_id, c["period"].academic_period_id,
+    )
+    student_row = next(r for r in gb.studentGrades if r.student_id == str(c["student"].student_id))
+    remedial_by_orig = {
+        item["original_assignment_id"]: item for item in student_row.remedial_classworks
+    }
+    assert remedial_by_orig[classwork_a.classwork_assignment_id]["effective_score"] == 15.0
+    assert remedial_by_orig[classwork_b.classwork_assignment_id]["effective_score"] == 22.5
+    assert classwork_c.classwork_assignment_id not in remedial_by_orig
+
+    # Requirement 7: Additional remediation stops when no unused eligible targets have positive gain,
+    # while the intervention remains ACTIVE (not auto-resolved).
+    tracked_ids = {
+        classwork_a.classwork_assignment_id,
+        classwork_b.classwork_assignment_id,
+        classwork_c.classwork_assignment_id,
+        rem_1.classwork_assignment_id,
+        rem_2.classwork_assignment_id,
+    }
+    for sub in db.query(StudentSubmission).filter_by(student_id=c["student"].student_id).all():
+        if sub.classwork_assignment_id not in tracked_ids:
+            asgn = db.get(ClassworkAssignment, sub.classwork_assignment_id)
+            if asgn and asgn.classwork and asgn.classwork.total_points:
+                sub.grade = asgn.classwork.total_points
+    db.commit()
+
+    post_outcome = project_subject_grade(db, _staff(c), _id(c), [])
+    assert post_outcome["additional_eligible_targets_have_positive_improvement"] is False
+    assert post_outcome["recommended_target_assignment_id"] is None
+    assert all(item["possible_score_gain"] == 0.0 for item in post_outcome["eligible_target_gains"])
+    db.refresh(row)
+    assert row.status == "ACTIVE"
+    assert row.resolved_at is None
+

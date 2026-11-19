@@ -236,6 +236,7 @@ export interface RemediationClassworkTarget {
   max_points: number;
   percent?: number | null;
   is_recommended?: boolean;
+  rubric_levels?: RemediationRubricLevelDraft[];
 }
 export interface ClassworkScorePreview {
   assignment_id: number;
@@ -247,6 +248,7 @@ export interface ClassworkScorePreview {
   cap_percentage: number;
   was_adjusted: boolean;
   was_capped: boolean;
+  rubric_levels?: RemediationRubricLevelDraft[];
 }
 export interface ScoreAdjustmentPreviewResponse {
   score_adjustment_cap: number;
@@ -411,6 +413,7 @@ export interface RemediationDraftGenerationRequest {
   target_component: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
   grade_treatment: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | "PRACTICE_ONLY";
   exam_subtype?: "SUMMATIVE_1" | "SUMMATIVE_2" | "TERM_EXAM" | null;
+  target_assignment_id?: number | null;
   item_count?: number;
   total_points?: number;
   activity_mode?: "ONLINE" | "MANUAL";

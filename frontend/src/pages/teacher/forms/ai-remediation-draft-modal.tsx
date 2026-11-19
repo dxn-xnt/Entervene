@@ -14,6 +14,7 @@ import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Label } from "@/components/retroui/Label";
+import RubricsScoreBoard from "@/components/rubrics-score-board";
 import type {
   RemediationGeneratedDraft,
   RemediationAssessmentCreateResult,
@@ -66,6 +67,7 @@ export interface AiRemediationDraftModalProps {
   capInput?: string;
   plan: RemediationPlan;
   targetAssignmentSummary: string;
+  rubricLocked?: boolean;
   onGenerateWithAI: () => void | Promise<void>;
   retryDisabled?: boolean;
   onSaveAssessmentDraft: () => void | Promise<void>;
@@ -117,6 +119,7 @@ export default function AiRemediationDraftModal({
   capInput,
   plan,
   targetAssignmentSummary,
+  rubricLocked = false,
   onGenerateWithAI,
   retryDisabled,
   onSaveAssessmentDraft,
@@ -792,12 +795,25 @@ export default function AiRemediationDraftModal({
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <Label className="font-bold text-sm">Grading Rubric Levels</Label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {generatedDraft.rubric_levels.map((r, idx) => (
-                        <Card key={idx} className="p-3 flex flex-col gap-1 border-2">
-                          <div className="flex items-center justify-between">
-                            {isEditingDraft ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Label className="font-bold text-sm">Grading Rubric Levels</Label>
+                      {rubricLocked && (
+                        <Badge variant="surface" size="sm" className="gap-1">
+                          <Lock className="size-3" />
+                          Inherited from original classwork
+                        </Badge>
+                      )}
+                    </div>
+                    {rubricLocked && (
+                      <p className="text-xs text-muted-foreground">
+                        Instructions and learning tasks can be edited, while scoring criteria, performance levels, score ranges, and maximum points remain aligned with the original classwork. The remediation score cap applies separately to the effective adjusted score.
+                      </p>
+                    )}
+                    {isEditingDraft && !rubricLocked ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {generatedDraft.rubric_levels.map((r, idx) => (
+                          <Card key={idx} className="p-3 flex flex-col gap-1 border-2">
+                            <div className="flex items-center justify-between">
                               <div className="flex items-center gap-1.5 flex-1 mr-2">
                                 <Input
                                   value={r.level_name}
@@ -818,14 +834,7 @@ export default function AiRemediationDraftModal({
                                   className="h-7 w-16 text-xs text-center font-bold"
                                 />
                               </div>
-                            ) : (
-                              <>
-                                <span className="font-bold text-sm">{r.level_name}</span>
-                                <Badge variant="solid" size="sm">{r.points} pts</Badge>
-                              </>
-                            )}
-                          </div>
-                          {isEditingDraft ? (
+                            </div>
                             <textarea
                               className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[40px] mt-1"
                               value={r.description}
@@ -833,12 +842,16 @@ export default function AiRemediationDraftModal({
                                 updateClassworkRubricLevel(idx, { description: e.target.value })
                               }
                             />
-                          ) : (
-                            <p className="text-xs text-muted-foreground">{r.description}</p>
-                          )}
-                        </Card>
-                      ))}
-                    </div>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <RubricsScoreBoard
+                        title={rubricLocked ? "Scoring Rubric (Inherited)" : "Scoring Rubric"}
+                        totalPoints={generatedDraft.total_points}
+                        rubricLevels={generatedDraft.rubric_levels}
+                      />
+                    )}
                   </div>
 
                   <Card className="flex flex-col gap-3 p-4 border-2 border-primary bg-primary/5 mt-2">

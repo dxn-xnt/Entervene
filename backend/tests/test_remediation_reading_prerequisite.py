@@ -606,10 +606,13 @@ import asyncio
 import json
 from app.models.notifications.Notification import Notification
 from app.schemas.Classwork import ClassworkAssignRequest
+from app.schemas.Quiz import QuizBuilderUpsert
 from app.services.classwork.ClassworkService import (
     assign_classwork_to_classes,
     create_classwork_wizard_record,
 )
+from app.services.quiz.QuizBuilderService import upsert_quiz_builder
+from tests.test_classwork_submission_authorization import _valid_quiz_payload
 
 
 def _wizard_kwargs(ctx, request_id, is_published=True, treatment="PRACTICE_ONLY", category=None):
@@ -868,8 +871,20 @@ def test_historical_published_activity_is_not_backfilled(candidate_context):
     activate_teacher_candidate(db, _staff(ctx), _id(ctx))
 
     historical = _remediation(ctx, "Historical Remediation")
+    upsert_quiz_builder(
+        db,
+        historical.classwork,
+        QuizBuilderUpsert.model_validate({**_valid_quiz_payload(), "status": "PUBLISHED"}),
+    )
     historical.is_published = True
     historical.classwork.is_published = True
+
+    later_reading = _reading(ctx, "Later Supporting Reading")
+    ctx["candidate"].remediation_plan = {
+        "teacher_choice": "QUIZ",
+        "grade_treatment": "WRITTEN_WORK",
+        "selected_resources": [{"kind": "CLASSWORK", "id": later_reading[0].classwork_id}],
+    }
     db.commit()
 
     # Zero snapshots exist initially
@@ -884,7 +899,7 @@ def test_historical_published_activity_is_not_backfilled(candidate_context):
     )
     assign_classwork_to_classes(historical.classwork_id, req, _staff(ctx), db, identity)
 
-    # Must NOT backfill snapshots
+    # Must NOT backfill snapshots with newly added Supporting Reading requirements
     assert remediation_reading_prerequisites(db, historical.classwork_assignment_id) == []
 
 
