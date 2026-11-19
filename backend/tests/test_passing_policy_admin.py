@@ -197,6 +197,25 @@ def test_template_audit_and_update_roll_back_together(policy_db, monkeypatch):
     assert core.passing_threshold == before and db.query(PassingPolicyAudit).count() == 0
 
 
+def test_template_update_rolls_back_when_intervention_reconciliation_fails(policy_db, monkeypatch):
+    from app.services.intervention import InterventionReconciliationService as reconciliation
+
+    db, actor, core, *_ = policy_db
+    before = core.passing_threshold
+    monkeypatch.setattr(
+        reconciliation,
+        "reconcile_open_interventions_for_template_threshold_change",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("synthetic reconciliation failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic reconciliation failure"):
+        edit(db, actor, core)
+
+    db.refresh(core)
+    assert core.passing_threshold == before
+    assert db.query(PassingPolicyAudit).count() == 0
+
+
 def test_legacy_initialization_requires_confirmation_and_is_year_specific(policy_db):
     db, actor, _, _, _, _ = policy_db
     assert read_year_general_average_policy(db, 1)["legacy_proposal"] == "80"

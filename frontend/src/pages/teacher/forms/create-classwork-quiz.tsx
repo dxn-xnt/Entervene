@@ -1,5 +1,6 @@
 "use client";
 
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCheck, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/teacher/button";
@@ -135,19 +136,13 @@ export default function CreateClassworkQuizModal({
 
     const [selectedTargetId, setSelectedTargetId] = useState<number | null>(() => {
         if (initialTargetAssignmentId) return initialTargetAssignmentId;
-        if (remediationOriginalTargets && remediationOriginalTargets.length > 0) {
-            const rec = remediationOriginalTargets.find((t) => t.is_recommended);
-            return rec ? rec.assignment_id : remediationOriginalTargets[0].assignment_id;
-        }
         return null;
     });
 
     const selectedOriginalTarget = useMemo(() => {
         if (!remediationOriginalTargets || remediationOriginalTargets.length === 0) return null;
         return (
-            remediationOriginalTargets.find((t) => t.assignment_id === selectedTargetId) ||
-            remediationOriginalTargets[0] ||
-            null
+            remediationOriginalTargets.find((t) => t.assignment_id === selectedTargetId) || null
         );
     }, [remediationOriginalTargets, selectedTargetId]);
 
@@ -160,8 +155,8 @@ export default function CreateClassworkQuizModal({
                     : "";
         const defaultTotalPoints = remediationOriginalExam
             ? String(remediationOriginalExam.total_points)
-            : (isGradedWWPT && remediationOriginalTargets && remediationOriginalTargets.length > 0)
-                ? String((remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) || remediationOriginalTargets.find((t) => t.is_recommended) || remediationOriginalTargets[0]).max_points)
+            : (isGradedWWPT && selectedOriginalTarget)
+                ? String(selectedOriginalTarget.max_points)
                 : emptyClassworkDraft.total_points;
         const defaultAttempts = (remediationGradeTreatment === "EXAMINATION" || isGradedWWPT)
             ? "1"
@@ -1278,7 +1273,6 @@ export default function CreateClassworkQuizModal({
                                     </Field>
                                 </div>
 
-                                <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isCreating} />
                                 {remediationFocus && (
                                     <p className="rounded border p-3 text-sm">
                                         Evidence focus: {focusGuidance(remediationFocus)}
@@ -1824,13 +1818,13 @@ export default function CreateClassworkQuizModal({
 
                                     {quizSettings.summary_release_mode === "SCHEDULED" ? (
                                         <Field label="Release Date & Time" isRequired>
-                                            <Input
-                                                type="datetime-local"
+                                            <DatePicker
+                                                includeTime
                                                 value={quizSettings.summary_release_at}
-                                                onChange={(event) =>
+                                                onValueChange={(value) =>
                                                     setQuizSettings((current) => ({
                                                         ...current,
-                                                        summary_release_at: event.target.value,
+                                                        summary_release_at: value,
                                                     }))
                                                 }
                                                 disabled={isCreating}
@@ -1839,7 +1833,7 @@ export default function CreateClassworkQuizModal({
                                         </Field>
                                     ) : (
                                         <div className="flex flex-col justify-end">
-                                            <div className="rounded border-2 border-dashed border-gray-300 bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
+                                            <div className="rounded! border-2 border-dashed border-gray-300 px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
                                                 {quizSettings.summary_release_mode === "AFTER_DUE_DATE"
                                                     ? "Summary unlocks automatically after the due date."
                                                     : quizSettings.summary_release_mode === "NEVER"
@@ -1889,7 +1883,7 @@ export default function CreateClassworkQuizModal({
                                                     }))
                                                 }
                                                 disabled={isCreating}
-                                                className="flex items-center justify-between rounded border-2 border-black bg-white px-3 py-2 text-left text-xs font-bold shadow-md cursor-pointer transition active:translate-y-0.5"
+                                                className="flex items-center justify-between rounded! border-2 border-black bg-white px-3 py-2 text-left text-xs font-bold shadow-none! cursor-pointer transition active:translate-y-0.5"
                                             >
                                                 <span>{setting.label}</span>
                                                 <span
@@ -1905,20 +1899,20 @@ export default function CreateClassworkQuizModal({
 
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <Field label="Due Date" isRequired={quizSettings.summary_release_mode === "AFTER_DUE_DATE"}>
-                                        <Input
-                                            type="datetime-local"
+                                        <DatePicker
+                                            includeTime
                                             value={draft.due_date}
-                                            onChange={(event) => {
-                                                if (event.target.value && createError.startsWith("A due date is required")) setCreateError("");
+                                            onValueChange={(value) => {
+                                                if (value && createError.startsWith("A due date is required")) setCreateError("");
                                                 setDraft((current) => ({
                                                     ...current,
-                                                    due_date: event.target.value,
+                                                    due_date: value,
                                                 }));
                                             }}
                                             disabled={isCreating}
                                             aria-invalid={createError.startsWith("A due date is required")}
                                             aria-describedby={createError.startsWith("A due date is required") ? "quiz-due-date-error" : undefined}
-                                            className="w-full"
+                                            className="w-full shadow-none"
                                         />
                                         {createError.startsWith("A due date is required") && <FormMessage id="quiz-due-date-error">{createError}</FormMessage>}
                                     </Field>
@@ -1995,17 +1989,17 @@ export default function CreateClassworkQuizModal({
 
                                 <div className="grid gap-4 sm:grid-cols-2 mt-4">
                                     <Field label="Locked Until">
-                                        <Input
-                                            type="datetime-local"
+                                        <DatePicker
+                                            includeTime
                                             value={draft.lock_date}
-                                            onChange={(event) =>
+                                            onValueChange={(value) =>
                                                 setDraft((current) => ({
                                                     ...current,
-                                                    lock_date: event.target.value,
+                                                    lock_date: value,
                                                 }))
                                             }
                                             disabled={isCreating || !draft.is_published}
-                                            className="w-full bg-white border-2 border-black rounded shadow-md disabled:bg-gray-100 disabled:opacity-55"
+                                            className="w-full rounded shadow-none disabled:bg-gray-100 disabled:opacity-55"
                                         />
                                     </Field>
 
@@ -2069,7 +2063,7 @@ export default function CreateClassworkQuizModal({
                                         </div>
                                     ) : (
                                         <div className="mb-2 flex items-center justify-end">
-                                            <Button
+                                            {/* <Button
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
@@ -2083,7 +2077,7 @@ export default function CreateClassworkQuizModal({
                                                 className="px-2 py-1 text-xs border border-black rounded shadow-xs"
                                             >
                                                 Select all
-                                            </Button>
+                                            </Button> */}
                                         </div>
                                     )}
 
@@ -2171,11 +2165,11 @@ export default function CreateClassworkQuizModal({
                                     </p>
 
                                     {selectedClassIds.length === 0 ? (
-                                        <p className="rounded border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
+                                        <p className="rounded! border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
                                             Select a section first to load available lessons.
                                         </p>
                                     ) : isLessonLoading ? (
-                                        <p className="rounded border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
+                                        <p className="rounded! border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
                                             Loading lessons...
                                         </p>
                                     ) : availableLessons.length > 0 ? (
@@ -2190,7 +2184,7 @@ export default function CreateClassworkQuizModal({
                                                         type="button"
                                                         onClick={() => toggleLesson(lesson.lesson_id)}
                                                         disabled={isCreating || isLessonLocked}
-                                                        className={`rounded border-2 border-black px-3 py-2 text-left text-xs font-bold cursor-pointer transition shadow-md hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-[#7ABA78]" : "bg-white"
+                                                        className={`rounded! border-2 border-black px-3 py-2 text-left text-xs font-bold cursor-pointer transition shadow-md hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-[#7ABA78]" : "bg-white"
                                                             }`}
                                                     >
                                                         <span className="block truncate">{lesson.title}</span>
@@ -2204,7 +2198,7 @@ export default function CreateClassworkQuizModal({
                                             })}
                                         </div>
                                     ) : (
-                                        <p className="rounded border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
+                                        <p className="rounded! border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
                                             No shared lesson is assigned to all selected sections.
                                         </p>
                                     )}
@@ -2385,7 +2379,7 @@ export default function CreateClassworkQuizModal({
                                 })()}
 
                                 {/* ── Export Questionnaire Card in Step 4 ── */}
-                                <div className="rounded border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
+                                <div className="rounded! border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
                                     <div>
                                         <div className="flex items-center gap-1.5 font-black text-sm text-black">
                                             <FileDown className="w-4 h-4 text-black" />

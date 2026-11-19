@@ -6,10 +6,12 @@ import { Button } from "@/components/teacher/button";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
+import { Tabs } from "@/components/retroui/Tabs";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Empty } from "@/components/retroui/Empty";
 import { Save, SlidersHorizontal } from "lucide-react";
+import { InterventionPredictionHistory } from "@/components/teacher/intervention-prediction-history";
 import InterventionSupportMaterials, {
   type InterventionSupportMaterialsHandle,
 } from "./intervention-support-materials";
@@ -46,6 +48,16 @@ const percentVariant = (
   if (value >= 75) return "surface";
   return "destructive";
 };
+
+export const INTERVENTION_ACTIVITY_WIZARD_STEP = 1;
+
+const supportTabs = [
+  { id: "1", label: "Support Plan" },
+  { id: "2", label: "Support Resources" },
+  { id: "3", label: "Practice Assessment" },
+  { id: "4", label: "Remediation Activity" },
+  { id: "5", label: "Summary" },
+];
 
 const strongestEvidence = (diagnosis: DiagnosisSnapshot) => {
   const scored = diagnosis.lowest_supported_competencies ?? [];
@@ -192,9 +204,48 @@ export default function InterventionModal({
 
   const isActive = selectedKind === "active" && detail?.status === "ACTIVE";
   const activationExplanation = detail ? candidateActivationExplanation(detail) : null;
+  const saveReadingSelections = async () => {
+    if (
+      !isActive ||
+      supportPage !== "plan" ||
+      wizardStep !== 2 ||
+      !supportHasChanges ||
+      !supportMaterialsRef.current
+    ) {
+      return true;
+    }
+    setSavingAdjustments(true);
+    try {
+      const saved = await supportMaterialsRef.current.saveAdjustments();
+      if (saved) setSupportHasChanges(false);
+      return saved;
+    } finally {
+      setSavingAdjustments(false);
+    }
+  };
+  const requestClose = async () => {
+    if (!(await saveReadingSelections())) return;
+    onClose();
+  };
+  const navigateToStep = async (target: number) => {
+    if (savingAdjustments || activating) return;
+    const currentStep = supportPage === "plan" ? wizardStep : 1;
+    if (target > currentStep) {
+      for (let step = currentStep; step < target; step++) {
+        if (!supportMaterialsRef.current?.validateStep(step)) {
+          contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+      }
+    }
+    if (!(await saveReadingSelections())) return;
+    setSupportPage("plan");
+    setWizardStep(target);
+    contentRef.current?.scrollTo({ top: 0 });
+  };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) void requestClose(); }}>
       <Dialog.Content
         size="2xl"
         className="max-h-[90vh] flex flex-col p-0 overflow-hidden"
@@ -277,9 +328,6 @@ export default function InterventionModal({
                                     <span className="text-base font-semibold">{resolved.class_name}</span>
                                   </p>
                                   <p>
-                                    Trigger: <strong>{resolved.triggering_predicted_grade.toFixed(2)}</strong>
-                                  </p>
-                                  <p>
                                     Resolution:{" "}
                                     <strong>
                                       {resolved.resolution_projection != null
@@ -287,6 +335,9 @@ export default function InterventionModal({
                                         : "Unavailable"}
                                     </strong>
                                   </p>
+                                  <div className="col-span-2 mt-1">
+                                    <InterventionPredictionHistory item={resolved} />
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -406,7 +457,21 @@ export default function InterventionModal({
                     wizardStep={supportPage === "plan" ? wizardStep : undefined}
                     detail={detail}
                     previousResolved={previousResolved}
-                    onAdjustSupport={() => setSupportPage("plan")}
+                    navigation={(
+                      <Tabs
+                        tabs={supportTabs}
+                        activeTab={String(supportPage === "plan" ? wizardStep : 1)}
+                        onTabChange={(step) => void navigateToStep(Number(step))}
+                        className="-mx-5! static!"
+                        listClassName="px-5!"
+                        tabClassName="rounded-t-lg!"
+                      />
+                    )}
+                    onAddInterventionActivity={() => {
+                      setSupportPage("plan");
+                      setWizardStep(INTERVENTION_ACTIVITY_WIZARD_STEP);
+                      contentRef.current?.scrollTo({ top: 0 });
+                    }}
                   />
                 ) : (
                   <>
@@ -695,15 +760,14 @@ export default function InterventionModal({
           <Button
             variant="outline"
             className="mr-auto"
-            onClick={onClose}
+            onClick={() => void requestClose()}
             disabled={activating || savingAdjustments}
           >
-            {isActive && supportPage === "plan" ? "Cancel" : "Close"}
+            {isActive && supportPage === "plan" && wizardStep !== 2 ? "Cancel" : "Close"}
           </Button>
           {isActive && supportPage === "plan" && wizardStep > 1 && (
             <Button variant="outline" disabled={savingAdjustments} onClick={() => {
-              setWizardStep((step) => step - 1);
-              contentRef.current?.scrollTo({ top: 0 });
+              void navigateToStep(wizardStep - 1);
             }}>Back</Button>
           )}
           {isActive && (
@@ -717,6 +781,7 @@ export default function InterventionModal({
                     return;
                   }
                   if (wizardStep < 5) {
+                    if (wizardStep === 2 && !(await saveReadingSelections())) return;
                     setWizardStep((step) => step + 1);
                     contentRef.current?.scrollTo({ top: 0 });
                     return;

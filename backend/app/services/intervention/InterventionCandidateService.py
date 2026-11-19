@@ -101,6 +101,7 @@ def sync_intervention_for_persisted_prediction(
         db,
         academic_year_id=period.academic_year_id,
         subject_id=subject_id,
+        academic_period_id=academic_period_id,
     )
     passing_threshold = float(threshold_resolution.threshold)
 

@@ -80,6 +80,49 @@ vi.mock("@/lib/api", async (importOriginal) => {
           json: () => Promise.resolve(sampleLesson),
         });
       }
+      if (url.includes("/api/v1/quizzes/classwork/404")) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ detail: "Quiz has not been created" }),
+        });
+      }
+      if (url.includes("/api/v1/quizzes/classwork/99")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            duration_minutes: 45,
+            has_attempts: true,
+            settings: {
+              is_shuffle_questions: true,
+              enable_per_question_scoring: true,
+              enable_per_question_time_limits: false,
+              max_attempts: 1,
+              show_correct_answers: true,
+              summary_release_mode: "IMMEDIATE",
+              summary_release_at: null,
+            },
+          }),
+        });
+      }
+      if (url.includes("/api/v1/quizzes/classwork/")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            duration_minutes: 30,
+            has_attempts: false,
+            settings: {
+              is_shuffle_questions: true,
+              enable_per_question_scoring: true,
+              enable_per_question_time_limits: false,
+              max_attempts: 2,
+              show_correct_answers: true,
+              summary_release_mode: "IMMEDIATE",
+              summary_release_at: null,
+            },
+          }),
+        });
+      }
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     }),
   };
@@ -257,5 +300,143 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     // Rendered for Assignment
     expect(screen.getByText("Reference Links")).toBeDefined();
     expect(screen.getByText(/Add Reference Link/i)).toBeDefined();
+  });
+
+  it("restores editable quiz creation settings before attempts", async () => {
+    const quizClasswork: TeacherClasswork = {
+      classwork_id: 12,
+      title: "Editable Quiz",
+      classwork_type: "QUIZ",
+      total_points: 20,
+      is_published: true,
+      show_scores: true,
+      is_locked: false,
+      is_archived: false,
+      subject_id: 10,
+      attachments: [],
+      reference_links: [],
+      assignments: [{
+        classwork_assignment_id: 1,
+        classwork_id: 12,
+        class_id: 100,
+        max_attempts: 1,
+        is_published: true,
+        show_scores: true,
+      }],
+    };
+
+    render(
+      <MemoryRouter>
+        <EditClassworkModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classwork={quizClasswork}
+          onSuccess={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    const duration = await screen.findByLabelText("Duration (minutes)") as HTMLInputElement;
+    const attempts = screen.getByLabelText("Allowed Attempts") as HTMLInputElement;
+    expect(duration.value).toBe("30");
+    expect(attempts.value).toBe("2");
+    expect(screen.getByRole("switch", { name: "Shuffle questions" }).getAttribute("aria-checked")).toBe("true");
+    expect(duration.disabled).toBe(false);
+  });
+
+  it("enables quiz settings for draft quiz even if quiz row is not created yet (404)", async () => {
+    const uninitializedQuizClasswork: TeacherClasswork = {
+      classwork_id: 404,
+      title: "Draft Quiz No Questions",
+      classwork_type: "QUIZ",
+      total_points: 10,
+      is_published: false,
+      show_scores: true,
+      is_locked: false,
+      is_archived: false,
+      subject_id: 10,
+      attachments: [],
+      reference_links: [],
+      assignments: [{
+        classwork_assignment_id: 101,
+        classwork_id: 404,
+        class_id: 100,
+        max_attempts: 1,
+        is_published: false,
+        show_scores: true,
+      }],
+    };
+
+    render(
+      <MemoryRouter>
+        <EditClassworkModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classwork={uninitializedQuizClasswork}
+          onSuccess={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    const duration = await screen.findByLabelText("Duration (minutes)") as HTMLInputElement;
+    const attempts = screen.getByLabelText("Allowed Attempts") as HTMLInputElement;
+    const shuffleSwitch = screen.getByRole("switch", { name: "Shuffle questions" });
+
+    expect(duration.disabled).toBe(false);
+    expect(attempts.disabled).toBe(false);
+    expect((shuffleSwitch as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(/Locked because students have already attempted this quiz/i)).toBeNull();
+  });
+
+  it("locks question settings with explanation but leaves result release settings editable when attempts exist", async () => {
+    const attemptedQuizClasswork: TeacherClasswork = {
+      classwork_id: 99,
+      title: "Attempted Quiz",
+      classwork_type: "QUIZ",
+      total_points: 50,
+      is_published: true,
+      show_scores: true,
+      is_locked: false,
+      is_archived: false,
+      subject_id: 10,
+      attachments: [],
+      reference_links: [],
+      assignments: [{
+        classwork_assignment_id: 102,
+        classwork_id: 99,
+        class_id: 100,
+        max_attempts: 1,
+        is_published: true,
+        show_scores: true,
+      }],
+    };
+
+    render(
+      <MemoryRouter>
+        <EditClassworkModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classwork={attemptedQuizClasswork}
+          onSuccess={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    const duration = await screen.findByLabelText("Duration (minutes)") as HTMLInputElement;
+    const attempts = screen.getByLabelText("Allowed Attempts") as HTMLInputElement;
+    const shuffleSwitch = screen.getByRole("switch", { name: "Shuffle questions" }) as HTMLButtonElement;
+
+    // Question structure and scoring controls are locked
+    expect(duration.disabled).toBe(true);
+    expect(attempts.disabled).toBe(true);
+    expect(shuffleSwitch.disabled).toBe(true);
+
+    // Clear explanation is displayed beside/under disabled controls
+    const lockedExplanations = screen.getAllByText("Locked because students have already attempted this quiz.");
+    expect(lockedExplanations.length).toBeGreaterThanOrEqual(1);
+
+    // Result release controls remain editable
+    const showResultsSwitch = screen.getByRole("switch", { name: /Show quiz results to students/i }) as HTMLButtonElement;
+    expect(showResultsSwitch.disabled).toBe(false);
   });
 });

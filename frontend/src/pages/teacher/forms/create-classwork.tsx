@@ -1,5 +1,6 @@
 "use client";
 
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCheck, FileText, Plus, Trash2, X } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
@@ -31,7 +32,7 @@ import type {
 } from "@/types/classwork";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
-import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
+import { activityRubricMaximum, defaultActivityRubric, scaleRubricLevels, validateActivityRubric } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
 import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination, RemediationClassworkTarget, RemediationResource } from "@/lib/teacher-interventions-api";
 import { categoryFromFocus } from "@/lib/remediation-authoring";
@@ -39,16 +40,6 @@ import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance
 import { ReferenceLinkEditor } from "@/components/classwork-reference-links";
 import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
 
-function scaleRubricToMaxPoints(levels: ActivityRubricLevel[], targetPoints: number): ActivityRubricLevel[] {
-  if (levels.length === 0) return levels;
-  const currentMax = Math.max(...levels.map((l) => l.points));
-  if (currentMax === targetPoints) return levels;
-  const factor = currentMax > 0 ? targetPoints / currentMax : 1;
-  return levels.map((l) => ({
-    ...l,
-    points: Math.round(l.points * factor * 10) / 10,
-  }));
-}
 
 interface CreateClassworkModalProps {
   draftOnly?: boolean;
@@ -102,8 +93,7 @@ export default function CreateClassworkModal({
     if (initialTargetAssignmentId && remediationOriginalTargets.some((t) => t.assignment_id === initialTargetAssignmentId)) {
       return initialTargetAssignmentId;
     }
-    const rec = remediationOriginalTargets.find((t) => t.is_recommended);
-    return rec?.assignment_id ?? remediationOriginalTargets[0]?.assignment_id ?? null;
+    return null;
   });
 
   const selectedOriginalTarget = useMemo(() => {
@@ -119,8 +109,8 @@ export default function CreateClassworkModal({
           : "";
     const targetPoints = remediationOriginalExam
       ? String(remediationOriginalExam.total_points)
-      : (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && remediationOriginalTargets.length
-        ? String((remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) ?? remediationOriginalTargets[0]).max_points)
+      : (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && selectedOriginalTarget
+        ? String(selectedOriginalTarget.max_points)
         : emptyClassworkDraft.total_points;
     return {
       ...emptyClassworkDraft,
@@ -182,7 +172,7 @@ export default function CreateClassworkModal({
       remediationOriginalTargets.length
     ) {
       const target = remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) ?? remediationOriginalTargets[0];
-      return scaleRubricToMaxPoints(defaultLevels, target.max_points);
+      return target ? scaleRubricLevels(defaultLevels, target.max_points) : defaultLevels;
     }
     return defaultLevels;
   });
@@ -570,7 +560,7 @@ export default function CreateClassworkModal({
                     if (target) {
                       setDraft((cur) => ({ ...cur, total_points: String(target.max_points) }));
                       if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
-                        setRubricLevels((levels) => scaleRubricToMaxPoints(levels, target.max_points));
+                        setRubricLevels((levels) => scaleRubricLevels(levels, target.max_points));
                       }
                     }
                     setValidationError("");
@@ -916,13 +906,13 @@ export default function CreateClassworkModal({
               <div className={`grid gap-4 ${isReadingType(selectedType) ? "" : "sm:grid-cols-2"}`}>
                 {!isReadingType(selectedType) && (
                   <Field label="Due Date">
-                    <Input
-                      type="datetime-local"
+                    <DatePicker
+                      includeTime
                       value={draft.due_date}
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         setDraft((current) => ({
                           ...current,
-                          due_date: event.target.value,
+                          due_date: value,
                         }))
                       }
                       disabled={isCreating}
@@ -963,13 +953,13 @@ export default function CreateClassworkModal({
               </div>
 
               <Field label="Locked Until">
-                <Input
-                  type="datetime-local"
+                <DatePicker
+                  includeTime
                   value={draft.lock_date}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setDraft((current) => ({
                       ...current,
-                      lock_date: event.target.value,
+                      lock_date: value,
                     }))
                   }
                   disabled={isCreating || !draft.is_published}

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.intervention.Intervention import Intervention
 from app.models.quiz.Quiz import Quiz
 from app.schemas.Quiz import QuizBuilderUpsert
@@ -40,6 +41,7 @@ def create_remediation_assessment(
     staff_id: str,
     intervention_id: int,
     remediation_request_id: UUID,
+    target_assignment_id: int | None = None,
     draft_input: RemediationDraft | dict,
 ) -> RemediationAssessmentCreateResult:
     """Create one unpublished assessment and all canonical links in one commit.
@@ -48,11 +50,18 @@ def create_remediation_assessment(
     saved plan are never trusted from an earlier request. The unique remediation
     request identifier makes retries idempotent.
     """
+    prior = db.query(ClassworkAssignment).filter_by(
+        remediation_request_id=remediation_request_id,
+    ).one_or_none()
     preflight = preflight_remediation_draft(
         db,
         staff_id=staff_id,
         intervention_id=intervention_id,
         draft_input=draft_input,
+        target_assignment_id=target_assignment_id,
+        allow_existing_remediation_assignment_id=(
+            prior.classwork_assignment_id if prior is not None else None
+        ),
         require_readings=False,
     )
     intervention = (
@@ -64,11 +73,8 @@ def create_remediation_assessment(
     if intervention is None or intervention.status != "ACTIVE":
         raise HTTPException(status_code=404, detail="Active intervention not found")
 
-    prior = db.query(ClassworkAssignment).filter_by(
-        remediation_request_id=remediation_request_id,
-    ).one_or_none()
     if prior is not None:
-        return _retry_result(prior, preflight, staff_id, remediation_request_id)
+        return _retry_result(db, prior, preflight, staff_id, remediation_request_id)
 
     try:
         classwork_data = preflight.authoring_payload["classwork"]
@@ -174,7 +180,7 @@ def create_remediation_assessment(
             remediation_request_id=remediation_request_id,
         ).one_or_none()
         if prior is not None:
-            return _retry_result(prior, preflight, staff_id, remediation_request_id)
+            return _retry_result(db, prior, preflight, staff_id, remediation_request_id)
         raise
     except Exception:
         db.rollback()
@@ -182,6 +188,7 @@ def create_remediation_assessment(
 
 
 def _retry_result(
+    db: Session,
     assignment: ClassworkAssignment,
     preflight,
     staff_id: str,
@@ -201,6 +208,15 @@ def _retry_result(
     existing_format = "QUIZ" if assignment.classwork.quiz is not None else "CLASSWORK"
     if existing_format != preflight.draft_format or assignment.classwork.title != preflight.title:
         raise HTTPException(status_code=409, detail="Remediation request was already used for a different draft")
+    expected_target_id = preflight.target_assignment_ids[0] if preflight.target_assignment_ids else None
+    existing_target_id = assignment.original_exam_assignment_id
+    if preflight.grade_treatment in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
+        existing_link = db.query(RemediationAssignmentLink).filter_by(
+            remediation_assignment_id=assignment.classwork_assignment_id,
+        ).one_or_none()
+        existing_target_id = existing_link.original_assignment_id if existing_link is not None else None
+    if existing_target_id != expected_target_id:
+        raise HTTPException(status_code=409, detail="Remediation request was already used for a different target")
     return RemediationAssessmentCreateResult(
         remediation_request_id=request_id,
         intervention_id=preflight.intervention_id,

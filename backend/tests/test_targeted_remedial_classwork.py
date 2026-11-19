@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
@@ -132,6 +133,15 @@ def test_targeted_assignment_is_private_across_existing_student_surfaces(authz_c
         ],
     )
     c["db"].commit()
+    from app.services.intervention.InterventionReadingReviewService import (
+        acknowledge_intervention_reading_review,
+    )
+    acknowledge_intervention_reading_review(
+        c["db"],
+        intervention_id=intervention.intervention_id,
+        reading_assignment_id=reading_assign.classwork_assignment_id,
+        student=c["student"],
+    )
     assignment_id = c["assignment"].classwork_assignment_id
     classwork_id = c["classwork"].classwork_id
     list_url = f"/api/v1/classwork-assignments/class/{c['allowed_class'].class_id}/subject/{c['subject'].subject_id}"
@@ -556,6 +566,14 @@ def test_targeted_quiz_attempt_rejects_classmate(quiz_attempt_context):
         db.add(period)
         db.flush()
     c["assignment"].academic_period_id = period.academic_period_id
+    db.add(SubjectLoad(
+        staff_id=c["classwork"].created_by_staff_id,
+        class_id=c["assignment"].class_id,
+        subject_id=c["classwork"].subject_id,
+        academic_period_id=period.academic_period_id,
+        status="published",
+        is_active_version=True,
+    ))
 
     intervention = Intervention(
         intervention_id=9999,
@@ -613,6 +631,15 @@ def test_targeted_quiz_attempt_rejects_classmate(quiz_attempt_context):
         ],
     )
     db.commit()
+    from app.services.intervention.InterventionReadingReviewService import (
+        acknowledge_intervention_reading_review,
+    )
+    acknowledge_intervention_reading_review(
+        db,
+        intervention_id=intervention.intervention_id,
+        reading_assignment_id=reading_assign.classwork_assignment_id,
+        student=c["student"],
+    )
     aid = c["assignment"].classwork_assignment_id
     assert c["client"].post(f"/api/v1/quizzes/assignment/{aid}/start").status_code == 200
     c["identity"].update(sub=c["accounts"]["other_student"].user_id, role="student")

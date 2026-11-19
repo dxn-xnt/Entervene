@@ -1,11 +1,19 @@
-import { useState } from "react";
-import { Upload, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Eye, Upload, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Alert } from "@/components/retroui/Alert";
 import { Input } from "@/components/retroui/Input";
+import { Dialog } from "@/components/retroui/Dialog";
+import { Text } from "@/components/retroui/Text";
 import { maxClassworkMaterialSize } from "@/lib/classwork-utils";
 
 export type SubmissionLinkDraft = { url: string; title?: string | null };
+
+const submissionFilePreviewKind = (file: File): "image" | "pdf" | null => {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) return "pdf";
+  return null;
+};
 
 interface SubmissionFormProps {
   assignmentId: number;
@@ -25,6 +33,18 @@ export default function SubmissionForm({
   const [links, setLinks] = useState<SubmissionLinkDraft[]>([]);
   const [error, setError] = useState<string>("");
   const [dragActive, setDragActive] = useState(false);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+
+  useEffect(() => {
+    if (!previewFile) {
+      setPreviewUrl("");
+      return;
+    }
+    const objectUrl = URL.createObjectURL(previewFile);
+    setPreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [previewFile]);
 
   const canSubmitMore = !maxAttempts || currentAttempt < maxAttempts;
 
@@ -67,6 +87,7 @@ export default function SubmissionForm({
   };
 
   const removeFile = (index: number) => {
+    if (previewFile === files[index]) setPreviewFile(null);
     setFiles(files.filter((_, i) => i !== index));
   };
 
@@ -119,6 +140,7 @@ export default function SubmissionForm({
       await onSubmit(files, links.map((link) => ({ url: link.url.trim(), title: link.title?.trim() || null })));
       setFiles([]);
       setLinks([]);
+      setPreviewFile(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit");
     }
@@ -188,14 +210,29 @@ export default function SubmissionForm({
                     {(file.size / 1024 / 1024).toFixed(2)} MB
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removeFile(index)}
-                  className="ml-2 p-1 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                  disabled={isLoading}
-                >
-                  <X size={16} />
-                </button>
+                <div className="ml-2 flex items-center gap-2">
+                  {submissionFilePreviewKind(file) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      disabled={isLoading}
+                      onClick={() => setPreviewFile(file)}
+                    >
+                      <Eye size={15} /> View
+                    </Button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${file.name}`}
+                    onClick={() => removeFile(index)}
+                    className="p-1 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                    disabled={isLoading}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -260,6 +297,38 @@ export default function SubmissionForm({
       >
         {isLoading ? "Submitting..." : "Submit Assignment"}
       </Button>
+
+      <Dialog open={previewFile !== null} onOpenChange={(open) => { if (!open) setPreviewFile(null); }}>
+        {previewFile && previewUrl && (
+          <Dialog.Content size="4xl">
+            <Dialog.Header position="static">
+              <Text as="h5" className="truncate font-sans text-xl font-bold">
+                Preview: {previewFile.name}
+              </Text>
+            </Dialog.Header>
+            <div className="min-h-0 flex-1 overflow-auto bg-neutral-100 p-4 sm:p-6">
+              {submissionFilePreviewKind(previewFile) === "image" ? (
+                <img
+                  src={previewUrl}
+                  alt={`Preview of ${previewFile.name}`}
+                  className="mx-auto max-h-[65dvh] max-w-full border-2 border-black bg-white object-contain shadow-[4px_4px_0_#000]"
+                />
+              ) : (
+                <iframe
+                  src={previewUrl}
+                  title={`Preview of ${previewFile.name}`}
+                  className="h-[65dvh] w-full border-2 border-black bg-white shadow-[4px_4px_0_#000]"
+                />
+              )}
+            </div>
+            <Dialog.Footer position="static">
+              <Button type="button" variant="outline" onClick={() => setPreviewFile(null)}>
+                Close preview
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        )}
+      </Dialog>
     </form>
   );
 }

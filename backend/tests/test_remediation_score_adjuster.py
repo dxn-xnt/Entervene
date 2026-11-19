@@ -43,6 +43,33 @@ def test_lower_remediation_score_never_reduces_original():
     assert result.was_capped is False
 
 
+def test_85_percent_target_score_ceiling_for_20_of_50_is_42_point_5():
+    """The ceiling limits the remediated classwork score, not the subject grade."""
+    result = adjust_remediation_score(
+        original_score=20,
+        remediation_score=50,
+        max_points=50,
+        cap_percentage=85,
+    )
+
+    assert result.cap_score == Decimal("42.5")
+    assert result.effective_score == Decimal("42.5")
+    assert result.effective_score - result.original_score == Decimal("22.5")
+    assert result.effective_score >= result.original_score
+
+
+@pytest.mark.parametrize("remediation_score", [0, 19, 20, 21, 42.5, 50])
+def test_effective_score_is_never_below_original_at_85_percent_ceiling(remediation_score):
+    result = adjust_remediation_score(
+        original_score=20,
+        remediation_score=remediation_score,
+        max_points=50,
+        cap_percentage=85,
+    )
+
+    assert result.effective_score >= Decimal("20")
+
+
 def test_zero_remediation_score_never_reduces_original():
     result = adjust_remediation_score(
         original_score=10,

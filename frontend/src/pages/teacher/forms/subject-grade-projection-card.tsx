@@ -3,7 +3,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Progress } from "@/components/retroui/Progress";
-import type { AIMidtermTargetEstimate, ClassworkScorePreview, SubjectGradeProjectionResponse, TargetProjection } from "@/lib/teacher-interventions-api";
+import type { ClassworkScorePreview, SubjectGradeProjectionResponse } from "@/lib/teacher-interventions-api";
 
 export interface SubjectGradeProjectionCardProps {
   projection: SubjectGradeProjectionResponse | null;
@@ -20,8 +20,14 @@ export interface SubjectGradeProjectionCardProps {
 
 const clampGrade = (value: number) => Math.min(100, Math.max(0, value));
 const gradeText = (value: number | null) => (value == null ? "—" : `${value.toFixed(1)}%`);
-const differenceText = (value: number | null) =>
-  value == null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+const scoreText = (value: number) => Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+
+const formatProjectionDifference = (value: number | null) => {
+  if (value == null) return "—";
+  const rounded = Number(value.toFixed(1));
+  const normalized = Object.is(rounded, -0) ? 0 : rounded;
+  return `${normalized > 0 ? "+" : ""}${normalized.toFixed(1)}%`;
+};
 
 export function SubjectGradeProjectionCard({
   projection,
@@ -45,7 +51,7 @@ export function SubjectGradeProjectionCard({
           <Badge variant="outline" size="sm">Calculating…</Badge>
         </div>
         <p className="animate-pulse text-xs text-muted-foreground">
-          Recalculating the estimate with the selected targets and {capPercentage}% cap…
+          Recalculating with the selected targets and {capPercentage}% target-score ceiling…
         </p>
       </Card>
     );
@@ -151,23 +157,26 @@ export function SubjectGradeProjectionCard({
 
   const isFinalized = projection.status === "FINALIZED";
   const isAuthoritative = projection.status === "AVAILABLE" || isFinalized;
-  const isAiWhatIf = !isAuthoritative && projection.ai_midterm_what_if?.status === "AVAILABLE";
-  const isUnavailable = !isAuthoritative && !isAiWhatIf;
+  const isUnavailable = projection.status === "UNAVAILABLE";
+  const isAiWhatIfAvailable = projection.ai_midterm_what_if?.status === "AVAILABLE";
   const hasTargets = selectedTargetIds.length > 0;
   const appliedTargets = projection.target_projections.filter((target) => target.applied);
   const lastTarget = appliedTargets.at(-1) ?? null;
   const aiEstimates = projection.ai_midterm_what_if?.target_estimates ?? [];
   const lastAiEstimate = aiEstimates.at(-1) ?? null;
 
-  const currentGrade = isAuthoritative
-    ? projection.current_subject_grade ?? null
-    : isAiWhatIf ? projection.ai_midterm_what_if.baseline_predicted_term_grade ?? null : null;
+  const currentGrade = isAuthoritative ? projection.current_subject_grade ?? null : null;
   const projectedGrade = isAuthoritative
     ? hasTargets ? lastTarget?.projected_subject_grade ?? null : currentGrade
-    : isAiWhatIf ? hasTargets ? lastAiEstimate?.hypothetical_predicted_term_grade ?? null : currentGrade : null;
-  const estimatedDifference = isAuthoritative
-    ? hasTargets ? lastTarget?.possible_grade_improvement ?? null : null
-    : isAiWhatIf ? hasTargets ? lastAiEstimate?.estimated_difference_from_baseline ?? null : null : null;
+    : null;
+  const estimatedDifference = isAuthoritative && hasTargets
+    ? lastTarget?.possible_grade_improvement ?? null
+    : null;
+  const aiBaseline = isAiWhatIfAvailable
+    ? projection.ai_midterm_what_if.baseline_predicted_term_grade ?? null
+    : null;
+  const aiProjected = hasTargets ? lastAiEstimate?.hypothetical_predicted_term_grade ?? null : null;
+  const aiDifference = hasTargets ? lastAiEstimate?.estimated_difference_from_baseline ?? null : null;
   const passingThreshold = projection.passing_threshold ?? null;
   const reachesThreshold = projectedGrade != null && passingThreshold != null
     ? projectedGrade >= passingThreshold
@@ -178,20 +187,58 @@ export function SubjectGradeProjectionCard({
   const changeStart = Math.min(currentPosition, projectedPosition);
   const changeWidth = Math.abs(projectedPosition - currentPosition);
   const isPositiveChange = projectedPosition >= currentPosition;
+  const selectedTargetSet = new Set(selectedTargetIds);
+  const projectedScoreBounds = appliedTargets.flatMap((target) => {
+    if (
+      !selectedTargetSet.has(target.assignment_id) ||
+      target.original_score == null ||
+      target.max_points == null ||
+      target.maximum_hypothetical_effective_score == null ||
+      target.possible_score_gain == null
+    ) {
+      return [];
+    }
+    return [{
+      assignmentId: target.assignment_id,
+      title: target.title ?? `Assignment #${target.assignment_id}`,
+      originalScore: target.original_score,
+      maximumScore: target.maximum_hypothetical_effective_score,
+      maxPoints: target.max_points,
+      possibleGain: target.possible_score_gain,
+    }];
+  });
+  const rawScoreBounds = rawPreviews
+    .filter((preview) => selectedTargetSet.has(preview.assignment_id))
+    .map((preview) => ({
+      assignmentId: preview.assignment_id,
+      title: preview.title ?? `Assignment #${preview.assignment_id}`,
+      originalScore: preview.original_score,
+      maximumScore: preview.max_adjusted_score,
+      maxPoints: preview.max_points,
+      possibleGain: preview.possible_gain,
+    }));
+  const scoreBounds = projectedScoreBounds.length > 0 ? projectedScoreBounds : rawScoreBounds;
+  const missingEvidence = Array.from(new Set(
+    projection.unavailable_reasons.flatMap((reason) => reason.missing_evidence ?? []),
+  ));
 
   return (
     <Card className={shellClass} aria-label="Grade projection card">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-lg font-black">Projected Grade</span>
-          <Badge variant={isAiWhatIf ? "surface" : isAuthoritative ? "solid" : "outline"} size="sm">
-            {isFinalized ? "Final Grade" : isAiWhatIf ? "Provisional AI Estimate" : isAuthoritative ? "Authoritative" : "Unavailable"}
-          </Badge>
+          <span className="text-lg font-black">
+            {isAuthoritative ? "Projected Subject Grade" : "Classwork Score Adjustment"}
+          </span>
+          {isAuthoritative && (
+            <Badge variant="solid" size="sm">
+              {isFinalized ? "Final Grade" : "Authoritative"}
+            </Badge>
+          )}
         </div>
-        <Badge variant="outline" size="sm">{capPercentage}% Cap</Badge>
+        <Badge variant="outline" size="sm">{capPercentage}% Target-Score Ceiling</Badge>
       </div>
 
-      {!isUnavailable && (
+      {isAuthoritative && (
         <div className="rounded! border-2 border-border bg-background p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-wrap items-center justify-between w-full">
@@ -213,15 +260,15 @@ export function SubjectGradeProjectionCard({
                     }
                     size="sm"
                   >
-                    {differenceText(estimatedDifference)}
+                    {formatProjectionDifference(estimatedDifference)}
                   </Badge>
                 )}
               </div>
               {reachesThreshold != null && (
                 <Badge variant={reachesThreshold ? "success" : "destructive"} size="md" className="self-start whitespace-nowrap sm:self-center">
                   {reachesThreshold
-                    ? isAiWhatIf ? "Est. Reaches Passing" : "Reaches Passing"
-                    : isAiWhatIf ? "Est. Below Passing" : "Below Passing"}
+                    ? "Reaches Passing"
+                    : "Below Passing"}
                 </Badge>
               )}
             </div>
@@ -260,35 +307,50 @@ export function SubjectGradeProjectionCard({
         </div>
 
       )}
-      <div className="flex items-start gap-2 text-xs text-muted-foreground">
-        <p>
-          {isAiWhatIf
-            ? "Based on current midterm performance evidence. This is an exploratory prediction and not an official grade or guaranteed result."
-            : isFinalized
+      {isAuthoritative && (
+        <div className="flex items-start gap-2 text-xs text-muted-foreground">
+          <p>
+            {isFinalized
               ? "This period grade is finalized. Hypothetical remediation is unavailable."
-              : "Authoritative calculation based on official DepEd grading weights and transmutation table. Based on complete academic evidence."}
-        </p>
-      </div>
+              : "Authoritative calculation based on official DepEd grading weights and transmutation table using complete academic evidence."}
+          </p>
+        </div>
+      )}
       {isUnavailable && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Alert status="warning" className="rounded! py-2 text-xs">
             <div>
-              <p className="font-bold">Subject grade projection is unavailable for this student.</p>
+              <p className="font-bold">Overall Grade Preview Unavailable</p>
               <p className="mt-0.5">
-                {projection.unavailable_reasons.length > 0
-                  ? projection.unavailable_reasons.map((reason) => reason.message).join(" ")
-                  : "Official evidence is incomplete and AI prediction readiness criteria are not met."}
+                Some required grades have not been recorded yet. You can still create remediation activities, but the overall subject-grade preview is not available.
               </p>
+              {missingEvidence.length > 0 && (
+                <p className="mt-1"><strong>Missing:</strong> {missingEvidence.join(", ")}.</p>
+              )}
             </div>
           </Alert>
-          {!compact && rawPreviews.length === 0 && projection.eligible_target_gains.length > 0 && (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {projection.eligible_target_gains.map((item) => (
-                <div key={item.assignment_id} className="flex items-center justify-between rounded! border border-border bg-background p-2 text-xs">
-                  <span className="mr-2 truncate font-semibold">{item.title}</span>
-                  <span className="shrink-0 font-bold text-success">
-                    +{item.possible_score_gain.toFixed(1)} pts ({item.maximum_hypothetical_effective_score.toFixed(1)}/{item.max_points})
-                  </span>
+          {hasTargets && scoreBounds.length > 0 && (
+            <div className="space-y-2" aria-label="Selected classwork score adjustment preview">
+              {scoreBounds.map((item) => (
+                <div key={item.assignmentId} className="rounded! border-2 border-border bg-background p-3">
+                  <p className="truncate text-sm font-bold">{item.title}</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Original score</p>
+                      <strong className="text-base">{scoreText(item.originalScore)}/{scoreText(item.maxPoints)}</strong>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Maximum target score</p>
+                      <strong className="text-base text-success">{scoreText(item.maximumScore)}/{scoreText(item.maxPoints)}</strong>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Maximum possible gain</p>
+                      <strong className="text-base">+{scoreText(Math.max(0, item.possibleGain))} pts</strong>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    This is a maximum classwork-score adjustment, not a guaranteed result. The actual graded remediation cannot lower the original score.
+                  </p>
                 </div>
               ))}
             </div>
@@ -296,23 +358,49 @@ export function SubjectGradeProjectionCard({
         </div>
       )}
 
-      {!compact && hasTargets && selectedTargetIds.length > 1 && (
+      {isAiWhatIfAvailable && (
+        <div className="space-y-2 border-t-2 border-border pt-3" aria-label="Provisional AI advisory">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-bold">Provisional AI Advisory</p>
+            <Badge variant="surface" size="sm">Not an Official Grade</Badge>
+          </div>
+          {hasTargets && aiBaseline != null && aiProjected != null && (
+            <div className="grid grid-cols-2 gap-2 rounded! border border-border bg-muted/20 p-3 text-center text-xs">
+              <div>
+                <p className="text-muted-foreground">AI baseline estimate</p>
+                <strong className="text-lg">{gradeText(aiBaseline)}</strong>
+              </div>
+              <div>
+                <p className="text-muted-foreground">AI what-if estimate</p>
+                <strong className="text-lg">{gradeText(aiProjected)}</strong>
+                {aiDifference != null && (
+                  <span className="ml-2 text-muted-foreground">Model variation {formatProjectionDifference(aiDifference)}</span>
+                )}
+              </div>
+            </div>
+          )}
+          <Alert status="info" className="rounded! py-2 text-xs">
+            This exploratory model estimate may increase or decrease even when the selected classwork score improves. It does not calculate or reduce the student's actual grade and does not determine the official subject grade.
+          </Alert>
+        </div>
+      )}
+
+      {!compact && isAuthoritative && hasTargets && selectedTargetIds.length > 1 && (
         <div className="border-t border-border pt-2">
           <p className="mb-2 text-xs font-bold text-muted-foreground">
             Cumulative Target Sequence ({selectedTargetIds.length} Classworks Selected):
           </p>
           <div className="flex flex-col gap-1.5">
-            {(appliedTargets.length > 0 ? appliedTargets : aiEstimates).map((step, index) => {
-              const authoritativeStep = "projected_subject_grade" in step;
-              const grade = authoritativeStep ? (step as TargetProjection).projected_subject_grade : (step as AIMidtermTargetEstimate).hypothetical_predicted_term_grade;
-              const difference = authoritativeStep ? (step as TargetProjection).possible_grade_improvement : (step as AIMidtermTargetEstimate).estimated_difference_from_baseline;
-              const title = authoritativeStep ? (step as TargetProjection).title || `Assignment #${step.assignment_id}` : `Target #${step.assignment_id}`;
+            {appliedTargets.map((step, index) => {
+              const grade = step.projected_subject_grade;
+              const difference = step.possible_grade_improvement;
+              const title = step.title || `Assignment #${step.assignment_id}`;
               return (
                 <div key={step.assignment_id} className="flex items-center justify-between rounded! border border-border bg-background px-2 py-1 text-xs">
                   <span className="min-w-0 truncate font-semibold">#{index + 1} {title}</span>
                   <span className="ml-2 shrink-0 text-muted-foreground">
-                    {isAiWhatIf ? "Est." : "Grade"} <strong className="text-foreground">{gradeText(grade ?? null)}</strong>
-                    {difference != null && ` (${differenceText(difference)})`}
+                    Grade <strong className="text-foreground">{gradeText(grade ?? null)}</strong>
+                    {difference != null && ` (${formatProjectionDifference(difference)})`}
                   </span>
                 </div>
               );

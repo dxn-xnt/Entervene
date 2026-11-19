@@ -1,11 +1,10 @@
-"use client";
+import { DatePicker } from "@/components/retroui/DatePicker";
 
 import * as React from "react";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Input } from "@/components/retroui/Input";
 import { Text } from "@/components/retroui/Text";
 import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
@@ -141,11 +140,10 @@ export default function AdjustSubstitutionModal({
             <Calendar className="h-3 w-3" />
             <span>New End Date</span>
           </label>
-          <Input
+          <DatePicker
             id="adjust-substitution-end-date"
-            type="date"
             value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); setErrorMsg(null); }}
+            onValueChange={(value) => { setEndDate(value); setErrorMsg(null); }}
             min={startDate || undefined}
             aria-invalid={errorMsg === "End date cannot be earlier than start date."}
             aria-describedby={errorMsg === "End date cannot be earlier than start date." ? "adjust-substitution-end-date-error" : undefined}

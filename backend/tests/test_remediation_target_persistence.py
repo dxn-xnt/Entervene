@@ -405,13 +405,15 @@ def test_backward_compatibility_with_original_exam_assignment_id(candidate_conte
     row = db.get(Intervention, _id(ctx))
 
     # Temporarily set focus to EXAMINATION so it passes examination validation
-    row.diagnosis_snapshot = {
+    diagnosis = dict(row.diagnosis_snapshot or {})
+    diagnosis.update({
         "focus": "EXAMINATION",
         "weakest_supported_components": ["EXAMINATION"],
         "evidence_level": "COMPONENT_ONLY",
         "component": "EXAMINATION",
         "exam_subtype": "SUMMATIVE_1",
-    }
+    })
+    row.diagnosis_snapshot = diagnosis
     db.commit()
 
     exam = _make_classwork_target(

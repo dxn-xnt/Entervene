@@ -1,3 +1,4 @@
+import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
@@ -826,13 +827,12 @@ export default function BreakConfigDrawer({
               <>
                 <div className="space-y-2">
                   <Label htmlFor="schedule-effective-date" className="text-xs font-bold">Effective date</Label>
-                  <Input
+                  <DatePicker
                     id="schedule-effective-date"
-                    type="date"
                     min={localIsoDate()}
                     value={applyImmediately ? localIsoDate() : effectiveDate}
                     disabled={applyImmediately || Boolean(overridePreview)}
-                    onChange={(event) => { setEffectiveDate(event.target.value); setOverridePreview(null); }}
+                    onValueChange={(value) => { setEffectiveDate(value); setOverridePreview(null); }}
                   />
                   <label className="flex items-center gap-2 text-xs font-semibold">
                     <Checkbox

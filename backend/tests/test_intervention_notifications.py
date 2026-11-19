@@ -6,7 +6,6 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.auth.Role import Role
@@ -43,16 +42,14 @@ def notified_context(current_period_context, monkeypatch):
     db.add_all([Role(role_id=1, role_name="teacher"), Role(role_id=2, role_name="admin")])
     db.flush()
     db.add(UserRoles(user_id=ctx["staff"].user_id, role_id=1))
-    db.add(StudentClass(
-        student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
-        academic_year_id=ctx["class"].academic_year_id, enrollment_status="enrolled",
-    ))
-    load = SubjectLoad(
-        staff_id=ctx["staff"].staff_id, class_id=ctx["class"].class_id,
-        subject_id=ctx["subject"].subject_id, academic_period_id=ctx["period"].academic_period_id,
-        status="published", is_active_version=True,
-    )
-    db.add(load)
+    load = db.query(SubjectLoad).filter_by(
+        staff_id=ctx["staff"].staff_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=ctx["period"].academic_period_id,
+    ).one()
+    load.status = "published"
+    load.is_active_version = True
     db.commit()
     ctx["load"] = load
     ctx["model_id"] = _setup(ctx, monkeypatch, [84, 84, 88, 74])

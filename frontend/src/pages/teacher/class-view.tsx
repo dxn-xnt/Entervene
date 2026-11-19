@@ -1022,7 +1022,7 @@ function LessonsTab({
             }
             isDelivered={Boolean(
               activeLessonDetail.is_taught ||
-                deliveriesByLessonId[activeLessonDetail.lesson_id]?.is_active,
+              deliveriesByLessonId[activeLessonDetail.lesson_id]?.is_active,
             )}
             isDeliveryLoading={
               deliveryLoadingLessonId === activeLessonDetail.lesson_id
@@ -1983,10 +1983,10 @@ function ClassworkTab({
             action={
               !isReadOnly
                 ? {
-                    label: "Create Classwork",
-                    icon: <Plus className="size-4" />,
-                    onClick: openCreateWizard,
-                  }
+                  label: "Create Classwork",
+                  icon: <Plus className="size-4" />,
+                  onClick: openCreateWizard,
+                }
                 : undefined
             }
           />

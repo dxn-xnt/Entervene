@@ -1,4 +1,4 @@
-"use client";
+import { DatePicker } from "@/components/retroui/DatePicker";
 
 import React, { useRef, useState } from "react";
 import { Download, FileSpreadsheet, UserPlus, Upload } from "lucide-react";
@@ -820,12 +820,11 @@ export default function AddUserModal({
 
               {!isAdmin && (
                 <Field label="Date of Birth">
-                  <Input
+                  <DatePicker
                     id="new-user-dob"
-                    type="date"
                     value={form.dob}
-                    onChange={(e) => handleField("dob", e.target.value)}
-                    className={cn("w-full bg-background border-2", manualErrors.dob ? "border-destructive focus:border-destructive" : "border-black")}
+                    onValueChange={(value) => handleField("dob", value)}
+                    className={cn("w-full bg-background border-2", manualErrors.dob ? "border-destructive focus:border-destructive" : "border-black shadow-none")}
                     aria-invalid={!!manualErrors.dob}
                     aria-describedby={manualErrors.dob ? "new-user-dob-error" : undefined}
                   />
@@ -836,13 +835,12 @@ export default function AddUserModal({
               {!isStudent && !isAdmin && (
                 <>
                   <Field label="Hired Date">
-                    <Input
-                      type="date"
+                    <DatePicker
                       value={form.hiredDate}
-                      onChange={(e) =>
-                        handleField("hiredDate", e.target.value)
+                      onValueChange={(value) =>
+                        handleField("hiredDate", value)
                       }
-                      className="w-full bg-background border-2 border-black"
+                      className="w-full shadow-none bg-background border-2 border-black"
                     />
                   </Field>
                   <Field label="Employment Status">

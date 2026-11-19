@@ -465,12 +465,26 @@ async def create_classwork_wizard_record(
                 is_finalized=True,
             ).first():
                 raise HTTPException(status_code=409, detail="The period grade is finalized")
+            existing_exam_remediation = db.query(ClassworkAssignment).filter_by(
+                original_exam_assignment_id=original_exam_assignment_id,
+                recipient_student_id=intervention.student_id,
+            ).first()
+            if (
+                existing_exam_remediation is not None
+                and existing_exam_remediation.remediation_request_id != remediation_request_id
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="The selected original Examination already has a remediation activity",
+                )
         elif original_exam_assignment_id is not None:
             raise HTTPException(status_code=400, detail="Original Examination link requires Examination grade treatment")
         prior = db.query(ClassworkAssignment).filter_by(remediation_request_id=remediation_request_id).first()
         if prior:
             if prior.source_intervention_id != intervention_id or prior.assigned_by_staff_id != staff_id:
                 raise HTTPException(status_code=409, detail="Remediation request was already used")
+            if treatment == "EXAMINATION" and prior.original_exam_assignment_id != original_exam_assignment_id:
+                raise HTTPException(status_code=409, detail="Remediation request was already used for a different target")
             if original_classwork_assignment_id is not None:
                 from app.services.intervention.RemediationAssignmentLinkService import create_remediation_assignment_link
                 create_remediation_assignment_link(
@@ -666,6 +680,23 @@ def _replace_activity_rubric(
     for rubric_id, row in existing.items():
         if rubric_id not in retained_ids:
             classwork.rubric_levels.remove(row)
+
+
+def _assert_rubric_change_allowed(submissions, *, confirmed: bool) -> None:
+    """Keep stored grades and their rubric denominator immutable."""
+    if any(submission.status == "graded" or submission.grade is not None for submission in submissions):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RUBRIC_LOCKED_AFTER_GRADING",
+                "message": "The rubric and maximum score cannot be changed after a submission has been graded.",
+            },
+        )
+    if submissions and not confirmed:
+        raise HTTPException(
+            status_code=409,
+            detail="This classwork already has student submissions. Rubric changes will apply when these submissions are graded.",
+        )
 
 
 def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
@@ -940,13 +971,7 @@ def update_classwork_record(
             for assignment in classwork.assignments
             for submission in assignment.submissions
         ]
-        if submissions and not confirm_rubric_change:
-            detail = (
-                "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades."
-                if any(s.status == "graded" or s.grade is not None for s in submissions)
-                else "This classwork already has student submissions. Rubric changes will apply when these submissions are graded."
-            )
-            raise HTTPException(status_code=409, detail=detail)
+        _assert_rubric_change_allowed(submissions, confirmed=confirm_rubric_change)
         parsed_levels = [ActivityRubricLevelInput.model_validate(level) for level in rubric_levels]
         parsed_levels = validate_activity_rubric(parsed_levels)
         values["total_points"] = max(level.points for level in parsed_levels)

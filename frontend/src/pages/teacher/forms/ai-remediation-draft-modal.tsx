@@ -356,9 +356,9 @@ export default function AiRemediationDraftModal({
                     </span>
                   </Card>
                   <Card className="border-2! p-2 flex flex-col gap-1 col-span-2">
-                    <span className="font-semibold">Adjustment Cap </span>
+                    <span className="font-semibold">Target-Score Ceiling</span>
                     <span className="text-sm text-foreground font-normal">
-                      Capped at {capInput || plan.score_adjustment_cap || 75}% of original max points.
+                      Up to {capInput || plan.score_adjustment_cap || 75}% of the selected classwork's original maximum points.
                     </span>
                   </Card>
                 </div>
@@ -927,7 +927,7 @@ export default function AiRemediationDraftModal({
         <Dialog.Footer className="mt-0 justify-between items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">
-              Score Cap: <strong>{capInput || plan.score_adjustment_cap || 75}%</strong> · Draft publishing in PR 2D.2
+              Target-Score Ceiling: <strong>{capInput || plan.score_adjustment_cap || 75}%</strong> · Draft publishing in PR 2D.2
             </span>
           </div>
           <div className="flex items-center gap-2">

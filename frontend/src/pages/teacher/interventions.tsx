@@ -13,6 +13,8 @@ import { Tabs } from "@/components/retroui/Tabs";
 import { useToast } from "@/components/retroui/Toast";
 import { Activity, AlertTriangle, CheckCircle2, HeartHandshake, Search, UserCheck, X } from "lucide-react";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
+import { InterventionPredictionHistory } from "@/components/teacher/intervention-prediction-history";
+import { getTeacherRiskDisplay } from "@/components/predictions/teacher-risk-display";
 import InterventionModal from "./forms/intervention-modal";
 import {
   activateTeacherCandidate,
@@ -662,7 +664,7 @@ export default function TeacherInterventions() {
                         <Table.Row>
                           <Table.Head>Student</Table.Head>
                           <Table.Head>Subject</Table.Head>
-                          <Table.Head className="text-center">Trigger</Table.Head>
+                          <Table.Head>Current prediction</Table.Head>
                           <Table.Head className="text-center">Status</Table.Head>
                           <Table.Head>Saved reason</Table.Head>
                           <Table.Head>
@@ -692,15 +694,23 @@ export default function TeacherInterventions() {
                             {candidate.class_name} · {candidate.academic_period_name}
                           </span>
                         </Table.Cell>
-                        <Table.Cell className="font-semibold text-center">
-                          {candidate.triggering_predicted_grade.toFixed(2)}
+                        <Table.Cell>
+                          <InterventionPredictionHistory item={candidate} />
                         </Table.Cell>
-                        <Table.Cell className="mt-2 flex flex-col items-center justify-center gap-1">
-                          <Badge size="sm" className={getRiskBadgeMeta(candidate.triggering_intervention_level).bg}>
-                            {label(candidate.triggering_intervention_level)}
-                          </Badge>
+                        <Table.Cell className="text-center">
+                          <div className="flex flex-col items-center justify-center gap-1">
+                          {(() => {
+                            const risk = getTeacherRiskDisplay(
+                              candidate.current_intervention_level ?? candidate.triggering_intervention_level,
+                            );
+                            return (
+                              <Badge size="sm" className={`shrink-0 whitespace-nowrap ${getRiskBadgeMeta(risk.level).bg}`}>
+                                {risk.label}
+                              </Badge>
+                            );
+                          })()}
                           {!activeView && !resolvedView && candidate.candidate_activation_eligible === false && (
-                            <Badge variant="outline" size="sm">Review only</Badge>
+                            <Badge variant="outline" size="sm" className="whitespace-nowrap">Review only</Badge>
                           )}
                           {!activeView && !resolvedView && candidate.current_intervention_level &&
                             candidate.current_intervention_level !== candidate.triggering_intervention_level && (
@@ -708,6 +718,7 @@ export default function TeacherInterventions() {
                                 Current: {label(candidate.current_intervention_level)}
                               </span>
                             )}
+                          </div>
                         </Table.Cell>
                         <Table.Cell>
                           {resolvedView
