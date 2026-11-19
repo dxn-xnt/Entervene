@@ -102,8 +102,7 @@ export default function CreateClassworkModal({
     if (initialTargetAssignmentId && remediationOriginalTargets.some((t) => t.assignment_id === initialTargetAssignmentId)) {
       return initialTargetAssignmentId;
     }
-    const rec = remediationOriginalTargets.find((t) => t.is_recommended);
-    return rec?.assignment_id ?? remediationOriginalTargets[0]?.assignment_id ?? null;
+    return null;
   });
 
   const selectedOriginalTarget = useMemo(() => {
@@ -119,8 +118,8 @@ export default function CreateClassworkModal({
           : "";
     const targetPoints = remediationOriginalExam
       ? String(remediationOriginalExam.total_points)
-      : (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && remediationOriginalTargets.length
-        ? String((remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) ?? remediationOriginalTargets[0]).max_points)
+      : (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && selectedOriginalTarget
+        ? String(selectedOriginalTarget.max_points)
         : emptyClassworkDraft.total_points;
     return {
       ...emptyClassworkDraft,
@@ -166,8 +165,8 @@ export default function CreateClassworkModal({
       (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") &&
       remediationOriginalTargets.length
     ) {
-      const target = remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) ?? remediationOriginalTargets[0];
-      return scaleRubricToMaxPoints(defaultLevels, target.max_points);
+      const target = remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId);
+      return target ? scaleRubricToMaxPoints(defaultLevels, target.max_points) : defaultLevels;
     }
     return defaultLevels;
   });

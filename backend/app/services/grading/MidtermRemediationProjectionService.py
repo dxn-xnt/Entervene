@@ -51,6 +51,7 @@ def _limitations() -> list[str]:
     return [
         "This is a development-model estimate, not an official or guaranteed subject grade.",
         "The estimate is associative rather than causal; a higher classwork score does not guarantee a higher model output.",
+        "A lower AI what-if estimate does not lower the student's actual classwork score or official subject grade.",
         "Reproduction requires the same evidence and the same immutable model artifact registered for this model version.",
         "A hypothetical feature combination may be less represented in training data than an observed evidence snapshot.",
         "No missing Examination score is fabricated, and AI output is not used as academic evidence.",

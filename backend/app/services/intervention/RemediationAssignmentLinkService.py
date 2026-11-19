@@ -18,12 +18,105 @@ from app.services.grading.RemediationScoreAdjuster import (
     DEFAULT_REMEDIATION_CAP_PERCENTAGE,
     validate_cap_percentage,
 )
+from app.services.grading.SubjectGradeProjectionService import (
+    AVAILABLE,
+    FINALIZED,
+    calculate_subject_grade_projection,
+)
 
 
 LINKABLE_COMPONENTS = {
     "WRITTEN_WORK": CanonicalGradingComponent.WRITTEN_WORK,
     "PERFORMANCE_TASK": CanonicalGradingComponent.PERFORMANCE_TASK,
 }
+
+
+def assert_progressive_remediation_eligible(
+    db: Session,
+    *,
+    intervention: Intervention,
+    staff_id: str,
+    target_assignment_id: int,
+    component: str,
+    cap_percentage: Decimal | float | int | str,
+    exclude_remediation_assignment_id: int | None = None,
+) -> None:
+    """Enforce lifecycle and academic eligibility before a later WW/PT activity."""
+    existing_assignments = db.query(ClassworkAssignment).filter_by(
+        source_intervention_id=intervention.intervention_id,
+        recipient_student_id=intervention.student_id,
+    ).all()
+    existing_assignments = [
+        assignment for assignment in existing_assignments
+        if assignment.classwork_assignment_id != exclude_remediation_assignment_id
+    ]
+    if not existing_assignments:
+        return
+
+    for assignment in existing_assignments:
+        work = assignment.classwork
+        submission = db.query(StudentSubmission).filter_by(
+            classwork_assignment_id=assignment.classwork_assignment_id,
+            student_id=intervention.student_id,
+        ).order_by(StudentSubmission.submission_id.desc()).first()
+        if (
+            work is None
+            or not work.is_graded
+            or not work.is_published
+            or not assignment.is_published
+            or submission is None
+            or submission.status != "graded"
+            or submission.grade is None
+        ):
+            raise HTTPException(409, detail={
+                "code": "REMEDIATION_RESULT_PENDING",
+                "message": "Complete and grade every existing remediation activity before adding another one.",
+            })
+        applied_link = db.query(RemediationAssignmentLink.remediation_link_id).filter_by(
+            remediation_assignment_id=assignment.classwork_assignment_id,
+            source_intervention_id=intervention.intervention_id,
+            student_id=intervention.student_id,
+        ).first()
+        if assignment.original_exam_assignment_id is None and applied_link is None:
+            raise HTTPException(409, detail={
+                "code": "REMEDIATION_RESULT_NOT_APPLIED",
+                "message": "The existing remediation result could not be applied to its original classwork.",
+            })
+
+    expected_component = LINKABLE_COMPONENTS.get(component)
+    if expected_component is None:
+        raise HTTPException(400, "Progressive remediation requires Written Work or Performance Task treatment")
+    outcome = calculate_subject_grade_projection(
+        db,
+        staff_id=staff_id,
+        student_id=intervention.student_id,
+        class_id=intervention.class_id,
+        subject_id=intervention.subject_id,
+        academic_period_id=intervention.academic_period_id,
+        target_assignment_ids=[target_assignment_id],
+        cap_percentage=cap_percentage,
+        eligible_components={expected_component},
+        source_intervention_id=None,
+    )
+    if outcome["status"] == FINALIZED:
+        raise HTTPException(409, detail={
+            "code": "PERIOD_GRADE_FINALIZED",
+            "message": "The academic period grade is finalized; another remediation activity cannot be created.",
+        })
+    if outcome["status"] == AVAILABLE and outcome["current_reaches_passing_threshold"] is True:
+        raise HTTPException(409, detail={
+            "code": "PASSING_RESULT_REACHED",
+            "message": "The official subject grade meets the passing threshold; another remediation activity is unnecessary.",
+        })
+    eligible = next((
+        item for item in outcome["eligible_target_gains"]
+        if item["assignment_id"] == target_assignment_id and item["possible_score_gain"] > 0
+    ), None)
+    if eligible is None:
+        raise HTTPException(409, detail={
+            "code": "NO_POSITIVE_REMEDIATION_TARGET",
+            "message": "The selected unused classwork has no positive possible score improvement.",
+        })
 
 
 def create_remediation_assignment_link(
@@ -61,6 +154,19 @@ def create_remediation_assignment_link(
     )
     if conflicting is not None:
         raise HTTPException(409, "A remediation activity is already linked to this original classwork")
+
+    plan_cap_raw = (intervention.remediation_plan or {}).get("score_adjustment_cap")
+    if plan_cap_raw is None:
+        plan_cap_raw = DEFAULT_REMEDIATION_CAP_PERCENTAGE
+    assert_progressive_remediation_eligible(
+        db,
+        intervention=intervention,
+        staff_id=staff_id,
+        target_assignment_id=original_assignment_id,
+        component=component,
+        cap_percentage=plan_cap_raw,
+        exclude_remediation_assignment_id=remediation_assignment.classwork_assignment_id,
+    )
 
     expected_component = LINKABLE_COMPONENTS.get(component)
     if expected_component is None:
@@ -147,9 +253,6 @@ def create_remediation_assignment_link(
     ).first():
         raise HTTPException(409, "The period grade is finalized")
 
-    plan_cap_raw = (intervention.remediation_plan or {}).get("score_adjustment_cap")
-    if plan_cap_raw is None:
-        plan_cap_raw = DEFAULT_REMEDIATION_CAP_PERCENTAGE
     try:
         authoritative_cap = validate_cap_percentage(plan_cap_raw)
     except (ValueError, TypeError) as err:

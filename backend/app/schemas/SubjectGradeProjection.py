@@ -23,6 +23,7 @@ class ProjectionUnavailableReason(BaseModel):
     code: str
     message: str
     assignment_id: int | None = None
+    missing_evidence: list[str] = Field(default_factory=list)
 
 
 class PassingThresholdPolicyRead(BaseModel):

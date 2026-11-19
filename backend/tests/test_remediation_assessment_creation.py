@@ -15,6 +15,7 @@ from app.models.quiz.Question import Question
 from app.models.quiz.QuestionOption import QuestionOption
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizSetting import QuizSetting
+from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.Classwork import ClassworkAssignRequest
 from app.services.quiz.QuizAttemptService import (
     _AttemptFeedbackVisibility,
@@ -41,6 +42,7 @@ from tests.test_teacher_intervention_review import (
     _staff,
     candidate_context,
 )
+from tests.test_remediation_target_persistence import _make_classwork_target
 
 
 def test_create_unpublished_quiz_is_atomic_linked_and_idempotent(candidate_context):
@@ -58,6 +60,7 @@ def test_create_unpublished_quiz_is_atomic_linked_and_idempotent(candidate_conte
         staff_id=_staff(ctx),
         intervention_id=_id(ctx),
         remediation_request_id=request_id,
+        target_assignment_id=target.classwork_assignment_id,
         draft_input=draft,
     )
     retry = create_remediation_assessment(
@@ -65,6 +68,7 @@ def test_create_unpublished_quiz_is_atomic_linked_and_idempotent(candidate_conte
         staff_id=_staff(ctx),
         intervention_id=_id(ctx),
         remediation_request_id=request_id,
+        target_assignment_id=target.classwork_assignment_id,
         draft_input=draft,
     )
 
@@ -135,9 +139,139 @@ def test_create_unpublished_quiz_is_atomic_linked_and_idempotent(candidate_conte
     assert result.classwork_assignment_id not in visible_assignment_ids
 
 
+def test_ai_creation_requires_explicit_target_for_multi_target_plan(candidate_context):
+    ctx = candidate_context
+    competency, lesson, first, _reading = _setup_intervention_with_targets(
+        ctx, "WRITTEN_WORK", 10.0,
+    )
+    second = _make_classwork_target(
+        ctx, "Second explicit target", score=8.0, points=20.0,
+    )
+    ctx["candidate"].remediation_plan = {
+        **ctx["candidate"].remediation_plan,
+        "target_assignment_ids": [first.classwork_assignment_id, second.classwork_assignment_id],
+    }
+    ctx["db"].commit()
+    draft = _make_quiz_draft(competency.competency_id, lesson.lesson_id, 20.0)
+
+    with pytest.raises(HTTPException) as missing:
+        create_remediation_assessment(
+            ctx["db"], staff_id=_staff(ctx), intervention_id=_id(ctx),
+            remediation_request_id=uuid4(), draft_input=draft,
+        )
+    assert missing.value.status_code == 422
+    assert "explicit original classwork" in missing.value.detail
+
+    result = create_remediation_assessment(
+        ctx["db"], staff_id=_staff(ctx), intervention_id=_id(ctx),
+        remediation_request_id=uuid4(), target_assignment_id=second.classwork_assignment_id,
+        draft_input=draft,
+    )
+    link = ctx["db"].query(RemediationAssignmentLink).filter_by(
+        remediation_assignment_id=result.classwork_assignment_id,
+    ).one()
+    assert link.original_assignment_id == second.classwork_assignment_id
+
+
+def test_ai_progressive_creation_allows_graded_result_when_official_grade_is_unavailable(candidate_context):
+    ctx = candidate_context
+    competency, lesson, first, _reading = _setup_intervention_with_targets(
+        ctx, "WRITTEN_WORK", 10.0,
+    )
+    second = _make_classwork_target(ctx, "Second progressive target", score=4.0, points=10.0)
+    ctx["candidate"].remediation_plan = {
+        **ctx["candidate"].remediation_plan,
+        "target_assignment_ids": [first.classwork_assignment_id, second.classwork_assignment_id],
+    }
+    ctx["db"].commit()
+    draft = _make_quiz_draft(competency.competency_id, lesson.lesson_id, 10.0)
+    initial = create_remediation_assessment(
+        ctx["db"], staff_id=_staff(ctx), intervention_id=_id(ctx),
+        remediation_request_id=uuid4(), target_assignment_id=first.classwork_assignment_id,
+        draft_input=draft,
+    )
+    initial_assignment = ctx["db"].get(ClassworkAssignment, initial.classwork_assignment_id)
+    initial_assignment.is_published = True
+    initial_assignment.classwork.is_published = True
+    ctx["db"].add(StudentSubmission(
+        classwork_assignment_id=initial.classwork_assignment_id,
+        student_id=ctx["student"].student_id,
+        grade=8.0,
+        status="graded",
+    ))
+    ctx["db"].commit()
+
+    additional = create_remediation_assessment(
+        ctx["db"], staff_id=_staff(ctx), intervention_id=_id(ctx),
+        remediation_request_id=uuid4(), target_assignment_id=second.classwork_assignment_id,
+        draft_input=draft,
+    )
+
+    link = ctx["db"].query(RemediationAssignmentLink).filter_by(
+        remediation_assignment_id=additional.classwork_assignment_id,
+    ).one()
+    assert link.original_assignment_id == second.classwork_assignment_id
+
+
+def test_ai_creation_rejects_duplicate_explicit_target(candidate_context):
+    ctx = candidate_context
+    competency, lesson, target, _reading = _setup_intervention_with_targets(
+        ctx, "WRITTEN_WORK", 10.0,
+    )
+    draft = _make_quiz_draft(competency.competency_id, lesson.lesson_id, 10.0)
+    create_remediation_assessment(
+        ctx["db"], staff_id=_staff(ctx), intervention_id=_id(ctx),
+        remediation_request_id=uuid4(), target_assignment_id=target.classwork_assignment_id,
+        draft_input=draft,
+    )
+
+    with pytest.raises(HTTPException) as duplicate:
+        create_remediation_assessment(
+            ctx["db"], staff_id=_staff(ctx), intervention_id=_id(ctx),
+            remediation_request_id=uuid4(), target_assignment_id=target.classwork_assignment_id,
+            draft_input=draft,
+        )
+    assert duplicate.value.status_code == 409
+
+
+def test_ai_creation_retry_rejects_a_different_explicit_target(candidate_context):
+    ctx = candidate_context
+    competency, lesson, first, _reading = _setup_intervention_with_targets(
+        ctx, "WRITTEN_WORK", 10.0,
+    )
+    second = _make_classwork_target(
+        ctx, "Second retry target", score=7.0, points=10.0,
+    )
+    ctx["candidate"].remediation_plan = {
+        **ctx["candidate"].remediation_plan,
+        "target_assignment_ids": [first.classwork_assignment_id, second.classwork_assignment_id],
+    }
+    ctx["db"].commit()
+    request_id = uuid4()
+    draft = _make_quiz_draft(competency.competency_id, lesson.lesson_id, 10.0)
+    create_remediation_assessment(
+        ctx["db"], staff_id=_staff(ctx), intervention_id=_id(ctx),
+        remediation_request_id=request_id, target_assignment_id=first.classwork_assignment_id,
+        draft_input=draft,
+    )
+
+    with pytest.raises(HTTPException) as changed_target:
+        create_remediation_assessment(
+            ctx["db"], staff_id=_staff(ctx), intervention_id=_id(ctx),
+            remediation_request_id=request_id, target_assignment_id=second.classwork_assignment_id,
+            draft_input=draft,
+        )
+
+    assert changed_target.value.status_code == 409
+    assert "different target" in changed_target.value.detail
+    links = ctx["db"].query(RemediationAssignmentLink).all()
+    assert len(links) == 1
+    assert links[0].original_assignment_id == first.classwork_assignment_id
+
+
 def test_publishing_targeted_quiz_promotes_quiz_and_student_can_fetch_attempt(candidate_context):
     ctx = candidate_context
-    competency, lesson, _target, _reading = _setup_intervention_with_targets(
+    competency, lesson, target, _reading = _setup_intervention_with_targets(
         ctx, "WRITTEN_WORK", 10.0,
     )
     result = create_remediation_assessment(
@@ -145,6 +279,7 @@ def test_publishing_targeted_quiz_promotes_quiz_and_student_can_fetch_attempt(ca
         staff_id=_staff(ctx),
         intervention_id=_id(ctx),
         remediation_request_id=uuid4(),
+        target_assignment_id=target.classwork_assignment_id,
         draft_input=_make_quiz_draft(competency.competency_id, lesson.lesson_id, 10.0),
     )
     assignment = ctx["db"].get(ClassworkAssignment, result.classwork_assignment_id)
@@ -187,7 +322,7 @@ def test_publishing_targeted_quiz_promotes_quiz_and_student_can_fetch_attempt(ca
 
 def test_create_unpublished_draft_without_reading_defers_gate_to_publication(candidate_context):
     ctx = candidate_context
-    competency, lesson, _target, _reading = _setup_intervention_with_targets(
+    competency, lesson, target, _reading = _setup_intervention_with_targets(
         ctx, "WRITTEN_WORK", 10.0,
     )
     plan = dict(ctx["candidate"].remediation_plan or {})
@@ -200,6 +335,7 @@ def test_create_unpublished_draft_without_reading_defers_gate_to_publication(can
         staff_id=_staff(ctx),
         intervention_id=_id(ctx),
         remediation_request_id=uuid4(),
+        target_assignment_id=target.classwork_assignment_id,
         draft_input=_make_quiz_draft(competency.competency_id, lesson.lesson_id, 10.0),
     )
 
@@ -249,6 +385,7 @@ def test_create_unpublished_summative_preserves_exam_subtype_and_original(candid
         staff_id=_staff(ctx),
         intervention_id=_id(ctx),
         remediation_request_id=uuid4(),
+        target_assignment_id=target.classwork_assignment_id,
         draft_input=draft,
     )
 
@@ -275,6 +412,7 @@ def test_create_unpublished_classwork_preserves_tasks_deliverables_and_rubric(ca
         staff_id=_staff(ctx),
         intervention_id=_id(ctx),
         remediation_request_id=uuid4(),
+        target_assignment_id=target.classwork_assignment_id,
         draft_input=draft,
     )
 
@@ -330,7 +468,7 @@ def test_invalid_or_unauthorized_creation_writes_nothing(candidate_context):
 
 def test_failure_after_assessment_staging_rolls_back_everything(candidate_context, monkeypatch):
     ctx = candidate_context
-    competency, lesson, _target, _reading = _setup_intervention_with_targets(
+    competency, lesson, target, _reading = _setup_intervention_with_targets(
         ctx, "WRITTEN_WORK", 10.0,
     )
     db = ctx["db"]
@@ -353,7 +491,8 @@ def test_failure_after_assessment_staging_rolls_back_everything(candidate_contex
     with pytest.raises(RuntimeError, match="forced builder failure"):
         create_remediation_assessment(
             db, staff_id=_staff(ctx), intervention_id=_id(ctx),
-            remediation_request_id=uuid4(), draft_input=draft,
+            remediation_request_id=uuid4(), target_assignment_id=target.classwork_assignment_id,
+            draft_input=draft,
         )
 
     assert db.query(Classwork).count() == counts["work"]
@@ -365,7 +504,7 @@ def test_failure_after_assessment_staging_rolls_back_everything(candidate_contex
 
 def test_teacher_creation_endpoint_returns_identifiers_only(candidate_context):
     ctx = candidate_context
-    competency, lesson, _target, _reading = _setup_intervention_with_targets(
+    competency, lesson, target, _reading = _setup_intervention_with_targets(
         ctx, "WRITTEN_WORK", 10.0,
     )
     draft = _make_quiz_draft(competency.competency_id, lesson.lesson_id, 10.0)
@@ -373,6 +512,7 @@ def test_teacher_creation_endpoint_returns_identifiers_only(candidate_context):
         f"/api/v1/teacher/interventions/{_id(ctx)}/remediation/assessment",
         json={
             "remediation_request_id": str(uuid4()),
+            "target_assignment_id": target.classwork_assignment_id,
             "draft": draft.model_dump(mode="json"),
         },
     )

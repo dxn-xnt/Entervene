@@ -430,6 +430,7 @@ class RemediationDraftPreflightRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     draft: dict[str, Any] | None = None
+    target_assignment_id: int | None = Field(default=None, gt=0)
     validation_stage: Literal["SAVE_DRAFT", "PUBLICATION"] = "PUBLICATION"
 
 
@@ -437,6 +438,7 @@ class RemediationAssessmentCreateRequest(StrictModel):
     """Idempotent request to persist one teacher-reviewed remediation draft."""
 
     remediation_request_id: UUID
+    target_assignment_id: int | None = Field(default=None, gt=0)
     draft: dict[str, Any]
 
 

@@ -156,6 +156,12 @@ def preflight_remediation_draft_endpoint(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    if (
+        body.target_assignment_id is None
+        and isinstance(body.draft, dict)
+        and body.draft.get("grade_treatment") != "PRACTICE_ONLY"
+    ):
+        raise HTTPException(422, "Select one explicit original classwork for this remediation activity")
     token = actor.set(staff_id)
     try:
         raw_draft = body.draft if body.draft is not None else body.model_dump()
@@ -164,6 +170,7 @@ def preflight_remediation_draft_endpoint(
             staff_id=staff_id,
             intervention_id=intervention_id,
             draft_input=raw_draft,
+            target_assignment_id=body.target_assignment_id,
             require_readings=body.validation_stage == "PUBLICATION",
         )
     finally:
@@ -182,11 +189,14 @@ def create_remediation_assessment_endpoint(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    if body.target_assignment_id is None and body.draft.get("grade_treatment") != "PRACTICE_ONLY":
+        raise HTTPException(422, "Select one explicit original classwork for this remediation activity")
     return create_remediation_assessment(
         db,
         staff_id=staff_id,
         intervention_id=intervention_id,
         remediation_request_id=body.remediation_request_id,
+        target_assignment_id=body.target_assignment_id,
         draft_input=body.draft,
     )
 

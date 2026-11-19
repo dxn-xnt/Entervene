@@ -25,7 +25,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.people.Student import Student
 from app.services.grading.ComponentMapper import CanonicalGradingComponent, classify_classwork_component
-from app.services.grading.ExaminationCalculator import ExaminationObservation, compute_examination_component
+from app.services.grading.ExaminationCalculator import EXAM_SUBTYPES, ExaminationObservation, compute_examination_component
 from app.services.grading.PassingThresholdReader import (
     read_passing_threshold_context_or_422,
     require_subject_passing_threshold,
@@ -58,10 +58,18 @@ FINALIZED = "FINALIZED"
 GRADE_REPRESENTATION = "TRANSMUTED_TERM_GRADE"
 
 
-def _reason(code: str, message: str, *, assignment_id: int | None = None) -> dict[str, Any]:
+def _reason(
+    code: str,
+    message: str,
+    *,
+    assignment_id: int | None = None,
+    missing_evidence: list[str] | None = None,
+) -> dict[str, Any]:
     value: dict[str, Any] = {"code": code, "message": message}
     if assignment_id is not None:
         value["assignment_id"] = assignment_id
+    if missing_evidence:
+        value["missing_evidence"] = missing_evidence
     return value
 
 
@@ -119,9 +127,20 @@ def _strict_exam_reasons(components: dict[str, Any]) -> list[dict[str, Any]]:
     result = compute_examination_component(observations, require_complete_for_percent=True)
     if result.complete:
         return []
+    labels = {
+        "SUMMATIVE_1": "Summative 1",
+        "SUMMATIVE_2": "Summative 2",
+        "TERM_EXAM": "Term Examination",
+    }
+    missing = [
+        labels[subtype]
+        for subtype in EXAM_SUBTYPES
+        if not result.subtype_has_evidence.get(subtype, False)
+    ]
     return [_reason(
         "INCOMPLETE_EXAMINATION_EVIDENCE",
-        "Authoritative projection requires scored Summative 1, Summative 2, and Term Examination evidence.",
+        "Some required Examination grades have not been recorded.",
+        missing_evidence=missing,
     )]
 
 
@@ -287,9 +306,21 @@ def calculate_subject_grade_projection(
                 _grade_send_requirements(db, scope, weights),
             )
             if readiness.code is not None:
+                missing_labels = sorted({item.category for item in readiness.missing_items})
+                if not missing_labels:
+                    component_labels = {
+                        "written_work": "Written Work",
+                        "performance_task": "Performance Task",
+                        "quarterly_assessment": "Examination",
+                    }
+                    missing_labels = [
+                        component_labels.get(name, name.replace("_", " ").title())
+                        for name in readiness.missing_components
+                    ]
                 unavailable_reasons.append(_reason(
                     "INCOMPLETE_ACADEMIC_EVIDENCE",
-                    readiness.message,
+                    "Some required grades have not been recorded.",
+                    missing_evidence=missing_labels,
                 ))
             unavailable_reasons.extend(_strict_exam_reasons(actual_components))
             for audit in resolved.audit_records:

@@ -6,6 +6,8 @@ from copy import deepcopy
 from decimal import Decimal
 from uuid import uuid4
 
+import pytest
+
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
@@ -278,7 +280,7 @@ def test_already_remediated_original_is_not_offered_again(candidate_context):
     assert response.json()["detail"]["reasons"][0]["code"] == "TARGET_ALREADY_REMEDIATED"
 
 
-def test_intervention_can_project_its_own_linked_targets(candidate_context):
+def test_intervention_cannot_reselect_its_own_linked_targets(candidate_context):
     ctx = candidate_context
     _activate(ctx)
     original = _focused_targets(ctx)[0]
@@ -319,8 +321,8 @@ def test_intervention_can_project_its_own_linked_targets(candidate_context):
         "target_assignment_ids": [original.classwork_assignment_id],
     })
 
-    assert response.status_code == 200, response.text
-    assert response.json()["target_projections"][0]["applied"] is True
+    assert response.status_code == 422
+    assert response.json()["detail"]["reasons"][0]["code"] == "TARGET_ALREADY_REMEDIATED"
 
 
 def test_student_class_subject_and_period_isolation(candidate_context):
@@ -400,6 +402,12 @@ def test_incomplete_midterm_projection_keeps_individual_gains(candidate_context)
     assert body["target_projections"][0]["projected_subject_grade"] is None
     assert body["target_projections"][0]["reaches_passing_threshold"] is None
     assert "INCOMPLETE_EXAMINATION_EVIDENCE" in {item["code"] for item in body["unavailable_reasons"]}
+    missing = {
+        label
+        for reason in body["unavailable_reasons"]
+        for label in reason.get("missing_evidence", [])
+    }
+    assert {"Summative 1", "Summative 2", "Term Examination"} <= missing
 
 
 def test_ai_midterm_baseline_replays_existing_pipeline_with_same_model(candidate_context, monkeypatch):
@@ -475,6 +483,46 @@ def test_ai_midterm_one_and_cumulative_targets_rebuild_only_score_features(candi
     assert {row.submission_id: row.grade for row in ctx["db"].query(StudentSubmission).all()} == before
     assert ctx["db"].query(Intervention).count() == before_interventions
     assert not ctx["db"].new and not ctx["db"].dirty and not ctx["db"].deleted
+
+
+def test_non_monotonic_ai_what_if_stays_advisory_when_official_projection_is_unavailable(
+    candidate_context,
+    monkeypatch,
+):
+    ctx = candidate_context
+    _activate(ctx)
+    _save_cap(ctx, 85)
+    target = _focused_targets(ctx)[0]
+    model_outputs = iter((82.9, 82.8))
+
+    monkeypatch.setattr(
+        current_term_scorer,
+        "score_development_current_term",
+        lambda _features, model_name=None: next(model_outputs),
+    )
+
+    response = _http(ctx).post(_path(ctx), json={
+        "target_assignment_ids": [target.classwork_assignment_id],
+    })
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "UNAVAILABLE"
+    assert body["current_subject_grade"] is None
+    assert body["target_projections"][0]["projected_subject_grade"] is None
+    assert body["target_projections"][0]["possible_score_gain"] >= 0
+    assert "INCOMPLETE_EXAMINATION_EVIDENCE" in {
+        reason["code"] for reason in body["unavailable_reasons"]
+    }
+
+    estimate = body["ai_midterm_what_if"]
+    assert estimate["status"] == "AVAILABLE"
+    assert estimate["is_official_grade"] is False
+    assert estimate["is_guaranteed"] is False
+    assert estimate["baseline_predicted_term_grade"] == 82.9
+    assert estimate["target_estimates"][0]["hypothetical_predicted_term_grade"] == 82.8
+    assert estimate["target_estimates"][0]["estimated_difference_from_baseline"] == pytest.approx(-0.1)
+    assert any("does not lower" in limitation for limitation in estimate["limitations"])
 
 
 def test_ai_midterm_is_unavailable_when_normal_prediction_readiness_fails(candidate_context, monkeypatch):
