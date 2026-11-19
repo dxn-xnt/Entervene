@@ -44,6 +44,7 @@ export interface ClassworkItemLineProps<T extends BaseClassworkItem = TeacherCla
   showCategory?: boolean;
   showTypeBadge?: boolean;
   showCategoryBadge?: boolean;
+  titleAccessory?: React.ReactNode;
   rightContent?: React.ReactNode;
   size?: "default" | "sm";
   iconClassName?: string;
@@ -85,6 +86,7 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
   showCategory = true,
   showTypeBadge,
   showCategoryBadge,
+  titleAccessory,
   rightContent,
   size = "default",
 }: ClassworkItemLineProps<T>) => {
@@ -169,6 +171,7 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
             <h4 className={cn("font-bold text-foreground line-clamp-1 break-words", isSmall ? "text-sm" : "text-base sm:text-lg")}>
               {item.title}
             </h4>
+            {titleAccessory}
           </div>
 
           <div className={cn("-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground", isSmall ? "text-xs" : "text-sm")}>

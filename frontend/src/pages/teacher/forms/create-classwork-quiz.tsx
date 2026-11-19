@@ -1669,7 +1669,7 @@ export default function CreateClassworkQuizModal({
                                 </div>
 
                                 {/* ── Export Questionnaire Card (Post-Review Snapshot) ── */}
-                                <div className="rounded border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
+                                <div className="rounded! border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
                                     <div>
                                         <div className="flex items-center gap-1.5 font-black text-sm text-black">
                                             <FileDown className="w-4 h-4 text-black" />

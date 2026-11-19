@@ -93,54 +93,28 @@ const StudentQuizView = () => {
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      {isCompleted && (
-                        <Badge variant="surface" className="ml-2 bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold">
-                          Completed
-                        </Badge>
-                      )}
-                      {isPending && (
-                        <Badge variant="surface" className="ml-2 bg-amber-100 text-amber-800 border-amber-300 font-semibold">
-                          In Progress
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {isCompleted && (
-                        <Button
-                          variant="outline"
-                          onClick={() => navigate(quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search))}
-                          className="hover:shadow-none transition-all cursor-pointer font-bold"
-                        >
-                          View Results
-                        </Button>
-                      )}
-
-                      {quiz.can_submit ? (
-                        <Button
-                          autoIcon={false}
-                          onClick={() => navigate(quizPathWithContext(routes.student.quizTake.replace(":assignmentId", String(aid)), location.search))}
-                          className="hover:shadow-none transition-all cursor-pointer font-bold"
-                        >
-                          {isPending ? "Resume Quiz" : isCompleted ? "Retake Quiz" : "Take Quiz"}
-                        </Button>
-                      ) : !isCompleted ? (
-                        <Button disabled className="opacity-50 cursor-not-allowed">
-                          Quiz Closed
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-1 flex-col gap-6 py-4">
+                  <div className="flex flex-1 flex-col gap-4 py-4">
                     {/* Instructions Card */}
                     {quiz.instructions && (
                       <Card className="bg-white">
                         <h3 className="font-bold text-sm text-black/70 uppercase tracking-wide mb-1">Instructions</h3>
                         <p className="text-sm text-black/80 whitespace-pre-wrap">{quiz.instructions}</p>
                       </Card>
+                    )}
+
+                    {(isCompleted || isPending) && (
+                      <div className="flex items-center justify-end">
+                        {isCompleted && (
+                          <Badge variant="outline" size="md" className="bg-white px-3 py-1.5 text-sm">
+                            Completed
+                          </Badge>
+                        )}
+                        {isPending && (
+                          <Badge variant="outline" size="md" className="bg-white px-3 py-1.5 text-sm">
+                            In Progress
+                          </Badge>
+                        )}
+                      </div>
                     )}
 
                     {/* Stats Overview Grid */}
@@ -182,6 +156,32 @@ const StudentQuizView = () => {
                           Attempts Used
                         </span>
                       </Card>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      {isCompleted && (
+                        <Button
+                          variant="outline"
+                          onClick={() => navigate(quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search))}
+                          className="hover:shadow-none transition-all cursor-pointer font-bold"
+                        >
+                          View Results
+                        </Button>
+                      )}
+
+                      {quiz.can_submit ? (
+                        <Button
+                          autoIcon={false}
+                          onClick={() => navigate(quizPathWithContext(routes.student.quizTake.replace(":assignmentId", String(aid)), location.search))}
+                          className="hover:shadow-none transition-all cursor-pointer font-bold"
+                        >
+                          {isPending ? "Resume Quiz" : isCompleted ? "Retake Quiz" : "Take Quiz"}
+                        </Button>
+                      ) : !isCompleted ? (
+                        <Button disabled className="opacity-50 cursor-not-allowed">
+                          Quiz Closed
+                        </Button>
+                      ) : null}
                     </div>
 
                     {/* Previous Result Summary Banner if graded */}

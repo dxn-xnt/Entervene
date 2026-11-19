@@ -187,26 +187,28 @@ export default function StudentInterventions() {
                             showPublicationStatus={false}
                             showCategory={false}
                             showType={false}
+                            titleAccessory={
+                              <Badge
+                                variant={isReviewed ? "success" : "outline"}
+                                size="sm"
+                                className="gap-1"
+                              >
+                                {isReviewed ? (
+                                  <CheckCircle2 className="size-3.5" />
+                                ) : (
+                                  <Timer className="size-3.5" />
+                                )}
+                                {isReviewed ? "Reviewed" : "Review Required"}
+                              </Badge>
+                            }
                             rightContent={
                               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                                <Badge
-                                  variant={isReviewed ? "success" : "outline"}
-                                  size="sm"
-                                  className="gap-1"
-                                >
-                                  {isReviewed ? (
-                                    <CheckCircle2 className="size-3.5" />
-                                  ) : (
-                                    <Timer className="size-3.5" />
-                                  )}
-                                  {isReviewed ? "Reviewed" : "Review Required"}
-                                </Badge>
                                 {!historical && (
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     autoIcon={false}
-                                    className="gap-2"
+                                    className="gap-2 shadow-none"
                                     aria-label={`Open reading: ${reading.title}`}
                                     onClick={() => navigate(classworkLink(reading.assignment_id, interventionId))}
                                   >
