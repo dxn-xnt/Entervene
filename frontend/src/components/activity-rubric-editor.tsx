@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { useState } from "react";
 import { BookOpen, Lock } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -17,11 +16,11 @@ type Props = {
   readOnlyMessage?: string;
 };
 
-export function ActivityRubricEditor({ levels, onChange, disabled, disabledReason }: Props) {
 export function ActivityRubricEditor({
   levels,
   onChange,
   disabled,
+  disabledReason,
   readOnly = false,
   readOnlyMessage,
 }: Props) {
@@ -40,6 +39,7 @@ export function ActivityRubricEditor({
   }, [levels]);
 
   const handleTotalPointsChange = (nextMax: number) => {
+    if (readOnly) return;
     const base = baselineLevelsRef.current.length ? baselineLevelsRef.current : levels;
     const scaled = scaleRubricLevels(base, nextMax);
     onChange(scaled);
@@ -47,20 +47,6 @@ export function ActivityRubricEditor({
 
   return (
     <>
-      <div data-rubric-template-actions className="flex items-end justify-between w-full">
-        <p className="text-sm text-foreground font-medium -mb-1">
-          Choose Rubrics
-        </p>
-        <Button
-          type="button"
-          size="sm"
-          disabled={disabled}
-          aria-describedby={disabled && disabledReason ? lockExplanationId : undefined}
-          title={disabled && disabledReason ? disabledReason : undefined}
-          onClick={() => setDialogMode("choose")}
-        >
-          <BookOpen /> Choose Template
-        </Button>
       <div data-rubric-template-actions className="flex flex-wrap items-center justify-between gap-2 w-full">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm text-foreground font-medium">
@@ -74,7 +60,14 @@ export function ActivityRubricEditor({
           )}
         </div>
         {!readOnly && (
-          <Button type="button" size="sm" disabled={disabled} onClick={() => setDialogMode("choose")}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={disabled}
+            aria-describedby={disabled && disabledReason ? lockExplanationId : undefined}
+            title={disabled && disabledReason ? disabledReason : undefined}
+            onClick={() => setDialogMode("choose")}
+          >
             <BookOpen /> Choose Template
           </Button>
         )}
@@ -86,10 +79,10 @@ export function ActivityRubricEditor({
         title={readOnly ? "Scoring Rubric (Inherited)" : chosenTitle}
         totalPoints={activityRubricMaximum(levels)}
         rubricLevels={levels}
-        editable
-        disabled={disabled}
-        disabledReason={disabledReason}
-        disabledReasonId={disabled && disabledReason ? lockExplanationId : undefined}
+        editable={!readOnly}
+        disabled={disabled || readOnly}
+        disabledReason={readOnly ? undefined : disabledReason}
+        disabledReasonId={!readOnly && disabled && disabledReason ? lockExplanationId : undefined}
         onTotalPointsChange={handleTotalPointsChange}
       />
       {!readOnly && dialogMode && (

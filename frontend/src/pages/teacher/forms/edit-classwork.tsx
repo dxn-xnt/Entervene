@@ -645,14 +645,13 @@ export default function EditClassworkModal({
     );
     const originalRubric = classwork.rubric_levels ?? [];
     const rubricChanged =
-      hasRubric && JSON.stringify(rubricLevels) !== JSON.stringify(originalRubric);
+      hasRubric &&
+      !isLinkedRemediationRubricLocked &&
+      JSON.stringify(rubricLevels) !== JSON.stringify(originalRubric);
     if (rubricChanged && currentClasswork.has_graded_submissions) {
       setFormError("The rubric and maximum score cannot be changed after a submission has been graded.");
       return;
     }
-      hasRubric &&
-      !isLinkedRemediationRubricLocked &&
-      JSON.stringify(rubricLevels) !== JSON.stringify(originalRubric);
     if (
       rubricChanged &&
       currentClasswork.has_submissions
@@ -1273,19 +1272,14 @@ export default function EditClassworkModal({
                         disabledReason={currentClasswork.has_graded_submissions
                           ? "This rubric is locked because a submission has already been graded. Existing scores keep their original denominator."
                           : undefined}
+                        readOnly={Boolean(
+                          classwork.is_graded !== false &&
+                          classwork.rubric_levels?.length &&
+                          classwork.assignments?.some((assignment) => assignment.source_intervention_id != null),
+                        )}
+                        readOnlyMessage="Inherited from the linked original classwork. Instructions and tasks can be edited, while scoring standards remain aligned with the original classwork."
                       />
                     </section>
-                    <ActivityRubricEditor
-                      levels={rubricLevels}
-                      onChange={setRubricLevels}
-                      disabled={isSavingEdit}
-                      readOnly={Boolean(
-                        classwork.is_graded !== false &&
-                        classwork.rubric_levels?.length &&
-                        classwork.assignments?.some((assignment) => assignment.source_intervention_id != null),
-                      )}
-                      readOnlyMessage="Inherited from the linked original classwork. Instructions and tasks can be edited, while scoring standards remain aligned with the original classwork."
-                    />
                   )}
               </div>
 
