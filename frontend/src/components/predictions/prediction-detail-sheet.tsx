@@ -876,18 +876,21 @@ function CurrentTermTeacherDetail({
                 </div>
               </div>
 
-              <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
+              <div className="mt-2 flex flex-col gap-1 text-sm">
                 <p className="text-sm">
                   Subject:{" "}
                   <span className="text-base font-semibold">{prediction.subject_name}</span>
                 </p>
-                <p className="text-sm">
-                  Class:{" "}
-                  <span className="text-base font-semibold">{prediction.class_name}</span>
-                </p>
-                <p className="col-span-2">
-                  Term: <strong>{prediction.period_name}</strong>
-                </p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <p className="text-sm">
+                    Class:{" "}
+                    <span className="text-base font-semibold">{prediction.class_name}</span>
+                  </p>
+                  <p className="text-sm">
+                    Term:{" "}
+                    <span className="text-base font-semibold">{prediction.period_name}</span>
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -1083,8 +1086,8 @@ function CurrentTermTeacherDetail({
       {isTeacher && activeInterventionId !== undefined && (
         <div className="pb-5">
           <Button asChild>
-            <Link to={`${routes.teacher.interventions}?active=${activeInterventionId}`}>
-              View Active Intervention
+            <Link to={`${routes.teacher.interventions}?active=${activeInterventionId}&setup=1`}>
+              Proceed With Intervention
             </Link>
           </Button>
         </div>

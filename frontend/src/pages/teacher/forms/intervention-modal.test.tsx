@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -30,7 +30,7 @@ vi.mock("./intervention-support-materials", async () => {
         validateStep: () => true,
       }));
       React.useEffect(() => {
-        onChangesChange?.(wizardStep === 2);
+        onChangesChange?.(wizardStep === 1);
       }, [onChangesChange, wizardStep]);
       return (
         <div>
@@ -78,14 +78,14 @@ describe("intervention support wizard navigation", () => {
       />,
     );
 
-    expect(screen.getByText("Step 1 of 5")).toBeDefined();
+    expect(screen.getByText("Step 1 of 3")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Add Intervention Activity" }));
 
-    expect(screen.getByText("Step 1 of 5")).toBeDefined();
+    expect(screen.getByText("Step 1 of 3")).toBeDefined();
     expect(screen.getByTestId("support-wizard-step").textContent).toBe("1");
   });
 
-  it("saves changed reading selections before closing step 2", async () => {
+  it("saves changed reading selections before closing step 1", async () => {
     const onClose = vi.fn();
     render(
       <InterventionModal
@@ -103,8 +103,7 @@ describe("intervention support wizard navigation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("Step 2 of 5")).toBeDefined();
+    expect(screen.getByText("Step 1 of 3")).toBeDefined();
     const closeButton = screen.getAllByRole("button", { name: "Close" }).at(-1);
     expect(closeButton).toBeDefined();
     fireEvent.click(closeButton!);

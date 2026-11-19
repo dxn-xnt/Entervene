@@ -2,8 +2,10 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
+import { Empty } from "@/components/retroui/Empty";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
+import { cn } from "@/lib/utils";
 import { SubjectSectionCard } from "./subject-section-card";
 import type { DashboardSubjectGroupSummary } from "./current-term-dashboard-adapter";
 import { getTeacherRiskDisplaySummary } from "./teacher-risk-display";
@@ -13,12 +15,14 @@ interface PredictionSubjectSectionProps {
   group: DashboardSubjectGroupSummary;
   navigationEnabled?: boolean;
   predictionBasePath?: string;
+  className?: string;
 }
 
 export function PredictionSubjectSection({
   group,
   navigationEnabled = true,
   predictionBasePath = "/teacher/predictions",
+  className,
 }: PredictionSubjectSectionProps) {
   const displaySummary = getTeacherRiskDisplaySummary({
     HIGH_RISK: group.high_risk_count,
@@ -37,12 +41,19 @@ export function PredictionSubjectSection({
   });
 
   return (
-    <Card className="flex flex-col bg-background">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold">{group.display_name}</h2>
+    <Card className={cn("flex flex-col bg-background", className)}>
+      <div className="flex items-center justify-between gap-3 min-w-0">
+        <div className="min-w-0 flex-1">
+          <Tooltip>
+            <TooltipTrigger render={
+              <h2 className="text-xl font-bold truncate">
+                {group.display_name}
+              </h2>
+            } />
+            <TooltipContent>{group.display_name}</TooltipContent>
+          </Tooltip>
         </div>
-        <div className="flex flex-row flex-wrap gap-2 items-center">
+        <div className="flex flex-row flex-wrap gap-2 items-center shrink-0">
           <Badge size="sm" className={getRiskBadgeMeta("MODERATE_RISK").bg}>
             {displaySummary.MODERATE_RISK} Moderate Risk
           </Badge>
@@ -67,7 +78,7 @@ export function PredictionSubjectSection({
           </Tooltip>}
         </div>
       </div>
-      <div className="flex flex-wrap gap-3 pt-2">
+      <div className="flex flex-row flex-wrap gap-3 pt-2">
         {group.sections.length > 0 ? (
           group.sections.map((sec) => (
             <SubjectSectionCard
@@ -86,9 +97,16 @@ export function PredictionSubjectSection({
             />
           ))
         ) : (
-          <p className="text-xs text-muted-foreground italic py-2">
-            No sections assigned in this subject.
-          </p>
+          <Empty className="w-full border-2 border-black bg-white py-4 px-3 shadow-none hover:shadow-none justify-center">
+            <Empty.Content className="gap-1">
+              <Empty.Title className="text-sm font-bold text-foreground">
+                No sections assigned
+              </Empty.Title>
+              <Empty.Description className="text-xs text-muted-foreground">
+                No sections are currently assigned to this subject.
+              </Empty.Description>
+            </Empty.Content>
+          </Empty>
         )}
       </div>
     </Card>

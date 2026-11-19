@@ -367,7 +367,7 @@ describe("InterventionSupportMaterials progressive target selection and creation
           ref={ref}
           detail={baseDetail}
           page="plan"
-          wizardStep={4}
+          wizardStep={3}
         />
       </MemoryRouter>
     );
@@ -425,7 +425,7 @@ describe("InterventionSupportMaterials progressive target selection and creation
         <InterventionSupportMaterials
           detail={baseDetail}
           page="plan"
-          wizardStep={4}
+          wizardStep={3}
         />
       </MemoryRouter>
     );
@@ -474,7 +474,7 @@ describe("InterventionSupportMaterials progressive target selection and creation
         <InterventionSupportMaterials
           detail={baseDetail}
           page="plan"
-          wizardStep={4}
+          wizardStep={3}
         />
       </MemoryRouter>
     );
@@ -511,7 +511,7 @@ describe("InterventionSupportMaterials progressive target selection and creation
         <InterventionSupportMaterials
           detail={baseDetail}
           page="plan"
-          wizardStep={4}
+          wizardStep={3}
         />
       </MemoryRouter>
     );
@@ -530,7 +530,7 @@ describe("InterventionSupportMaterials progressive target selection and creation
         <InterventionSupportMaterials
           detail={baseDetail}
           page="plan"
-          wizardStep={4}
+          wizardStep={3}
         />
       </MemoryRouter>
     );
@@ -589,7 +589,7 @@ describe("InterventionSupportMaterials progressive target selection and creation
         <InterventionSupportMaterials
           detail={baseDetail}
           page="plan"
-          wizardStep={4}
+          wizardStep={3}
         />
       </MemoryRouter>
     );
@@ -603,308 +603,5 @@ describe("InterventionSupportMaterials progressive target selection and creation
     expect(await screen.findByText(/No unused eligible classwork has a positive possible improvement/i)).toBeDefined();
     expect(screen.queryByRole("button", { name: "Add Another Remediation Activity" })).toBeNull();
     expect(screen.queryByLabelText("New Remediation Activity")).toBeNull();
-  });
-});
-
-describe("InterventionSupportMaterials Step 5 summary and Step 1 labels/outcomes", () => {
-  const makeTwoActivityWorkspace = (targetAssignmentIds: number[] = [101, 103]): RemediationWorkspace => {
-    const ws = makeWorkspace(targetAssignmentIds);
-    ws.progress = {
-      ...ws.progress,
-      completed_remediation: [
-        ...ws.progress.completed_remediation,
-        {
-          title: "Remedial Quiz 2",
-          assignment_id: 502,
-          grade: 27,
-          total_points: 30,
-        },
-      ],
-      assigned_remediation: [
-        ...(ws.progress.assigned_remediation ?? []),
-        {
-          title: "Remedial Quiz 2",
-          assignment_id: 502,
-          classwork_id: 602,
-          classwork_type: "QUIZ",
-          is_published: true,
-          component: "WRITTEN_WORK",
-          is_graded: true,
-          submission_status: "graded",
-          grade: 27,
-          total_points: 30,
-          original_assignment_id: 103,
-          original_title: "WW 3 - Linear Equations",
-          original_grade: 12,
-          effective_grade: 22.5,
-        },
-      ],
-    };
-    return ws;
-  };
-
-  it("displays all remediation activities with their own linked originals, scores, and statuses on Step 5", async () => {
-    apiMocks.getRemediationWorkspace.mockResolvedValue(makeTwoActivityWorkspace([101, 103]));
-
-    render(
-      <MemoryRouter>
-        <InterventionSupportMaterials
-          detail={baseDetail}
-          page="plan"
-          wizardStep={5}
-        />
-      </MemoryRouter>
-    );
-
-    expect(await screen.findByText("2 activities")).toBeDefined();
-
-    const firstCard = screen.getByTestId("summary-remediation-501");
-    expect(within(firstCard).getByText("Remedial Quiz 1")).toBeDefined();
-    expect(within(firstCard).getByText("Original Classwork")).toBeDefined();
-    expect(within(firstCard).getByText("WW 1 - Number Sense")).toBeDefined();
-    expect(within(firstCard).getByText("8/20")).toBeDefined();
-    expect(within(firstCard).getByText("18/20")).toBeDefined();
-    expect(within(firstCard).getByText("15/20")).toBeDefined();
-    expect(within(firstCard).getByText("Completed")).toBeDefined();
-    expect(within(firstCard).queryByText("WW 3 - Linear Equations")).toBeNull();
-    expect(within(firstCard).queryByText("22.5/30")).toBeNull();
-
-    const secondCard = screen.getByTestId("summary-remediation-502");
-    expect(within(secondCard).getByText("Remedial Quiz 2")).toBeDefined();
-    expect(within(secondCard).getByText("Original Classwork")).toBeDefined();
-    expect(within(secondCard).getByText("WW 3 - Linear Equations")).toBeDefined();
-    expect(within(secondCard).getByText("12/30")).toBeDefined();
-    expect(within(secondCard).getByText("27/30")).toBeDefined();
-    expect(within(secondCard).getByText("22.5/30")).toBeDefined();
-    expect(within(secondCard).getByText("Completed")).toBeDefined();
-    expect(within(secondCard).queryByText("WW 1 - Number Sense")).toBeNull();
-    expect(within(secondCard).queryByText("15/20")).toBeNull();
-
-    expect(screen.queryByLabelText("Pending New Remediation Target")).toBeNull();
-    expect(screen.queryByText(/Original Exam/i)).toBeNull();
-  });
-
-  it("displays a pending new remediation target separately from completed activities on Step 5", async () => {
-    apiMocks.getRemediationWorkspace.mockResolvedValue(makeWorkspace([101, 103]));
-
-    render(
-      <MemoryRouter>
-        <InterventionSupportMaterials
-          detail={baseDetail}
-          page="plan"
-          wizardStep={5}
-        />
-      </MemoryRouter>
-    );
-
-    expect(await screen.findByText("1 activity")).toBeDefined();
-
-    const completedCard = screen.getByTestId("summary-remediation-501");
-    expect(within(completedCard).getByText("Remedial Quiz 1")).toBeDefined();
-    expect(within(completedCard).getByText("WW 1 - Number Sense")).toBeDefined();
-    expect(within(completedCard).getByText("Completed")).toBeDefined();
-
-    const pendingSection = screen.getByLabelText("Pending New Remediation Target");
-    expect(within(pendingSection).getByText("Not yet created")).toBeDefined();
-    expect(within(pendingSection).getByText("WW 3 - Linear Equations")).toBeDefined();
-    expect(within(pendingSection).getByText("12/30")).toBeDefined();
-    expect(within(pendingSection).getByText(/Awaiting activity creation/i)).toBeDefined();
-    expect(within(pendingSection).queryByText("Remedial Quiz 1")).toBeNull();
-  });
-
-  it("handles missing outcome data and ungraded draft activities gracefully on Step 5", async () => {
-    const ws = makeWorkspace([999, 102]);
-    ws.progress = {
-      ...ws.progress,
-      completed_remediation: [
-        {
-          title: "Remedial Activity Missing Scores",
-          assignment_id: 701,
-          grade: null,
-          total_points: null,
-        },
-      ],
-      assigned_remediation: [
-        {
-          title: "Remedial Activity Missing Scores",
-          assignment_id: 701,
-          classwork_id: 801,
-          classwork_type: "ASSIGNMENT",
-          is_published: true,
-          component: "PERFORMANCE_TASK",
-          is_graded: true,
-          submission_status: "graded",
-          grade: null,
-          total_points: null,
-          original_assignment_id: 999,
-          original_title: null,
-          original_grade: null,
-          effective_grade: null,
-        },
-        {
-          title: "Remedial Draft Activity",
-          assignment_id: 702,
-          classwork_id: 802,
-          classwork_type: "QUIZ",
-          is_published: false,
-          component: "WRITTEN_WORK",
-          is_graded: true,
-          submission_status: "draft",
-          grade: null,
-          total_points: 20,
-          original_assignment_id: 102,
-          original_title: "WW 2 - Algebraic Expressions",
-          original_grade: 9,
-          effective_grade: null,
-        },
-      ],
-    };
-    apiMocks.getRemediationWorkspace.mockResolvedValue(ws);
-
-    render(
-      <MemoryRouter>
-        <InterventionSupportMaterials
-          detail={baseDetail}
-          page="plan"
-          wizardStep={5}
-        />
-      </MemoryRouter>
-    );
-
-    const missingCard = await screen.findByTestId("summary-remediation-701");
-    expect(within(missingCard).getByText("Remedial Activity Missing Scores")).toBeDefined();
-    expect(within(missingCard).getByText("Completed")).toBeDefined();
-    expect(within(missingCard).getAllByText("Unavailable")).toHaveLength(4);
-    expect(missingCard.textContent).not.toContain("null");
-    expect(missingCard.textContent).not.toContain("undefined");
-
-    const draftCard = screen.getByTestId("summary-remediation-702");
-    expect(within(draftCard).getByText("Remedial Draft Activity")).toBeDefined();
-    expect(within(draftCard).getByText("Draft")).toBeDefined();
-    expect(within(draftCard).getByText("WW 2 - Algebraic Expressions")).toBeDefined();
-    expect(within(draftCard).getByText("9/20")).toBeDefined();
-    expect(within(draftCard).getAllByText("Pending")).toHaveLength(2);
-  });
-
-  it("uses Original Classwork labels and groups outcomes per activity on Step 1 for WW/PT", async () => {
-    apiMocks.getRemediationWorkspace.mockResolvedValue(makeTwoActivityWorkspace([101, 103]));
-
-    render(
-      <MemoryRouter>
-        <InterventionSupportMaterials
-          detail={baseDetail}
-          page="plan"
-          wizardStep={1}
-        />
-      </MemoryRouter>
-    );
-
-    const firstOutcome = await screen.findByTestId("activity-outcome-501");
-    const secondOutcome = screen.getByTestId("activity-outcome-502");
-
-    expect(screen.getAllByText(/Original Classwork:/i).length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByText(/Original Exam:/i)).toBeNull();
-
-    expect(within(firstOutcome).getByText("Remedial Quiz 1")).toBeDefined();
-    expect(within(firstOutcome).getByText("WW 1 - Number Sense")).toBeDefined();
-    expect(within(firstOutcome).getByText("18/20")).toBeDefined();
-    expect(within(firstOutcome).getByText("15/20")).toBeDefined();
-    expect(within(firstOutcome).queryByText("27/30")).toBeNull();
-    expect(within(firstOutcome).queryByText("22.5/30")).toBeNull();
-
-    expect(within(secondOutcome).getByText("Remedial Quiz 2")).toBeDefined();
-    expect(within(secondOutcome).getByText("WW 3 - Linear Equations")).toBeDefined();
-    expect(within(secondOutcome).getByText("27/30")).toBeDefined();
-    expect(within(secondOutcome).getByText("22.5/30")).toBeDefined();
-    expect(within(secondOutcome).queryByText("18/20")).toBeNull();
-    expect(within(secondOutcome).queryByText("15/20")).toBeNull();
-  });
-
-  it("uses Original Exam labels only for Examination remediation on Step 1 and Step 5", async () => {
-    const examWorkspace = makeWorkspace([201]);
-    examWorkspace.plan = {
-      ...examWorkspace.plan,
-      grade_treatment: "EXAMINATION",
-      original_exam_assignment_id: 201,
-      target_assignment_ids: [201],
-    };
-    examWorkspace.focus = {
-      ...examWorkspace.focus,
-      component: "EXAMINATION",
-      exam_subtype: "TERM_EXAM",
-    };
-    examWorkspace.original_exams = [
-      {
-        assignment_id: 201,
-        title: "First Quarter Exam",
-        subtype: "TERM_EXAM",
-        score: 28,
-        total_points: 50,
-      },
-    ];
-    examWorkspace.progress = {
-      ...examWorkspace.progress,
-      completed_remediation: [
-        {
-          title: "Remedial Quarter Exam",
-          assignment_id: 601,
-          grade: 42,
-          total_points: 50,
-        },
-      ],
-      assigned_remediation: [
-        {
-          title: "Remedial Quarter Exam",
-          assignment_id: 601,
-          classwork_id: 701,
-          classwork_type: "QUIZ",
-          is_published: true,
-          component: "EXAMINATION",
-          is_graded: true,
-          submission_status: "graded",
-          grade: 42,
-          total_points: 50,
-          original_assignment_id: 201,
-          original_title: "First Quarter Exam",
-          original_grade: 28,
-          effective_grade: 42,
-          exam_subtype: "TERM_EXAM",
-        },
-      ],
-    };
-    apiMocks.getRemediationWorkspace.mockResolvedValue(examWorkspace);
-
-    const { rerender } = render(
-      <MemoryRouter>
-        <InterventionSupportMaterials
-          detail={baseDetail}
-          page="plan"
-          wizardStep={1}
-        />
-      </MemoryRouter>
-    );
-
-    const examOutcome = await screen.findByTestId("activity-outcome-601");
-    expect(screen.getAllByText(/Original Exam:/i).length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByText(/Original Classwork:/i)).toBeNull();
-    expect(within(examOutcome).getAllByText("42/50")).toHaveLength(2);
-
-    rerender(
-      <MemoryRouter>
-        <InterventionSupportMaterials
-          detail={baseDetail}
-          page="plan"
-          wizardStep={5}
-        />
-      </MemoryRouter>
-    );
-
-    const summaryCard = await screen.findByTestId("summary-remediation-601");
-    expect(within(summaryCard).getByText("Original Exam")).toBeDefined();
-    expect(within(summaryCard).queryByText("Original Classwork")).toBeNull();
-    expect(within(summaryCard).getByText(/First Quarter Exam/i)).toBeDefined();
-    expect(within(summaryCard).getByText("28/50")).toBeDefined();
-    expect(within(summaryCard).getAllByText("42/50")).toHaveLength(2);
-    expect(screen.queryByLabelText("Pending New Remediation Target")).toBeNull();
   });
 });

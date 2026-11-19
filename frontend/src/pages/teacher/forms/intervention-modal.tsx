@@ -6,7 +6,7 @@ import { Button } from "@/components/teacher/button";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
-import { Tabs } from "@/components/retroui/Tabs";
+import SegmentedControl from "@/components/retroui/SegmentedControl";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Empty } from "@/components/retroui/Empty";
@@ -52,12 +52,12 @@ const percentVariant = (
 export const INTERVENTION_ACTIVITY_WIZARD_STEP = 1;
 
 const supportTabs = [
-  { id: "1", label: "Support Plan" },
-  { id: "2", label: "Support Resources" },
-  { id: "3", label: "Practice Assessment" },
-  { id: "4", label: "Remediation Activity" },
-  { id: "5", label: "Summary" },
+  { id: "1", label: "Support Resources" },
+  { id: "2", label: "Practice Assessment" },
+  { id: "3", label: "Remediation Activity" },
 ];
+
+const LAST_SUPPORT_STEP = supportTabs.length;
 
 const strongestEvidence = (diagnosis: DiagnosisSnapshot) => {
   const scored = diagnosis.lowest_supported_competencies ?? [];
@@ -208,7 +208,7 @@ export default function InterventionModal({
     if (
       !isActive ||
       supportPage !== "plan" ||
-      wizardStep !== 2 ||
+      wizardStep !== 1 ||
       !supportHasChanges ||
       !supportMaterialsRef.current
     ) {
@@ -248,7 +248,7 @@ export default function InterventionModal({
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) void requestClose(); }}>
       <Dialog.Content
         size="2xl"
-        className="max-h-[90vh] flex flex-col p-0 overflow-hidden"
+        className="w-[95vw] max-w-5xl h-[88vh] max-h-[88vh] flex flex-col p-0 overflow-hidden"
       >
         <Dialog.Header asChild={isActive && supportPage === "plan"}>
           <Dialog.Title className="text-xl font-bold">
@@ -261,11 +261,11 @@ export default function InterventionModal({
                 : "Candidate Review"}
           </Dialog.Title>
           {isActive && supportPage === "plan" && (
-            <span className="ml-auto text-base font-semibold">Step {wizardStep} of 5</span>
+            <span className="ml-auto text-base font-semibold">Step {wizardStep} of {LAST_SUPPORT_STEP}</span>
           )}
         </Dialog.Header>
 
-        <div ref={contentRef} className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div ref={contentRef} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5">
           {detailLoading ? (
             <div
               aria-label={
@@ -471,16 +471,23 @@ export default function InterventionModal({
                     wizardStep={supportPage === "plan" ? wizardStep : undefined}
                     detail={detail}
                     previousResolved={previousResolved}
-                    navigation={(
-                      <Tabs
-                        tabs={supportTabs}
-                        activeTab={String(supportPage === "plan" ? wizardStep : 1)}
-                        onTabChange={(step) => void navigateToStep(Number(step))}
-                        className="-mx-5! static!"
-                        listClassName="px-5!"
-                        tabClassName="rounded-t-lg!"
-                      />
-                    )}
+                    navigation={supportPage === "plan" ? (
+                      <div className="overflow-x-auto no-scrollbar py-0.5">
+                        <SegmentedControl
+                          size="sm"
+                          className="w-full justify-evenly"
+                          value={String(wizardStep)}
+                          onValueChange={(step) => void navigateToStep(Number(step))}
+                          aria-label="Support navigation"
+                        >
+                          {supportTabs.map((tab) => (
+                            <SegmentedControl.Item key={tab.id} value={tab.id} className="w-full flex-1 text-base py-1">
+                              {tab.label}
+                            </SegmentedControl.Item>
+                          ))}
+                        </SegmentedControl>
+                      </div>
+                    ) : null}
                     onAddInterventionActivity={() => {
                       setSupportPage("plan");
                       setWizardStep(INTERVENTION_ACTIVITY_WIZARD_STEP);
@@ -777,7 +784,7 @@ export default function InterventionModal({
             onClick={() => void requestClose()}
             disabled={activating || savingAdjustments}
           >
-            {isActive && supportPage === "plan" && wizardStep !== 2 ? "Cancel" : "Close"}
+            {isActive && supportPage === "plan" && wizardStep !== 1 ? "Cancel" : "Close"}
           </Button>
           {isActive && supportPage === "plan" && wizardStep > 1 && (
             <Button variant="outline" disabled={savingAdjustments} onClick={() => {
@@ -787,15 +794,15 @@ export default function InterventionModal({
           {isActive && (
             <Button
               variant={supportPage === "plan" ? "outline" : "default"}
-              disabled={activating || savingAdjustments || (supportPage === "plan" && wizardStep === 5 && !supportHasChanges)}
+              disabled={activating || savingAdjustments || (supportPage === "plan" && wizardStep === LAST_SUPPORT_STEP && !supportHasChanges)}
               onClick={async () => {
                 if (supportPage === "plan") {
                   if (!supportMaterialsRef.current?.validateStep(wizardStep)) {
                     contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
                     return;
                   }
-                  if (wizardStep < 5) {
-                    if (wizardStep === 2 && !(await saveReadingSelections())) return;
+                  if (wizardStep < LAST_SUPPORT_STEP) {
+                    if (wizardStep === 1 && !(await saveReadingSelections())) return;
                     setWizardStep((step) => step + 1);
                     contentRef.current?.scrollTo({ top: 0 });
                     return;
@@ -822,7 +829,7 @@ export default function InterventionModal({
               {supportPage === "plan" ? (
                 savingAdjustments ? (
                   "Saving adjustments..."
-                ) : wizardStep < 5 ? "Next" : (
+                ) : wizardStep < LAST_SUPPORT_STEP ? "Next" : (
                   <>
                     <Save className="size-4 mr-1.5" />
                     Save Adjustments
