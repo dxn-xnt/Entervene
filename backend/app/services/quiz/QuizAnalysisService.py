@@ -44,16 +44,38 @@ def build_teacher_quiz_analysis(
     db: Session,
     staff_id: str,
     classwork_id: int,
+    assignment_id: int | None = None,
 ) -> QuizAnalysisResponse:
     """Summarize student participation, scores, and question-level outcomes."""
-    classwork = get_teacher_quiz_classwork(db, staff_id, classwork_id)
+    selected_assignment = (
+        db.query(ClassworkAssignment)
+        .filter(
+            ClassworkAssignment.classwork_assignment_id == assignment_id,
+            ClassworkAssignment.classwork_id == classwork_id,
+        )
+        .first()
+        if assignment_id is not None
+        else None
+    )
+    classwork = get_teacher_quiz_classwork(
+        db,
+        staff_id,
+        classwork_id,
+        assignment_scope=selected_assignment,
+    )
+    if assignment_id is not None and selected_assignment is None:
+        raise HTTPException(status_code=404, detail="Classwork assignment not found")
     quiz = _quiz_with_questions(db, classwork.classwork_id)
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz has not been created")
 
-    assignments = db.query(ClassworkAssignment).filter(
-        ClassworkAssignment.classwork_id == classwork.classwork_id
-    ).all()
+    assignments = (
+        [selected_assignment]
+        if selected_assignment is not None
+        else db.query(ClassworkAssignment).filter(
+            ClassworkAssignment.classwork_id == classwork.classwork_id
+        ).all()
+    )
     assignment_ids = [assignment.classwork_assignment_id for assignment in assignments]
     class_ids = [assignment.class_id for assignment in assignments]
     roster = _roster(db, class_ids)

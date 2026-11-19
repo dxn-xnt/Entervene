@@ -139,6 +139,7 @@ export default function ClassworkView({
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const editDeepLinkHandledRef = useRef(false);
+  const trackingRequestSeqRef = useRef(0);
   const [statusFilter, setStatusFilter] = useState<SubmissionStatusFilter>("all");
   const [gradingStatusFilter, setGradingStatusFilter] =
     useState<GradingStatusFilter>("all");
@@ -240,32 +241,42 @@ export default function ClassworkView({
 
   const loadTrackingAndAnalysis = useCallback(async () => {
     if (!selected) return;
+    const requestSeq = ++trackingRequestSeqRef.current;
     const trackingUrl =
       selectedAssignmentId !== "all"
         ? `/api/v1/submissions/assignment/${selectedAssignmentId}/tracking`
         : `/api/v1/submissions/classwork/${selected.classwork_id}/tracking`;
+    const analysisUrl =
+      selectedAssignmentId !== "all"
+        ? `/api/v1/quizzes/classwork/${selected.classwork_id}/analysis?assignment_id=${selectedAssignmentId}`
+        : `/api/v1/quizzes/classwork/${selected.classwork_id}/analysis`;
 
     setIsTrackingLoading(true);
+    setDetailError("");
     if (isQuizType(selected.classwork_type)) {
       setIsQuizAnalysisLoading(true);
+      setQuizAnalysisError("");
     }
     try {
       const response = await apiFetch(trackingUrl);
       if (!response.ok) {
         throw new Error("Unable to load student submissions.");
       }
-      setTracking((await response.json()) as AssignmentTracking);
+      const trackingPayload = (await response.json()) as AssignmentTracking;
+      if (requestSeq !== trackingRequestSeqRef.current) return;
+      setTracking(trackingPayload);
       if (isQuizType(selected.classwork_type)) {
-        const analysisResponse = await apiFetch(
-          `/api/v1/quizzes/classwork/${selected.classwork_id}/analysis`,
-        );
+        const analysisResponse = await apiFetch(analysisUrl);
         if (!analysisResponse.ok) {
           const body = await analysisResponse.json().catch(() => ({}));
           throw new Error(body.detail || "Unable to load quiz analysis.");
         }
-        setQuizAnalysis((await analysisResponse.json()) as QuizAnalysis);
+        const analysisPayload = (await analysisResponse.json()) as QuizAnalysis;
+        if (requestSeq !== trackingRequestSeqRef.current) return;
+        setQuizAnalysis(analysisPayload);
       }
     } catch (err) {
+      if (requestSeq !== trackingRequestSeqRef.current) return;
       const message =
         err instanceof Error
           ? err.message
@@ -276,8 +287,10 @@ export default function ClassworkView({
         setDetailError(message);
       }
     } finally {
-      setIsTrackingLoading(false);
-      setIsQuizAnalysisLoading(false);
+      if (requestSeq === trackingRequestSeqRef.current) {
+        setIsTrackingLoading(false);
+        setIsQuizAnalysisLoading(false);
+      }
     }
   }, [selected, selectedAssignmentId]);
 
@@ -1332,6 +1345,7 @@ export default function ClassworkView({
                   isQuizAnalysisLoading={isQuizAnalysisLoading}
                   quizAnalysisError={quizAnalysisError}
                   selected={selected}
+                  selectedAssignmentId={selectedAssignmentId}
                   setSelectedGradingSubmissionId={(submissionId) => {
                     if (!blocksLiveActions) setSelectedGradingSubmissionId(submissionId);
                   }}

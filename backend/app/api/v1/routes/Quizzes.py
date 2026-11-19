@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id, get_student_record
@@ -96,10 +96,16 @@ def get_quiz_builder(
 @router.get("/classwork/{classwork_id}/analysis", response_model=QuizAnalysisResponse)
 def get_quiz_analysis(
     classwork_id: int,
+    assignment_id: int | None = Query(default=None),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    return build_teacher_quiz_analysis(db, staff_id, classwork_id)
+    return build_teacher_quiz_analysis(
+        db,
+        staff_id,
+        classwork_id,
+        assignment_id=assignment_id,
+    )
 
 
 @router.put("/classwork/{classwork_id}", response_model=QuizBuilderResponse)
