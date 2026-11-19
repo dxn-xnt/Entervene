@@ -231,24 +231,14 @@ export function CurriculumPlanTable({
   return (
     <Card className="w-full overflow-hidden p-0 shadow-md">
       <Card.Header className="border-b-2 border-black bg-primary p-3 mb-0">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div className="flex flex-col gap-1">
-            <div className="flex flex-row gap-2 items-end">
-              <h2 className="text-2xl font-bold">
-                {gradeLabel}
-              </h2>
-              <p className="mb-0.5 text-base">
-                ({academicYearLabel})
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Badge size="sm" variant="solid">
-                {rows.length} subject{rows.length === 1 ? "" : "s"}
-              </Badge>
-              <Badge size="sm" variant="solid">
-                {terms.length} term{terms.length === 1 ? "" : "s"}
-              </Badge>
-            </div>
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-row gap-2 items-end">
+            <h2 className="text-2xl font-bold">
+              {gradeLabel}
+            </h2>
+            <p className="mb-0.5 text-base">
+              ({academicYearLabel})
+            </p>
           </div>
           <Badge size="sm" variant="outline">
             {pathwayLabel}

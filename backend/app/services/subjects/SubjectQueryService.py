@@ -7,6 +7,7 @@ from app.models.academic.GradingTemplate import GradingTemplate
 from app.services.subjects.SubjectShared import (
     ALLOWED_SUBJECT_STATUSES,
     DEFAULT_SUBJECT_STATUS,
+    ensure_standard_academic_levels,
     normalize_optional_text,
     normalize_subject_status,
     subject_to_item,
@@ -41,6 +42,7 @@ def _assignment_lock_reasons(db: Session, subject_ids: list[int]) -> dict[int, s
 
 
 def get_subject_form_options_data(db: Session) -> dict:
+    ensure_standard_academic_levels(db)
     academic_levels = (
         db.query(AcademicLevel)
         .order_by(AcademicLevel.grade_level, func.lower(AcademicLevel.level_name))

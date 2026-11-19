@@ -47,5 +47,5 @@ export { SubjectRow } from "./subject-row";
 export { SubjectCatalogCard } from "./subject-catalog-card";
 export { SubjectGradeSection } from "./subject-grade-section";
 export { OfferingRow } from "./offering-row";
-export { OfferingModal } from "./offering-modal";
+export { OfferingModal } from "../../forms/add-subject-offering-modal";
 export { CopyPreviousYearSetupModal } from "./copy-previous-year-setup-modal";
