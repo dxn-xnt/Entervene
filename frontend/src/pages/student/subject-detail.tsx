@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { BookOpen, ClipboardList, Sparkles } from "lucide-react";
+import { BookOpen, ClipboardList } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { PageBreadcrumb as Breadcrumb } from "@/components/page-breadcrumb";
@@ -9,17 +9,17 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { SubjectClassHeader } from "@/components/subject-class-header";
 import SubjectLessonTab from "./subjects-view/tabs/subject-lesson-tab";
 import SubjectClassworkTab from "./subjects-view/tabs/subject-classwork-tab";
-import SubjectSuggestionsTab from "./subjects-view/tabs/subject-suggestions-tab";
 import { routes } from "@/../routes";
 import { getMySubjects, type StudentSubjectItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { LoadingPanel } from "@/components/loading-panel";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 
-const tabs: TabItem<"lessons" | "classwork" | "suggestions">[] = [
+type SubjectTab = "lessons" | "classwork";
+
+const tabs: TabItem<SubjectTab>[] = [
   { id: "lessons", label: "Lessons", icon: BookOpen },
   { id: "classwork", label: "Classwork", icon: ClipboardList },
-  { id: "suggestions", label: "Suggestions", icon: Sparkles },
 ];
 
 const StudentSubjectDetail = () => {
@@ -31,10 +31,8 @@ const StudentSubjectDetail = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedPeriodId } = useAcademicPeriod();
   const requestedTab = searchParams.get("tab");
-  const activeTab = (requestedTab === "classwork" || requestedTab === "suggestions" ? requestedTab : "lessons") as
-    | "lessons"
-    | "classwork"
-    | "suggestions";
+  const activeTab: SubjectTab =
+    requestedTab === "classwork" ? "classwork" : "lessons";
   const isLessonDetailScreen =
     activeTab === "lessons" && Boolean(searchParams.get("lessonId"));
   const numericClassId = classId ? parseInt(classId, 10) : undefined;
@@ -44,13 +42,12 @@ const StudentSubjectDetail = () => {
     key: string;
     subject: StudentSubjectItem | null;
   } | null>(null);
-  const subjectInfo = subjectResult?.key === requestKey
-    ? subjectResult.subject
-    : null;
+  const subjectInfo =
+    subjectResult?.key === requestKey ? subjectResult.subject : null;
   const isResolved = subjectResult?.key === requestKey;
   const isLoading = !isResolved;
 
-  const handleTabChange = (tabId: "lessons" | "classwork" | "suggestions") => {
+  const handleTabChange = (tabId: SubjectTab) => {
     const nextParams = new URLSearchParams(searchParams);
     if (tabId === "lessons") nextParams.delete("tab");
     else nextParams.set("tab", tabId);
@@ -137,7 +134,6 @@ const StudentSubjectDetail = () => {
                         </Breadcrumb.List>
                       </Breadcrumb>
                     </div>
-
                   </header>
 
                   <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
@@ -190,12 +186,6 @@ const StudentSubjectDetail = () => {
                         )}
                         {activeTab === "classwork" && (
                           <SubjectClassworkTab
-                            classId={numericClassId}
-                            subjectId={numericSubjectId}
-                          />
-                        )}
-                        {activeTab === "suggestions" && (
-                          <SubjectSuggestionsTab
                             classId={numericClassId}
                             subjectId={numericSubjectId}
                           />
