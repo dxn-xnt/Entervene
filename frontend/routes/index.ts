@@ -19,7 +19,6 @@ export const routes = {
     users: "/admin/users",
     userDetail: "/admin/users/:role/:userId",
     interventions: "/admin/interventions",
-    notifications: "/admin/notifications",
     settings: "/admin/settings",
     academicPeriods: "/admin/academic-periods",
     predictions: "/admin/predictions",

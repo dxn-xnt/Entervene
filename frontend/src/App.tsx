@@ -26,7 +26,6 @@ const AdminClassDetail = lazy(() => import("./pages/admin/class-view"));
 const SubjectLoadStudio = lazy(() => import("./pages/admin/subject-load-studio"));
 const AdminUsers = lazy(() => import("./pages/admin/users"));
 const AdminUserDetail = lazy(() => import("./pages/admin/user-detail"));
-const AdminNotifications = lazy(() => import("./pages/admin/notifications"));
 const AdminSettings = lazy(() => import("./pages/admin/system-settings"));
 const AcademicPeriods = lazy(() => import("./pages/admin/academic-periods"));
 const AdminProfile = lazy(() => import("./pages/admin/profile-view"));
@@ -113,7 +112,6 @@ const App = () => {
                   <Route path={routes.admin.subjectLoadStudio} element={<SubjectLoadStudio />} />
                   <Route path={routes.admin.users} element={<AdminUsers />} />
                   <Route path={routes.admin.userDetail} element={<AdminUserDetail />} />
-                  <Route path={routes.admin.notifications} element={<AdminNotifications />} />
                   <Route path={routes.admin.settings} element={<AdminSettings />} />
                   <Route path={routes.admin.academicPeriods} element={<AcademicPeriods />} />
                   <Route path={routes.admin.profile} element={<AdminProfile />} />
