@@ -3394,7 +3394,7 @@ const InterventionSupportMaterials = forwardRef<
                         </div>
                         <div className="flex items-center gap-2 justify-between">
                           <span className="text-xs text-muted-foreground">
-                            Limits the selected classwork score, not the subject grade. Default: 75% · 100% full replacement is prohibited.
+                            Sets the highest score the classwork can reach after remediation.
                           </span>
                           <div className="flex items-center gap-1.5">
                             {[75, 80, 85].map((preset) => {
@@ -3435,88 +3435,13 @@ const InterventionSupportMaterials = forwardRef<
                         75
                       ) ? (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Unsaved target-score ceiling ({capInput}%). The preview above reflects the saved{" "}
+                        Save the {capInput}% cap to update the preview. Current preview: {" "}
                         {projectionResponse?.target_projections?.[0]?.cap_percentage ??
                           projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
                           plan.score_adjustment_cap ??
                           75}
                         % ceiling until adjustments are saved.
                       </p>
-                    ) : null}
-
-                    {selectedScorePreviews.length > 0 ? (
-                      <Card className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
-                        <div className="flex items-center justify-between">
-                          <p className="text-base font-bold">Score Adjustment Preview</p>
-                          <Badge variant="surface" size="sm">
-                            {capInput || "75"}% Target-Score Ceiling
-                          </Badge>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          {selectedScorePreviews.map((preview) => {
-                            const act = treatmentActivities.find(
-                              (a) =>
-                                a.classwork_id === preview.assignment_id ||
-                                (a as { classwork_assignment_id?: number }).classwork_assignment_id === preview.assignment_id
-                            );
-                            const comp = act?.component ?? plan.grade_treatment;
-                            return (
-                              <Card
-                                key={`modal-prev-${preview.assignment_id}`}
-                                className="flex flex-col border-2! gap-1 p-3 bg-primary rounded border-2 border-border"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-bold">{preview.title}</span>
-                                  {comp && (
-                                    <Badge variant="solid" size="sm">
-                                      {componentLabel(comp)}
-                                    </Badge>
-                                  )}
-                                </div>
-
-                                <Card className="grid grid-cols-3 border-2! gap-2 py-1.5 text-center bg-background! bg-retro rounded border mt-1">
-                                  <div>
-                                    <p className="text-[11px] text-muted-foreground font-semibold">Original</p>
-                                    <p className="text-base font-bold">
-                                      {preview.original_score}/{preview.max_points}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-[11px] text-muted-foreground font-semibold">Max. adjusted</p>
-                                    <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
-                                      {preview.max_adjusted_score}/{preview.max_points}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-[11px] text-muted-foreground font-semibold">Possible gain</p>
-                                    <p className="text-base font-bold">
-                                      +{preview.possible_gain > 0 ? preview.possible_gain : 0}
-                                    </p>
-                                  </div>
-                                </Card>
-
-                                <p className="text-xs text-foreground mt-0.5">
-                                  Actual grade reflects from students remediation score.
-                                </p>
-                              </Card>
-                            );
-                          })}
-                        </div>
-                      </Card>
-                    ) : selectedActivityIds.length > 0 ? (
-                      <div className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-bold">Score Adjustment Preview</p>
-                          <Badge variant="outline" size="sm">
-                            {previewLoading ? "Calculating..." : "Unavailable"}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {previewLoading
-                            ? "Calculating hypothetical adjusted scores..."
-                            : "Preview unavailable for the selected classwork."}
-                        </p>
-                      </div>
                     ) : null}
 
                     <div className="flex flex-col gap-1 mb-2">
@@ -3634,7 +3559,7 @@ const InterventionSupportMaterials = forwardRef<
                         </Empty>
                       )}
                       <p className="text-xs text-muted-foreground">
-                        Select exactly one original classwork. This remediation activity can adjust only that classwork.
+                        Choose one original classwork for this remediation.
                       </p>
                     </div>
 

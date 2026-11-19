@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.services.prediction.DevelopmentCurrentTermPredictionService import (
     STATUS_DEVELOPMENT_PREDICTION_AVAILABLE,
-     predict_development_current_term,
+    predict_development_current_term,
     prepare_development_current_term,
+    score_prepared_development_current_term,
 )
 
 
@@ -50,43 +51,15 @@ def _unavailable(
 
 def _limitations() -> list[str]:
     return [
-        "This is a provisional AI-assisted remediation estimate, not a raw model prediction or an official or guaranteed subject grade.",
-        "The what-if estimate combines the live AI baseline prediction with the mathematically justified weighted component grade impact of the capped classwork gain.",
+        "This is a provisional Random Forest what-if prediction, not an official or guaranteed subject grade.",
+        "The after-value assumes each selected original classwork receives its maximum capped effective score.",
+        "The model may predict a lower or unchanged grade even when a classwork score improves because its learned response uses the complete feature vector and is not forced to be monotonic.",
         "A lower or unchanged remediation score does not lower the student's actual classwork score or official subject grade.",
         "Reproduction requires the same evidence and the same immutable model artifact registered for this model version.",
         "No missing Examination score is fabricated, and AI output is not used as academic evidence.",
         "The baseline is recomputed from current live evidence (including previous graded remediation adjustments), so it can differ from an older stored prediction snapshot.",
-        "Hypothetical scores exist only for this calculation and are not submissions, awards, or persisted prediction snapshots.",
+        "Hypothetical scores and predictions exist only for this calculation and are not submissions, awards, or persisted prediction snapshots.",
     ]
-
-
-def _calculate_weighted_component_grade_gain(
-    *,
-    baseline_features: dict[str, Any],
-    hypothetical_features: dict[str, Any],
-) -> float | None:
-    """Compute the deterministic weighted subject-grade impact from capped WW/PT score gains.
-
-    For each component c in {ww, pt}:
-        delta_earned_c = E_c_hyp - E_c_base
-        delta_ps_c = (delta_earned_c / P_c) * 100
-        delta_ws_c = delta_ps_c * (W_c / 100) = (delta_earned_c / P_c) * W_c
-    """
-    total_weighted_gain = 0.0
-    for prefix in ("ww", "pt"):
-        base_earned = float(baseline_features.get(f"{prefix}_points_earned_so_far") or 0.0)
-        hyp_earned = float(hypothetical_features.get(f"{prefix}_points_earned_so_far") or 0.0)
-        delta_earned = hyp_earned - base_earned
-        if abs(delta_earned) <= 1e-12:
-            continue
-        if delta_earned < -1e-12:
-            return None
-        possible = float(hypothetical_features.get(f"{prefix}_points_possible_so_far") or 0.0)
-        weight = float(hypothetical_features.get(f"{prefix}_weight") or 0.0)
-        if possible <= 0.0 or weight <= 0.0:
-            return None
-        total_weighted_gain += (delta_earned / possible) * weight
-    return round(total_weighted_gain, 6)
 
 
 def calculate_ai_midterm_what_if(
@@ -100,7 +73,7 @@ def calculate_ai_midterm_what_if(
     model_name: str | None,
     target_projections: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Combine the live AI baseline prediction with cumulative weighted WW/PT remediation impacts."""
+    """Run read-only Random Forest inference for cumulative capped WW/PT scenarios."""
     if model_version_id is None or not model_name:
         return _unavailable(
             model_version_id=model_version_id,
@@ -116,12 +89,10 @@ def calculate_ai_midterm_what_if(
         "target_period_id": academic_period_id,
         "model_name": model_name,
     }
-    baseline_features: dict[str, Any] = {}
     try:
         baseline = predict_development_current_term(
             db,
             **scope,
-            scored_features_out=baseline_features,
         )
     except Exception:
         return _unavailable(
@@ -185,22 +156,23 @@ def calculate_ai_midterm_what_if(
                 )],
                 readiness=hypothetical.get("readiness_result"),
             )
-        weighted_gain = _calculate_weighted_component_grade_gain(
-            baseline_features=baseline_features,
-            hypothetical_features=prepared_hypothetical["features"],
-        )
-        if weighted_gain is None:
+        try:
+            scored_hypothetical = score_prepared_development_current_term(
+                hypothetical,
+                prepared_hypothetical,
+            )
+        except Exception:
             return _unavailable(
                 model_version_id=model_version_id,
                 model_name=model_name,
                 reasons=[_reason(
-                    "GRADING_WEIGHT_UNAVAILABLE",
-                    "Component possible points or grading weights are unavailable for hybrid impact calculation.",
+                    "MODEL_EVALUATION_UNAVAILABLE",
+                    "The selected prediction model could not score the hypothetical evidence.",
                     assignment_id,
                 )],
                 readiness=hypothetical.get("readiness_result"),
             )
-        grade = min(100.0, round(baseline_grade + weighted_gain, 6))
+        grade = float(scored_hypothetical["projected_final_term_grade"])
         estimates.append({
             "assignment_id": assignment_id,
             "maximum_hypothetical_effective_score": float(maximum),
