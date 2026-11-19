@@ -35,6 +35,8 @@ import {
   targetLevels,
   type OfferingFormState,
 } from "../subjects/components/subject-utils";
+import { Card } from "@/components/retroui/Card";
+import { Badge } from "@/components/retroui/Badge";
 
 const COMMON_DURATIONS = [45, 60, 72, 96] as const;
 
@@ -786,12 +788,9 @@ export function OfferingModal({
                     })}
                   </div>
                   {!periods.length ? (
-                    <Alert status="warning">
-                      <Alert.Title className="font-bold">Academic year setup incomplete</Alert.Title>
-                      <Alert.Description>
-                        No valid terms are configured for {selectedYear?.year_label ?? "the selected academic year"}. Configure its academic periods before adding offerings.
-                      </Alert.Description>
-                    </Alert>
+                    <p className="text-sm text-muted-foreground">
+                      No valid terms are configured for {selectedYear?.year_label ?? "the selected academic year"}. Configure its academic periods before adding offerings.
+                    </p>
                   ) : null}
                   {error === "No valid academic terms are available for the selected academic year." && <FormMessage>{error}</FormMessage>}
                   {error === "Select setup details, at least one term, and at least one subject." && !form.academic_period_ids.length && <FormMessage>Select at least one term.</FormMessage>}
@@ -802,11 +801,14 @@ export function OfferingModal({
             {offering ? (
               <>
                 <div className="space-y-1 text-muted-foreground">
-                  <p className="text-xs">Subject Being Edited</p>
-                  <p className="text-sm">{offering.subject.subject_name}</p>
-                  <p className="text-xs">
-                    Code: {offering.subject.subject_codename || "N/A"} • Grade: {offering.academic_level.level_name}
-                  </p>
+                  <p className="text-foreground text-sm font-semibold">Subject Being Edited</p>
+                  <Card className="flex flex-col gap-0 py-2! px-3 text-sm">
+                    <div className="flex flex-row gap-3 items-center">
+                      <span className="font-semibold text-lg text-foreground">{offering.subject.subject_name}</span>
+                      <Badge size="sm" variant="surface">{offering.academic_level.level_name}</Badge>
+                    </div>
+                    <span>{offering.subject.subject_codename || "N/A"}</span>
+                  </Card>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

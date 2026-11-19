@@ -48,7 +48,6 @@ import {
   offeringQueryFromFilters,
   downloadBlob,
   friendlyErrorMessage,
-  gradeLabel,
   pathwayLabel,
   targetLevels,
   TARGET_GRADES,
@@ -75,6 +74,7 @@ import {
   uploadSubjectOfferingImportCsv,
   type GradingTemplateListItem,
   type SubjectOfferingCopyAcademicYearResult,
+  type SubjectAcademicLevel,
   type SubjectListItem,
   type SubjectOfferingFormOptions,
   type SubjectOfferingListItem,
@@ -110,6 +110,7 @@ export default function AdminSubjects() {
   const [offeringOptions, setOfferingOptions] = useState<SubjectOfferingFormOptions | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogTemplateFilter, setCatalogTemplateFilter] = useState<string>("all");
+  const [catalogGradeFilter, setCatalogGradeFilter] = useState<string>("all");
   const [offeringFilters, setOfferingFilters] = useState<OfferingFilters>({
     academic_year_id: ALL_VALUE,
     grade: ALL_VALUE,
@@ -231,13 +232,12 @@ export default function AdminSubjects() {
   useEffect(() => {
     if (!offeringOptions) return;
     setOfferingFilters((current) => {
-      if (current.academic_year_id !== ALL_VALUE && current.grade !== ALL_VALUE) return current;
       const defaults = defaultOfferingFilters(offeringOptions, selectedYearId);
+      const nextYear = current.academic_year_id !== ALL_VALUE ? current.academic_year_id : defaults.academic_year_id;
+      if (current.academic_year_id === nextYear) return current;
       return {
-        ...defaults, ...current,
-        academic_year_id: current.academic_year_id !== ALL_VALUE ? current.academic_year_id : defaults.academic_year_id,
-        grade: current.grade !== ALL_VALUE ? current.grade : defaults.grade,
-        pathway: current.pathway !== ALL_VALUE ? current.pathway : defaults.pathway
+        ...current,
+        academic_year_id: nextYear,
       };
     });
   }, [offeringOptions, selectedYearId]);
@@ -271,8 +271,60 @@ export default function AdminSubjects() {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [gradingTemplates, subjects, archivedSubjects]);
 
+  const catalogGradeOptions = useMemo(() => {
+    const byLevel = new Map<number, { value: string; label: string; gradeLevel: number }>();
+
+    (offeringOptions?.academic_levels ?? []).forEach((lvl) => {
+      if (TARGET_GRADES.has(lvl.grade_level)) {
+        byLevel.set(lvl.academic_level_id, {
+          value: String(lvl.grade_level),
+          label: lvl.level_name,
+          gradeLevel: lvl.grade_level,
+        });
+      }
+    });
+
+    subjects.forEach((s) => {
+      if (s.academic_level && TARGET_GRADES.has(s.academic_level.grade_level)) {
+        if (!byLevel.has(s.academic_level.academic_level_id)) {
+          byLevel.set(s.academic_level.academic_level_id, {
+            value: String(s.academic_level.grade_level),
+            label: s.academic_level.level_name,
+            gradeLevel: s.academic_level.grade_level,
+          });
+        }
+      }
+    });
+
+    const sorted = Array.from(byLevel.values()).sort((a, b) => a.gradeLevel - b.gradeLevel);
+    if (sorted.length === 0) {
+      return [
+        { value: "all", label: "All" },
+        { value: "7", label: "Grade 7", gradeLevel: 7 },
+        { value: "8", label: "Grade 8", gradeLevel: 8 },
+        { value: "9", label: "Grade 9", gradeLevel: 9 },
+        { value: "10", label: "Grade 10", gradeLevel: 10 },
+        { value: "11", label: "Grade 11", gradeLevel: 11 },
+        { value: "12", label: "Grade 12", gradeLevel: 12 },
+      ];
+    }
+    return [
+      { value: "all", label: "All" },
+      ...sorted,
+    ];
+  }, [offeringOptions?.academic_levels, subjects]);
+
   const filteredCatalogSubjects = useMemo(() => {
     let list = subjects;
+
+    if (catalogGradeFilter !== "all") {
+      list = list.filter(
+        (subject) =>
+          String(subject.academic_level.grade_level) === catalogGradeFilter ||
+          String(subject.academic_level.academic_level_id) === catalogGradeFilter ||
+          subject.academic_level.level_name.toLowerCase() === catalogGradeFilter.toLowerCase()
+      );
+    }
 
     if (catalogTemplateFilter !== "all") {
       const filterLower = catalogTemplateFilter.trim().toLowerCase();
@@ -288,10 +340,9 @@ export default function AdminSubjects() {
         subject.subject_codename,
         subject.grading_template.template_name,
         subject.academic_level.level_name,
-        subject.grading_template.template_name,
       ].some((value) => value?.toLowerCase().includes(query));
     });
-  }, [subjects, catalogTemplateFilter, catalogSearch]);
+  }, [subjects, catalogGradeFilter, catalogTemplateFilter, catalogSearch]);
 
   const gradeGroups = useMemo<GradeGroup[]>(() => {
     const grouped = new Map<number, GradeGroup>();
@@ -359,16 +410,6 @@ export default function AdminSubjects() {
     ? `Viewing historical academic year: ${selectedAcademicYear?.year_label}. Curriculum setup is read-only to protect historical grades and prediction records.`
     : undefined;
 
-
-
-
-  const selectedAcademicLevel = useMemo(() => {
-    if (!offeringOptions || offeringFilters.grade === ALL_VALUE) return null;
-    return offeringOptions.academic_levels.find(
-      (level) => String(level.grade_level) === offeringFilters.grade
-    ) ?? null;
-  }, [offeringFilters.grade, offeringOptions]);
-
   const curriculumPeriods = useMemo(() => {
     if (!offeringOptions || !selectedAcademicYear) return [];
     return offeringOptions.academic_periods
@@ -380,6 +421,21 @@ export default function AdminSubjects() {
     () => [...subjects, ...archivedSubjects],
     [archivedSubjects, subjects]
   );
+
+  const groupedPlanOfferings = useMemo(() => {
+    const map = new Map<number, { level: SubjectAcademicLevel; offerings: SubjectOfferingListItem[] }>();
+    for (const off of offerings) {
+      const lvl = off.academic_level;
+      if (!map.has(lvl.academic_level_id)) {
+        map.set(lvl.academic_level_id, {
+          level: lvl,
+          offerings: [],
+        });
+      }
+      map.get(lvl.academic_level_id)!.offerings.push(off);
+    }
+    return Array.from(map.values()).sort((a, b) => a.level.grade_level - b.level.grade_level);
+  }, [offerings]);
   const setOfferingSearch = (value: string) => {
     setOfferingFilters((current) => ({ ...current, search: value }));
   };
@@ -579,7 +635,6 @@ export default function AdminSubjects() {
     }
   };
 
-  const selectedGradeLabel = selectedAcademicLevel?.level_name ?? gradeLabel(offeringFilters.grade);
   const selectedPathwayLabel = offeringFilters.pathway === ALL_VALUE
     ? "All Pathways"
     : pathwayLabel(offeringFilters.pathway);
@@ -817,22 +872,60 @@ export default function AdminSubjects() {
                     </Select>
                   </div>
 
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                      Grade:
+                    </span>
+                    {catalogGradeOptions.map((grade) => (
+                      <Button
+                        key={grade.value}
+                        autoIcon={false}
+                        variant={catalogGradeFilter === grade.value ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCatalogGradeFilter(grade.value)}
+                        className="shrink-0 border-black shadow-none"
+                      >
+                        {grade.label}
+                      </Button>
+                    ))}
+                  </div>
+
                   {isLoadingCatalog ? (
                     <LoadingCard label="Loading subjects..." />
                   ) : gradeGroups.length === 0 ? (
                     <EmptyStateCard
-                      title="No subjects exist yet."
-                      description="Create catalog subjects first, then use offerings to place them in a year, grade, pathway, and term."
+                      title={subjects.length === 0 ? "No subjects exist yet." : "No matching catalog subjects found."}
+                      description={
+                        subjects.length === 0
+                          ? "Create catalog subjects first, then use offerings to place them in a year, grade, pathway, and term."
+                          : "Try adjusting your search query, grading template, or grade filter."
+                      }
                     >
-                      <Button size="sm" onClick={openCreateSubject}>Create Subject</Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => catalogImportInputRef.current?.click()}
-                        disabled={isImportingCatalog}
-                      >
-                        Import Catalog CSV
-                      </Button>
+                      {subjects.length === 0 ? (
+                        <>
+                          <Button size="sm" onClick={openCreateSubject}>Create Subject</Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => catalogImportInputRef.current?.click()}
+                            disabled={isImportingCatalog}
+                          >
+                            Import Catalog CSV
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setCatalogSearch("");
+                            setCatalogTemplateFilter("all");
+                            setCatalogGradeFilter("all");
+                          }}
+                        >
+                          Reset Filters
+                        </Button>
+                      )}
                     </EmptyStateCard>
                   ) : (
                     gradeGroups.map((item) => (
@@ -873,6 +966,7 @@ export default function AdminSubjects() {
                     grade={offeringFilters.grade}
                     pathway={offeringFilters.pathway}
                     status={offeringFilters.status}
+                    academicLevels={offeringOptions?.academic_levels}
                     onSearchChange={setOfferingSearch}
                     onGradeChange={setOfferingGrade}
                     onPathwayChange={setOfferingPathway}
@@ -928,34 +1022,41 @@ export default function AdminSubjects() {
                       </Button>
                     </EmptyStateCard>
                   ) : (
-                    <CurriculumPlanTable
-                      offerings={offerings}
-                      periods={curriculumPeriods}
-                      catalogSubjects={catalogSubjectsForPlan}
-                      academicYearLabel={selectedYearLabel}
-                      gradeLabel={selectedGradeLabel}
-                      pathwayLabel={selectedPathwayLabel}
-                      pathway={offeringFilters.pathway}
-                      readOnly={isViewingInactiveAcademicYear}
-                      readOnlyReason={readOnlyReason}
-                      onEdit={openEditOffering}
-                      onArchive={(itemToArchive) =>
-                        setPendingAction({
-                          kind: "offering",
-                          action: "archive",
-                          id: itemToArchive.subject_offering_id,
-                          label: itemToArchive.subject.subject_name,
-                        })
-                      }
-                      onRestore={(itemToRestore) =>
-                        setPendingAction({
-                          kind: "offering",
-                          action: "restore",
-                          id: itemToRestore.subject_offering_id,
-                          label: itemToRestore.subject.subject_name,
-                        })
-                      }
-                    />
+                    groupedPlanOfferings.map((group) => (
+                      <CurriculumPlanTable
+                        key={group.level.academic_level_id}
+                        offerings={group.offerings}
+                        periods={curriculumPeriods}
+                        catalogSubjects={catalogSubjectsForPlan}
+                        academicYearLabel={selectedYearLabel}
+                        gradeLabel={group.level.level_name}
+                        pathwayLabel={
+                          group.level.grade_level <= 10
+                            ? "General / Unrestricted"
+                            : selectedPathwayLabel
+                        }
+                        pathway={offeringFilters.pathway}
+                        readOnly={isViewingInactiveAcademicYear}
+                        readOnlyReason={readOnlyReason}
+                        onEdit={openEditOffering}
+                        onArchive={(itemToArchive) =>
+                          setPendingAction({
+                            kind: "offering",
+                            action: "archive",
+                            id: itemToArchive.subject_offering_id,
+                            label: itemToArchive.subject.subject_name,
+                          })
+                        }
+                        onRestore={(itemToRestore) =>
+                          setPendingAction({
+                            kind: "offering",
+                            action: "restore",
+                            id: itemToRestore.subject_offering_id,
+                            label: itemToRestore.subject.subject_name,
+                          })
+                        }
+                      />
+                    ))
                   )}
                 </section>
               ) : null}
@@ -1122,6 +1223,8 @@ export default function AdminSubjects() {
         isImportingOfferings={isImportingOfferings}
         gradingTemplates={gradingTemplates}
         academicLevels={offeringOptions?.academic_levels ?? []}
+        catalogSubjects={subjects}
+        periods={curriculumPeriods}
         onClose={() => {
           if (!isImportingCatalog && !isImportingOfferings) setPendingImport(null);
         }}
