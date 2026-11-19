@@ -173,6 +173,7 @@ def activate_academic_period(
     *,
     academic_period_id: int,
     actor_user_id: UUID | None = None,
+    as_of: date | None = None,
 ) -> tuple[AcademicYear, AcademicPeriod]:
     try:
         db.query(AcademicYear).order_by(AcademicYear.academic_year_id).with_for_update().all()
@@ -195,6 +196,25 @@ def activate_academic_period(
                 status_code=409,
                 detail="Only a grading period in the active academic year can be activated.",
             )
+
+        current_active = next(
+            (period for period in all_periods if period.is_active),
+            None,
+        )
+        if (
+            current_active is not None
+            and current_active.academic_period_id != target_period.academic_period_id
+        ):
+            from app.services.academic.SubstitutionService import SubstitutionService
+            today = SubstitutionService.get_academic_date(as_of)
+            if current_active.end_date and today <= current_active.end_date:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Cannot change academic period while the current active term ({current_active.period_name}) "
+                        f"is still ongoing. It is scheduled until {current_active.end_date.strftime('%B %d, %Y')}."
+                    ),
+                )
 
         for period in all_periods:
             period.is_active = period.academic_period_id == academic_period_id
