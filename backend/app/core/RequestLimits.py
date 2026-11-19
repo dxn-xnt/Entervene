@@ -50,7 +50,7 @@ class RequestLimitsMiddleware:
         if is_auth:
             allowed = allowed and self.limiter.allow("auth:" + client, 300)
         if scope["method"] == "POST" and any(part in path for part in (
-            "/invite", "/resend-invitation", "/upload-csv", "/auto-schedule", "/predictions/",
+            "/invite", "/resend-invitation", "/upload-csv", "/predictions/",
         )):
             allowed = allowed and self.limiter.allow("expensive:" + client, 10)
         if not allowed or self.inflight >= 100:

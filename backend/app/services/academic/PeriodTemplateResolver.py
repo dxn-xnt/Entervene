@@ -60,14 +60,22 @@ class PeriodTemplateResolver:
     def slots_for_class(
         cls, db: Session, class_obj: Class, as_of: date | None = None
     ) -> list[PeriodTemplateSlot]:
-        base_group = class_obj.period_template_group or "JHS_45MIN"
+        level = db.get(AcademicLevel, class_obj.academic_level_id)
+        is_shs = level is not None and level.grade_level >= 11
+        base_group = class_obj.period_template_group
+        if not base_group:
+            if is_shs:
+                return []
+            base_group = "JHS_45MIN"
+        elif is_shs and base_group == "JHS_45MIN":
+            return []
+
         slots = cls.slots_for_group(
             db,
             base_group=base_group,
             academic_year_id=class_obj.academic_year_id,
             as_of=as_of,
         )
-        level = db.get(AcademicLevel, class_obj.academic_level_id)
         if not level or not 7 <= level.grade_level <= 10 or base_group == "JHS_45MIN":
             return slots
 
