@@ -8,7 +8,10 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Alert } from "@/components/retroui/Alert";
 import { Text } from "@/components/retroui/Text";
-import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
+import {
+  FormMessage,
+  NoChangesMessage,
+} from "@/components/retroui/FormMessage";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { optionalNumber, unorderedValues } from "@/lib/form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
@@ -40,7 +43,13 @@ import { Badge } from "@/components/retroui/Badge";
 
 const COMMON_DURATIONS = [45, 60, 72, 96] as const;
 
-function DurationSelect({ id, value, onChange, invalid, describedBy }: {
+function DurationSelect({
+  id,
+  value,
+  onChange,
+  invalid,
+  describedBy,
+}: {
   id: string;
   value: string;
   onChange: (value: string) => void;
@@ -48,32 +57,58 @@ function DurationSelect({ id, value, onChange, invalid, describedBy }: {
   describedBy?: string;
 }) {
   const [custom, setCustom] = useState(false);
-  const isPreset = COMMON_DURATIONS.some((minutes) => String(minutes) === value);
+  const isPreset = COMMON_DURATIONS.some(
+    (minutes) => String(minutes) === value,
+  );
   const customMode = custom || Boolean(value && !isPreset);
   return (
     <>
-      <Select value={customMode ? "custom" : value || undefined} onValueChange={(next) => {
-        setCustom(next === "custom");
-        onChange(next === "custom" ? "" : next);
-      }}>
-        <Select.Trigger id={id} className="w-full" aria-invalid={invalid} aria-describedby={describedBy}>
+      <Select
+        value={customMode ? "custom" : value || undefined}
+        onValueChange={(next) => {
+          setCustom(next === "custom");
+          onChange(next === "custom" ? "" : next);
+        }}
+      >
+        <Select.Trigger
+          id={id}
+          className="w-full"
+          aria-invalid={invalid}
+          aria-describedby={describedBy}
+        >
           <Select.Value placeholder="Select duration" />
         </Select.Trigger>
         <Select.Content>
           <Select.Group>
-            {COMMON_DURATIONS.map((minutes) => <Select.Item key={minutes} value={String(minutes)}>{minutes} minutes</Select.Item>)}
+            {COMMON_DURATIONS.map((minutes) => (
+              <Select.Item key={minutes} value={String(minutes)}>
+                {minutes} minutes
+              </Select.Item>
+            ))}
             <Select.Item value="custom">Custom duration</Select.Item>
           </Select.Group>
         </Select.Content>
       </Select>
-      {customMode && <Input type="number" min={1} step={1} value={value} onChange={(event) => onChange(event.target.value)} placeholder="Enter minutes" aria-label="Custom duration in minutes" aria-invalid={invalid} aria-describedby={describedBy} />}
+      {customMode && (
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Enter minutes"
+          aria-label="Custom duration in minutes"
+          aria-invalid={invalid}
+          aria-describedby={describedBy}
+        />
+      )}
     </>
   );
 }
 const pathwayScopesOverlap = (existingIds: number[], targetIds: number[]) =>
-  !existingIds.length
-  || !targetIds.length
-  || existingIds.some((pathwayId) => targetIds.includes(pathwayId));
+  !existingIds.length ||
+  !targetIds.length ||
+  existingIds.some((pathwayId) => targetIds.includes(pathwayId));
 
 export function OfferingModal({
   open,
@@ -102,7 +137,9 @@ export function OfferingModal({
     academicYearId?: number;
   }) => Promise<void>;
 }) {
-  const [existingSubjectOfferings, setExistingSubjectOfferings] = useState<SubjectOfferingListItem[]>([]);
+  const [existingSubjectOfferings, setExistingSubjectOfferings] = useState<
+    SubjectOfferingListItem[]
+  >([]);
   const [isLoadingEligibility, setIsLoadingEligibility] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const eligibilityRequestIdRef = useRef(0);
@@ -123,11 +160,18 @@ export function OfferingModal({
   const [validationAttempt, setValidationAttempt] = useState(0);
   const [showAdvancedYear, setShowAdvancedYear] = useState(false);
 
-  const gradeLevels = useMemo(() => targetLevels(options?.academic_levels ?? []), [options]);
+  const gradeLevels = useMemo(
+    () => targetLevels(options?.academic_levels ?? []),
+    [options],
+  );
   const selectedYearId = Number(form.academic_year_id);
   const selectedLevelId = Number(form.academic_level_id);
-  const selectedLevel = gradeLevels.find((level) => level.academic_level_id === selectedLevelId);
-  const selectedYear = options?.academic_years.find((year) => year.academic_year_id === selectedYearId);
+  const selectedLevel = gradeLevels.find(
+    (level) => level.academic_level_id === selectedLevelId,
+  );
+  const selectedYear = options?.academic_years.find(
+    (year) => year.academic_year_id === selectedYearId,
+  );
   const isJhsSelection = isJuniorHighGrade(selectedLevel?.grade_level);
   const isShsSelection = isSeniorHighGrade(selectedLevel?.grade_level);
 
@@ -156,46 +200,73 @@ export function OfferingModal({
 
   const requiresPathway = availablePathways.length > 0;
   const periods = useMemo(
-    () => (options?.academic_periods ?? []).filter((period) => period.academic_year_id === selectedYearId),
-    [options, selectedYearId]
+    () =>
+      (options?.academic_periods ?? []).filter(
+        (period) => period.academic_year_id === selectedYearId,
+      ),
+    [options, selectedYearId],
   );
   const visiblePeriods = periods.length ? periods : FALLBACK_PERIODS;
   const subjects = useMemo(
-    () => catalogSubjects.filter((subject) => subject.academic_level.academic_level_id === selectedLevelId && subject.status === "active"),
-    [catalogSubjects, selectedLevelId]
+    () =>
+      catalogSubjects.filter(
+        (subject) =>
+          subject.academic_level.academic_level_id === selectedLevelId &&
+          subject.status === "active",
+      ),
+    [catalogSubjects, selectedLevelId],
   );
   const selectedPeriodIds = new Set(form.academic_period_ids);
   const isCreateMode = !offering;
-  const allTermsSelected = periods.length > 0 && periods.every((period) => selectedPeriodIds.has(String(period.academic_period_id)));
+  const allTermsSelected =
+    periods.length > 0 &&
+    periods.every((period) =>
+      selectedPeriodIds.has(String(period.academic_period_id)),
+    );
 
   const effectivePathwayForSubject = useCallback(
     (subject: SubjectListItem): SubjectOfferingPathway =>
-      subject.is_core ? "general" : (requiresPathway ? form.pathway : "general"),
+      subject.is_core ? "general" : requiresPathway ? form.pathway : "general",
     [form.pathway, requiresPathway],
   );
-  const pathwayIdsForCode = useCallback((pathway: string) => {
-    if (!pathway || pathway === "general") return [];
-    if (pathway === "both") return (options?.pathways ?? []).map((item) => item.id);
-    const normalized = pathway.toLocaleLowerCase();
-    const match = (options?.pathways ?? []).find((item) => {
-      const code = item.code.toLocaleLowerCase();
-      if (code === normalized) return true;
-      if (normalized === "stem_medical") return code.includes("medical");
-      if (normalized === "stem_engineering") return code.includes("engineering");
-      return false;
-    });
-    return match ? [match.id] : [];
-  }, [options?.pathways]);
+  const pathwayIdsForCode = useCallback(
+    (pathway: string) => {
+      if (!pathway || pathway === "general") return [];
+      if (pathway === "both")
+        return (options?.pathways ?? []).map((item) => item.id);
+      const normalized = pathway.toLocaleLowerCase();
+      const match = (options?.pathways ?? []).find((item) => {
+        const code = item.code.toLocaleLowerCase();
+        if (code === normalized) return true;
+        if (normalized === "stem_medical") return code.includes("medical");
+        if (normalized === "stem_engineering")
+          return code.includes("engineering");
+        return false;
+      });
+      return match ? [match.id] : [];
+    },
+    [options?.pathways],
+  );
   const targetPathwayIdsForSubject = useCallback(
-    (subject: SubjectListItem) => pathwayIdsForCode(effectivePathwayForSubject(subject)),
+    (subject: SubjectListItem) =>
+      pathwayIdsForCode(effectivePathwayForSubject(subject)),
     [effectivePathwayForSubject, pathwayIdsForCode],
   );
   const periodLabelById = useMemo(
-    () => new Map(periods.map((period) => [String(period.academic_period_id), formatPeriodLabel(period)])),
+    () =>
+      new Map(
+        periods.map((period) => [
+          String(period.academic_period_id),
+          formatPeriodLabel(period),
+        ]),
+      ),
     [periods],
   );
   const availabilityBySubjectId = useMemo(() => {
-    const availability = new Map<string, { disabled: boolean; status: string }>();
+    const availability = new Map<
+      string,
+      { disabled: boolean; status: string }
+    >();
     if (!form.academic_period_ids.length) return availability;
     for (const subject of subjects) {
       const subjectId = String(subject.subject_id);
@@ -203,14 +274,20 @@ export function OfferingModal({
       const occupiedPeriodIds = new Set(
         existingSubjectOfferings
           .filter((item) => item.subject.subject_id === subject.subject_id)
-          .filter((item) => pathwayScopesOverlap(
-            item.pathway_ids ?? pathwayIdsForCode(item.pathway),
-            targetPathwayIds,
-          ))
+          .filter((item) =>
+            pathwayScopesOverlap(
+              item.pathway_ids ?? pathwayIdsForCode(item.pathway),
+              targetPathwayIds,
+            ),
+          )
           .map((item) => String(item.academic_period.academic_period_id)),
       );
-      const alreadyOffered = form.academic_period_ids.filter((periodId) => occupiedPeriodIds.has(periodId));
-      const missing = form.academic_period_ids.filter((periodId) => !occupiedPeriodIds.has(periodId));
+      const alreadyOffered = form.academic_period_ids.filter((periodId) =>
+        occupiedPeriodIds.has(periodId),
+      );
+      const missing = form.academic_period_ids.filter(
+        (periodId) => !occupiedPeriodIds.has(periodId),
+      );
       if (!alreadyOffered.length) continue;
       if (!missing.length) {
         availability.set(subjectId, {
@@ -225,37 +302,65 @@ export function OfferingModal({
       }
     }
     return availability;
-  }, [existingSubjectOfferings, form.academic_period_ids, pathwayIdsForCode, periodLabelById, subjects, targetPathwayIdsForSubject]);
+  }, [
+    existingSubjectOfferings,
+    form.academic_period_ids,
+    pathwayIdsForCode,
+    periodLabelById,
+    subjects,
+    targetPathwayIdsForSubject,
+  ]);
   const missingOfferingItems = useMemo(() => {
-    const byId = new Map(subjects.map((subject) => [String(subject.subject_id), subject]));
+    const byId = new Map(
+      subjects.map((subject) => [String(subject.subject_id), subject]),
+    );
     return form.subject_ids.flatMap((subjectId) => {
       const subject = byId.get(subjectId);
       if (!subject) return [];
       const targetPathway = effectivePathwayForSubject(subject);
       const targetPathwayIds = targetPathwayIdsForSubject(subject);
       return form.academic_period_ids
-        .filter((periodId) => !existingSubjectOfferings.some(
-          (item) => item.subject.subject_id === subject.subject_id
-            && String(item.academic_period.academic_period_id) === periodId
-            && pathwayScopesOverlap(
-              item.pathway_ids ?? pathwayIdsForCode(item.pathway),
-              targetPathwayIds,
+        .filter(
+          (periodId) =>
+            !existingSubjectOfferings.some(
+              (item) =>
+                item.subject.subject_id === subject.subject_id &&
+                String(item.academic_period.academic_period_id) === periodId &&
+                pathwayScopesOverlap(
+                  item.pathway_ids ?? pathwayIdsForCode(item.pathway),
+                  targetPathwayIds,
+                ),
             ),
-        ))
+        )
         .map((periodId) => ({
           subject_id: subject.subject_id,
           academic_period_id: Number(periodId),
           pathway: targetPathway,
         }));
     });
-  }, [effectivePathwayForSubject, existingSubjectOfferings, form.academic_period_ids, form.subject_ids, pathwayIdsForCode, subjects, targetPathwayIdsForSubject]);
+  }, [
+    effectivePathwayForSubject,
+    existingSubjectOfferings,
+    form.academic_period_ids,
+    form.subject_ids,
+    pathwayIdsForCode,
+    subjects,
+    targetPathwayIdsForSubject,
+  ]);
   const duplicateCatalogLabels = useMemo(() => {
     const keys = new Map<string, string>();
     const duplicates = new Set<string>();
     for (const subject of subjects) {
-      const normalizedCode = subject.subject_codename?.replace(/\s+/g, "").toLocaleLowerCase();
-      const normalizedName = subject.subject_name.replace(/\s+/g, "").toLocaleLowerCase();
-      for (const key of [normalizedCode ? `code:${normalizedCode}` : "", `name:${normalizedName}`].filter(Boolean)) {
+      const normalizedCode = subject.subject_codename
+        ?.replace(/\s+/g, "")
+        .toLocaleLowerCase();
+      const normalizedName = subject.subject_name
+        .replace(/\s+/g, "")
+        .toLocaleLowerCase();
+      for (const key of [
+        normalizedCode ? `code:${normalizedCode}` : "",
+        `name:${normalizedName}`,
+      ].filter(Boolean)) {
         const previous = keys.get(key);
         if (previous) duplicates.add(`${previous} / ${subject.subject_name}`);
         else keys.set(key, subject.subject_name);
@@ -281,18 +386,25 @@ export function OfferingModal({
         .then((res) => {
           if (!isMounted) return;
           const subjectOfferings = res.subject_offerings.filter(
-            (o) => o.subject.subject_id === offering.subject.subject_id
-              && o.status === "active"
-              && o.pathway === offering.pathway
+            (o) =>
+              o.subject.subject_id === offering.subject.subject_id &&
+              o.status === "active" &&
+              o.pathway === offering.pathway,
           );
           setExistingSubjectOfferings(subjectOfferings);
-          const periodIds = subjectOfferings.map((o) => String(o.academic_period.academic_period_id));
+          const periodIds = subjectOfferings.map((o) =>
+            String(o.academic_period.academic_period_id),
+          );
           setForm({
             subject_id: String(offering.subject.subject_id),
             subject_ids: [String(offering.subject.subject_id)],
             academic_year_id: String(offering.academic_year.academic_year_id),
-            academic_level_id: String(offering.academic_level.academic_level_id),
-            academic_period_id: String(offering.academic_period.academic_period_id),
+            academic_level_id: String(
+              offering.academic_level.academic_level_id,
+            ),
+            academic_period_id: String(
+              offering.academic_period.academic_period_id,
+            ),
             academic_period_ids: periodIds.length
               ? periodIds
               : [String(offering.academic_period.academic_period_id)],
@@ -309,9 +421,15 @@ export function OfferingModal({
             subject_id: String(offering.subject.subject_id),
             subject_ids: [String(offering.subject.subject_id)],
             academic_year_id: String(offering.academic_year.academic_year_id),
-            academic_level_id: String(offering.academic_level.academic_level_id),
-            academic_period_id: String(offering.academic_period.academic_period_id),
-            academic_period_ids: [String(offering.academic_period.academic_period_id)],
+            academic_level_id: String(
+              offering.academic_level.academic_level_id,
+            ),
+            academic_period_id: String(
+              offering.academic_period.academic_period_id,
+            ),
+            academic_period_ids: [
+              String(offering.academic_period.academic_period_id),
+            ],
             pathway: offering.pathway,
             minutes: offering.minutes != null ? String(offering.minutes) : "",
             status: offering.status,
@@ -324,12 +442,15 @@ export function OfferingModal({
       };
     }
 
-    const activeYear = options?.academic_years.find(
-      (year) => year.academic_year_id === defaultAcademicYearId,
-    ) ?? options?.academic_years.find((year) => year.is_active) ?? options?.academic_years[0];
+    const activeYear =
+      options?.academic_years.find(
+        (year) => year.academic_year_id === defaultAcademicYearId,
+      ) ??
+      options?.academic_years.find((year) => year.is_active) ??
+      options?.academic_years[0];
     const level = gradeLevels[0];
     const initialPeriods = (options?.academic_periods ?? []).filter(
-      (period) => period.academic_year_id === activeYear?.academic_year_id
+      (period) => period.academic_year_id === activeYear?.academic_year_id,
     );
     const isLevelJhs = isJuniorHighGrade(level?.grade_level);
     const activePathwayCount = (options?.pathways ?? []).length;
@@ -346,7 +467,9 @@ export function OfferingModal({
       subject_ids: [],
       academic_year_id: activeYear ? String(activeYear.academic_year_id) : "",
       academic_level_id: level ? String(level.academic_level_id) : "",
-      academic_period_id: initialPeriods[0] ? String(initialPeriods[0].academic_period_id) : "",
+      academic_period_id: initialPeriods[0]
+        ? String(initialPeriods[0].academic_period_id)
+        : "",
       academic_period_ids: isLevelJhs
         ? initialPeriods.map((period) => String(period.academic_period_id))
         : [],
@@ -355,7 +478,14 @@ export function OfferingModal({
       status: options?.default_status ?? "active",
       grading_template_id: "",
     });
-  }, [catalogSubjects, defaultAcademicYearId, gradeLevels, offering, open, options]);
+  }, [
+    catalogSubjects,
+    defaultAcademicYearId,
+    gradeLevels,
+    offering,
+    open,
+    options,
+  ]);
 
   // In create mode, fetch active offerings for the selected year and grade.
   // Eligibility is then resolved per selected term and overlapping pathway.
@@ -382,19 +512,35 @@ export function OfferingModal({
       .catch((caught) => {
         if (requestId !== eligibilityRequestIdRef.current) return;
         setExistingSubjectOfferings([]);
-        setEligibilityError(caught instanceof Error ? caught.message : "Unable to check existing offerings.");
+        setEligibilityError(
+          caught instanceof Error
+            ? caught.message
+            : "Unable to check existing offerings.",
+        );
       })
       .finally(() => {
-        if (requestId === eligibilityRequestIdRef.current) setIsLoadingEligibility(false);
+        if (requestId === eligibilityRequestIdRef.current)
+          setIsLoadingEligibility(false);
       });
     return () => {
       eligibilityRequestIdRef.current += 1;
     };
   }, [open, offering, selectedYearId, selectedLevelId]);
 
-  const setField = <TKey extends keyof OfferingFormState>(key: TKey, value: OfferingFormState[TKey]) => {
+  const setField = <TKey extends keyof OfferingFormState>(
+    key: TKey,
+    value: OfferingFormState[TKey],
+  ) => {
     setForm((current) => ({ ...current, [key]: value }));
-    if ((key === "pathway" && error === "Select a valid pathway for the selected grade level.") || (key === "minutes" && error === "Minutes must be a positive whole number." && Number.isInteger(Number(value)) && Number(value) > 0)) setError(null);
+    if (
+      (key === "pathway" &&
+        error === "Select a valid pathway for the selected grade level.") ||
+      (key === "minutes" &&
+        error === "Minutes must be a positive whole number." &&
+        Number.isInteger(Number(value)) &&
+        Number(value) > 0)
+    )
+      setError(null);
   };
 
   const failValidation = (message: string) => {
@@ -404,18 +550,24 @@ export function OfferingModal({
 
   const handleYearChange = (value: string) => {
     const nextPeriods = (options?.academic_periods ?? []).filter(
-      (period) => period.academic_year_id === Number(value)
+      (period) => period.academic_year_id === Number(value),
     );
     setForm((current) => ({
       ...current,
       academic_year_id: value,
-      academic_period_id: nextPeriods[0] ? String(nextPeriods[0].academic_period_id) : "",
-      academic_period_ids: isJhsSelection ? nextPeriods.map((period) => String(period.academic_period_id)) : [],
+      academic_period_id: nextPeriods[0]
+        ? String(nextPeriods[0].academic_period_id)
+        : "",
+      academic_period_ids: isJhsSelection
+        ? nextPeriods.map((period) => String(period.academic_period_id))
+        : [],
     }));
   };
 
   const handleLevelChange = (value: string) => {
-    const nextLevel = gradeLevels.find((level) => String(level.academic_level_id) === value);
+    const nextLevel = gradeLevels.find(
+      (level) => String(level.academic_level_id) === value,
+    );
     const isNextJhs = isJuniorHighGrade(nextLevel?.grade_level);
     const activePathwayCount = (options?.pathways ?? []).length;
     const nextDefaultPathway: SubjectOfferingPathway = isNextJhs
@@ -427,7 +579,7 @@ export function OfferingModal({
           : "general";
 
     const nextPeriods = (options?.academic_periods ?? []).filter(
-      (period) => period.academic_year_id === Number(form.academic_year_id)
+      (period) => period.academic_year_id === Number(form.academic_year_id),
     );
     setForm((current) => ({
       ...current,
@@ -468,7 +620,9 @@ export function OfferingModal({
 
   const toggleAllTerms = () => {
     setForm((current) => {
-      const nextIds = allTermsSelected ? [] : periods.map((period) => String(period.academic_period_id));
+      const nextIds = allTermsSelected
+        ? []
+        : periods.map((period) => String(period.academic_period_id));
       return {
         ...current,
         academic_period_ids: nextIds,
@@ -480,32 +634,64 @@ export function OfferingModal({
   const changes = useEditFormChanges({
     enabled: !!offering,
     resetKey: `${open}:${offering?.subject_offering_id}`,
-    initialValues: offering ? [
-      String(offering.subject.subject_id), String(offering.academic_year.academic_year_id),
-      String(offering.academic_level.academic_level_id),
-      unorderedValues(existingSubjectOfferings.length ? existingSubjectOfferings.map(item => String(item.academic_period.academic_period_id)) : [String(offering.academic_period.academic_period_id)]),
-      offering.pathway, optionalNumber(offering.minutes), offering.status,
-      String(offering.subject.grading_template_id),
-    ] : null,
-    values: [form.subject_id, form.academic_year_id, form.academic_level_id,
-    unorderedValues(form.academic_period_ids), requiresPathway ? form.pathway : "general",
-    optionalNumber(form.minutes), form.status, form.grading_template_id],
+    initialValues: offering
+      ? [
+          String(offering.subject.subject_id),
+          String(offering.academic_year.academic_year_id),
+          String(offering.academic_level.academic_level_id),
+          unorderedValues(
+            existingSubjectOfferings.length
+              ? existingSubjectOfferings.map((item) =>
+                  String(item.academic_period.academic_period_id),
+                )
+              : [String(offering.academic_period.academic_period_id)],
+          ),
+          offering.pathway,
+          optionalNumber(offering.minutes),
+          offering.status,
+          String(offering.subject.grading_template_id),
+        ]
+      : null,
+    values: [
+      form.subject_id,
+      form.academic_year_id,
+      form.academic_level_id,
+      unorderedValues(form.academic_period_ids),
+      requiresPathway ? form.pathway : "general",
+      optionalNumber(form.minutes),
+      form.status,
+      form.grading_template_id,
+    ],
   });
   const handleSubmit = async () => {
     if (!changes.guardChanges()) return;
     setError(null);
     if (readOnly) {
-      failValidation(readOnlyReason ?? "Historical academic years are locked in the UI to protect historical records.");
+      failValidation(
+        readOnlyReason ??
+          "Historical academic years are locked in the UI to protect historical records.",
+      );
       return;
     }
-    const selectedIds = isCreateMode ? form.subject_ids : [form.subject_id].filter(Boolean);
+    const selectedIds = isCreateMode
+      ? form.subject_ids
+      : [form.subject_id].filter(Boolean);
     const selectedTermIds = form.academic_period_ids;
-    if (!selectedIds.length || !selectedTermIds.length || !form.academic_year_id || !form.academic_level_id) {
-      failValidation("Select setup details, at least one term, and at least one subject.");
+    if (
+      !selectedIds.length ||
+      !selectedTermIds.length ||
+      !form.academic_year_id ||
+      !form.academic_level_id
+    ) {
+      failValidation(
+        "Select setup details, at least one term, and at least one subject.",
+      );
       return;
     }
     if (selectedTermIds.some((periodId) => Number(periodId) <= 0)) {
-      failValidation("No valid academic terms are available for the selected academic year.");
+      failValidation(
+        "No valid academic terms are available for the selected academic year.",
+      );
       return;
     }
     if (requiresPathway && !availablePathways.includes(form.pathway)) {
@@ -514,7 +700,11 @@ export function OfferingModal({
     }
 
     const parsedMinutes = form.minutes.trim() ? Number(form.minutes) : null;
-    if (parsedMinutes === null || !Number.isInteger(parsedMinutes) || parsedMinutes <= 0) {
+    if (
+      parsedMinutes === null ||
+      !Number.isInteger(parsedMinutes) ||
+      parsedMinutes <= 0
+    ) {
       failValidation("Minutes must be a positive whole number.");
       return;
     }
@@ -525,10 +715,18 @@ export function OfferingModal({
         const targetPeriodIds = new Set(form.academic_period_ids);
         const existingMap = new Map<string, SubjectOfferingListItem>();
         for (const item of existingSubjectOfferings) {
-          existingMap.set(String(item.academic_period.academic_period_id), item);
+          existingMap.set(
+            String(item.academic_period.academic_period_id),
+            item,
+          );
         }
-        if (!existingMap.has(String(offering.academic_period.academic_period_id))) {
-          existingMap.set(String(offering.academic_period.academic_period_id), offering);
+        if (
+          !existingMap.has(String(offering.academic_period.academic_period_id))
+        ) {
+          existingMap.set(
+            String(offering.academic_period.academic_period_id),
+            offering,
+          );
         }
 
         for (const periodId of form.academic_period_ids) {
@@ -572,12 +770,17 @@ export function OfferingModal({
           pathway: effectivePathway,
           academicYearId: Number(form.academic_year_id),
         };
-        await onSaved({ message: `Updated offerings for ${offering.subject.subject_name}.`, ...savedMeta });
+        await onSaved({
+          message: `Updated offerings for ${offering.subject.subject_name}.`,
+          ...savedMeta,
+        });
         onOpenChange(false);
       } else {
         const effectivePathway = requiresPathway ? form.pathway : "general";
         if (!missingOfferingItems.length) {
-          failValidation("The selected subjects are already offered in all selected terms.");
+          failValidation(
+            "The selected subjects are already offered in all selected terms.",
+          );
           return;
         }
         const result = await createSubjectOfferingsBatch({
@@ -600,7 +803,9 @@ export function OfferingModal({
         onOpenChange(false);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save subject offering.");
+      setError(
+        err instanceof Error ? err.message : "Unable to save subject offering.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -620,10 +825,25 @@ export function OfferingModal({
           <div className="flex flex-col gap-4">
             <div className="space-y-1 text-muted-foreground">
               <p className="text-xs">
-                This offering will be added to the selected academic year. Use the year selector or the advanced option below to change context.
+                This offering will be added to the selected academic year. Use
+                the year selector or the advanced option below to change
+                context.
               </p>
             </div>
-            <AdminValidationAlert message={error && !["Select setup details, at least one term, and at least one subject.", "No valid academic terms are available for the selected academic year.", "Select a valid pathway for the selected grade level.", "Minutes must be a positive whole number."].includes(error) ? error : null} attempt={validationAttempt} />
+            <AdminValidationAlert
+              message={
+                error &&
+                ![
+                  "Select setup details, at least one term, and at least one subject.",
+                  "No valid academic terms are available for the selected academic year.",
+                  "Select a valid pathway for the selected grade level.",
+                  "Minutes must be a positive whole number.",
+                ].includes(error)
+                  ? error
+                  : null
+              }
+              attempt={validationAttempt}
+            />
             {readOnly ? (
               <div className="rounded! border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                 <p className="font-bold">Read-only academic year</p>
@@ -634,18 +854,36 @@ export function OfferingModal({
             <div className="">
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-semibold" htmlFor="offering-context-year">Academic Year</label>
+                  <label
+                    className="text-sm font-semibold"
+                    htmlFor="offering-context-year"
+                  >
+                    Academic Year
+                  </label>
                   <Select
-                    value={selectedYear ? String(selectedYear.academic_year_id) : undefined}
+                    value={
+                      selectedYear
+                        ? String(selectedYear.academic_year_id)
+                        : undefined
+                    }
                     disabled
                   >
-                    <Select.Trigger id="offering-context-year" className="w-full">
-                      <Select.Value placeholder={selectedYear?.year_label ?? "Current academic year"} />
+                    <Select.Trigger
+                      id="offering-context-year"
+                      className="w-full"
+                    >
+                      <Select.Value
+                        placeholder={
+                          selectedYear?.year_label ?? "Current academic year"
+                        }
+                      />
                     </Select.Trigger>
                     <Select.Content>
                       <Select.Group>
                         {selectedYear ? (
-                          <Select.Item value={String(selectedYear.academic_year_id)}>
+                          <Select.Item
+                            value={String(selectedYear.academic_year_id)}
+                          >
                             {selectedYear.year_label}
                           </Select.Item>
                         ) : null}
@@ -654,47 +892,100 @@ export function OfferingModal({
                   </Select>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-semibold" htmlFor="offering-level">Grade Level</label>
+                  <label
+                    className="text-sm font-semibold"
+                    htmlFor="offering-level"
+                  >
+                    Grade Level
+                  </label>
                   <Select
                     value={form.academic_level_id}
                     onValueChange={handleLevelChange}
                     disabled={!isCreateMode}
                   >
-                    <Select.Trigger id="offering-level" aria-invalid={error === "Select setup details, at least one term, and at least one subject." && !form.academic_level_id} aria-describedby={error === "Select setup details, at least one term, and at least one subject." && !form.academic_level_id ? "offering-level-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
+                    <Select.Trigger
+                      id="offering-level"
+                      aria-invalid={
+                        error ===
+                          "Select setup details, at least one term, and at least one subject." &&
+                        !form.academic_level_id
+                      }
+                      aria-describedby={
+                        error ===
+                          "Select setup details, at least one term, and at least one subject." &&
+                        !form.academic_level_id
+                          ? "offering-level-error"
+                          : undefined
+                      }
+                      className="w-full aria-[invalid=true]:border-destructive"
+                    >
                       <Select.Value placeholder="Select grade" />
                     </Select.Trigger>
                     <Select.Content>
                       <Select.Group>
                         {gradeLevels.map((level) => (
-                          <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
+                          <Select.Item
+                            key={level.academic_level_id}
+                            value={String(level.academic_level_id)}
+                          >
                             {level.level_name}
                           </Select.Item>
                         ))}
                       </Select.Group>
                     </Select.Content>
                   </Select>
-                  {error === "Select setup details, at least one term, and at least one subject." && !form.academic_level_id && <FormMessage id="offering-level-error">Select a grade level.</FormMessage>}
+                  {error ===
+                    "Select setup details, at least one term, and at least one subject." &&
+                    !form.academic_level_id && (
+                      <FormMessage id="offering-level-error">
+                        Select a grade level.
+                      </FormMessage>
+                    )}
                   {!isCreateMode ? (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Grade level is tied to the catalog subject and cannot be changed here.
+                      Grade level is tied to the catalog subject and cannot be
+                      changed here.
                     </p>
                   ) : null}
                 </div>
                 {requiresPathway ? (
                   <div className="flex flex-col gap-1">
-                    <label className="text-sm font-semibold" htmlFor="offering-pathway">Pathway</label>
+                    <label
+                      className="text-sm font-semibold"
+                      htmlFor="offering-pathway"
+                    >
+                      Pathway
+                    </label>
                     <Select
                       value={form.pathway}
-                      onValueChange={(value) => setField("pathway", value as SubjectOfferingPathway)}
+                      onValueChange={(value) =>
+                        setField("pathway", value as SubjectOfferingPathway)
+                      }
                     >
-                      <Select.Trigger id="offering-pathway" aria-invalid={error === "Select a valid pathway for the selected grade level."} aria-describedby={error === "Select a valid pathway for the selected grade level." ? "offering-pathway-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
+                      <Select.Trigger
+                        id="offering-pathway"
+                        aria-invalid={
+                          error ===
+                          "Select a valid pathway for the selected grade level."
+                        }
+                        aria-describedby={
+                          error ===
+                          "Select a valid pathway for the selected grade level."
+                            ? "offering-pathway-error"
+                            : undefined
+                        }
+                        className="w-full aria-[invalid=true]:border-destructive"
+                      >
                         <Select.Value placeholder="Select pathway" />
                       </Select.Trigger>
                       <Select.Content>
                         <Select.Group>
                           {availablePathways.map((pathway) => {
-                            const pathwayObj = options?.pathways.find((p) => p.code === pathway);
-                            const label = pathwayObj?.name || pathwayLabel(pathway);
+                            const pathwayObj = options?.pathways.find(
+                              (p) => p.code === pathway,
+                            );
+                            const label =
+                              pathwayObj?.name || pathwayLabel(pathway);
                             return (
                               <Select.Item key={pathway} value={pathway}>
                                 {label}
@@ -704,54 +995,110 @@ export function OfferingModal({
                         </Select.Group>
                       </Select.Content>
                     </Select>
-                    {error === "Select a valid pathway for the selected grade level." && <FormMessage id="offering-pathway-error">{error}</FormMessage>}
+                    {error ===
+                      "Select a valid pathway for the selected grade level." && (
+                      <FormMessage id="offering-pathway-error">
+                        {error}
+                      </FormMessage>
+                    )}
                   </div>
                 ) : null}
                 {isCreateMode ? (
                   <div className="flex flex-col gap-1">
-                    <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (minutes) <span className="text-red-500">*</span></label>
+                    <label
+                      className="text-sm font-semibold"
+                      htmlFor="create-offering-minutes"
+                    >
+                      Duration (minutes) <span className="text-red-500">*</span>
+                    </label>
                     <DurationSelect
                       id="create-offering-minutes"
                       value={form.minutes}
                       onChange={(value) => setField("minutes", value)}
-                      invalid={error === "Minutes must be a positive whole number."}
-                      describedBy={error === "Minutes must be a positive whole number." ? "create-offering-minutes-error" : undefined}
+                      invalid={
+                        error === "Minutes must be a positive whole number."
+                      }
+                      describedBy={
+                        error === "Minutes must be a positive whole number."
+                          ? "create-offering-minutes-error"
+                          : undefined
+                      }
                     />
-                    {error === "Minutes must be a positive whole number." && <FormMessage id="create-offering-minutes-error">{error}</FormMessage>}
+                    {error === "Minutes must be a positive whole number." && (
+                      <FormMessage id="create-offering-minutes-error">
+                        {error}
+                      </FormMessage>
+                    )}
                   </div>
                 ) : null}
                 <div className="col-span-full flex flex-col gap-2">
                   <label className="flex cursor-pointer items-start gap-3 rounded! border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[2px_2px_0_#000]">
                     <Checkbox
                       checked={showAdvancedYear}
-                      onCheckedChange={(checked) => setShowAdvancedYear(checked === true)}
+                      onCheckedChange={(checked) =>
+                        setShowAdvancedYear(checked === true)
+                      }
                       className="mt-1 shrink-0"
                     />
                     <span>
-                      <span className="block font-bold">Add to a different academic year</span>
+                      <span className="block font-bold">
+                        Add to a different academic year
+                      </span>
                       <span className="text-xs text-muted-foreground">
-                        Keep this off unless you are copying or correcting offerings outside the active setup.
+                        Keep this off unless you are copying or correcting
+                        offerings outside the active setup.
                       </span>
                     </span>
                   </label>
                   {showAdvancedYear ? (
                     <div className="flex flex-col gap-1">
-                      <label className="text-sm" htmlFor="offering-year">Academic Year</label>
-                      <Select value={form.academic_year_id} onValueChange={handleYearChange}>
-                        <Select.Trigger id="offering-year" aria-invalid={error === "Select setup details, at least one term, and at least one subject." && !form.academic_year_id} aria-describedby={error === "Select setup details, at least one term, and at least one subject." && !form.academic_year_id ? "offering-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
+                      <label className="text-sm" htmlFor="offering-year">
+                        Academic Year
+                      </label>
+                      <Select
+                        value={form.academic_year_id}
+                        onValueChange={handleYearChange}
+                      >
+                        <Select.Trigger
+                          id="offering-year"
+                          aria-invalid={
+                            error ===
+                              "Select setup details, at least one term, and at least one subject." &&
+                            !form.academic_year_id
+                          }
+                          aria-describedby={
+                            error ===
+                              "Select setup details, at least one term, and at least one subject." &&
+                            !form.academic_year_id
+                              ? "offering-year-error"
+                              : undefined
+                          }
+                          className="w-full aria-[invalid=true]:border-destructive"
+                        >
                           <Select.Value placeholder="Select year" />
                         </Select.Trigger>
                         <Select.Content>
                           <Select.Group>
-                            {activeFirst(options?.academic_years).map((year) => (
-                              <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
-                                {year.year_label}
-                              </Select.Item>
-                            ))}
+                            {activeFirst(options?.academic_years).map(
+                              (year) => (
+                                <Select.Item
+                                  key={year.academic_year_id}
+                                  value={String(year.academic_year_id)}
+                                >
+                                  {year.year_label}
+                                </Select.Item>
+                              ),
+                            )}
                           </Select.Group>
                         </Select.Content>
                       </Select>
-                      {error === "Select setup details, at least one term, and at least one subject." && !form.academic_year_id && <FormMessage id="offering-year-error">Select an academic year.</FormMessage>}
+                      {error ===
+                        "Select setup details, at least one term, and at least one subject." &&
+                        !form.academic_year_id && (
+                          <FormMessage id="offering-year-error">
+                            Select an academic year.
+                          </FormMessage>
+                        )}
                     </div>
                   ) : null}
                 </div>
@@ -761,7 +1108,13 @@ export function OfferingModal({
                       <p className="text-sm font-semibold">Term(s)</p>
                     </div>
                     {periods.length ? (
-                      <Button type="button" size="sm" variant="secondary" className="gap-2 shadow-none" onClick={toggleAllTerms}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="default"
+                        className="gap-2 shadow-none bg-white"
+                        onClick={toggleAllTerms}
+                      >
                         {allTermsSelected ? "Clear Selected" : "Select All"}
                       </Button>
                     ) : null}
@@ -773,8 +1126,11 @@ export function OfferingModal({
                       return (
                         <label
                           key={period.academic_period_id}
-                          className={`flex items-center gap-3 rounded! border-2 border-black p-3 shadow-[2px_2px_0_#000] ${isFallback ? "cursor-not-allowed bg-black/5 text-black/50" : "cursor-pointer bg-background"
-                            }`}
+                          className={`flex items-center gap-3 rounded! border-2 border-black p-3 shadow-[2px_2px_0_#000] ${
+                            isFallback
+                              ? "cursor-not-allowed bg-black/5 text-black/50"
+                              : "cursor-pointer bg-background"
+                          }`}
                         >
                           <Checkbox
                             checked={selectedPeriodIds.has(periodId)}
@@ -782,18 +1138,29 @@ export function OfferingModal({
                             className="shrink-0"
                             disabled={isFallback}
                           />
-                          <span className="font-semibold text-base">{formatPeriodLabel(period)}</span>
+                          <span className="font-semibold text-base">
+                            {formatPeriodLabel(period)}
+                          </span>
                         </label>
                       );
                     })}
                   </div>
                   {!periods.length ? (
                     <p className="text-sm text-muted-foreground">
-                      No valid terms are configured for {selectedYear?.year_label ?? "the selected academic year"}. Configure its academic periods before adding offerings.
+                      No valid terms are configured for{" "}
+                      {selectedYear?.year_label ?? "the selected academic year"}
+                      . Configure its academic periods before adding offerings.
                     </p>
                   ) : null}
-                  {error === "No valid academic terms are available for the selected academic year." && <FormMessage>{error}</FormMessage>}
-                  {error === "Select setup details, at least one term, and at least one subject." && !form.academic_period_ids.length && <FormMessage>Select at least one term.</FormMessage>}
+                  {error ===
+                    "No valid academic terms are available for the selected academic year." && (
+                    <FormMessage>{error}</FormMessage>
+                  )}
+                  {error ===
+                    "Select setup details, at least one term, and at least one subject." &&
+                    !form.academic_period_ids.length && (
+                      <FormMessage>Select at least one term.</FormMessage>
+                    )}
                 </div>
               </div>
             </div>
@@ -801,11 +1168,17 @@ export function OfferingModal({
             {offering ? (
               <>
                 <div className="space-y-1 text-muted-foreground">
-                  <p className="text-foreground text-sm font-semibold">Subject Being Edited</p>
+                  <p className="text-foreground text-sm font-semibold">
+                    Subject Being Edited
+                  </p>
                   <Card className="flex flex-col gap-0 py-2! px-3 text-sm">
                     <div className="flex flex-row gap-3 items-center">
-                      <span className="font-semibold text-lg text-foreground">{offering.subject.subject_name}</span>
-                      <Badge size="sm" variant="surface">{offering.academic_level.level_name}</Badge>
+                      <span className="font-semibold text-lg text-foreground">
+                        {offering.subject.subject_name}
+                      </span>
+                      <Badge size="sm" variant="surface">
+                        {offering.academic_level.level_name}
+                      </Badge>
                     </div>
                     <span>{offering.subject.subject_codename || "N/A"}</span>
                   </Card>
@@ -813,55 +1186,101 @@ export function OfferingModal({
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div className="flex flex-col gap-1">
-                    <label className="text-sm font-semibold" htmlFor="offering-minutes">Duration (Minutes)</label>
+                    <label
+                      className="text-sm font-semibold"
+                      htmlFor="offering-minutes"
+                    >
+                      Duration (Minutes)
+                    </label>
                     <DurationSelect
                       id="offering-minutes"
                       value={form.minutes}
                       onChange={(value) => setField("minutes", value)}
-                      invalid={error === "Minutes must be a positive whole number."}
-                      describedBy={error === "Minutes must be a positive whole number." ? "offering-minutes-error" : undefined}
+                      invalid={
+                        error === "Minutes must be a positive whole number."
+                      }
+                      describedBy={
+                        error === "Minutes must be a positive whole number."
+                          ? "offering-minutes-error"
+                          : undefined
+                      }
                     />
-                    {error === "Minutes must be a positive whole number." && <FormMessage id="offering-minutes-error">{error}</FormMessage>}
-                    <p className="text-xs text-muted-foreground">Minutes per period. Required for publishing.</p>
+                    {error === "Minutes must be a positive whole number." && (
+                      <FormMessage id="offering-minutes-error">
+                        {error}
+                      </FormMessage>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Minutes per period. Required for publishing.
+                    </p>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-sm font-semibold" htmlFor="offering-grading-template">Grading Template</label>
+                    <label
+                      className="text-sm font-semibold"
+                      htmlFor="offering-grading-template"
+                    >
+                      Grading Template
+                    </label>
                     <Select
                       value={form.grading_template_id}
-                      onValueChange={(value) => setField("grading_template_id", value)}
-                      disabled={offering.subject.grading_template_assignment_locked}
+                      onValueChange={(value) =>
+                        setField("grading_template_id", value)
+                      }
+                      disabled={
+                        offering.subject.grading_template_assignment_locked
+                      }
                     >
-                      <Select.Trigger id="offering-grading-template" className="w-full">
+                      <Select.Trigger
+                        id="offering-grading-template"
+                        className="w-full"
+                      >
                         <Select.Value placeholder="Select template" />
                       </Select.Trigger>
                       <Select.Content>
                         <Select.Group>
-                          {(options?.grading_templates ?? []).map((template) => (
-                            <Select.Item
-                              key={template.grading_template_id}
-                              value={String(template.grading_template_id)}
-                            >
-                              {template.template_name}
-                            </Select.Item>
-                          ))}
+                          {(options?.grading_templates ?? []).map(
+                            (template) => (
+                              <Select.Item
+                                key={template.grading_template_id}
+                                value={String(template.grading_template_id)}
+                              >
+                                {template.template_name}
+                              </Select.Item>
+                            ),
+                          )}
                         </Select.Group>
                       </Select.Content>
                     </Select>
-                    <p className="text-xs text-muted-foreground">Applies to every term and pathway in {offering.academic_year.year_label}.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Applies to every term and pathway in{" "}
+                      {offering.academic_year.year_label}.
+                    </p>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-sm font-semibold" htmlFor="offering-status">Status</label>
-                    <Select value={form.status} onValueChange={(value) => setField("status", value as SubjectStatus)}>
+                    <label
+                      className="text-sm font-semibold"
+                      htmlFor="offering-status"
+                    >
+                      Status
+                    </label>
+                    <Select
+                      value={form.status}
+                      onValueChange={(value) =>
+                        setField("status", value as SubjectStatus)
+                      }
+                    >
                       <Select.Trigger id="offering-status" className="w-full">
                         <Select.Value placeholder="Select status" />
                       </Select.Trigger>
                       <Select.Content>
                         <Select.Group>
-                          {(options?.statuses ?? ["active", "archived"]).map((status) => (
-                            <Select.Item key={status} value={status}>
-                              {status}
-                            </Select.Item>
-                          ))}
+                          {(options?.statuses ?? ["active", "archived"]).map(
+                            (status) => (
+                              <Select.Item key={status} value={status}>
+                                {status}
+                              </Select.Item>
+                            ),
+                          )}
                         </Select.Group>
                       </Select.Content>
                     </Select>
@@ -869,7 +1288,9 @@ export function OfferingModal({
                 </div>
                 {offering.subject.grading_template_assignment_locked ? (
                   <Alert status="warning" className="md:col-span-3 py-3">
-                    <Alert.Title className="font-bold">Grading template locked</Alert.Title>
+                    <Alert.Title className="font-bold">
+                      Grading template locked
+                    </Alert.Title>
                     <Alert.Description className="text-sm text-yellow-950">
                       {offering.subject.grading_template_assignment_lock_reason}
                     </Alert.Description>
@@ -878,27 +1299,44 @@ export function OfferingModal({
               </>
             ) : (
               <Accordion>
-                <Accordion.Item value="subjects" className="rounded! border-border shadow-none!">
+                <Accordion.Item
+                  value="subjects"
+                  className="rounded! border-border shadow-none!"
+                >
                   <Accordion.Header className="items-center py-3 text-sm font-normal">
-                    {form.subject_ids.length ? `${form.subject_ids.length} subjects selected` : "Select Subjects"}
+                    {form.subject_ids.length
+                      ? `${form.subject_ids.length} subjects selected`
+                      : "Select Subjects"}
                   </Accordion.Header>
                   <Accordion.Content>
-                    <p className="mb-3 text-sm text-muted-foreground">Catalog subjects are filtered by the selected grade level.</p>
+                    <p className="mb-3 text-sm text-muted-foreground">
+                      Catalog subjects are filtered by the selected grade level.
+                    </p>
                     {duplicateCatalogLabels.length ? (
                       <Alert status="warning" className="mb-3 py-3">
-                        <Alert.Title className="font-bold">Possible duplicate catalog subjects</Alert.Title>
+                        <Alert.Title className="font-bold">
+                          Possible duplicate catalog subjects
+                        </Alert.Title>
                         <Alert.Description className="text-sm">
-                          Review these separate catalog records before assigning offerings: {duplicateCatalogLabels.join(", ")}.
+                          Review these separate catalog records before assigning
+                          offerings: {duplicateCatalogLabels.join(", ")}.
                         </Alert.Description>
                       </Alert>
                     ) : null}
                     {eligibilityError ? (
                       <Alert status="error">
-                        <Alert.Title className="font-bold">Unable to check offering availability</Alert.Title>
-                        <Alert.Description>{eligibilityError}</Alert.Description>
+                        <Alert.Title className="font-bold">
+                          Unable to check offering availability
+                        </Alert.Title>
+                        <Alert.Description>
+                          {eligibilityError}
+                        </Alert.Description>
                       </Alert>
                     ) : isLoadingEligibility ? (
-                      <LoadingPanel label="Checking existing offerings..." className="w-full" />
+                      <LoadingPanel
+                        label="Checking existing offerings..."
+                        className="w-full"
+                      />
                     ) : (
                       <SubjectPicker
                         showSelectedChips={false}
@@ -911,29 +1349,38 @@ export function OfferingModal({
                     )}
                   </Accordion.Content>
                 </Accordion.Item>
-                {error === "Select setup details, at least one term, and at least one subject." && !form.subject_ids.length && <FormMessage>Select at least one subject.</FormMessage>}
+                {error ===
+                  "Select setup details, at least one term, and at least one subject." &&
+                  !form.subject_ids.length && (
+                    <FormMessage>Select at least one subject.</FormMessage>
+                  )}
               </Accordion>
             )}
-
           </div>
         </section>
         <Dialog.Footer>
           <NoChangesMessage message={changes.noChangesMessage} />
-          <Button variant="outline" className="gap-2" onClick={() => onOpenChange(false)} disabled={isSaving}>Cancel</Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => onOpenChange(false)}
+            disabled={isSaving}
+          >
+            Cancel
+          </Button>
           <Button
             className="gap-2"
             onClick={handleSubmit}
             disabled={
-              isSaving
-              || !options
-              || readOnly
-              || (isCreateMode && (
-                isLoadingEligibility
-                || Boolean(eligibilityError)
-                || !periods.length
-                || !missingOfferingItems.length
-              ))
-              || (!!offering && !changes.hasChanges)
+              isSaving ||
+              !options ||
+              readOnly ||
+              (isCreateMode &&
+                (isLoadingEligibility ||
+                  Boolean(eligibilityError) ||
+                  !periods.length ||
+                  !missingOfferingItems.length)) ||
+              (!!offering && !changes.hasChanges)
             }
             title={readOnly ? readOnlyReason : undefined}
           >
