@@ -46,6 +46,7 @@ export interface StudentSupportActivity {
   title: string;
   classwork_type: string;
   submission_status: string | null;
+  is_passed?: boolean;
   grade: number | null;
   total_points: number | null;
   access_state: "HISTORICAL" | "PREPARATION_REQUIRED" | "READY";

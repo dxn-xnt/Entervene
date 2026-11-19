@@ -351,12 +351,46 @@ def update_quiz_configuration(
         .with_for_update()
         .first()
     )
-    if classwork_has_quiz_attempts(db, locked_classwork.classwork_id):
+    has_exam_remediation = (
+        db.query(ClassworkAssignment.classwork_assignment_id)
+        .filter(
+            ClassworkAssignment.classwork_id == locked_classwork.classwork_id,
+            ClassworkAssignment.original_exam_assignment_id.isnot(None),
+        )
+        .first()
+        is not None
+    )
+    if has_exam_remediation and payload.max_attempts != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Remedial Examination quiz permits one attempt per activity",
+        )
+    has_intervention_remediation = (
+        db.query(ClassworkAssignment.classwork_assignment_id)
+        .filter(
+            ClassworkAssignment.classwork_id == locked_classwork.classwork_id,
+            ClassworkAssignment.source_intervention_id.isnot(None),
+        )
+        .first()
+        is not None
+    )
+    if has_intervention_remediation and payload.max_attempts > 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Study Support quizzes allow up to 3 attempts",
+        )
+    has_attempts = classwork_has_quiz_attempts(db, locked_classwork.classwork_id)
+    if has_attempts and (
+        (quiz is not None and quiz.duration_minutes != payload.duration_minutes)
+        or (setting is not None and setting.is_shuffle_questions != payload.is_shuffle_questions)
+        or (setting is not None and setting.enable_per_question_scoring != payload.enable_per_question_scoring)
+        or (setting is not None and setting.enable_per_question_time_limits != payload.enable_per_question_time_limits)
+    ):
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "QUIZ_CONFIGURATION_LOCKED_AFTER_ATTEMPT",
-                "message": "Quiz duration, attempt limits, and question behavior cannot be changed after an attempt has started.",
+                "message": "Quiz duration and question behavior cannot be changed after an attempt has started. The attempt limit remains editable.",
             },
         )
     if quiz is None:
@@ -387,7 +421,7 @@ def update_quiz_configuration(
         enable_per_question_scoring=setting.enable_per_question_scoring,
         enable_per_question_time_limits=setting.enable_per_question_time_limits,
         max_attempts=setting.max_attempts or payload.max_attempts,
-        has_attempts=False,
+        has_attempts=has_attempts,
     )
 
 

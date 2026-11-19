@@ -35,12 +35,20 @@ from app.services.classwork.ClassworkShared import (
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
+from app.services.grading.PassingThresholdReader import read_passing_threshold_context
+from app.services.grading.PassingThresholdResolver import (
+    PassingThresholdConfigurationError,
+    resolve_passing_threshold,
+)
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 from app.services.intervention.RemediationPrerequisiteService import require_remediation_prerequisite
 from app.services.quiz.quiz_normalization import is_identification_correct
 
 
 COMPLETED_ATTEMPT_STATUSES = frozenset({"submitted", "late", "graded"})
+STUDY_SUPPORT_QUIZ_PASSED_MESSAGE = (
+    "You've successfully completed this Study Support assessment. No further attempts are needed."
+)
 INVALID_SUMMARY_RELEASE_MESSAGE = (
     "Your quiz has been submitted successfully. "
     "Your quiz summary is currently unavailable."
@@ -75,20 +83,6 @@ def get_student_quiz_attempt(
     return _attempt_response(db, assignment, classwork, quiz, submission)
 
 
-def _lock_targeted_assignment(db: Session, assignment: ClassworkAssignment) -> None:
-    """Serialize concurrent start/submit calls for a single-student assignment."""
-    if assignment.recipient_student_id is not None:
-        (
-            db.query(ClassworkAssignment.classwork_assignment_id)
-            .filter(
-                ClassworkAssignment.classwork_assignment_id
-                == assignment.classwork_assignment_id
-            )
-            .with_for_update()
-            .one_or_none()
-        )
-
-
 def start_student_quiz_attempt(
     db: Session,
     student: Student,
@@ -99,10 +93,14 @@ def start_student_quiz_attempt(
     require_remediation_prerequisite(db, assignment, student)
     _ensure_before_due(assignment)
     ensure_remedial_period_open(db, assignment, student.student_id)
-    _lock_targeted_assignment(db, assignment)
-
+    _lock_assignment_row(db, assignment_id)
     submission = _submission_for(db, student, assignment_id, lock_for_update=True)
     previous_grade = submission.grade if submission else None
+    has_passed, _threshold = evaluate_intervention_quiz_pass(
+        db, assignment, classwork, submission, quiz=quiz,
+    )
+    if has_passed:
+        raise HTTPException(status_code=403, detail=STUDY_SUPPORT_QUIZ_PASSED_MESSAGE)
     max_attempts = _max_attempts(db, assignment, classwork)
     if submission and submission.status != "pending" and submission.attempt_count >= max_attempts:
         raise HTTPException(status_code=403, detail="Maximum attempts reached")
@@ -146,9 +144,14 @@ def submit_student_quiz_attempt(
     _assert_student_quiz_write_scope(db, student, assignment, classwork)
     require_remediation_prerequisite(db, assignment, student)
     ensure_remedial_period_open(db, assignment, student.student_id)
-    _lock_targeted_assignment(db, assignment)
+    _lock_assignment_row(db, assignment_id)
     submission = _submission_for(db, student, assignment_id, lock_for_update=True)
     previous_grade = submission.grade if submission else None
+    has_passed, _threshold = evaluate_intervention_quiz_pass(
+        db, assignment, classwork, submission, quiz=quiz,
+    )
+    if has_passed:
+        raise HTTPException(status_code=403, detail=STUDY_SUPPORT_QUIZ_PASSED_MESSAGE)
     if not submission:
         _ensure_before_due(assignment)
         submission = StudentSubmission(
@@ -402,6 +405,83 @@ def _assert_student_quiz_write_scope(
         raise HTTPException(status_code=409, detail="The period grade is finalized")
 
 
+def _lock_assignment_row(db: Session, assignment_id: int) -> None:
+    db.query(ClassworkAssignment.classwork_assignment_id).filter(
+        ClassworkAssignment.classwork_assignment_id == assignment_id,
+    ).with_for_update().first()
+
+
+def _intervention_quiz_passing_threshold(
+    db: Session,
+    assignment: ClassworkAssignment,
+    classwork: Classwork,
+) -> Decimal | None:
+    """Resolve the subject passing threshold for an Intervention/Study Support quiz."""
+    if assignment.source_intervention_id is None or not is_quiz_type(classwork.classwork_type):
+        return None
+    academic_year_id: int | None = None
+    if assignment.class_id is not None:
+        class_row = db.get(Class, assignment.class_id)
+        if class_row is not None:
+            academic_year_id = class_row.academic_year_id
+    if academic_year_id is None and assignment.academic_period_id is not None:
+        period_row = db.get(AcademicPeriod, assignment.academic_period_id)
+        if period_row is not None:
+            academic_year_id = period_row.academic_year_id
+    if academic_year_id is None or classwork.subject_id is None:
+        return None
+    try:
+        context = read_passing_threshold_context(
+            db,
+            academic_year_id=academic_year_id,
+            subject_ids=[classwork.subject_id],
+            academic_period_id=assignment.academic_period_id,
+        )
+        resolution = resolve_passing_threshold(
+            context,
+            academic_year_id=academic_year_id,
+            scope="subject",
+            subject_id=classwork.subject_id,
+        )
+        return resolution.threshold
+    except PassingThresholdConfigurationError:
+        return None
+
+
+def _quiz_max_points(classwork: Classwork, quiz: Quiz | None) -> Decimal:
+    if classwork.total_points is not None:
+        total = Decimal(str(classwork.total_points))
+        if total > 0:
+            return total
+    if quiz is not None and quiz.questions:
+        return sum(
+            (Decimal(str(link.question.points)) for link in quiz.questions if link.question is not None),
+            Decimal("0"),
+        )
+    return Decimal("0")
+
+
+def evaluate_intervention_quiz_pass(
+    db: Session,
+    assignment: ClassworkAssignment,
+    classwork: Classwork,
+    submission: StudentSubmission | None,
+    *,
+    quiz: Quiz | None = None,
+) -> tuple[bool, Decimal | None]:
+    """Return (is_passed, passing_threshold) for an Intervention/Study Support quiz."""
+    if assignment.source_intervention_id is None or not is_quiz_type(classwork.classwork_type):
+        return False, None
+    threshold = _intervention_quiz_passing_threshold(db, assignment, classwork)
+    if threshold is None or submission is None or submission.status != "graded" or submission.grade is None:
+        return False, threshold
+    max_points = _quiz_max_points(classwork, quiz)
+    if max_points <= 0:
+        return False, threshold
+    is_passed = Decimal(str(submission.grade)) * Decimal("100") >= threshold * max_points
+    return is_passed, threshold
+
+
 def _submission_for(
     db: Session,
     student: Student,
@@ -419,12 +499,7 @@ def _submission_for(
 
 
 def _max_attempts(db: Session, assignment: ClassworkAssignment, classwork: Classwork) -> int:
-    if assignment.original_exam_assignment_id is not None or assignment.source_intervention_id is not None:
-        return 1
-    from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
-    if db.query(RemediationAssignmentLink.remediation_link_id).filter_by(
-        remediation_assignment_id=assignment.classwork_assignment_id
-    ).first() is not None:
+    if assignment.original_exam_assignment_id is not None:
         return 1
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
     return assignment.max_attempts or (setting.max_attempts if setting else None) or 1
@@ -464,7 +539,16 @@ def _attempt_response(
 ) -> QuizAttemptResponse:
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
     summary_available, release_at, summary_message = _summary_release_state(setting, assignment, submission)
-    can_submit = _can_submit(db, assignment, classwork, submission)
+    is_intervention_quiz = assignment.source_intervention_id is not None
+    is_passed, passing_threshold = evaluate_intervention_quiz_pass(
+        db, assignment, classwork, submission, quiz=quiz,
+    )
+    max_attempts = _max_attempts(db, assignment, classwork)
+    attempt_count = submission.attempt_count if submission else 0
+    can_submit = _can_submit(
+        db, assignment, classwork, submission, is_passed=is_passed,
+    )
+    show_scores = bool(classwork.show_scores)
     visibility = _attempt_feedback_visibility(
         setting,
         submission,
@@ -484,14 +568,28 @@ def _attempt_response(
         instructions=classwork.instructions,
         total_points=float(classwork.total_points) if classwork.total_points is not None else None,
         duration_minutes=quiz.duration_minutes,
-        max_attempts=_max_attempts(db, assignment, classwork),
-        attempt_count=submission.attempt_count if submission else 0,
+        max_attempts=max_attempts,
+        attempt_count=attempt_count,
+        attempts_used=attempt_count,
+        attempts_remaining=0 if is_passed else max(0, max_attempts - attempt_count),
         status=submission.status if submission else "not_started",
         started_at=submission.created_at if submission else None,
         server_time=datetime.now(timezone.utc),
         submitted_at=submission.submitted_at if submission else None,
-        grade=float(submission.grade) if submission and submission.grade is not None else None,
-        can_submit=_can_submit(db, assignment, classwork, submission),
+        grade=(
+            float(submission.grade)
+            if submission and submission.grade is not None and show_scores
+            else None
+        ),
+        can_submit=can_submit,
+        is_intervention_quiz=is_intervention_quiz,
+        is_passed=is_passed,
+        passing_threshold=(
+            float(passing_threshold)
+            if passing_threshold is not None and show_scores
+            else None
+        ),
+        show_scores=show_scores,
         summary_available=summary_available,
         summary_release_mode=setting.summary_release_mode if setting else "IMMEDIATE",
         summary_release_at=release_at,
@@ -584,7 +682,11 @@ def _can_submit(
     assignment: ClassworkAssignment,
     classwork: Classwork,
     submission: StudentSubmission | None,
+    *,
+    is_passed: bool = False,
 ) -> bool:
+    if is_passed:
+        return False
     if assignment.source_intervention_id is not None:
         from app.models.intervention.Intervention import Intervention
 

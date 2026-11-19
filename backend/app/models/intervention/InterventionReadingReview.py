@@ -19,7 +19,8 @@ class InterventionReadingReview(Base):
         UniqueConstraint(
             "intervention_id",
             "reading_assignment_id",
-            name="uq_intervention_reading_review_intervention_assignment",
+            "review_cycle",
+            name="uq_intervention_reading_review_intervention_assignment_cycle",
         ),
         Index(
             "ix_intervention_reading_review_intervention",
@@ -57,6 +58,12 @@ class InterventionReadingReview(Base):
         PG_UUID(as_uuid=True),
         ForeignKey("student.student_id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    review_cycle: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
     )
     acknowledged_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

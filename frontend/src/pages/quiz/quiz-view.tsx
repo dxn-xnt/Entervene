@@ -3,13 +3,18 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Clock, HelpCircle, Award, AlertCircle, RotateCcw } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
 import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
-import { getQuizAttempt, type QuizAttemptResponse } from "@/lib/quiz-api";
+import {
+  getQuizAttempt,
+  STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
+  type QuizAttemptResponse,
+} from "@/lib/quiz-api";
 import {
   quizPathWithContext,
   quizReturnContext,
@@ -185,13 +190,24 @@ const StudentQuizView = () => {
                       <Card className="flex min-h-48 w-full flex-col items-center justify-center rounded-lg bg-white p-6 text-center shadow-md hover:shadow-md">
                         <RotateCcw className="mb-3 size-7 text-black/65" />
                         <span className="text-3xl font-extrabold">
-                          {quiz.attempt_count} / {quiz.max_attempts}
+                          {quiz.is_passed
+                            ? quiz.attempts_used ?? quiz.attempt_count
+                            : `${quiz.attempts_used ?? quiz.attempt_count} / ${quiz.max_attempts}`}
                         </span>
                         <span className="mt-2 text-xs font-semibold uppercase tracking-wider text-black/65">
-                          Attempts Used
+                          {quiz.is_passed ? "Passed" : "Attempts Used"}
                         </span>
                       </Card>
                     </div>
+
+                    {quiz.is_passed && (
+                      <Alert status="success" className="mt-4">
+                        <Alert.Title>Passed</Alert.Title>
+                        <Alert.Description>
+                          {STUDY_SUPPORT_QUIZ_PASSED_MESSAGE}
+                        </Alert.Description>
+                      </Alert>
+                    )}
 
                     <div className="mt-6 flex w-full flex-wrap items-center justify-center gap-3 sm:mt-8 lg:mt-12">
                       {isCompleted && (
@@ -247,12 +263,19 @@ const StudentQuizView = () => {
                     </div>
 
                     {/* Previous Result Summary Banner if graded */}
-                    {isCompleted && quiz.grade != null && (
+                    {isCompleted && (quiz.grade != null || quiz.show_scores === false) && (
                       <Card className="bg-white p-6 flex flex-col md:flex-row items-center justify-between gap-4">
                         <div>
-                          <h3 className="font-bold text-lg">
-                            Your Latest Score
-                          </h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-lg">
+                              Your Latest Score
+                            </h3>
+                            {quiz.is_passed && (
+                              <Badge variant="success" size="sm">
+                                Passed
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-black/60">
                             Submitted on{" "}
                             {quiz.submitted_at
@@ -262,21 +285,34 @@ const StudentQuizView = () => {
                                 )
                               : "N/A"}
                           </p>
+                          {quiz.show_scores !== false &&
+                            quiz.is_intervention_quiz &&
+                            quiz.passing_threshold != null && (
+                              <p className="text-sm font-medium text-black/70 mt-1">
+                                Passing score: {quiz.passing_threshold}%
+                              </p>
+                            )}
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-4xl font-extrabold">
-                            {quiz.grade}
-                            <span className="text-xl text-black/50 font-normal">
-                              {" "}
-                              /{" "}
-                              {quiz.total_points ??
-                                quiz.questions.reduce(
-                                  (sum, q) => sum + (q.points || 1),
-                                  0,
-                                )}{" "}
-                              pts
+                          {quiz.show_scores === false || quiz.grade == null ? (
+                            <Badge variant="outline" size="sm">
+                              Score hidden
+                            </Badge>
+                          ) : (
+                            <span className="text-4xl font-extrabold">
+                              {quiz.grade}
+                              <span className="text-xl text-black/50 font-normal">
+                                {" "}
+                                /{" "}
+                                {quiz.total_points ??
+                                  quiz.questions.reduce(
+                                    (sum, q) => sum + (q.points || 1),
+                                    0,
+                                  )}{" "}
+                                pts
+                              </span>
                             </span>
-                          </span>
+                          )}
                         </div>
                       </Card>
                     )}

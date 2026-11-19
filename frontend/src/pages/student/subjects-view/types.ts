@@ -138,12 +138,18 @@ export interface QuizAttempt {
   duration_minutes?: number | null;
   max_attempts: number;
   attempt_count: number;
+  attempts_used?: number;
+  attempts_remaining?: number;
   status: string;
   started_at?: string | null;
   server_time?: string | null;
   submitted_at?: string | null;
   grade?: number | null;
   can_submit: boolean;
+  is_intervention_quiz?: boolean;
+  is_passed?: boolean;
+  passing_threshold?: number | null;
+  show_scores?: boolean;
   summary_available: boolean;
   summary_release_mode:
     | "IMMEDIATE"

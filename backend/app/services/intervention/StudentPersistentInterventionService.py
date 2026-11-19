@@ -13,6 +13,7 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.classwork.ClassworkShared import assignment_is_locked
 from app.services.intervention.InterventionHistoryService import sent_reviewer, targeted_activities
+from app.services.intervention.PracticeReadingCycleService import current_practice_reading_cycle
 from app.schemas.StudentPersistentIntervention import (
     StudentPersistentIntervention, StudentPersistentInterventionList,
     StudentPreparationProgress, StudentRequiredReading,
@@ -48,9 +49,13 @@ def resolve_required_readings(
         enrollment_status="enrolled",
     ).first() is not None
 
+    review_cycle = current_practice_reading_cycle(
+        db, intervention_id=row.intervention_id, student_id=student_id,
+    )
     reviews = db.query(InterventionReadingReview).filter_by(
         intervention_id=row.intervention_id,
         student_id=student_id,
+        review_cycle=review_cycle,
     ).all()
     reviews_by_assignment = {
         r.reading_assignment_id: r.acknowledged_at for r in reviews
@@ -248,10 +253,15 @@ def _summary(db: Session, row: Intervention, student_id) -> StudentPersistentInt
             prereq_message = decision.message
             activity_prep = decision.preparation
 
+        from app.services.quiz.QuizAttemptService import evaluate_intervention_quiz_pass
+        activity_passed, _threshold = evaluate_intervention_quiz_pass(
+            db, assignment, work, submission,
+        )
         activities.append(StudentSupportActivity(
             assignment_id=assignment.classwork_assignment_id,
             title=work.title, classwork_type=work.classwork_type,
             submission_status=submission.status if submission else None,
+            is_passed=activity_passed,
             grade=float(submission.grade) if submission and submission.grade is not None and work.show_scores else None,
             total_points=float(work.total_points) if work.total_points is not None and work.show_scores else None,
             access_state=access_state,

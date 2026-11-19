@@ -167,12 +167,18 @@ class QuizAttemptResponse(BaseModel):
     duration_minutes: Optional[int] = None
     max_attempts: int
     attempt_count: int
+    attempts_used: int
+    attempts_remaining: int
     status: str
     started_at: Optional[datetime] = None
     server_time: Optional[datetime] = None
     submitted_at: Optional[datetime] = None
     grade: Optional[float] = None
     can_submit: bool
+    is_intervention_quiz: bool = False
+    is_passed: bool = False
+    passing_threshold: Optional[float] = None
+    show_scores: bool = True
     summary_available: bool = False
     summary_release_mode: str = "IMMEDIATE"
     summary_release_at: Optional[datetime] = None

@@ -160,6 +160,7 @@ class PracticeAttemptSubmitRequest(BaseModel):
 class PracticeAttemptStartResponse(BaseModel):
     attempt_id: int
     attempt_number: int
+    reading_review_cycle: int = 1
     status: str
     passing_percentage: Decimal
     total_questions: int
@@ -218,6 +219,7 @@ class PracticeAttemptSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     attempt_id: int
     attempt_number: int
+    reading_review_cycle: int = 1
     status: str
     total_score: Decimal
     max_score: Decimal

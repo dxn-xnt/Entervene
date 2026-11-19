@@ -266,17 +266,19 @@ def test_model_declares_review_identity_constraints_and_indexes():
         "intervention_id",
         "reading_assignment_id",
         "student_id",
+        "review_cycle",
         "acknowledged_at",
     }
     unique = next(
         constraint
         for constraint in table.constraints
         if constraint.name
-        == "uq_intervention_reading_review_intervention_assignment"
+        == "uq_intervention_reading_review_intervention_assignment_cycle"
     )
     assert [column.name for column in unique.columns] == [
         "intervention_id",
         "reading_assignment_id",
+        "review_cycle",
     ]
     assert {
         "ix_intervention_reading_review_intervention",

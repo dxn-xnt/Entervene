@@ -6,6 +6,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import CreateLessonModal from "./create-lesson";
 import CreateClassworkModal from "./create-classwork";
 import CreateClassworkQuizModal from "./create-classwork-quiz";
+import { interventionQuizCreationDefaults } from "../classworks/quiz-builder-utils";
 import EditClassworkModal from "./edit-classwork";
 import type { TeacherClassLoad, TeacherClasswork } from "@/types/classwork";
 
@@ -18,7 +19,7 @@ vi.mock("@/context/AcademicPeriodContext", () => ({
     selectedPeriodId: 1,
     selectedYearId: 1,
   }),
-  useRegisterDirtyGuard: () => {},
+  useRegisterDirtyGuard: () => { },
 }));
 
 const mockClasses = [
@@ -225,6 +226,29 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
 
     expect(screen.queryByText("Reference Links")).toBeNull();
     expect(screen.queryByText("Add reference link")).toBeNull();
+  });
+
+  it("defaults new Study Support quizzes to three attempts and visible results only for intervention quizzes", () => {
+    expect(interventionQuizCreationDefaults(true, "PRACTICE_ONLY")).toEqual({
+      maxAttempts: "3",
+      showScores: true,
+    });
+    expect(interventionQuizCreationDefaults(true, "WRITTEN_WORK")).toEqual({
+      maxAttempts: "3",
+      showScores: true,
+    });
+    expect(interventionQuizCreationDefaults(true, "PERFORMANCE_TASK")).toEqual({
+      maxAttempts: "3",
+      showScores: true,
+    });
+    expect(interventionQuizCreationDefaults(true, "EXAMINATION")).toEqual({
+      maxAttempts: "1",
+      showScores: true,
+    });
+    expect(interventionQuizCreationDefaults(false, null)).toEqual({
+      maxAttempts: "1",
+      showScores: false,
+    });
   });
 
   it("Scenario 14: Create Assignment/Activity modal renders ReferenceLinkEditor", () => {
@@ -436,12 +460,12 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
 
     // Question structure and scoring controls are locked
     expect(duration.disabled).toBe(true);
-    expect(attempts.disabled).toBe(true);
+    expect(attempts.disabled).toBe(false);
     expect(shuffleSwitch.disabled).toBe(true);
 
     // A single, clear explanation describes all locked quiz controls.
-    expect(screen.getByText("Quiz settings locked")).toBeInTheDocument();
-    expect(screen.getByText(/A student has already started this quiz/)).toBeInTheDocument();
+    expect(screen.getByText("Quiz settings locked")).toBeTruthy();
+    expect(screen.getByText(/A student has already started this quiz/)).toBeTruthy();
 
     // Result release controls remain editable
     const showResultsSwitch = screen.getByRole("switch", { name: /Show quiz results to students/i }) as HTMLButtonElement;

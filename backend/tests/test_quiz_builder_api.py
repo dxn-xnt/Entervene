@@ -435,6 +435,87 @@ def test_quiz_configuration_is_locked_after_attempt_starts(quiz_api_context):
     assert response.json()["detail"]["code"] == "QUIZ_CONFIGURATION_LOCKED_AFTER_ATTEMPT"
 
 
+def test_attempt_limit_remains_editable_without_resetting_existing_attempt(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    assert c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}",
+        json=_valid_payload(c["lesson"].lesson_id),
+    ).status_code == 200
+    submission = StudentSubmission(
+        student_id=c["student"].student_id,
+        classwork_assignment_id=c["assignment"].classwork_assignment_id,
+        status="submitted",
+        attempt_count=1,
+        grade=Decimal("6.00"),
+    )
+    c["db"].add(submission)
+    c["db"].commit()
+
+    response = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/configuration",
+        json={
+            "duration_minutes": 30,
+            "is_shuffle_questions": True,
+            "enable_per_question_scoring": True,
+            "enable_per_question_time_limits": False,
+            "max_attempts": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["max_attempts"] == 3
+    assert response.json()["has_attempts"] is True
+    c["db"].refresh(c["assignment"])
+    c["db"].refresh(submission)
+    assert c["assignment"].max_attempts == 3
+    assert submission.attempt_count == 1
+    assert submission.status == "submitted"
+    assert submission.grade == Decimal("6.00")
+
+
+def test_study_support_quiz_configuration_caps_attempts_at_three(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    assert c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}",
+        json=_valid_payload(c["lesson"].lesson_id),
+    ).status_code == 200
+    from uuid import uuid4
+
+    student_id = c["student"].student_id
+    c["assignment"].source_intervention_id = 77
+    c["assignment"].recipient_student_id = student_id
+    c["assignment"].remediation_request_id = uuid4()
+    c["db"].commit()
+
+    allowed = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/configuration",
+        json={
+            "duration_minutes": 30,
+            "is_shuffle_questions": True,
+            "enable_per_question_scoring": True,
+            "enable_per_question_time_limits": False,
+            "max_attempts": 3,
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["max_attempts"] == 3
+
+    rejected = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/configuration",
+        json={
+            "duration_minutes": 30,
+            "is_shuffle_questions": True,
+            "enable_per_question_scoring": True,
+            "enable_per_question_time_limits": False,
+            "max_attempts": 4,
+        },
+    )
+    assert rejected.status_code == 400
+    assert "3 attempts" in rejected.json()["detail"]
+
+
 def test_quiz_results_settings_update_both_visibility_fields_after_attempt_exists(quiz_api_context):
     c = quiz_api_context
     classwork_id = c["quiz_classwork"].classwork_id

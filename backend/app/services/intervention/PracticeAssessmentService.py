@@ -73,7 +73,7 @@ def _require_teacher_scope(db: Session, staff_id: str, row: Intervention) -> Non
 def _require_student_scope(db: Session, student_id: UUID, row: Intervention) -> None:
     """Verify that student is the designated recipient and currently enrolled."""
     if row.student_id != student_id:
-        raise HTTPException(status_code=403, detail="This intervention belongs to another student")
+        raise HTTPException(status_code=403, detail="This Study Support record belongs to another student")
     enrolled = db.query(StudentClass.student_class_id).filter_by(
         student_id=student_id, class_id=row.class_id, enrollment_status="enrolled",
     ).first() is not None
@@ -106,7 +106,7 @@ def get_or_create_assessment(
     """Retrieve existing practice assessment for an intervention or initialize a new DRAFT."""
     intervention = db.get(Intervention, intervention_id)
     if intervention is None:
-        raise HTTPException(status_code=404, detail="Intervention not found")
+        raise HTTPException(status_code=404, detail="Study Support record not found")
     _require_teacher_scope(db, staff_id, intervention)
 
     assessment = db.query(PracticeAssessment).filter_by(intervention_id=intervention_id).first()
@@ -616,7 +616,7 @@ def get_student_assessment_metadata(db: Session, student_id: UUID, intervention_
     """Retrieve published assessment metadata for the student (no questions leaked)."""
     intervention = db.get(Intervention, intervention_id)
     if intervention is None:
-        raise HTTPException(status_code=404, detail="Intervention not found")
+        raise HTTPException(status_code=404, detail="Study Support record not found")
     _require_student_scope(db, student_id, intervention)
 
     assessment = db.query(PracticeAssessment).filter_by(
@@ -624,7 +624,7 @@ def get_student_assessment_metadata(db: Session, student_id: UUID, intervention_
         status="PUBLISHED",
     ).first()
     if assessment is None:
-        raise HTTPException(status_code=404, detail="No published practice assessment available for this intervention")
+        raise HTTPException(status_code=404, detail="No published Practice Assessment is available for this Study Support record")
 
     attempts = (
         db.query(PracticeAttempt)
@@ -641,6 +641,14 @@ def get_student_assessment_metadata(db: Session, student_id: UUID, intervention_
         a.is_passed or (a.score_percentage is not None and a.score_percentage >= assessment.passing_percentage)
         for a in submitted_attempts
     )
+    from app.services.intervention.StudentPersistentInterventionService import resolve_required_readings
+    from app.services.intervention.PracticeReadingCycleService import current_practice_reading_cycle
+    readings, reading_issues, preparation = resolve_required_readings(db, intervention, student_id)
+    reading_cycle = current_practice_reading_cycle(
+        db, intervention_id=intervention_id, student_id=student_id,
+    )
+    readings_satisfied = preparation.required_count == 0 or preparation.is_satisfied
+    can_start_attempt = bool(active_attempt or (not has_passed and readings_satisfied and not reading_issues))
 
     return {
         "practice_assessment_id": assessment.practice_assessment_id,
@@ -657,6 +665,18 @@ def get_student_assessment_metadata(db: Session, student_id: UUID, intervention_
         "best_score_percentage": float(best_score) if best_score is not None else None,
         "latest_score_percentage": float(latest_attempt.score_percentage) if latest_attempt is not None else None,
         "latest_attempt_number": latest_attempt.attempt_number if latest_attempt else None,
+        "reading_review_cycle": reading_cycle,
+        "required_readings_count": preparation.required_count,
+        "reviewed_readings_count": preparation.completed_count,
+        "reading_prerequisite_met": readings_satisfied and not reading_issues,
+        "can_start_attempt": can_start_attempt,
+        "practice_lock_reason": (
+            None
+            if can_start_attempt
+            else "Practice completed successfully."
+            if has_passed
+            else "Review all assigned readings for this Study Support cycle before starting Practice Assessment."
+        ),
     }
 
 
@@ -668,7 +688,7 @@ def start_or_resume_attempt(
     """Start a new attempt or resume an existing active attempt with frozen question snapshots."""
     intervention = db.get(Intervention, intervention_id)
     if intervention is None:
-        raise HTTPException(status_code=404, detail="Intervention not found")
+        raise HTTPException(status_code=404, detail="Study Support record not found")
     _require_student_scope(db, student_id, intervention)
 
     # Serialize attempt creation with full-question synchronization. If an
@@ -679,7 +699,7 @@ def start_or_resume_attempt(
         status="PUBLISHED",
     ).with_for_update().first()
     if assessment is None:
-        raise HTTPException(status_code=404, detail="No published practice assessment available for this intervention")
+        raise HTTPException(status_code=404, detail="No published Practice Assessment is available for this Study Support record")
 
     questions = assessment.questions
     if not questions:
@@ -697,6 +717,18 @@ def start_or_resume_attempt(
     )
     if active is not None:
         return _format_active_attempt_response(active)
+
+    from app.services.intervention.StudentPersistentInterventionService import resolve_required_readings
+    from app.services.intervention.PracticeReadingCycleService import current_practice_reading_cycle
+    _readings, reading_issues, preparation = resolve_required_readings(db, intervention, student_id)
+    if reading_issues or (preparation.required_count > 0 and not preparation.is_satisfied):
+        raise HTTPException(
+            status_code=409,
+            detail="Review all assigned readings for this Study Support cycle before starting Practice Assessment",
+        )
+    reading_cycle = current_practice_reading_cycle(
+        db, intervention_id=intervention_id, student_id=student_id,
+    )
 
     # 2. Initialize new independent attempt
     max_num = db.query(func.max(PracticeAttempt.attempt_number)).filter_by(
@@ -745,6 +777,7 @@ def start_or_resume_attempt(
         attempt_number=next_num,
         status="STARTED",
         assessment_version=assessment.version,
+        reading_review_cycle=reading_cycle,
         passing_threshold_snapshot=assessment.passing_percentage,
         question_order=shuffled_q_ids,
         option_order_map=option_order_map,
@@ -808,6 +841,7 @@ def _format_active_attempt_response(attempt: PracticeAttempt) -> PracticeAttempt
     return PracticeAttemptStartResponse(
         attempt_id=attempt.attempt_id,
         attempt_number=attempt.attempt_number,
+        reading_review_cycle=attempt.reading_review_cycle,
         status=attempt.status,
         passing_percentage=attempt.passing_threshold_snapshot,
         total_questions=len(active_questions),
@@ -824,13 +858,15 @@ def save_attempt_draft(
     payload: PracticeAttemptSubmitRequest,
 ) -> PracticeAttemptDraftSaveResponse:
     """Persist student draft answers without finalizing, scoring, or revealing diagnostic feedback."""
-    attempt = db.get(PracticeAttempt, attempt_id)
+    attempt = db.query(PracticeAttempt).filter(
+        PracticeAttempt.attempt_id == attempt_id,
+    ).with_for_update().one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Attempt not found")
     if attempt.student_id != student_id:
         raise HTTPException(status_code=403, detail="Attempt belongs to another student")
     if attempt.assessment.intervention_id != intervention_id:
-        raise HTTPException(status_code=400, detail="Mismatched intervention ID for this attempt")
+        raise HTTPException(status_code=400, detail="This attempt does not belong to the selected Study Support record")
 
     if attempt.status != "STARTED":
         raise HTTPException(
@@ -870,13 +906,15 @@ def submit_attempt(
     payload: PracticeAttemptSubmitRequest,
 ) -> PracticeAttemptFeedbackResponse:
     """Score submitted answers, freeze historical answer snapshot, and return complete diagnostic feedback."""
-    attempt = db.get(PracticeAttempt, attempt_id)
+    attempt = db.query(PracticeAttempt).filter(
+        PracticeAttempt.attempt_id == attempt_id,
+    ).with_for_update().one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Attempt not found")
     if attempt.student_id != student_id:
         raise HTTPException(status_code=403, detail="Attempt belongs to another student")
     if attempt.assessment.intervention_id != intervention_id:
-        raise HTTPException(status_code=400, detail="Mismatched intervention ID for this attempt")
+        raise HTTPException(status_code=400, detail="This attempt does not belong to the selected Study Support record")
 
     # Idempotent re-submission check
     if attempt.status == "SUBMITTED":
@@ -1020,7 +1058,7 @@ def get_attempt_feedback(
     """Retrieve full diagnostic feedback for a submitted attempt (authorized student or teacher)."""
     attempt = db.get(PracticeAttempt, attempt_id)
     if attempt is None or attempt.assessment.intervention_id != intervention_id:
-        raise HTTPException(status_code=404, detail="Attempt not found for this intervention")
+        raise HTTPException(status_code=404, detail="Attempt not found for this Study Support record")
 
     if attempt.status != "SUBMITTED":
         raise HTTPException(
@@ -1117,7 +1155,7 @@ def list_student_attempts(db: Session, student_id: UUID, intervention_id: int) -
     """List historical attempts for student."""
     intervention = db.get(Intervention, intervention_id)
     if intervention is None:
-        raise HTTPException(status_code=404, detail="Intervention not found")
+        raise HTTPException(status_code=404, detail="Study Support record not found")
     _require_student_scope(db, student_id, intervention)
 
     assessment = db.query(PracticeAssessment).filter_by(intervention_id=intervention_id).first()

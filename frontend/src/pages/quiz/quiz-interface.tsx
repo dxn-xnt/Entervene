@@ -79,8 +79,8 @@ const StudentQuizTake = () => {
         const normalizedStatus = (data.status || "").toLowerCase();
         const completed = isCompletedQuizStatus(normalizedStatus);
 
-        // Already submitted and no further attempts permitted -> go directly to results
-        if (!data.can_submit && completed) {
+        // Already submitted or passed and no further attempts permitted -> go directly to results
+        if (!data.can_submit && (completed || data.is_passed)) {
           navigate(
             quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search),
             { replace: true, state: { submittedAttempt: data } },

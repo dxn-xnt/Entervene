@@ -465,21 +465,22 @@ def test_quiz_remediation_enforces_single_attempt(candidate_context):
     kwargs.update(
         classwork_type="QUIZ",
         quiz_payload=quiz_payload,
-        max_attempts=2,
+        max_attempts=4,
     )
 
-    # Attempting to create remedial quiz with max_attempts=2 fails
+    # Attempting to create remedial quiz with max_attempts > 3 fails
     with pytest.raises(HTTPException) as attempt_exc:
         asyncio.run(create_classwork_wizard_record(**kwargs))
     assert attempt_exc.value.status_code == 400
-    assert "permits one attempt" in attempt_exc.value.detail
+    assert "3 attempts" in attempt_exc.value.detail
 
-    # Creating with max_attempts=1 succeeds
-    kwargs["max_attempts"] = 1
+    # Creating with max_attempts=3 succeeds
+    kwargs["max_attempts"] = 3
     created = asyncio.run(create_classwork_wizard_record(**kwargs))
     remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
     link = db.query(RemediationAssignmentLink).one()
     assert link.remediation_assignment_id == remediation.classwork_assignment_id
+    assert remediation.max_attempts == 3
 
 
 @pytest.mark.parametrize("second_creation_mode", ["AI", "MANUAL"])

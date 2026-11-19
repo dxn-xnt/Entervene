@@ -704,9 +704,20 @@ export default function EditClassworkModal({
         }),
       ) !==
         JSON.stringify(quizConfigurationComparable(initialQuizConfiguration));
-    if (quizConfigurationChanged && quizConfigurationDraft.has_attempts) {
+    const lockedQuizFieldsChanged =
+      isQuiz &&
+      quizConfigurationDraft.loaded &&
+      (quizConfigurationDraft.duration_minutes !==
+        initialQuizConfiguration.duration_minutes ||
+        quizConfigurationDraft.is_shuffle_questions !==
+          initialQuizConfiguration.is_shuffle_questions ||
+        quizConfigurationDraft.enable_per_question_scoring !==
+          initialQuizConfiguration.enable_per_question_scoring ||
+        quizConfigurationDraft.enable_per_question_time_limits !==
+          initialQuizConfiguration.enable_per_question_time_limits);
+    if (lockedQuizFieldsChanged && quizConfigurationDraft.has_attempts) {
       setFormError(
-        "Quiz duration, attempt limits, and question behavior cannot be changed after an attempt has started.",
+        "Quiz duration and question behavior cannot be changed after an attempt has started.",
       );
       return;
     }
@@ -764,6 +775,17 @@ export default function EditClassworkModal({
     }
     if (selectedClassIds.length === 0) {
       setFormError("Select at least one section to assign.");
+      return;
+    }
+    const isInterventionQuiz = isQuiz && classwork.assignments?.some(
+      (assignment) => assignment.source_intervention_id != null,
+    );
+    if (isInterventionQuiz && attempts > 3) {
+      setFormError("Study Support quizzes allow up to 3 attempts.");
+      return;
+    }
+    if (isInterventionQuiz && !editDraft.due_date) {
+      setFormError("A due date is required for a Study Support quiz.");
       return;
     }
 
@@ -869,7 +891,7 @@ export default function EditClassworkModal({
                 : null,
               allow_late_submissions: editDraft.allow_late_submissions,
               max_attempts: isQuiz
-                ? Number(initialQuizConfiguration.max_attempts || attempts)
+                ? attempts
                 : null,
               is_published: publishValue,
             }),
@@ -1477,9 +1499,10 @@ export default function EditClassworkModal({
                           Quiz settings locked
                         </Alert.Title>
                         <Alert.Description className="mt-1 text-sm leading-relaxed text-yellow-900">
-                          A student has already started this quiz, so attempt
-                          limits, duration, and question behavior can no longer
-                          be changed. Result-release settings remain editable.
+                          A student has already started this quiz, so duration
+                          and question behavior can no longer be changed.
+                          Attempt limits and result-release settings remain
+                          editable.
                         </Alert.Description>
                       </Alert>
                     )}
@@ -1493,7 +1516,13 @@ export default function EditClassworkModal({
                     }`}
                   >
                     {!isReadingType(editDraft.classwork_type) && (
-                      <Field label="Due Date">
+                      <Field
+                        label="Due Date"
+                        isRequired={
+                          Boolean(targetedAssignment) &&
+                          isQuizType(editDraft.classwork_type)
+                        }
+                      >
                         <DatePicker
                           includeTime
                           value={editDraft.due_date}
@@ -1563,6 +1592,7 @@ export default function EditClassworkModal({
                           <Input
                             type="number"
                             min="1"
+                            max={targetedAssignment ? "3" : undefined}
                             step="1"
                             value={editDraft.max_attempts}
                             onChange={(event) =>
@@ -1572,9 +1602,7 @@ export default function EditClassworkModal({
                               }))
                             }
                             disabled={
-                              isSavingEdit ||
-                              !quizConfigurationDraft.loaded ||
-                              quizConfigurationDraft.has_attempts
+                              isSavingEdit || !quizConfigurationDraft.loaded
                             }
                             className="w-full bg-white border-2 border-black rounded shadow-md"
                           />

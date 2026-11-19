@@ -56,6 +56,7 @@ import type {
 import {
   createEmptyQuizQuestion,
   defaultQuizSettings,
+  interventionQuizCreationDefaults,
 } from "../classworks/quiz-builder-utils";
 import {
   isUnkeyed,
@@ -130,6 +131,10 @@ export default function CreateClassworkQuizModal({
   onBack,
 }: CreateClassworkQuizModalProps) {
   const toast = useToast();
+  const creationDefaults = interventionQuizCreationDefaults(
+    Boolean(remediationTarget),
+    remediationGradeTreatment,
+  );
   const quizFileInputRef = useRef<HTMLInputElement>(null);
   const [createStep, setCreateStep] = useState<
     "quiz-source" | "details" | "quiz" | "assign"
@@ -197,10 +202,7 @@ export default function CreateClassworkQuizModal({
       : isGradedWWPT && selectedOriginalTarget
         ? String(selectedOriginalTarget.max_points)
         : emptyClassworkDraft.total_points;
-    const defaultAttempts =
-      remediationGradeTreatment === "EXAMINATION" || isGradedWWPT
-        ? "1"
-        : emptyClassworkDraft.max_attempts;
+    const defaultAttempts = creationDefaults.maxAttempts;
 
     return {
       ...emptyClassworkDraft,
@@ -220,9 +222,7 @@ export default function CreateClassworkQuizModal({
       exam_subtype: remediationOriginalExam?.subtype ?? "",
       total_points: defaultTotalPoints,
       max_attempts: defaultAttempts,
-      // Unified quiz results visibility defaults to hidden until the
-      // teacher explicitly enables scores and correct answers.
-      show_scores: defaultQuizSettings.show_correct_answers,
+      show_scores: creationDefaults.showScores,
       auto_ai_feedback_enabled: false,
       subject_id: preferredId,
     };
@@ -257,10 +257,8 @@ export default function CreateClassworkQuizModal({
   );
   const [quizSettings, setQuizSettings] = useState<QuizSettingsDraft>(() => ({
     ...defaultQuizSettings,
-    max_attempts:
-      remediationGradeTreatment === "EXAMINATION" || isGradedWWPT
-        ? "1"
-        : defaultQuizSettings.max_attempts,
+    max_attempts: creationDefaults.maxAttempts,
+    show_correct_answers: creationDefaults.showScores,
   }));
   const [quizImportWarnings, setQuizImportWarnings] = useState<string[]>([]);
   const [isImportingQuiz, setIsImportingQuiz] = useState(false);
@@ -609,9 +607,6 @@ export default function CreateClassworkQuizModal({
       if (Number(draft.total_points) !== selectedOriginalTarget.max_points) {
         return `Remedial quiz points (${Number(draft.total_points)}) must equal the original classwork maximum points (${selectedOriginalTarget.max_points}).`;
       }
-      if (Number(draft.max_attempts) !== 1) {
-        return "Graded remediation quiz must allow exactly one attempt.";
-      }
     }
     const points = Number(draft.total_points);
     if (!Number.isFinite(points) || points <= 0) {
@@ -645,9 +640,6 @@ export default function CreateClassworkQuizModal({
     const attempts = Number(quizSettings.max_attempts || draft.max_attempts);
     if (!Number.isInteger(attempts) || attempts <= 0) {
       return "Allowed quiz attempts must be a positive whole number.";
-    }
-    if (isGradedWWPT && attempts !== 1) {
-      return "Graded remediation quiz must allow exactly one attempt.";
     }
     if (
       quizSettings.summary_release_mode === "SCHEDULED" &&
@@ -934,6 +926,21 @@ export default function CreateClassworkQuizModal({
     }
     if (selectedLessonIds.length === 0) {
       const msg = "Select the lesson where this quiz should appear.";
+      setCreateError(msg);
+      toast.error({ title: msg });
+      return;
+    }
+    if (
+      remediationTarget &&
+      Number(quizSettings.max_attempts || draft.max_attempts) > 3
+    ) {
+      const msg = "Study Support quizzes allow up to 3 attempts.";
+      setCreateError(msg);
+      toast.error({ title: msg });
+      return;
+    }
+    if (remediationTarget && !draft.due_date) {
+      const msg = "A due date is required for a Study Support quiz.";
       setCreateError(msg);
       toast.error({ title: msg });
       return;
@@ -2127,6 +2134,7 @@ export default function CreateClassworkQuizModal({
                     <Input
                       type="number"
                       min="1"
+                      max={remediationTarget ? "3" : undefined}
                       step="1"
                       value={quizSettings.max_attempts}
                       onFocus={(event) => event.target.select()}
@@ -2142,8 +2150,7 @@ export default function CreateClassworkQuizModal({
                       }}
                       disabled={
                         isCreating ||
-                        remediationGradeTreatment === "EXAMINATION" ||
-                        isGradedWWPT
+                        remediationGradeTreatment === "EXAMINATION"
                       }
                       className="w-full bg-white border-2 border-black rounded shadow-none"
                     />
@@ -2274,6 +2281,7 @@ export default function CreateClassworkQuizModal({
                   <Field
                     label="Due Date"
                     isRequired={
+                      Boolean(remediationTarget) ||
                       quizSettings.summary_release_mode === "AFTER_DUE_DATE"
                     }
                   >

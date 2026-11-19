@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { Alert } from "@/components/retroui/Alert";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -19,7 +20,12 @@ import { Switch } from "@/components/retroui/Switch";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
-import { getQuizAttempt, type QuizAttemptResponse, type QuizAttemptQuestion } from "@/lib/quiz-api";
+import {
+  getQuizAttempt,
+  STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
+  type QuizAttemptResponse,
+  type QuizAttemptQuestion,
+} from "@/lib/quiz-api";
 import { quizPathWithContext, quizReturnContext } from "@/lib/student-quiz-navigation";
 
 type QuestionStatus = "correct" | "incorrect" | "partial" | "reviewed" | "pending";
@@ -169,15 +175,36 @@ const StudentQuizResult = () => {
   }
 
   const maxPoints = quiz.total_points ?? quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0);
-  const grade = quiz.grade != null ? quiz.grade : null;
+  const canShowScores = quiz.show_scores !== false;
+  const grade = canShowScores && quiz.grade != null ? quiz.grade : null;
   const scorePercent = grade != null && maxPoints > 0 ? Math.round((grade / maxPoints) * 100) : null;
   const isActiveAttempt = quiz.status === "pending" || quiz.status === "not_started";
+  const isPassed = Boolean(quiz.is_passed);
+  const evaluationWithheldForRetake =
+    quiz.status === "graded" &&
+    quiz.can_submit &&
+    quiz.summary_available &&
+    quiz.questions.length > 0 &&
+    quiz.questions.every((question) => question.points_awarded == null);
   const hasVisiblePendingEvaluation =
-    quiz.summary_available && quiz.questions.some((question) => question.points_awarded == null);
+    !evaluationWithheldForRetake &&
+    quiz.summary_available &&
+    quiz.questions.some((question) => question.points_awarded == null);
   const isPendingGrading =
     quiz.status === "submitted" || quiz.status === "late" ||
     (quiz.status === "graded" && hasVisiblePendingEvaluation);
-  const showFinalScore = quiz.status === "graded" && !isPendingGrading && scorePercent != null;
+  const showFinalScore = canShowScores && quiz.status === "graded" && !isPendingGrading && scorePercent != null;
+  const attemptsUsed = quiz.attempts_used ?? quiz.attempt_count;
+  const attemptsRemaining =
+    quiz.attempts_remaining ?? Math.max(0, quiz.max_attempts - attemptsUsed);
+  const shouldPromptRetake = Boolean(
+    quiz.is_intervention_quiz &&
+      !isPassed &&
+      quiz.status === "graded" &&
+      !isPendingGrading &&
+      quiz.can_submit &&
+      attemptsRemaining > 0,
+  );
   const teacherFeedback = quiz.feedback?.trim() ? quiz.feedback : null;
   const hasPartial = questionStatuses.includes("partial");
   const hasReviewed = questionStatuses.includes("reviewed");
@@ -232,7 +259,13 @@ const StudentQuizResult = () => {
               {/* Score Hero Card */}
               <Card className="bg-card p-5 flex flex-col items-center justify-center text-center shadow-none hover:shadow-none">
                 <span className="text-lg font-bold mb-1">
-                  {isActiveAttempt ? "Quiz in Progress" : isPendingGrading ? "Quiz Submitted" : "Score Result"}
+                  {isActiveAttempt
+                    ? "Quiz in Progress"
+                    : isPendingGrading
+                      ? "Quiz Submitted"
+                      : isPassed
+                        ? "Study Support Assessment Passed"
+                        : "Score Result"}
                 </span>
 
                 {isActiveAttempt ? (
@@ -251,6 +284,16 @@ const StudentQuizResult = () => {
                       Your open-ended answers are currently awaiting teacher review.
                     </p>
                   </div>
+                ) : !canShowScores ? (
+                  <div className="my-4 flex flex-col items-center gap-2">
+                    <CheckCircle2 className="w-12 h-12 text-emerald-600" />
+                    <p className="text-xl font-bold text-black/80">
+                      {isPassed ? "Assessment Completed" : "Score Hidden"}
+                    </p>
+                    <p className="text-sm text-black/60 max-w-md">
+                      Your teacher has hidden quiz scores for this assessment.
+                    </p>
+                  </div>
                 ) : showFinalScore ? (
                   <>
                     <p
@@ -263,6 +306,11 @@ const StudentQuizResult = () => {
                     <p className="text-sm text-muted-foreground">
                       {grade} / {maxPoints} Total Points
                     </p>
+                    {quiz.is_intervention_quiz && quiz.passing_threshold != null && (
+                      <p className="text-xs font-semibold text-black/70 mt-1">
+                        Passing score: {quiz.passing_threshold}%
+                      </p>
+                    )}
                   </>
                 ) : (
                   <div className="my-4 flex flex-col items-center gap-2">
@@ -277,16 +325,54 @@ const StudentQuizResult = () => {
                 <div className="flex items-center gap-2 mt-4">
                   <Badge
                     size="sm"
-                    variant={quiz.status === "graded" ? "success" : quiz.status === "late" ? "destructive" : "outline"}
+                    variant={
+                      isPassed || quiz.status === "graded"
+                        ? "success"
+                        : quiz.status === "late"
+                          ? "destructive"
+                          : "outline"
+                    }
                   >
-                    {quiz.status.charAt(0).toUpperCase() + quiz.status.slice(1).toLowerCase()}
+                    {isPassed
+                      ? "Passed"
+                      : quiz.status.charAt(0).toUpperCase() + quiz.status.slice(1).toLowerCase()}
                   </Badge>
 
                   <span className="text-sm text-black/60 font-medium">
-                    Attempt {quiz.attempt_count} of {quiz.max_attempts}
+                    {isPassed
+                      ? `Completed in ${attemptsUsed} ${attemptsUsed === 1 ? "attempt" : "attempts"}`
+                      : `Attempt ${attemptsUsed} of ${quiz.max_attempts}`}
                   </span>
                 </div>
               </Card>
+
+              {isPassed ? (
+                <Alert status="success">
+                  <Alert.Title>Passed</Alert.Title>
+                  <Alert.Description>
+                    {STUDY_SUPPORT_QUIZ_PASSED_MESSAGE}
+                  </Alert.Description>
+                </Alert>
+              ) : shouldPromptRetake ? (
+                <Alert status="warning">
+                  <Alert.Title>Passing score not reached yet</Alert.Title>
+                  <Alert.Description>
+                    {canShowScores && quiz.passing_threshold != null
+                      ? `You need at least ${quiz.passing_threshold}% to pass this Study Support assessment. `
+                      : "You haven't reached the passing score for this Study Support assessment yet. "}
+                    {`You have ${attemptsRemaining} ${attemptsRemaining === 1 ? "attempt" : "attempts"} remaining—review the material and retake the quiz when you're ready.`}
+                    {evaluationWithheldForRetake
+                      ? " Item-by-item results and correct answers will appear once all attempts are used or after you pass."
+                      : ""}
+                  </Alert.Description>
+                </Alert>
+              ) : evaluationWithheldForRetake ? (
+                <Alert status="info">
+                  <Alert.Description>
+                    Your attempt score is shown above. Item-by-item results and correct answers will appear once all attempts are used or after you pass.
+                  </Alert.Description>
+                </Alert>
+              ) : null}
 
               {teacherFeedback && (
                 <Card
@@ -341,7 +427,8 @@ const StudentQuizResult = () => {
                           )}
                           {hasPending && (
                             <span className="flex items-center gap-1.5">
-                              <span className="h-2.5 w-2.5 rounded-full bg-[#F6E9B2] border border-black" /> Pending Review
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#F6E9B2] border border-black" />{" "}
+                              {evaluationWithheldForRetake ? "Recorded" : "Pending Review"}
                             </span>
                           )}
                         </div>
@@ -475,7 +562,9 @@ const StudentQuizResult = () => {
                               {isNeedsGrading && (
                                 <Badge size="sm" variant="default" className="gap-1.5">
                                   <Clock className="w-3.5 h-3.5" />
-                                  Pending Teacher Review ({q.points} pts)
+                                  {evaluationWithheldForRetake
+                                    ? `Answer Recorded (${q.points} pts)`
+                                    : `Pending Teacher Review (${q.points} pts)`}
                                 </Badge>
                               )}
                             </div>
