@@ -697,19 +697,20 @@ export default function TeacherInterventions() {
                         <Table.Cell>
                           <InterventionPredictionHistory item={candidate} />
                         </Table.Cell>
-                        <Table.Cell className="mt-2 flex flex-col items-center justify-center gap-1">
+                        <Table.Cell className="text-center">
+                          <div className="flex flex-col items-center justify-center gap-1">
                           {(() => {
                             const risk = getTeacherRiskDisplay(
                               candidate.current_intervention_level ?? candidate.triggering_intervention_level,
                             );
                             return (
-                              <Badge size="sm" className={getRiskBadgeMeta(risk.level).bg}>
+                              <Badge size="sm" className={`shrink-0 whitespace-nowrap ${getRiskBadgeMeta(risk.level).bg}`}>
                                 {risk.label}
                               </Badge>
                             );
                           })()}
                           {!activeView && !resolvedView && candidate.candidate_activation_eligible === false && (
-                            <Badge variant="outline" size="sm">Review only</Badge>
+                            <Badge variant="outline" size="sm" className="whitespace-nowrap">Review only</Badge>
                           )}
                           {!activeView && !resolvedView && candidate.current_intervention_level &&
                             candidate.current_intervention_level !== candidate.triggering_intervention_level && (
@@ -717,6 +718,7 @@ export default function TeacherInterventions() {
                                 Current: {label(candidate.current_intervention_level)}
                               </span>
                             )}
+                          </div>
                         </Table.Cell>
                         <Table.Cell>
                           {resolvedView

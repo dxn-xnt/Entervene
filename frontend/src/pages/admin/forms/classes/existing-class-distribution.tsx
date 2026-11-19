@@ -9,7 +9,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Users } from "lucide-react";
 import { useState } from "react";
 import { commitExistingClassDistribution, previewExistingClassDistribution } from "@/lib/api";
 import type { ClassTransferOption, ExistingClassDistributionPreview } from "@/types/adminClasses";
@@ -18,6 +18,10 @@ import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
+import { Checkbox } from "@/components/retroui/Checkbox";
+import { Card } from "@/components/retroui/Card";
+import { Badge } from "@/components/retroui/Badge";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 
 type PreviewAssignment = ExistingClassDistributionPreview["assignments"][number];
 
@@ -83,17 +87,17 @@ function AssignmentRow({ item }: { item: PreviewAssignment }) {
     <li
       ref={setNodeRef}
       style={{ transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined }}
-      className={`group relative flex items-center justify-between gap-2.5 rounded border px-3 py-2 text-xs select-none transition-all ${
+      className={`group relative flex items-center justify-between gap-2.5 rounded border px-3 py-2 text-sm select-none transition-all ${
         isDragging
           ? "z-30 opacity-30 border-dashed border-2 border-primary bg-muted/60 scale-95"
-          : "border-border/80 bg-background hover:border-black hover:bg-[#fffdf0] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5"
+          : "border-border/80 bg-background hover:border-black hover:bg-accent hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5"
       }`}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <button
           type="button"
           aria-label={`Drag ${item.student_name}`}
-          className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded bg-muted/80 text-muted-foreground touch-none transition-colors group-hover:bg-[#ffe038] group-hover:text-black active:cursor-grabbing"
+          className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded bg-muted/80 text-muted-foreground touch-none transition-colors group-hover:bg-primary group-hover:text-black active:cursor-grabbing"
           title={`Drag ${item.student_name} to reassign`}
           {...attributes}
           {...listeners}
@@ -104,11 +108,11 @@ function AssignmentRow({ item }: { item: PreviewAssignment }) {
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {item.gwa != null && (
-          <span className="rounded border border-black/20 bg-muted/50 px-2 py-0.5 text-[11px] font-bold text-foreground">
+          <span className="rounded border border-black/20 bg-muted/50 px-2 py-0.5 text-sm font-bold text-foreground">
             GWA {item.gwa}
           </span>
         )}
-        <span className="hidden text-[10px] font-bold text-muted-foreground group-hover:inline-block">
+        <span className="hidden text-sm font-bold text-muted-foreground group-hover:inline-block">
           Drag
         </span>
       </div>
@@ -133,22 +137,22 @@ function AssignmentSection({
     <section
       ref={setNodeRef}
       aria-label={`${section.section_name} assignments`}
-      className={`min-w-0 rounded-lg border-2 flex flex-col transition-all ${
+      className={`min-w-0 rounded-lg border-2 overflow-hidden flex flex-col transition-all ${
         isOver
           ? "border-black bg-[#dcfce7] ring-4 ring-emerald-500/30 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
           : isDraggingAny
           ? "border-dashed border-primary/70 bg-card/90"
-          : "border-border bg-card shadow-sm"
+          : "border-border bg-card shadow-none"
       }`}
     >
-      <h5 className="border-b-2 border-border bg-[#ffe038] px-3.5 py-2.5 font-bold flex items-center justify-between text-black">
+      <h5 className="border-b-2 border-border bg-primary px-3.5 py-2.5 font-bold flex items-center justify-between text-black">
         <span className="text-base">{section.section_name}</span>
-        <span className="rounded bg-black/10 px-2 py-0.5 text-xs font-semibold">
+        <Badge size="sm" variant="outline">
           {assignments.length} to add
-        </span>
+        </Badge>
       </h5>
       {isOver && (
-        <div className="m-2 rounded-md border-2 border-dashed border-emerald-600 bg-emerald-100 p-2 text-center text-xs font-bold text-emerald-900 animate-pulse">
+        <div className="m-2 rounded-md border-2 border-dashed border-emerald-600 bg-emerald-100 p-2 text-center text-sm font-bold text-emerald-900 animate-pulse">
           Drop here to assign to {section.section_name}
         </div>
       )}
@@ -156,7 +160,7 @@ function AssignmentSection({
         {assignments.length ? (
           groupedAssignments(assignments).map(({ gender, students }) => (
             <div key={gender} className="space-y-1.5">
-              <h6 className="bg-muted/60 px-3 py-1 text-xs font-bold uppercase text-muted-foreground rounded">
+              <h6 className="bg-muted/60 px-3 py-1 text-sm font-semibold text-foreground rounded">
                 {gender} ({students.length})
               </h6>
               <ul className="space-y-1.5">
@@ -167,16 +171,11 @@ function AssignmentSection({
             </div>
           ))
         ) : (
-          <div className="flex h-32 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/20 p-4 text-center">
-            <p className="text-xs font-bold text-foreground">Section is empty</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Drop students here to assign them to {section.section_name}
-            </p>
-          </div>
+          <EmptyStateCard compact icon={<Users />} title="Section is empty" description={`Drop students here to assign them to ${section.section_name}.`} />
         )}
       </div>
       <div
-        className={`border-t border-dashed px-3 py-1.5 text-center text-[10px] font-medium transition-colors ${
+        className={`border-t border-dashed px-3 py-1.5 text-center text-sm font-medium transition-colors ${
           isOver
             ? "border-emerald-600 bg-emerald-100/60 text-emerald-950 font-bold"
             : "border-border/60 bg-muted/20 text-muted-foreground"
@@ -287,8 +286,8 @@ export default function ExistingClassDistribution({
     <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
       <Dialog.Content size="2xl">
         <Dialog.Header><Text as="h5" className="text-xl font-bold">Distribute Students Evenly</Text></Dialog.Header>
-        <div className="grid max-h-[70vh] gap-4 overflow-y-auto p-4 text-sm">
-          <p><b>Academic Year:</b> {academicYear} <span className="mx-2">•</span> <b>Grade:</b> {academicLevel}</p>
+        <div className="grid max-h-[70vh] gap-4 overflow-y-auto p-5 text-sm">
+          <p><b>Academic Year:</b> {academicYear} <span className="mx-2">Ã¢â‚¬Â¢</span> <b>Grade:</b> {academicLevel}</p>
           <p>Unassigned students available when opened: {initialAvailableCount}. Preview checks the live, complete grade-level pool.</p>
           <AdminValidationAlert message={error} />
           {requiresPathway ? (
@@ -297,35 +296,35 @@ export default function ExistingClassDistribution({
             <Alert status="info">Create another eligible class for this academic year and grade before distributing students evenly.</Alert>
           ) : (
             <>
-              <fieldset className="grid gap-2 rounded! border-2 border-border p-3">
-                <legend className="px-1 font-bold">Existing classes to include</legend>
-                <label className="flex items-center gap-2"><input type="checkbox" checked disabled />{sourceSectionName} (current class)</label>
+              <fieldset className="space-y-2">
+                <legend className="mb-2 font-semibold">Existing classes to include</legend><Card className="grid w-full gap-3 shadow-none">
+                <label className="flex items-center gap-2"><Checkbox checked disabled />{sourceSectionName} (current class)</label>
                 {otherClasses.map((item) => (
                   <label key={item.class_id} className="flex items-center gap-2">
-                    <input type="checkbox" checked={selectedIds.has(item.class_id)} onChange={() => toggleClass(item.class_id)} />
+                    <Checkbox checked={selectedIds.has(item.class_id)} onCheckedChange={() => toggleClass(item.class_id)} />
                     {item.section_name}
                   </label>
                 ))}
-              </fieldset>
-              <fieldset className="grid gap-2 rounded! border-2 border-border p-3">
-                <legend className="px-1 font-bold">Distribution method</legend>
-                <label className="flex items-center gap-2"><input type="radio" name="existing-distribution-mode" checked={mode === "alphabetical"} onChange={() => { setMode("alphabetical"); setPreview(null); setError(""); }} />Balance alphabetically and by gender</label>
-                <label className="flex items-center gap-2"><input type="radio" name="existing-distribution-mode" checked={mode === "gwa"} onChange={() => { setMode("gwa"); setPreview(null); setError(""); }} />Balance by prior academic performance (GWA)</label>
-              </fieldset>
-              <Button variant="outline" disabled={busy || selectedIds.size < 2} onClick={() => void calculate()}>{busy ? "Working..." : "Preview Distribution"}</Button>
+              </Card></fieldset>
+              <fieldset className="space-y-2">
+                <legend className="mb-2 font-semibold">Distribution method</legend><Card role="radiogroup" aria-label="Distribution method" className="grid w-full gap-3 shadow-none">
+                <label className="flex items-center gap-2"><Checkbox role="radio" aria-checked={mode === "alphabetical"} checked={mode === "alphabetical"} onCheckedChange={() => { setMode("alphabetical"); setPreview(null); setError(""); }} />Balance alphabetically and by gender</label>
+                <label className="flex items-center gap-2"><Checkbox role="radio" aria-checked={mode === "gwa"} checked={mode === "gwa"} onCheckedChange={() => { setMode("gwa"); setPreview(null); setError(""); }} />Balance by prior academic performance (GWA)</label>
+              </Card></fieldset>
+              <Button className="gap-2" variant="outline" disabled={busy || selectedIds.size < 2} onClick={() => void calculate()}>{busy ? "Working..." : "Preview Distribution"}</Button>
               {selectedIds.size < 2 && <p className="text-sm text-muted-foreground">Choose at least one other class.</p>}
               {preview && (
                 <section className="grid gap-3" aria-label="Distribution preview">
                   <div><h3 className="font-bold">Proposed assignments</h3><p>{preview.unassigned_count} eligible unassigned students. No changes have been saved.</p></div>
                   <div className="overflow-x-auto rounded border-2 border-border">
                     <table className="w-full text-left text-sm">
-                      <thead className="bg-[#ffe038]"><tr><th className="p-2">Class</th><th className="p-2">Existing</th><th className="p-2">To add</th><th className="p-2">Final</th><th className="p-2">M / F / U</th>{preview.mode === "gwa" && <th className="p-2">Avg. GWA</th>}</tr></thead>
-                      <tbody>{classRows.map((item) => <tr key={item.class_id} className="border-t border-border"><th className="p-2">{item.section_name}</th><td className="p-2">{item.existing_count}</td><td className="p-2">{item.to_add_count}</td><td className="p-2">{item.final_count}</td><td className="p-2">{item.male_count} / {item.female_count} / {item.unspecified_count}</td>{preview.mode === "gwa" && <td className="p-2">{item.average_gwa ?? "—"}</td>}</tr>)}</tbody>
+                      <thead className="bg-primary"><tr><th className="p-2">Class</th><th className="p-2">Existing</th><th className="p-2">To add</th><th className="p-2">Final</th><th className="p-2">M / F / U</th>{preview.mode === "gwa" && <th className="p-2">Avg. GWA</th>}</tr></thead>
+                      <tbody>{classRows.map((item) => <tr key={item.class_id} className="border-t border-border"><th className="p-2">{item.section_name}</th><td className="p-2">{item.existing_count}</td><td className="p-2">{item.to_add_count}</td><td className="p-2">{item.final_count}</td><td className="p-2">{item.male_count} / {item.female_count} / {item.unspecified_count}</td>{preview.mode === "gwa" && <td className="p-2">{item.average_gwa ?? "Ã¢â‚¬â€"}</td>}</tr>)}</tbody>
                     </table>
                   </div>
-                  {imbalance > 1 && <Alert status="info">Existing rosters limit exact balance. Current assignments will remain in place.</Alert>}
+                  {imbalance > 1 && <p className="text-muted-foreground">Existing rosters limit exact balance. Current assignments will remain in place.</p>}
                   {customCount > 0 && (
-                    <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
                       <span>{customCount} manual {customCount === 1 ? "adjustment" : "adjustments"} made to proposed distribution.</span>
                       <button
                         type="button"
@@ -366,15 +365,15 @@ export default function ExistingClassDistribution({
                       </div>
                       <DragOverlay dropAnimation={{ duration: 150, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
                         {activeStudent ? (
-                          <div className="flex items-center justify-between gap-3 rounded-lg border-2 border-black bg-[#ffe038] px-3.5 py-2.5 text-xs font-bold text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] rotate-1 scale-105 cursor-grabbing z-50 select-none">
+                          <div className="flex items-center justify-between gap-3 rounded-lg border-2 border-black bg-primary px-3.5 py-2.5 text-sm font-bold text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] rotate-1 scale-105 cursor-grabbing z-50 select-none">
                             <div className="flex items-center gap-2">
-                              <span className="flex size-5 items-center justify-center rounded bg-black text-[#ffe038]">
+                              <span className="flex size-5 items-center justify-center rounded bg-black text-primary-foreground">
                                 <GripVertical className="size-3.5" />
                               </span>
                               <span className="font-bold">{activeStudent.student_name}</span>
                             </div>
                             {activeStudent.gwa != null && (
-                              <span className="rounded bg-black px-2 py-0.5 text-[11px] text-white">
+                              <span className="rounded bg-black px-2 py-0.5 text-sm text-white">
                                 GWA {activeStudent.gwa}
                               </span>
                             )}
@@ -389,8 +388,8 @@ export default function ExistingClassDistribution({
           )}
         </div>
         <Dialog.Footer>
-          <Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-          {preview && <Button disabled={busy || !draftAssignments.length} onClick={() => void confirm()}>{busy ? "Saving..." : `Confirm and Assign ${draftAssignments.length}`}</Button>}
+          <Button className="gap-2" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
+          {preview && <Button className="gap-2" disabled={busy || !draftAssignments.length} onClick={() => void confirm()}>{busy ? "Saving..." : `Confirm and Assign ${draftAssignments.length}`}</Button>}
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
