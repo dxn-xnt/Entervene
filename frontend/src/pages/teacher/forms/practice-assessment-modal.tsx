@@ -89,8 +89,13 @@ export default function PracticeAssessmentModal({
 }: PracticeAssessmentModalProps) {
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadedInterventionRef = useRef<number | null>(null);
+  const hasLocalDraftRef = useRef(false);
 
   const effectiveApprovedReadings = selectedReadingIds ?? savedReadingIds ?? [];
+  const currentReadingSignature = [...effectiveApprovedReadings]
+    .sort((a, b) => a - b)
+    .join(",");
 
   // Assessment Config State
   const [assessment, setAssessment] = useState<PracticeAssessmentDetail | null>(null);
@@ -114,6 +119,7 @@ export default function PracticeAssessmentModal({
   const [aiGuidance, setAiGuidance] = useState("");
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [generatedSourceSignature, setGeneratedSourceSignature] = useState<string | null>(null);
 
   // Import State
   const [isImporting, setIsImporting] = useState(false);
@@ -121,10 +127,21 @@ export default function PracticeAssessmentModal({
 
   // Questions are locked if student attempts exist
   const isLocked = attempts.length > 0;
+  const generatedSourcesAreStale =
+    generatedSourceSignature !== null && generatedSourceSignature !== currentReadingSignature;
 
   // Load existing assessment and attempts
   useEffect(() => {
     if (!isOpen) return;
+
+    // Keep an unsaved generated/imported draft when the teacher briefly closes
+    // this modal or moves between intervention wizard steps.
+    if (
+      loadedInterventionRef.current === interventionId &&
+      hasLocalDraftRef.current
+    ) {
+      return;
+    }
 
     let mounted = true;
     const load = async () => {
@@ -135,6 +152,9 @@ export default function PracticeAssessmentModal({
       try {
         const existing = await getTeacherPracticeAssessment(interventionId);
         if (!mounted) return;
+        loadedInterventionRef.current = interventionId;
+        hasLocalDraftRef.current = false;
+        setGeneratedSourceSignature(null);
 
         if (existing) {
           setAssessment(existing);
@@ -286,19 +306,10 @@ export default function PracticeAssessmentModal({
     setErrorMessage(null);
     setImportWarnings([]);
     try {
-      // If assessment does not exist on backend yet, create draft assessment first
-      if (!assessment) {
-        const created = await initializeTeacherPracticeAssessment(interventionId, {
-          title,
-          passing_percentage: passingPercentage,
-          gatekeeper_policy: gatekeeperPolicy,
-        });
-        setAssessment(created);
-      }
-
       const preview = await importPracticeQuestionsPreview(interventionId, file);
       if (preview.questions.length > 0) {
         setQuestions((prev) => [...prev, ...preview.questions]);
+        hasLocalDraftRef.current = true;
         toast.success({
           title: "Questions Imported",
           description: `Imported ${preview.questions.length} questions from ${file.name}. Review and save draft.`,
@@ -332,26 +343,23 @@ export default function PracticeAssessmentModal({
     }
 
     try {
-      // Ensure assessment exists on backend
-      if (!assessment) {
-        const created = await initializeTeacherPracticeAssessment(interventionId, {
-          title,
-          passing_percentage: passingPercentage,
-          gatekeeper_policy: gatekeeperPolicy,
-        });
-        setAssessment(created);
-      }
-
       const generated = await generatePracticeQuestionsAI(interventionId, {
         target_count: aiTargetCount,
         reading_classwork_ids: effectiveApprovedReadings,
         additional_guidance: aiGuidance.trim() || undefined,
       });
 
-      if (generated.length === 0) {
-        setAiError("The AI service did not generate any questions from the reading materials.");
+      if (generated.length !== aiTargetCount) {
+        setAiError(
+          `The AI service returned ${generated.length} of ${aiTargetCount} requested questions. ` +
+          "Your current draft was not changed; try again."
+        );
       } else {
-        setQuestions((prev) => [...prev, ...generated]);
+        // Generation is a replacement operation. Appending caused repeated
+        // clicks (or regenerating an existing five-question draft) to become ten.
+        setQuestions(generated);
+        setGeneratedSourceSignature(currentReadingSignature);
+        hasLocalDraftRef.current = true;
         setShowAiDrawer(false);
         setAiGuidance("");
         toast.success({
@@ -401,6 +409,12 @@ export default function PracticeAssessmentModal({
 
   // Save Draft
   const handleSaveDraft = async () => {
+    if (generatedSourcesAreStale) {
+      setErrorMessage(
+        "Selected reading materials changed after AI generation. Regenerate the questions before saving this draft."
+      );
+      return;
+    }
     setIsSaving(true);
     setErrorMessage(null);
     try {
@@ -427,6 +441,7 @@ export default function PracticeAssessmentModal({
       }
 
       setAssessment(currentAssessment);
+      hasLocalDraftRef.current = false;
       if (onAssessmentUpdated) onAssessmentUpdated(currentAssessment);
 
       toast.success({
@@ -443,6 +458,12 @@ export default function PracticeAssessmentModal({
 
   // Publish Assessment
   const handlePublish = async () => {
+    if (generatedSourcesAreStale) {
+      setErrorMessage(
+        "Selected reading materials changed after AI generation. Regenerate the questions before publishing."
+      );
+      return;
+    }
     const valError = validateQuestions();
     if (valError) {
       setErrorMessage(valError);
@@ -475,6 +496,7 @@ export default function PracticeAssessmentModal({
       // 3. Publish
       const published = await publishTeacherPracticeAssessment(interventionId);
       setAssessment(published);
+      hasLocalDraftRef.current = false;
       if (onAssessmentUpdated) onAssessmentUpdated(published);
 
       toast.success({
@@ -725,6 +747,19 @@ export default function PracticeAssessmentModal({
                     </Alert>
                   )}
 
+                  {generatedSourcesAreStale && (
+                    <Alert status="warning" className="border-2 border-amber-400 bg-amber-50">
+                      <AlertTriangle className="size-4 text-amber-600" />
+                      <Alert.Title className="text-amber-900 font-bold">
+                        Reading materials changed
+                      </Alert.Title>
+                      <Alert.Description className="text-amber-800">
+                        These AI questions were generated from a different reading selection. The questions remain
+                        visible for review, but regenerate them before saving or publishing.
+                      </Alert.Description>
+                    </Alert>
+                  )}
+
                   {/* AI Generation Drawer */}
                   {showAiDrawer && (
                     <Card className="w-full shadow-none! w-full rounded! border-2 border-border bg-card p-4 space-y-4 shadow-none!">
@@ -741,6 +776,19 @@ export default function PracticeAssessmentModal({
                         Generates multiple-choice practice questions grounded strictly in the selected reading materials
                         for this intervention.
                       </p>
+
+                      {questions.length > 0 && (
+                        <Alert status="warning" className="border-2 border-amber-400 bg-amber-50">
+                          <AlertTriangle className="size-4 text-amber-600" />
+                          <Alert.Title className="text-amber-900 font-bold">
+                            Regeneration replaces the current question draft
+                          </Alert.Title>
+                          <Alert.Description className="text-amber-800">
+                            Review or save the current questions first if you want to keep them. Generated questions are
+                            never appended automatically.
+                          </Alert.Description>
+                        </Alert>
+                      )}
 
                       <div className="flex items-center gap-2 text-sm">
                         <span>
@@ -763,11 +811,11 @@ export default function PracticeAssessmentModal({
                           <Input
                             type="number"
                             min={1}
-                            max={20}
+                            max={15}
                             id="practice-ai-count"
                             value={aiTargetCount}
                             onChange={(e) =>
-                              setAiTargetCount(Math.max(1, Math.min(20, Number(e.target.value) || 1)))
+                              setAiTargetCount(Math.max(1, Math.min(15, Number(e.target.value) || 1)))
                             }
                           />
                         </div>
@@ -806,7 +854,7 @@ export default function PracticeAssessmentModal({
                             </>
                           ) : (
                             <>
-                              <Sparkles className="size-3.5 " /> Generate Questions
+                              <Sparkles className="size-3.5 " /> {questions.length > 0 ? "Regenerate Questions" : "Generate Questions"}
                             </>
                           )}
                         </Button>

@@ -32,7 +32,7 @@ import type {
 } from "@/types/classwork";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
-import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
+import { activityRubricMaximum, defaultActivityRubric, scaleRubricLevels, validateActivityRubric } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
 import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination, RemediationClassworkTarget, RemediationResource } from "@/lib/teacher-interventions-api";
 import { categoryFromFocus } from "@/lib/remediation-authoring";
@@ -40,16 +40,6 @@ import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance
 import { ReferenceLinkEditor } from "@/components/classwork-reference-links";
 import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
 
-function scaleRubricToMaxPoints(levels: ActivityRubricLevel[], targetPoints: number): ActivityRubricLevel[] {
-  if (levels.length === 0) return levels;
-  const currentMax = Math.max(...levels.map((l) => l.points));
-  if (currentMax === targetPoints) return levels;
-  const factor = currentMax > 0 ? targetPoints / currentMax : 1;
-  return levels.map((l) => ({
-    ...l,
-    points: Math.round(l.points * factor * 10) / 10,
-  }));
-}
 
 interface CreateClassworkModalProps {
   draftOnly?: boolean;

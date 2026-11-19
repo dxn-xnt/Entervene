@@ -8,6 +8,8 @@ from app.schemas.Quiz import (
     QuizAttemptResponse,
     QuizBuilderResponse,
     QuizBuilderUpsert,
+    QuizConfigurationResponse,
+    QuizConfigurationUpdate,
     QuizImportPreviewResponse,
     QuizReadinessResponse,
     QuizResultsSettingsResponse,
@@ -33,6 +35,7 @@ from app.services.quiz.QuizBuilderService import (
     get_teacher_quiz_classwork,
     quiz_readiness,
     update_quiz_results_settings,
+    update_quiz_configuration,
     upsert_quiz_builder,
 )
 from app.services.quiz.QuizImportService import preview_quiz_import
@@ -115,6 +118,32 @@ def upsert_quiz(
     )
     try:
         response = upsert_quiz_builder(db, classwork, body)
+        db.commit()
+        return response
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.put(
+    "/classwork/{classwork_id}/configuration",
+    response_model=QuizConfigurationResponse,
+)
+def update_quiz_configuration_settings(
+    classwork_id: int,
+    body: QuizConfigurationUpdate,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    classwork = get_teacher_quiz_classwork(
+        db,
+        staff_id,
+        classwork_id,
+        write_required=True,
+        live_operation=True,
+    )
+    try:
+        response = update_quiz_configuration(db, classwork, body)
         db.commit()
         return response
     except Exception:

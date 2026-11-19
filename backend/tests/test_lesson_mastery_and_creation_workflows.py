@@ -423,7 +423,7 @@ def test_ensure_lessons_owned_prevents_misassociations(test_db):
     assert "not assigned to the selected class sections" in exc.value.detail
 
 
-def test_quiz_rejects_reference_links_and_assignment_accepts(client, test_db):
+def test_quiz_creation_rejects_reference_links_but_edit_accepts_them(client, test_db):
     data = seed_basic_data(test_db)
     teacher_headers = auth_headers(data["teacher_account"], role="teacher")
 
@@ -465,14 +465,14 @@ def test_quiz_rejects_reference_links_and_assignment_accepts(client, test_db):
     assert res_clean.status_code in (200, 201), res_clean.text
     created_quiz_id = res_clean.json()["classwork_id"]
 
-    # 3. Quiz update with reference_links fails
-    res_update_fail = client.put(
+    # 3. Existing quizzes can add reference links from the Edit Classwork modal.
+    res_update = client.put(
         f"/api/v1/classwork-assignments/classwork/{created_quiz_id}",
-        json={"title": "Updated Quiz", "reference_links": [{"url": "https://bad.com"}]},
+        json={"title": "Updated Quiz", "reference_links": [{"url": "https://example.com/quiz-reference"}]},
         headers=teacher_headers,
     )
-    assert res_update_fail.status_code == 400
-    assert "Reference links are not supported for quizzes" in res_update_fail.json()["detail"]
+    assert res_update.status_code == 200
+    assert res_update.json()["reference_links"][0]["url"] == "https://example.com/quiz-reference"
 
     # 4. Assignment creation with reference_links succeeds
     assignment_data = {

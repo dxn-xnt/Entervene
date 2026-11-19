@@ -231,11 +231,10 @@ async def import_questions_preview(
     intervention_id: int,
     file: UploadFile = File(...),
     _teacher: dict = Depends(require_intervention_teacher),
-    staff_id: str = Depends(get_staff_id),
-    db: Session = Depends(get_db),
+    _staff_id: str = Depends(get_staff_id),
 ):
-    # Authorization verify
-    get_assessment(db, staff_id, intervention_id)
+    # Route authorization is sufficient. Import is a read-only preview and must
+    # not require or create a persisted Practice Assessment draft.
     return await preview_practice_quiz_import(file)
 
 

@@ -13,6 +13,7 @@ import type {
 } from "@/types/adminClasses";
 import { assignmentStudentName, matchesStudentSearch, sortAssignmentStudents } from "@/components/admin/classes/assignment/studentSorting";
 import { Alert } from "@/components/retroui/Alert";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Badge } from "@/components/retroui/Badge";
@@ -186,7 +187,7 @@ export default function EditStudentList({
   }
 
   function closeModal() {
-    if (pendingCount && !discardPrompt) {
+    if (pendingCount) {
       setDiscardPrompt(true);
       return;
     }
@@ -314,22 +315,6 @@ export default function EditStudentList({
             />
           )}
 
-          {discardPrompt && (
-            <Alert status="error" className="flex flex-wrap items-center justify-between gap-2 p-3 w-full">
-              <Text as="p" className="text-sm font-bold">
-                Discard unsaved changes?
-              </Text>
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" onClick={onClose}>
-                  Discard Changes
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setDiscardPrompt(false)}>
-                  Continue Editing
-                </Button>
-              </div>
-            </Alert>
-          )}
-
           <div className="flex justify-end gap-2 w-full">
             <Button variant="outline" disabled={saving} onClick={closeModal}>
               Cancel
@@ -340,6 +325,17 @@ export default function EditStudentList({
           </div>
         </Dialog.Footer>
       </Dialog.Content>
+      <ConfirmDialog
+        open={discardPrompt}
+        onOpenChange={setDiscardPrompt}
+        title="Discard Unsaved Changes"
+        confirmationTitle="Discard your changes to the student list?"
+        description="Your unsaved changes will be lost."
+        cancelLabel="Continue Editing"
+        confirmLabel="Discard Changes"
+        confirmVariant="destructive"
+        onConfirm={onClose}
+      />
     </Dialog>
     {showDistribution && <ExistingClassDistribution
       sourceClassId={currentSectionId}
