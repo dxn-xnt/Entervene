@@ -29,7 +29,10 @@ const SubjectGrade = ({
   const navigate = useNavigate();
   const { selectedPeriodId } = useAcademicPeriod();
   const requestKey = `${selectedPeriodId ?? "all"}:${classId ?? "all"}:${subjectId ?? subject.toLowerCase()}`;
-  const [result, setResult] = useState<{ key: string; todos: TodoItem[] } | null>(null);
+  const [result, setResult] = useState<{
+    key: string;
+    todos: TodoItem[];
+  } | null>(null);
   const todos = result?.key === requestKey ? result.todos : [];
   const loading = result?.key !== requestKey;
 
@@ -43,7 +46,8 @@ const SubjectGrade = ({
           (t) =>
             (classId == null || t.class_id === classId) &&
             ((subjectId != null && t.subject_id === subjectId) ||
-              (subjectId == null && t.subject.toLowerCase() === subject.toLowerCase())),
+              (subjectId == null &&
+                t.subject.toLowerCase() === subject.toLowerCase())),
         );
         setResult({ key: requestKey, todos: filtered });
       })
@@ -102,7 +106,7 @@ const SubjectGrade = ({
                     <Card.Title className="text-sm font-medium">
                       Completion Rate
                     </Card.Title>
-                    
+
                     <Card.Content className="text-sm text-muted-foreground">
                       {completedCount} of {totalCount} activities done
                     </Card.Content>
@@ -173,7 +177,13 @@ const SubjectGrade = ({
                         colSpan={3}
                         className="text-center py-6 text-muted-foreground"
                       >
-                        <StudentEmptyState embedded icon={<FileCheck2 />} title="No graded classwork yet" description="Scores for this subject will appear after your teacher grades and releases them." />
+                        <StudentEmptyState
+                          className="shadow-none"
+                          embedded
+                          icon={<FileCheck2 />}
+                          title="No graded classwork yet"
+                          description="Scores for this subject will appear after your teacher grades and releases them."
+                        />
                       </Table.Cell>
                     </Table.Row>
                   ) : (

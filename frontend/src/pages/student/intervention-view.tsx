@@ -494,16 +494,14 @@ export default function StudentInterventionView() {
                                 showPublicationStatus={false}
                                 showCategory={false}
                                 showType={false}
-                                rightContent={
-                                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                                    <Badge
-                                      variant={isReviewed ? "surface" : "solid"}
-                                      size="sm"
-                                      className="gap-1"
-                                    >
-                                      {isReviewed ? "Reviewed" : "Review Required"}
-                                    </Badge>
-                                  </div>
+                                titleAccessory={
+                                  <Badge
+                                    variant={isReviewed ? "surface" : "solid"}
+                                    size="sm"
+                                    className="gap-1"
+                                  >
+                                    {isReviewed ? "Reviewed" : "Review Required"}
+                                  </Badge>
                                 }
                               />
                             );
@@ -521,20 +519,20 @@ export default function StudentInterventionView() {
                         aria-label="Practice Assessment"
                         className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3.5"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
                             <h2 className="text-base sm:text-lg font-bold text-foreground">
-                              Practice Assessment
+                              {practiceMeta.title || "Practice Assessment"}
                             </h2>
-                            <Badge variant="surface" size="sm">
-                              Ungraded
-                            </Badge>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Badge variant="surface" size="sm">
+                              Ungraded Practice
+                            </Badge>
                             {practiceMeta.gatekeeper_policy === "REQUIRE_PASS" ? (
                               <Badge variant="solid" size="sm">
-                                Passing Required ({practiceMeta.passing_percentage}%)
+                                Require Passing ({practiceMeta.passing_percentage}%)
                               </Badge>
                             ) : practiceMeta.gatekeeper_policy === "REQUIRE_ATTEMPT" ? (
                               <Badge variant="outline" size="sm">
@@ -549,11 +547,8 @@ export default function StudentInterventionView() {
                         </div>
 
                         {/* Assessment Information & Status */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/30 p-3.5 rounded border-2 border-border">
-                          <div className="space-y-1">
-                            <h3 className="font-bold text-sm text-foreground">
-                              {practiceMeta.title}
-                            </h3>
+                        <div className="flex flex-col justify-between gap-4 rounded border-2 border-border bg-background p-4 sm:flex-row sm:items-center">
+                          <div className="min-w-0 space-y-2">
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                               <span>{practiceMeta.total_questions} question(s)</span>
                               <span>•</span>
@@ -563,7 +558,7 @@ export default function StudentInterventionView() {
                             </div>
 
                             {/* Status detail */}
-                            <div className="pt-1">
+                            <div>
                               {practiceMeta.has_active_attempt ? (
                                 <div className="flex items-center gap-2">
                                   <Badge variant="solid" size="sm">
@@ -594,7 +589,7 @@ export default function StudentInterventionView() {
                           </div>
 
                           {/* Action Buttons */}
-                          <div className="flex flex-wrap items-center gap-2 sm:self-center">
+                          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
                             {practiceMeta.has_active_attempt ? (
                               <Button
                                 size="sm"

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronLeft, SkipBack, SkipForward, Flag, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Flag, Loader2, AlertCircle } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
@@ -230,16 +230,20 @@ const StudentQuizTake = () => {
   }
 
   return (
-    <div className="retro-squares-bg min-h-dvh min-w-0 px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5">
-      {/* Top bar */}
-      <div className="flex items-center justify-between mb-6">
-        <button
+    <div className="retro-squares-bg min-h-dvh min-w-0">
+      <header className="border-b-2 border-black bg-card px-4 py-3 sm:px-6">
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+        <Button
+          type="button"
+          size="headerIcon"
+          variant="outline"
+          autoIcon={false}
           onClick={() => navigate(-1)}
-          className="hover:text-black/70 cursor-pointer"
+          className="rounded-full"
           aria-label="Go back"
         >
-          <ChevronLeft size={24} />
-        </button>
+          <ArrowLeft className="size-5" />
+        </Button>
         <div className="text-center">
           {secondsLeft != null ? (
             <>
@@ -256,9 +260,9 @@ const StudentQuizTake = () => {
         </div>
         <Button
           autoIcon={false}
+          size="header"
           onClick={handleSubmit}
           disabled={submitting}
-          className="hover:shadow-none transition-all"
         >
           {submitting ? (
             <><Loader2 className="w-4 h-4 animate-spin inline mr-1" /> Submitting...</>
@@ -266,7 +270,10 @@ const StudentQuizTake = () => {
             "Finish Quiz"
           )}
         </Button>
-      </div>
+        </div>
+      </header>
+
+      <main className="px-3 py-4 sm:px-4 md:px-6">
 
       {/* Quiz header + question navigator */}
       <Card className="flex flex-col">
@@ -306,15 +313,18 @@ const StudentQuizTake = () => {
       </Card>
 
       {/* Prev / Flag / Next controls */}
-      <div className="flex items-center justify-between px-12 py-4 md:px-24">
-        <button
+      <div className="flex items-center justify-between px-3 py-4 sm:px-6 md:px-24">
+        <Button
+          type="button"
+          autoIcon={false}
+          variant="outline"
           onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
           disabled={currentIndex === 0}
-          className="flex size-9 items-center justify-center rounded-full border-2 border-black bg-white hover:bg-black/5 cursor-pointer disabled:opacity-40"
+          className="size-11 rounded-full p-0"
           aria-label="Previous question"
         >
-          <SkipBack size={16} />
-        </button>
+          <ArrowLeft className="size-5" />
+        </Button>
         <div className="flex items-center gap-4">
           <Button
             autoIcon={false}
@@ -327,14 +337,17 @@ const StudentQuizTake = () => {
             {flagged.has(currentIndex) ? "Flagged" : "Flag Question"}
           </Button>
 
-          <button
+          <Button
+            type="button"
+            autoIcon={false}
+            variant="outline"
             onClick={() => setCurrentIndex((i) => Math.min(totalQuestions - 1, i + 1))}
             disabled={currentIndex === totalQuestions - 1}
-            className="flex size-9 items-center justify-center rounded-full border-2 border-black bg-white hover:bg-black/5 cursor-pointer disabled:opacity-40"
+            className="size-11 rounded-full p-0"
             aria-label="Next question"
           >
-            <SkipForward size={16} />
-          </button>
+            <ArrowRight className="size-5" />
+          </Button>
         </div>
       </div>
 
@@ -386,6 +399,7 @@ const StudentQuizTake = () => {
           />
         </div>
       )}
+      </main>
     </div>
   );
 };
