@@ -15,6 +15,7 @@ import type {
 } from "@/types/adminClasses";
 import AssignmentToolbar from "./AssignmentToolbar";
 import { Button } from "@/components/retroui/Button";
+import { Dialog } from "@/components/retroui/Dialog";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import AssignEvenlyConfirmationModal from "./AssignEvenlyConfirmationModal";
 import AvailableStudentsPanel from "./AvailableStudentsPanel";
@@ -48,7 +49,8 @@ export default function StudentAssignmentWorkspace({
   const [showAssignEvenlyConfirmation, setShowAssignEvenlyConfirmation] =
     useState(false);
   const [distributing, setDistributing] = useState(false);
-  const [distributionMode, setDistributionMode] = useState<DistributionMode>("alphabetical");
+  const [distributionMode, setDistributionMode] =
+    useState<DistributionMode>("alphabetical");
   const [distributeError, setDistributeError] = useState("");
   const [detailsSectionId, setDetailsSectionId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -58,7 +60,11 @@ export default function StudentAssignmentWorkspace({
   useEffect(() => {
     if (state?.academicLevelId === setup.academicLevelId) return;
     let cancelled = false;
-    getUnassignedClassStudents(setup.academicLevelId, undefined, setup.academicYear.academic_year_id)
+    getUnassignedClassStudents(
+      setup.academicLevelId,
+      undefined,
+      setup.academicYear.academic_year_id,
+    )
       .then((data) => {
         if (cancelled) return;
         onChange({
@@ -169,9 +175,7 @@ export default function StudentAssignmentWorkspace({
         message="Unable to load unassigned students."
         detail={loadError}
       >
-        <Button onClick={retryLoading}>
-          Retry
-        </Button>
+        <Button onClick={retryLoading}>Retry</Button>
         <Button variant="outline" onClick={onBack}>
           Back to Class Details
         </Button>
@@ -212,17 +216,20 @@ export default function StudentAssignmentWorkspace({
           local_id: s.localId,
           section_name: s.sectionName,
         })),
-        unassigned_student_ids: state.unassignedStudents.map((s) => s.student_id),
+        unassigned_student_ids: state.unassignedStudents.map(
+          (s) => s.student_id,
+        ),
         assignments_by_section: Object.fromEntries(
-          Object.entries(state.assignmentsBySection).map(([secId, students]) => [
-            secId,
-            students.map((s) => s.student_id),
-          ]),
+          Object.entries(state.assignmentsBySection).map(
+            ([secId, students]) => [secId, students.map((s) => s.student_id)],
+          ),
         ),
       });
 
       const allStudentsMap = new Map<string, ClassAssignmentStudent>();
-      state.unassignedStudents.forEach((s) => allStudentsMap.set(s.student_id, s));
+      state.unassignedStudents.forEach((s) =>
+        allStudentsMap.set(s.student_id, s),
+      );
       Object.values(state.assignmentsBySection)
         .flat()
         .forEach((s) => allStudentsMap.set(s.student_id, s));
@@ -265,7 +272,8 @@ export default function StudentAssignmentWorkspace({
             Academic Year: {setup.academicYear.year_label}
           </p>
           <p className="text-sm text-muted-foreground">
-            Student assignment is optional. You can add students after saving the class.
+            Student assignment is optional. You can add students after saving
+            the class.
           </p>
         </div>
         {resetWarning && (
@@ -289,38 +297,43 @@ export default function StudentAssignmentWorkspace({
       {distributing && (
         <div className="flex items-center gap-2 rounded border-2 border-black bg-[#fff8d7] p-2.5 text-xs font-bold">
           <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-black border-t-transparent" />
-          <span>{distributionMode === "gwa" ? "Balancing students by academic performance (GWA)..." : "Balancing students alphabetically..."}</span>
+          <span>
+            {distributionMode === "gwa"
+              ? "Balancing students by academic performance (GWA)..."
+              : "Balancing students alphabetically..."}
+          </span>
         </div>
       )}
       <AssignmentToolbar
         sections={setup.sections}
         selectedCount={state.selectedStudentIds.size}
         canAssignEvenly={
-          state.unassignedStudents.length > 0 && setup.sections.length > 0 && !distributing
+          state.unassignedStudents.length > 0 &&
+          setup.sections.length > 0 &&
+          !distributing
         }
         onMove={(target) => moveStudents([...state.selectedStudentIds], target)}
         onClear={() => onChange({ ...state, selectedStudentIds: new Set() })}
         onAssignEvenly={() => setShowAssignEvenlyConfirmation(true)}
       />
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="grid min-h-0 grid-cols-1 gap-3 overflow-y-auto 2xl:grid-cols-[minmax(280px,36%)_minmax(0,1fr)] 2xl:overflow-hidden">
+        <div className="grid min-h-0 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
           <AvailableStudentsPanel
             students={state.unassignedStudents}
             assignedCount={assignedCount}
             totalStudentCount={totalStudentCount}
             selectedIds={state.selectedStudentIds}
             onSelect={updateSelection}
-            onSelectVisible={(ids) =>
-              onChange({
-                ...state,
-                selectedStudentIds: new Set([
-                  ...state.selectedStudentIds,
-                  ...ids,
-                ]),
-              })
-            }
+            onSelectVisible={(ids, selected) => {
+              const selectedStudentIds = new Set(state.selectedStudentIds);
+              ids.forEach((id) => {
+                if (selected) selectedStudentIds.add(id);
+                else selectedStudentIds.delete(id);
+              });
+              onChange({ ...state, selectedStudentIds });
+            }}
           />
-          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 border-2 border-black bg-white p-3">
+          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 rounded! border-2 border-black bg-white p-3">
             <h3 className="font-bold">Sections</h3>
             <div className="grid min-h-0 grid-cols-1 content-start gap-3 overflow-y-auto pr-1">
               {setup.sections.map((section) => (
@@ -342,20 +355,20 @@ export default function StudentAssignmentWorkspace({
           </div>
         </div>
       </DndContext>
-      <div className="-mx-4 -mb-4 flex w-[calc(100%+2rem)] shrink-0 flex-wrap items-center justify-between gap-3 border-t-2 px-4 py-4">
-        <div />
-        <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
-          <Button variant="outline" onClick={onClose}>Close</Button>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={onBack}>Back to Class Details</Button>
-            <Button
-              onClick={continueToReview}
-            >
-              Continue to Review
-            </Button>
-          </div>
+      <Dialog.Footer
+        position="static"
+        className="-mx-4 -mb-4 mt-0 w-[calc(100%+2rem)] justify-between"
+      >
+        <Button variant="outline" autoIcon={false} onClick={onClose}>
+          Close
+        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={onBack}>
+            Back to Class Details
+          </Button>
+          <Button onClick={continueToReview}>Continue to Review</Button>
         </div>
-      </div>
+      </Dialog.Footer>
       {showAssignEvenlyConfirmation && (
         <AssignEvenlyConfirmationModal
           onCancel={() => setShowAssignEvenlyConfirmation(false)}
