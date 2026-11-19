@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -11,7 +11,15 @@ import { Skeleton } from "@/components/retroui/Skeleton";
 import { Table } from "@/components/retroui/Table";
 import { Tabs } from "@/components/retroui/Tabs";
 import { useToast } from "@/components/retroui/Toast";
-import { Activity, AlertTriangle, CheckCircle2, HeartHandshake, Search, UserCheck, X } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  HeartHandshake,
+  Search,
+  UserCheck,
+  X,
+} from "lucide-react";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { InterventionPredictionHistory } from "@/components/teacher/intervention-prediction-history";
 import { getTeacherRiskDisplay } from "@/components/predictions/teacher-risk-display";
@@ -29,6 +37,7 @@ import {
   type TeacherInterventionSummary,
   type TeacherResolvedInterventionDetail,
 } from "@/lib/teacher-interventions-api";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 const label = (value: string) =>
   value
@@ -48,7 +57,7 @@ const formatTime = (value: string) =>
 
 const sameScope = (
   left: TeacherInterventionSummary,
-  right: TeacherInterventionSummary
+  right: TeacherInterventionSummary,
 ) =>
   left.student_id === right.student_id &&
   left.class_id === right.class_id &&
@@ -65,11 +74,16 @@ const RISK_DISPLAY_ORDER = [
 
 const displayedRisk = (item: TeacherInterventionSummary) =>
   getTeacherRiskDisplay(
-    item.current_intervention_level ?? item.triggering_intervention_level
+    item.current_intervention_level ?? item.triggering_intervention_level,
   );
 
 export default function TeacherInterventions() {
   const toast = useToast();
+  const {
+    selectedPeriodId,
+    selectedPeriod,
+    isLoading: isPeriodLoading,
+  } = useAcademicPeriod();
   const [params, setParams] = useSearchParams();
   const candidateParam = params.get("candidate");
   const activeParam = params.get("active");
@@ -98,8 +112,12 @@ export default function TeacherInterventions() {
   const resolvedView = view === "resolved";
 
   const [items, setItems] = useState<TeacherInterventionSummary[]>([]);
-  const [activeItems, setActiveItems] = useState<TeacherInterventionSummary[]>([]);
-  const [resolvedItems, setResolvedItems] = useState<TeacherInterventionSummary[]>([]);
+  const [activeItems, setActiveItems] = useState<TeacherInterventionSummary[]>(
+    [],
+  );
+  const [resolvedItems, setResolvedItems] = useState<
+    TeacherInterventionSummary[]
+  >([]);
 
   const [loading, setLoading] = useState(true);
   const [activeLoading, setActiveLoading] = useState(true);
@@ -139,11 +157,11 @@ export default function TeacherInterventions() {
     setRiskFilter("all");
   };
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setListError(null);
     try {
-      const res = await listTeacherCandidates();
+      const res = await listTeacherCandidates(selectedPeriodId);
       setItems(res.items);
     } catch (error) {
       const message =
@@ -156,13 +174,13 @@ export default function TeacherInterventions() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedPeriodId, toast]);
 
-  const refreshActive = async () => {
+  const refreshActive = useCallback(async () => {
     setActiveLoading(true);
     setActiveError(null);
     try {
-      const res = await listTeacherActive();
+      const res = await listTeacherActive(selectedPeriodId);
       setActiveItems(res.items);
     } catch (error) {
       const message =
@@ -177,13 +195,13 @@ export default function TeacherInterventions() {
     } finally {
       setActiveLoading(false);
     }
-  };
+  }, [selectedPeriodId, toast]);
 
-  const refreshResolved = async () => {
+  const refreshResolved = useCallback(async () => {
     setResolvedLoading(true);
     setResolvedError(null);
     try {
-      const res = await listTeacherResolved();
+      const res = await listTeacherResolved(selectedPeriodId);
       setResolvedItems(res.items);
     } catch (error) {
       const message =
@@ -198,13 +216,20 @@ export default function TeacherInterventions() {
     } finally {
       setResolvedLoading(false);
     }
-  };
+  }, [selectedPeriodId, toast]);
 
   useEffect(() => {
+    if (isPeriodLoading || !selectedPeriodId) return;
     void refresh();
     void refreshActive();
     void refreshResolved();
-  }, []);
+  }, [
+    isPeriodLoading,
+    selectedPeriodId,
+    refresh,
+    refreshActive,
+    refreshResolved,
+  ]);
 
   useEffect(() => {
     if (selectedId === null) {
@@ -236,7 +261,9 @@ export default function TeacherInterventions() {
       .catch((error: unknown) => {
         if (!cancelled) {
           setDetailError(
-            error instanceof Error ? error.message : "Unable to load intervention."
+            error instanceof Error
+              ? error.message
+              : "Unable to load intervention.",
           );
         }
       })
@@ -284,7 +311,13 @@ export default function TeacherInterventions() {
   };
 
   const activate = async () => {
-    if (!detail || activating || reviewStale || detail.candidate_activation_eligible === false) return;
+    if (
+      !detail ||
+      activating ||
+      reviewStale ||
+      detail.candidate_activation_eligible === false
+    )
+      return;
     setActivating(true);
     setActionError(null);
     try {
@@ -309,12 +342,11 @@ export default function TeacherInterventions() {
       let alertMsg = message;
       if (error instanceof InterventionApiError && error.status === 409) {
         setReviewStale(true);
-        alertMsg =
-          /improved|at least 85/i.test(message)
-            ? "The current prediction improved. This candidate can no longer be approved. Refresh the list to see its current state."
-            : /evidence|ready|unavailable|invalid/i.test(message)
-              ? "Current prediction evidence is insufficient or unavailable. Approval was not completed."
-              : `Candidate state changed: ${message}`;
+        alertMsg = /improved|at least 85/i.test(message)
+          ? "The current prediction improved. This candidate can no longer be approved. Refresh the list to see its current state."
+          : /evidence|ready|unavailable|invalid/i.test(message)
+            ? "Current prediction evidence is insufficient or unavailable. Approval was not completed."
+            : `Candidate state changed: ${message}`;
         setActionError(alertMsg);
         void refresh();
         void refreshActive();
@@ -342,9 +374,17 @@ export default function TeacherInterventions() {
       ? activeItems
       : items;
 
+  const periodScopedList = useMemo(
+    () =>
+      selectedPeriodId
+        ? rawList.filter((item) => item.academic_period_id === selectedPeriodId)
+        : [],
+    [rawList, selectedPeriodId],
+  );
+
   const availableSubjects = useMemo(() => {
     const map = new Map<number, string>();
-    for (const item of rawList) {
+    for (const item of periodScopedList) {
       if (item.subject_id && item.subject_name) {
         map.set(item.subject_id, item.subject_name);
       }
@@ -352,11 +392,11 @@ export default function TeacherInterventions() {
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rawList]);
+  }, [periodScopedList]);
 
   const availableClasses = useMemo(() => {
     const map = new Map<number, string>();
-    for (const item of rawList) {
+    for (const item of periodScopedList) {
       if (item.class_id && item.class_name) {
         map.set(item.class_id, item.class_name);
       }
@@ -364,11 +404,11 @@ export default function TeacherInterventions() {
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rawList]);
+  }, [periodScopedList]);
 
   const availableGrades = useMemo(() => {
     const set = new Set<string>();
-    for (const item of rawList) {
+    for (const item of periodScopedList) {
       const gl =
         item.level_name ||
         (item.grade_level != null
@@ -379,11 +419,11 @@ export default function TeacherInterventions() {
       if (gl) set.add(gl);
     }
     return Array.from(set).sort();
-  }, [rawList]);
+  }, [periodScopedList]);
 
   const availableRiskLevels = useMemo(() => {
     const map = new Map<string, string>();
-    for (const item of rawList) {
+    for (const item of periodScopedList) {
       const risk = displayedRisk(item);
       if (risk.level) {
         map.set(risk.level, risk.label);
@@ -399,19 +439,19 @@ export default function TeacherInterventions() {
         if (bi === -1) return -1;
         return ai - bi;
       });
-  }, [rawList]);
+  }, [periodScopedList]);
 
   const sorted = useMemo(() => {
-    return [...rawList].sort((a, b) =>
+    return [...periodScopedList].sort((a, b) =>
       resolvedView
         ? (b.resolved_at || "").localeCompare(a.resolved_at || "")
         : activeView
           ? (b.activated_at || "").localeCompare(a.activated_at || "")
           : (a.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) -
-          (b.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) ||
-          b.created_at.localeCompare(a.created_at)
+              (b.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) ||
+            b.created_at.localeCompare(a.created_at),
     );
-  }, [rawList, resolvedView, activeView]);
+  }, [periodScopedList, resolvedView, activeView]);
 
   const filtered = useMemo(() => {
     return sorted.filter((candidate) => {
@@ -423,7 +463,9 @@ export default function TeacherInterventions() {
         const className = (candidate.class_name || "").toLowerCase();
         const gradeText = (
           candidate.level_name ||
-          (candidate.grade_level != null ? `Grade ${candidate.grade_level}` : "")
+          (candidate.grade_level != null
+            ? `Grade ${candidate.grade_level}`
+            : "")
         ).toLowerCase();
         const matches =
           studentName.includes(query) ||
@@ -434,7 +476,10 @@ export default function TeacherInterventions() {
         if (!matches) return false;
       }
 
-      if (subjectFilter !== "all" && String(candidate.subject_id) !== subjectFilter) {
+      if (
+        subjectFilter !== "all" &&
+        String(candidate.subject_id) !== subjectFilter
+      ) {
         return false;
       }
 
@@ -453,7 +498,10 @@ export default function TeacherInterventions() {
         if (gl !== gradeFilter) return false;
       }
 
-      if (riskFilter !== "all" && displayedRisk(candidate).level !== riskFilter) {
+      if (
+        riskFilter !== "all" &&
+        displayedRisk(candidate).level !== riskFilter
+      ) {
         return false;
       }
 
@@ -476,22 +524,22 @@ export default function TeacherInterventions() {
   const previousResolved =
     detail?.status === "ACTIVE"
       ? resolvedItems.find(
-        (row) =>
-          sameScope(row, detail) &&
-          row.resolved_at &&
-          Date.parse(row.resolved_at) <
-          Date.parse(detail.activated_at || detail.created_at)
-      )
+          (row) =>
+            sameScope(row, detail) &&
+            row.resolved_at &&
+            Date.parse(row.resolved_at) <
+              Date.parse(detail.activated_at || detail.created_at),
+        )
       : undefined;
 
   const newerActive =
     detail?.status === "RESOLVED" && detail.resolved_at
       ? activeItems.find(
-        (row) =>
-          sameScope(row, detail) &&
-          row.activated_at &&
-          Date.parse(row.activated_at) > Date.parse(detail.resolved_at!)
-      )
+          (row) =>
+            sameScope(row, detail) &&
+            row.activated_at &&
+            Date.parse(row.activated_at) > Date.parse(detail.resolved_at!),
+        )
       : undefined;
 
   return (
@@ -546,22 +594,31 @@ export default function TeacherInterventions() {
                   description={showingError}
                   action={{
                     label: "Retry",
-                    onClick: () => void (resolvedView
-                      ? refreshResolved()
-                      : activeView
-                        ? refreshActive()
-                        : refresh()),
+                    onClick: () =>
+                      void (resolvedView
+                        ? refreshResolved()
+                        : activeView
+                          ? refreshActive()
+                          : refresh()),
                   }}
                 />
-              ) : rawList.length === 0 && !hasActiveFilters ? (
+              ) : periodScopedList.length === 0 && !hasActiveFilters ? (
                 <TeacherEmptyState
                   icon={<HeartHandshake />}
-                  title={resolvedView ? "No resolved interventions" : activeView ? "No active interventions" : "No candidates to review"}
-                  description={resolvedView
-                    ? "Resolved support will appear here."
-                    : activeView
-                      ? "Approved interventions will appear here."
-                      : "New candidates will appear when a current corrected prediction qualifies."}
+                  title={
+                    resolvedView
+                      ? "No resolved interventions"
+                      : activeView
+                        ? "No active interventions"
+                        : "No candidates to review"
+                  }
+                  description={
+                    resolvedView
+                      ? `Resolved support for ${selectedPeriod?.period ?? "the selected term"} will appear here.`
+                      : activeView
+                        ? `Approved interventions for ${selectedPeriod?.period ?? "the selected term"} will appear here.`
+                        : `New candidates for ${selectedPeriod?.period ?? "the selected term"} will appear when a current corrected prediction qualifies.`
+                  }
                 />
               ) : (
                 <>
@@ -584,7 +641,10 @@ export default function TeacherInterventions() {
 
                       {/* Subject Filter */}
                       {availableSubjects.length > 0 && (
-                        <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+                        <Select
+                          value={subjectFilter}
+                          onValueChange={setSubjectFilter}
+                        >
                           <Select.Trigger className="w-full sm:w-44">
                             <Select.Value placeholder="All Subjects" />
                           </Select.Trigger>
@@ -601,7 +661,10 @@ export default function TeacherInterventions() {
 
                       {/* Class / Section Filter */}
                       {availableClasses.length > 0 && (
-                        <Select value={classFilter} onValueChange={setClassFilter}>
+                        <Select
+                          value={classFilter}
+                          onValueChange={setClassFilter}
+                        >
                           <Select.Trigger className="w-full sm:w-44">
                             <Select.Value placeholder="All Classes" />
                           </Select.Trigger>
@@ -618,7 +681,10 @@ export default function TeacherInterventions() {
 
                       {/* Grade Level Filter */}
                       {availableGrades.length > 0 && (
-                        <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                        <Select
+                          value={gradeFilter}
+                          onValueChange={setGradeFilter}
+                        >
                           <Select.Trigger className="w-full sm:w-36">
                             <Select.Value placeholder="All Grades" />
                           </Select.Trigger>
@@ -635,12 +701,17 @@ export default function TeacherInterventions() {
 
                       {/* Risk Level Filter */}
                       {availableRiskLevels.length > 0 && (
-                        <Select value={riskFilter} onValueChange={setRiskFilter}>
+                        <Select
+                          value={riskFilter}
+                          onValueChange={setRiskFilter}
+                        >
                           <Select.Trigger className="w-full sm:w-44">
                             <Select.Value placeholder="All Risk Levels" />
                           </Select.Trigger>
                           <Select.Content>
-                            <Select.Item value="all">All Risk Levels</Select.Item>
+                            <Select.Item value="all">
+                              All Risk Levels
+                            </Select.Item>
                             {availableRiskLevels.map((lvl) => (
                               <Select.Item key={lvl.value} value={lvl.value}>
                                 {lvl.label}
@@ -682,9 +753,13 @@ export default function TeacherInterventions() {
                           <Table.Head>Student</Table.Head>
                           <Table.Head>Subject</Table.Head>
                           <Table.Head>
-                            {resolvedView ? "Resolution prediction" : "Current prediction"}
+                            {resolvedView
+                              ? "Resolution prediction"
+                              : "Current prediction"}
                           </Table.Head>
-                          <Table.Head className="text-center">Status</Table.Head>
+                          <Table.Head className="text-center">
+                            Status
+                          </Table.Head>
                           <Table.Head>Saved reason</Table.Head>
                           <Table.Head>
                             {resolvedView
@@ -702,7 +777,14 @@ export default function TeacherInterventions() {
                             <Table.Cell className="font-semibold">
                               {candidate.student_name}
                               <span className="block text-xs text-muted-foreground">
-                                {candidate.level_name || (candidate.grade_level != null ? (String(candidate.grade_level).startsWith("Grade") ? candidate.grade_level : `Grade ${candidate.grade_level}`) : "—")}
+                                {candidate.level_name ||
+                                  (candidate.grade_level != null
+                                    ? String(candidate.grade_level).startsWith(
+                                        "Grade",
+                                      )
+                                      ? candidate.grade_level
+                                      : `Grade ${candidate.grade_level}`
+                                    : "—")}
                               </span>
                             </Table.Cell>
                             <Table.Cell>
@@ -710,7 +792,8 @@ export default function TeacherInterventions() {
                                 {candidate.subject_name}
                               </span>
                               <span className="block text-xs text-muted-foreground">
-                                {candidate.class_name} · {candidate.academic_period_name}
+                                {candidate.class_name} ·{" "}
+                                {candidate.academic_period_name}
                               </span>
                             </Table.Cell>
                             <Table.Cell>
@@ -721,18 +804,36 @@ export default function TeacherInterventions() {
                                 {(() => {
                                   const risk = displayedRisk(candidate);
                                   return (
-                                    <Badge size="sm" className={`shrink-0 whitespace-nowrap ${getRiskBadgeMeta(risk.level).bg}`}>
+                                    <Badge
+                                      size="sm"
+                                      className={`shrink-0 whitespace-nowrap ${getRiskBadgeMeta(risk.level).bg}`}
+                                    >
                                       {risk.label}
                                     </Badge>
                                   );
                                 })()}
-                                {!activeView && !resolvedView && candidate.candidate_activation_eligible === false && (
-                                  <Badge variant="outline" size="sm" className="whitespace-nowrap">Review only</Badge>
-                                )}
-                                {!activeView && !resolvedView && candidate.current_intervention_level &&
-                                  candidate.current_intervention_level !== candidate.triggering_intervention_level && (
+                                {!activeView &&
+                                  !resolvedView &&
+                                  candidate.candidate_activation_eligible ===
+                                    false && (
+                                    <Badge
+                                      variant="outline"
+                                      size="sm"
+                                      className="whitespace-nowrap"
+                                    >
+                                      Review only
+                                    </Badge>
+                                  )}
+                                {!activeView &&
+                                  !resolvedView &&
+                                  candidate.current_intervention_level &&
+                                  candidate.current_intervention_level !==
+                                    candidate.triggering_intervention_level && (
                                     <span className="text-xs text-muted-foreground">
-                                      Current: {label(candidate.current_intervention_level)}
+                                      Current:{" "}
+                                      {label(
+                                        candidate.current_intervention_level,
+                                      )}
                                     </span>
                                   )}
                               </div>
@@ -741,21 +842,34 @@ export default function TeacherInterventions() {
                               {resolvedView ? (
                                 <div className="flex flex-col leading-tight">
                                   <span className="text-sm font-semibold">
-                                    {label(candidate.resolution_reason || "Unavailable")}
+                                    {label(
+                                      candidate.resolution_reason ||
+                                        "Unavailable",
+                                    )}
                                   </span>
-                                  <span className="text-xs text-muted-foreground">Resolution reason</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Resolution reason
+                                  </span>
                                 </div>
-                              ) : (() => {
-                                const weakest = candidate.diagnosis_summary.weakest_supported_components ?? [];
-                                return (
-                                  <div className="flex flex-col leading-tight">
-                                    <span className="text-sm font-semibold">
-                                      {weakest.length ? weakest.map(label).join(", ") : "Unavailable"}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">Weakest supported</span>
-                                  </div>
-                                );
-                              })()}
+                              ) : (
+                                (() => {
+                                  const weakest =
+                                    candidate.diagnosis_summary
+                                      .weakest_supported_components ?? [];
+                                  return (
+                                    <div className="flex flex-col leading-tight">
+                                      <span className="text-sm font-semibold">
+                                        {weakest.length
+                                          ? weakest.map(label).join(", ")
+                                          : "Unavailable"}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        Weakest supported
+                                      </span>
+                                    </div>
+                                  );
+                                })()
+                              )}
                             </Table.Cell>
                             <Table.Cell>
                               {(() => {

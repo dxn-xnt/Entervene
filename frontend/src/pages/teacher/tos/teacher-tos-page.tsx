@@ -3,7 +3,11 @@ import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/teacher/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/retroui/Tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -24,9 +28,19 @@ import { toast } from "sonner";
 import { TOSGeneratorScreen } from "../subject-details/tos-generator-screen";
 import type { CompetencyItem } from "../subject-details/types";
 import { Dialog } from "@/components/retroui/Dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { getTeacherActive, getRemediationWorkspace, type RemediationFocus } from "@/lib/teacher-interventions-api";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  getTeacherActive,
+  getRemediationWorkspace,
+  type RemediationFocus,
+} from "@/lib/teacher-interventions-api";
 import { formatDate } from "@/lib/classwork-utils";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 interface SubjectOption {
   subject_id: number;
@@ -56,22 +70,24 @@ interface SavedTOSSummary {
 }
 
 export const TeacherTOSPage: React.FC = () => {
+  const { selectedPeriod, isLoading: isPeriodLoading } = useAcademicPeriod();
   const [routeParams, setRouteParams] = useSearchParams();
+  const remediationMode = routeParams.get("remediation");
   const remediationSubject = routeParams.get("subject_id");
   const remediationInterventionId = Number(routeParams.get("intervention_id"));
-  const [remediationFocus, setRemediationFocus] = useState<RemediationFocus | null>(null);
+  const [remediationFocus, setRemediationFocus] =
+    useState<RemediationFocus | null>(null);
   const [remediationError, setRemediationError] = useState("");
   const [exams, setExams] = useState<SavedTOSSummary[]>([]);
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSubjectFilter, setSelectedSubjectFilter] =
     useState<string>("ALL");
-  const [selectedQuarterFilter, setSelectedQuarterFilter] = useState<
-    "ALL" | "Term 1" | "Term 2" | "Term 3"
-  >("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [examToDelete, setExamToDelete] = useState<SavedTOSSummary | null>(null);
+  const [examToDelete, setExamToDelete] = useState<SavedTOSSummary | null>(
+    null,
+  );
 
   // Active Wizard Mode State
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -134,28 +150,58 @@ export const TeacherTOSPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (routeParams.get("remediation") !== "TOS") return;
-    if (!Number.isInteger(remediationInterventionId) || remediationInterventionId <= 0) {
-      setRemediationError("Open the TOS blueprint from an active Intervention.");
+    if (remediationMode !== "TOS") return;
+    if (
+      !Number.isInteger(remediationInterventionId) ||
+      remediationInterventionId <= 0
+    ) {
+      setRemediationError(
+        "Open the TOS blueprint from an active Intervention.",
+      );
       return;
     }
     let live = true;
-    void Promise.all([getTeacherActive(remediationInterventionId), getRemediationWorkspace(remediationInterventionId)])
+    void Promise.all([
+      getTeacherActive(remediationInterventionId),
+      getRemediationWorkspace(remediationInterventionId),
+    ])
       .then(([detail, workspace]) => {
         if (!live) return;
-        if (workspace.plan.teacher_choice !== "TOS" || detail.subject_id !== Number(remediationSubject)) {
-          setRemediationError("The saved Intervention support choice or subject has changed.");
+        if (
+          workspace.plan.teacher_choice !== "TOS" ||
+          detail.subject_id !== Number(remediationSubject)
+        ) {
+          setRemediationError(
+            "The saved Intervention support choice or subject has changed.",
+          );
           return;
         }
         setRemediationFocus(workspace.focus);
       })
-      .catch((cause) => { if (live) setRemediationError(cause instanceof Error ? cause.message : "Unable to load Intervention focus."); });
-    return () => { live = false; };
-  }, [remediationInterventionId, remediationSubject, routeParams.get("remediation")]);
+      .catch((cause) => {
+        if (live)
+          setRemediationError(
+            cause instanceof Error
+              ? cause.message
+              : "Unable to load Intervention focus.",
+          );
+      });
+    return () => {
+      live = false;
+    };
+  }, [remediationInterventionId, remediationMode, remediationSubject]);
 
   useEffect(() => {
-    if (routeParams.get("remediation") !== "TOS" || !subjects.length || !remediationFocus || remediationError) return;
-    const subject = subjects.find((item) => item.subject_id === Number(remediationSubject));
+    if (
+      remediationMode !== "TOS" ||
+      !subjects.length ||
+      !remediationFocus ||
+      remediationError
+    )
+      return;
+    const subject = subjects.find(
+      (item) => item.subject_id === Number(remediationSubject),
+    );
     if (!subject) return;
     setActiveSubject(subject);
     setActiveCompetencies([]);
@@ -164,7 +210,15 @@ export const TeacherTOSPage: React.FC = () => {
     const next = new URLSearchParams(routeParams);
     next.delete("remediation");
     setRouteParams(next, { replace: true });
-  }, [subjects, remediationSubject, routeParams, setRouteParams, remediationFocus, remediationError]);
+  }, [
+    subjects,
+    remediationSubject,
+    routeParams,
+    setRouteParams,
+    remediationFocus,
+    remediationError,
+    remediationMode,
+  ]);
 
   const handleOpenExam = async (exam: SavedTOSSummary) => {
     setIsOpeningExam(true);
@@ -226,17 +280,24 @@ export const TeacherTOSPage: React.FC = () => {
     }
   };
 
+  const selectedTermLabel = selectedPeriod?.period.trim() ?? "";
+  const normalizedSelectedTerm = selectedTermLabel.toLocaleLowerCase();
+
+  const termExams = useMemo(
+    () =>
+      (exams || []).filter(
+        (exam) =>
+          normalizedSelectedTerm.length > 0 &&
+          exam.quarter?.trim().toLocaleLowerCase() === normalizedSelectedTerm,
+      ),
+    [exams, normalizedSelectedTerm],
+  );
+
   const filteredExams = useMemo(() => {
-    return (exams || []).filter((ex) => {
+    return termExams.filter((ex) => {
       if (
         selectedSubjectFilter !== "ALL" &&
         ex.subject_id !== Number(selectedSubjectFilter)
-      ) {
-        return false;
-      }
-      if (
-        selectedQuarterFilter !== "ALL" &&
-        ex.quarter !== selectedQuarterFilter
       ) {
         return false;
       }
@@ -248,7 +309,7 @@ export const TeacherTOSPage: React.FC = () => {
       }
       return true;
     });
-  }, [exams, selectedSubjectFilter, selectedQuarterFilter, searchQuery]);
+  }, [termExams, selectedSubjectFilter, searchQuery]);
 
   return (
     <AppLayout>
@@ -276,7 +337,14 @@ export const TeacherTOSPage: React.FC = () => {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              {remediationError && <p role="alert" className="rounded border p-3 text-sm text-red-700">{remediationError}</p>}
+              {remediationError && (
+                <p
+                  role="alert"
+                  className="rounded border p-3 text-sm text-red-700"
+                >
+                  {remediationError}
+                </p>
+              )}
               {/* Filter Toolbar */}
               <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
                 {/* Search Input */}
@@ -296,11 +364,16 @@ export const TeacherTOSPage: React.FC = () => {
                     value={selectedSubjectFilter}
                     onValueChange={setSelectedSubjectFilter}
                   >
-                    <Select.Trigger aria-label="Filter by subject" className="h-10 w-full">
+                    <Select.Trigger
+                      aria-label="Filter by subject"
+                      className="h-10 w-full"
+                    >
                       <Select.Value placeholder="All Assigned Subjects" />
                     </Select.Trigger>
                     <Select.Content>
-                      <Select.Item value="ALL">All Assigned Subjects</Select.Item>
+                      <Select.Item value="ALL">
+                        All Assigned Subjects
+                      </Select.Item>
                       {subjects.map((subject) => (
                         <Select.Item
                           key={subject.subject_id}
@@ -313,31 +386,8 @@ export const TeacherTOSPage: React.FC = () => {
                   </Select>
                 </div>
               </div>
-              {/* Academic Term Filter Chips */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="shrink-0 text-sm font-regular text-muted-foreground">
-                  Terms:
-                </span>
-                {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map(
-                  (qTab) => (
-                    <Button
-                      key={qTab}
-                      type="button"
-                      size="sm"
-                      variant={selectedQuarterFilter === qTab ? "default" : "outline"}
-                      autoIcon={false}
-                      aria-pressed={selectedQuarterFilter === qTab}
-                      onClick={() => setSelectedQuarterFilter(qTab)}
-                      className="shrink-0 border-black shadow-none"
-                    >
-                      {qTab === "ALL" ? "All" : qTab}
-                    </Button>
-                  ),
-                )}
-              </div>
-
               {/* Exams Grid */}
-              {isLoading || isOpeningExam ? (
+              {isLoading || isPeriodLoading || isOpeningExam ? (
                 <div className="py-20 text-center">
                   <RefreshCw className="mx-auto h-8 w-8 animate-spin text-black" />
                   <p className="mt-3 text-xs font-black text-gray-700">
@@ -347,17 +397,37 @@ export const TeacherTOSPage: React.FC = () => {
               ) : filteredExams.length === 0 ? (
                 <TeacherEmptyState
                   icon={<TableProperties />}
-                  title={exams.length === 0 ? "No TOS Exams Found" : "No TOS exams match your filters"}
-                  description={exams.length === 0
-                    ? "Create your first Table of Specifications blueprint and exam questionnaire."
-                    : "Try another search, subject, or term."}
-                  action={exams.length === 0
-                    ? { label: "Create New TOS", icon: <Plus size={16} />, onClick: handleStartNewTOS }
-                    : { label: "Clear filters", onClick: () => {
-                      setSearchQuery("");
-                      setSelectedSubjectFilter("ALL");
-                      setSelectedQuarterFilter("ALL");
-                    } }}
+                  title={
+                    !selectedTermLabel
+                      ? "Select an academic term"
+                      : termExams.length === 0
+                        ? `No TOS exams for ${selectedTermLabel}`
+                        : "No TOS exams match your filters"
+                  }
+                  description={
+                    !selectedTermLabel
+                      ? "Choose an academic term from the sidebar to view its Table of Specifications."
+                      : termExams.length === 0
+                        ? `Create a Table of Specifications for ${selectedTermLabel}.`
+                        : "Try another search or subject."
+                  }
+                  action={
+                    selectedTermLabel && termExams.length === 0
+                      ? {
+                          label: "Create New TOS",
+                          icon: <Plus size={16} />,
+                          onClick: handleStartNewTOS,
+                        }
+                      : termExams.length > 0
+                        ? {
+                            label: "Clear filters",
+                            onClick: () => {
+                              setSearchQuery("");
+                              setSelectedSubjectFilter("ALL");
+                            },
+                          }
+                        : undefined
+                  }
                 />
               ) : (
                 <section className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -376,32 +446,61 @@ export const TeacherTOSPage: React.FC = () => {
                             </Card.Title>
                             <DropdownMenu>
                               <Tooltip>
-                                <TooltipTrigger render={<span className="inline-flex shrink-0">
-                                  <DropdownMenuTrigger asChild>
-                                    <Button type="button" variant="secondary" size="sm" className="p-1 shadow-none" aria-label={`Actions for ${ex.title}`}>
-                                      <MoreVertical className="size-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                </span>} />
+                                <TooltipTrigger
+                                  render={
+                                    <span className="inline-flex shrink-0">
+                                      <DropdownMenuTrigger asChild>
+                                        <Button
+                                          type="button"
+                                          variant="secondary"
+                                          size="sm"
+                                          className="p-1 shadow-none"
+                                          aria-label={`Actions for ${ex.title}`}
+                                        >
+                                          <MoreVertical className="size-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                    </span>
+                                  }
+                                />
                                 <TooltipContent>Exam actions</TooltipContent>
                               </Tooltip>
-                              <DropdownMenuContent align="end" className="z-50 min-w-[160px] rounded border-2 border-border bg-card p-1 text-xs font-semibold shadow-md">
-                                <DropdownMenuItem className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded p-2 text-xs hover:bg-accent" onClick={() => handleOpenExam(ex)}>
-                                  <Pencil className="size-4" /><span>Edit</span>
+                              <DropdownMenuContent
+                                align="end"
+                                className="z-50 min-w-[160px] rounded border-2 border-border bg-card p-1 text-xs font-semibold shadow-md"
+                              >
+                                <DropdownMenuItem
+                                  className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded p-2 text-xs hover:bg-accent"
+                                  onClick={() => handleOpenExam(ex)}
+                                >
+                                  <Pencil className="size-4" />
+                                  <span>Edit</span>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded p-2 text-xs text-destructive hover:bg-destructive/10" disabled={deletingId !== null} onClick={(event) => {
-                                  event.stopPropagation();
-                                  setExamToDelete(ex);
-                                }}>
-                                  <Trash2 className="size-4" /><span>Delete</span>
+                                <DropdownMenuItem
+                                  className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded p-2 text-xs text-destructive hover:bg-destructive/10"
+                                  disabled={deletingId !== null}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setExamToDelete(ex);
+                                  }}
+                                >
+                                  <Trash2 className="size-4" />
+                                  <span>Delete</span>
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge variant="outline" size="sm">{ex.subject_name || "Subject"}</Badge>
-                            <Badge variant="outline" size="sm">{ex.quarter}</Badge>
-                            <Badge variant={isFinalized ? "solid" : "default"} size="sm">
+                            <Badge variant="outline" size="sm">
+                              {ex.subject_name || "Subject"}
+                            </Badge>
+                            <Badge variant="outline" size="sm">
+                              {ex.quarter}
+                            </Badge>
+                            <Badge
+                              variant={isFinalized ? "solid" : "default"}
+                              size="sm"
+                            >
                               {isFinalized ? "Finalized" : "Draft"}
                             </Badge>
                           </div>
@@ -410,16 +509,26 @@ export const TeacherTOSPage: React.FC = () => {
                         <Card.Content className="mt-auto flex flex-col gap-3 pt-2">
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
-                              <p className="text-muted-foreground">Target items</p>
-                              <p className="font-bold text-foreground">{ex.total_items || "—"}</p>
+                              <p className="text-muted-foreground">
+                                Target items
+                              </p>
+                              <p className="font-bold text-foreground">
+                                {ex.total_items || "—"}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-muted-foreground">AI questions</p>
-                              <p className="font-bold text-foreground">{ex.question_count}</p>
+                              <p className="text-muted-foreground">
+                                AI questions
+                              </p>
+                              <p className="font-bold text-foreground">
+                                {ex.question_count}
+                              </p>
                             </div>
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {ex.created_at ? `Created ${formatDate(ex.created_at)}` : "Recently"}
+                            {ex.created_at
+                              ? `Created ${formatDate(ex.created_at)}`
+                              : "Recently"}
                           </div>
                         </Card.Content>
                       </Card>
@@ -444,20 +553,24 @@ export const TeacherTOSPage: React.FC = () => {
         isLoading={deletingId !== null}
         onConfirm={handleDeleteExam}
       />
-      <Dialog open={isWizardOpen} onOpenChange={(open) => {
-        if (!open) {
-          setIsWizardOpen(false);
-          setRemediationFocus(null);
-          setActiveSubject(null);
-          setActiveExamId(null);
-          void fetchData();
-        }
-      }}>
+      <Dialog
+        open={isWizardOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsWizardOpen(false);
+            setRemediationFocus(null);
+            setActiveSubject(null);
+            setActiveExamId(null);
+            void fetchData();
+          }
+        }}
+      >
         {isWizardOpen && (
           <Dialog.Content size="3xl">
             <TOSGeneratorScreen
               modalMode
               initialTitle={routeParams.get("title") || undefined}
+              initialQuarter={selectedTermLabel || undefined}
               subjectId={activeSubject?.subject_id ?? 0}
               subjectName={activeSubject?.subject_name ?? ""}
               competencies={activeCompetencies}

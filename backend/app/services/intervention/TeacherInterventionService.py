@@ -166,24 +166,33 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
     )
 
 
-def list_teacher_candidates(db: Session, staff_id: str) -> TeacherInterventionList:
-    candidates = db.query(Intervention).filter_by(status="CANDIDATE").order_by(
+def list_teacher_candidates(db: Session, staff_id: str, academic_period_id: int | None = None) -> TeacherInterventionList:
+    query = db.query(Intervention).filter_by(status="CANDIDATE")
+    if academic_period_id is not None:
+        query = query.filter(Intervention.academic_period_id == academic_period_id)
+    candidates = query.order_by(
         Intervention.created_at.desc(), Intervention.intervention_id.desc(),
     ).all()
     items = [_summary(db, row) for row in candidates if _eligible_scope(db, staff_id, row)]
     return TeacherInterventionList(items=items, total=len(items))
 
 
-def list_teacher_active(db: Session, staff_id: str) -> TeacherInterventionList:
-    active = db.query(Intervention).filter_by(status="ACTIVE").order_by(
+def list_teacher_active(db: Session, staff_id: str, academic_period_id: int | None = None) -> TeacherInterventionList:
+    query = db.query(Intervention).filter_by(status="ACTIVE")
+    if academic_period_id is not None:
+        query = query.filter(Intervention.academic_period_id == academic_period_id)
+    active = query.order_by(
         Intervention.activated_at.desc(), Intervention.intervention_id.desc(),
     ).all()
     items = [_summary(db, row) for row in active if _eligible_scope(db, staff_id, row)]
     return TeacherInterventionList(items=items, total=len(items))
 
 
-def list_teacher_resolved(db: Session, staff_id: str) -> TeacherInterventionList:
-    rows = db.query(Intervention).filter_by(status="RESOLVED").order_by(
+def list_teacher_resolved(db: Session, staff_id: str, academic_period_id: int | None = None) -> TeacherInterventionList:
+    query = db.query(Intervention).filter_by(status="RESOLVED")
+    if academic_period_id is not None:
+        query = query.filter(Intervention.academic_period_id == academic_period_id)
+    rows = query.order_by(
         Intervention.resolved_at.desc(), Intervention.intervention_id.desc(),
     ).all()
     items = [_summary(db, row) for row in rows if _eligible_scope(db, staff_id, row)]
