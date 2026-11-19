@@ -64,9 +64,15 @@ function getEntryKey(entry: DynamicScheduleRow, showSection = true): string {
   ].join("::");
 }
 
-function getEntriesKey(entries: DynamicScheduleRow[], showSection = true): string {
+function getEntriesKey(
+  entries: DynamicScheduleRow[],
+  showSection = true,
+): string {
   if (!entries || entries.length === 0) return "";
-  return entries.map((e) => getEntryKey(e, showSection)).sort().join("||");
+  return entries
+    .map((e) => getEntryKey(e, showSection))
+    .sort()
+    .join("||");
 }
 
 export function DynamicScheduleTable({
@@ -79,19 +85,23 @@ export function DynamicScheduleTable({
   showSection = true,
   onSubjectClick,
 }: DynamicScheduleTableProps) {
-  const [selectedEntry, setSelectedEntry] = useState<DynamicScheduleRow | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<DynamicScheduleRow | null>(
+    null,
+  );
   if (isLoading) {
     return <LoadingPanel label="Loading schedule..." />;
   }
 
   if (!isPublished || !schedule || schedule.length === 0) {
     return (
-      <Empty className="py-8">
+      <Empty className="rounded-lg! py-8">
         <Empty.Content>
           <Empty.Icon className="grid size-11 place-items-center rounded-lg border-2 border-border bg-primary p-2">
             <CalendarOff className="size-6" />
           </Empty.Icon>
-          <Empty.Title className="text-base md:text-lg">{emptyMessage}</Empty.Title>
+          <Empty.Title className="text-base md:text-lg">
+            {emptyMessage}
+          </Empty.Title>
           <Empty.Description className="max-w-md text-sm">
             {emptyDescription}
           </Empty.Description>
@@ -171,7 +181,10 @@ export function DynamicScheduleTable({
             // Break slot → full-width separator row
             if (slot.isBreak) {
               return (
-                <Table.Row key={slot.start_time} className="bg-background border-none">
+                <Table.Row
+                  key={slot.start_time}
+                  className="bg-background border-none"
+                >
                   <Table.Cell className="sticky left-0 z-10 border-r-2 border-t-2 border-black bg-background px-3 py-1 text-xs font-semibold text-foreground whitespace-nowrap">
                     {slot.time}
                   </Table.Cell>
@@ -196,7 +209,9 @@ export function DynamicScheduleTable({
               const entries = cellMap[day]?.[slot.start_time] ?? [];
               const currentKey = getEntriesKey(entries, showSection);
               const lastGroup = groups[groups.length - 1];
-              const lastKey = lastGroup ? getEntriesKey(lastGroup.entries, showSection) : null;
+              const lastKey = lastGroup
+                ? getEntriesKey(lastGroup.entries, showSection)
+                : null;
 
               if (lastGroup && lastKey === currentKey) {
                 lastGroup.span += 1;
@@ -216,7 +231,9 @@ export function DynamicScheduleTable({
               >
                 {/* Sticky time label */}
                 <Table.Cell className="sticky left-0 z-10 border-r-2 border-y-2 border-black px-3 py-2.5 align-middle whitespace-nowrap">
-                  <div className="text-xs font-bold text-black">{slot.time}</div>
+                  <div className="text-xs font-bold text-black">
+                    {slot.time}
+                  </div>
                 </Table.Cell>
 
                 {/* Grouped day cells */}
@@ -268,12 +285,16 @@ export function DynamicScheduleTable({
                                   }
                                 }
                               }}
-                              className={`w-full rounded border-2 border-black px-2 py-1.5 text-xs hover:bg-retro leading-snug shadow-sm cursor-pointer transition-all hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-primary ${entry.is_covered
-                                ? "bg-amber-50"
-                                : entry.is_substitution
-                                  ? "bg-emerald-50"
-                                  : getSubjectColor(entry.subject, entry.subject_load_id)
-                                }`}
+                              className={`w-full rounded border-2 border-black px-2 py-1.5 text-xs hover:bg-retro leading-snug shadow-sm cursor-pointer transition-all hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-primary ${
+                                entry.is_covered
+                                  ? "bg-amber-50"
+                                  : entry.is_substitution
+                                    ? "bg-emerald-50"
+                                    : getSubjectColor(
+                                        entry.subject,
+                                        entry.subject_load_id,
+                                      )
+                              }`}
                             >
                               {/* Subject */}
                               <div className="text-sm font-bold text-black truncate">
@@ -414,7 +435,10 @@ export function DynamicScheduleTable({
                 </span>
                 {selectedEntry.is_substitution && (
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-500 font-bold">
+                    <Badge
+                      variant="outline"
+                      className="bg-emerald-50 text-emerald-800 border-emerald-500 font-bold"
+                    >
                       Covering Substitution
                     </Badge>
                     {selectedEntry.original_teacher_name && (
@@ -426,7 +450,10 @@ export function DynamicScheduleTable({
                 )}
                 {selectedEntry.is_covered && (
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-500 font-bold">
+                    <Badge
+                      variant="outline"
+                      className="bg-amber-50 text-amber-800 border-amber-500 font-bold"
+                    >
                       Teacher On Leave
                     </Badge>
                     {selectedEntry.substitute_name && (
@@ -454,4 +481,3 @@ export function DynamicScheduleTable({
     </div>
   );
 }
-
