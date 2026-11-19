@@ -11,6 +11,7 @@ import { OverviewCard } from "@/components/overview-cards";
 import { ClassworkItemLine } from "@/components/item-line/classwork";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { isReadingType } from "@/lib/classwork-utils";
+import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import type {
   StudentRecordDetailResponse,
 } from "@/lib/student-record-api";
