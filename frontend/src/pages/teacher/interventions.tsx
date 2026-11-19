@@ -55,13 +55,6 @@ const sameScope = (
   left.subject_id === right.subject_id &&
   left.academic_period_id === right.academic_period_id;
 
-const reason = (candidate: TeacherInterventionSummary) => {
-  const weakest = candidate.diagnosis_summary.weakest_supported_components ?? [];
-  return weakest.length
-    ? `Weakest supported: ${weakest.map(label).join(", ")}`
-    : "Component detail unavailable in saved diagnosis";
-};
-
 const RISK_DISPLAY_ORDER = [
   "HIGH_RISK",
   "MODERATE_RISK",
@@ -415,8 +408,8 @@ export default function TeacherInterventions() {
         : activeView
           ? (b.activated_at || "").localeCompare(a.activated_at || "")
           : (a.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) -
-            (b.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) ||
-            b.created_at.localeCompare(a.created_at)
+          (b.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) ||
+          b.created_at.localeCompare(a.created_at)
     );
   }, [rawList, resolvedView, activeView]);
 
@@ -705,85 +698,100 @@ export default function TeacherInterventions() {
                       </Table.Header>
                       <Table.Body>
                         {filtered.map((candidate) => (
-                      <Table.Row key={candidate.intervention_id}>
-                        <Table.Cell className="font-semibold">
-                          {candidate.student_name}
-                          <span className="block text-xs text-muted-foreground">
-                            {candidate.level_name || (candidate.grade_level != null ? (String(candidate.grade_level).startsWith("Grade") ? candidate.grade_level : `Grade ${candidate.grade_level}`) : "—")}
-                          </span>
-                        </Table.Cell>
-                        <Table.Cell>
-                          <span className="text-sm font-semibold">
-                            {candidate.subject_name}
-                          </span>
-                          <span className="block text-xs text-muted-foreground">
-                            {candidate.class_name} · {candidate.academic_period_name}
-                          </span>
-                        </Table.Cell>
-                        <Table.Cell>
-                          <InterventionPredictionHistory item={candidate} />
-                        </Table.Cell>
-                        <Table.Cell className="text-center">
-                          <div className="flex flex-col items-center justify-center gap-1">
-                          {(() => {
-                            const risk = displayedRisk(candidate);
-                            return (
-                              <Badge size="sm" className={`shrink-0 whitespace-nowrap ${getRiskBadgeMeta(risk.level).bg}`}>
-                                {risk.label}
-                              </Badge>
-                            );
-                          })()}
-                          {!activeView && !resolvedView && candidate.candidate_activation_eligible === false && (
-                            <Badge variant="outline" size="sm" className="whitespace-nowrap">Review only</Badge>
-                          )}
-                          {!activeView && !resolvedView && candidate.current_intervention_level &&
-                            candidate.current_intervention_level !== candidate.triggering_intervention_level && (
-                              <span className="text-xs text-muted-foreground">
-                                Current: {label(candidate.current_intervention_level)}
+                          <Table.Row key={candidate.intervention_id}>
+                            <Table.Cell className="font-semibold">
+                              {candidate.student_name}
+                              <span className="block text-xs text-muted-foreground">
+                                {candidate.level_name || (candidate.grade_level != null ? (String(candidate.grade_level).startsWith("Grade") ? candidate.grade_level : `Grade ${candidate.grade_level}`) : "—")}
                               </span>
-                            )}
-                          </div>
-                        </Table.Cell>
-                        <Table.Cell>
-                          {resolvedView
-                            ? label(candidate.resolution_reason || "Unavailable")
-                            : reason(candidate)}
-                        </Table.Cell>
-                        <Table.Cell>
-                          {(() => {
-                            const rawDate =
-                              resolvedView && candidate.resolved_at
-                                ? candidate.resolved_at
-                                : activeView && candidate.activated_at
-                                  ? candidate.activated_at
-                                  : candidate.created_at;
-                            if (!rawDate) return "—";
-                            return (
-                              <div className="flex flex-col leading-tight">
-                                <span className="font-semibold text-sm text-black">
-                                  {formatDate(rawDate)}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  {formatTime(rawDate)}
-                                </span>
+                            </Table.Cell>
+                            <Table.Cell>
+                              <span className="text-sm font-semibold">
+                                {candidate.subject_name}
+                              </span>
+                              <span className="block text-xs text-muted-foreground">
+                                {candidate.class_name} · {candidate.academic_period_name}
+                              </span>
+                            </Table.Cell>
+                            <Table.Cell>
+                              <InterventionPredictionHistory item={candidate} />
+                            </Table.Cell>
+                            <Table.Cell className="text-center">
+                              <div className="flex flex-col items-center justify-center gap-1">
+                                {(() => {
+                                  const risk = displayedRisk(candidate);
+                                  return (
+                                    <Badge size="sm" className={`shrink-0 whitespace-nowrap ${getRiskBadgeMeta(risk.level).bg}`}>
+                                      {risk.label}
+                                    </Badge>
+                                  );
+                                })()}
+                                {!activeView && !resolvedView && candidate.candidate_activation_eligible === false && (
+                                  <Badge variant="outline" size="sm" className="whitespace-nowrap">Review only</Badge>
+                                )}
+                                {!activeView && !resolvedView && candidate.current_intervention_level &&
+                                  candidate.current_intervention_level !== candidate.triggering_intervention_level && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Current: {label(candidate.current_intervention_level)}
+                                    </span>
+                                  )}
                               </div>
-                            );
-                          })()}
-                        </Table.Cell>
-                        <Table.Cell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            autoIcon={false}
-                            onClick={() => open(candidate.intervention_id)}
-                          >
-                            Review
-                          </Button>
-                        </Table.Cell>
-                      </Table.Row>
-                    ))}
-                  </Table.Body>
-                </Table>
+                            </Table.Cell>
+                            <Table.Cell>
+                              {resolvedView ? (
+                                <div className="flex flex-col leading-tight">
+                                  <span className="text-sm font-semibold">
+                                    {label(candidate.resolution_reason || "Unavailable")}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">Resolution reason</span>
+                                </div>
+                              ) : (() => {
+                                const weakest = candidate.diagnosis_summary.weakest_supported_components ?? [];
+                                return (
+                                  <div className="flex flex-col leading-tight">
+                                    <span className="text-sm font-semibold">
+                                      {weakest.length ? weakest.map(label).join(", ") : "Unavailable"}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">Weakest supported</span>
+                                  </div>
+                                );
+                              })()}
+                            </Table.Cell>
+                            <Table.Cell>
+                              {(() => {
+                                const rawDate =
+                                  resolvedView && candidate.resolved_at
+                                    ? candidate.resolved_at
+                                    : activeView && candidate.activated_at
+                                      ? candidate.activated_at
+                                      : candidate.created_at;
+                                if (!rawDate) return "—";
+                                return (
+                                  <div className="flex flex-col leading-tight">
+                                    <span className="font-semibold text-sm text-black">
+                                      {formatDate(rawDate)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {formatTime(rawDate)}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                            </Table.Cell>
+                            <Table.Cell>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                autoIcon={false}
+                                onClick={() => open(candidate.intervention_id)}
+                              >
+                                Review
+                              </Button>
+                            </Table.Cell>
+                          </Table.Row>
+                        ))}
+                      </Table.Body>
+                    </Table>
                   )}
                 </>
               )}

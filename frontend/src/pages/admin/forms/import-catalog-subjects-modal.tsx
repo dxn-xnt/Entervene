@@ -36,7 +36,153 @@ export type OfferingImportDraftRow = {
   term: string;
   subject_code: string;
   minutes: string;
+  subject_name?: string;
 };
+
+export const KNOWN_SUBJECT_NAMES: Record<string, string> = {
+  // Junior High School standard DepEd subjects
+  MATH7: "Mathematics 7",
+  MATH8: "Mathematics 8",
+  MATH9: "Mathematics 9",
+  MATH10: "Mathematics 10",
+  ENMATH7: "Enhanced Mathematics 7",
+  EMATH8: "Enhanced Mathematics 8",
+  SCI7: "Science 7",
+  SCI8: "Science 8",
+  SCI9: "Science 9",
+  SCI10: "Science 10",
+  ESCIE8: "Enhanced Science 8",
+  ENG7: "English 7",
+  ENG8: "English 8",
+  ENG9: "English 9",
+  ENG10: "English 10",
+  FIL7: "Filipino 7",
+  FIL8: "Filipino 8",
+  FIL9: "Filipino 9",
+  FIL10: "Filipino 10",
+  AP7: "Araling Panlipunan 7",
+  AP8: "Araling Panlipunan 8",
+  AP9: "Araling Panlipunan 9",
+  AP10: "Araling Panlipunan 10",
+  ESP7: "Edukasyon sa Pagpapakatao 7",
+  ESP8: "Edukasyon sa Pagpapakatao 8",
+  ESP9: "Edukasyon sa Pagpapakatao 9",
+  ESP10: "Edukasyon sa Pagpapakatao 10",
+  TLE7: "Technology and Livelihood Education 7",
+  TLE8: "Technology and Livelihood Education 8",
+  TLE9: "Technology and Livelihood Education 9",
+  TLE10: "Technology and Livelihood Education 10",
+  MAPEH7: "MAPEH 7",
+  MAPEH8: "MAPEH 8",
+  MAPEH9: "MAPEH 9",
+  MAPEH10: "MAPEH 10",
+
+  // Senior High School standard DepEd subjects
+  GENMATH11: "General Mathematics 11",
+  GENMATH: "General Mathematics",
+  GENMATH12: "General Mathematics 12",
+  BIO1: "General Biology 1",
+  GENBIO1: "General Biology 1",
+  BIO2: "General Biology 2",
+  GENBIO2: "General Biology 2",
+  PRECAL11: "Pre-Calculus 11",
+  PRECAL: "Pre-Calculus",
+  BASICAL11: "Basic Calculus 11",
+  BASICAL: "Basic Calculus",
+  CHEM1: "General Chemistry 1",
+  GENCHEM1: "General Chemistry 1",
+  CHEM2: "General Chemistry 2",
+  GENCHEM2: "General Chemistry 2",
+  PHYS1: "General Physics 1",
+  GENPHYS1: "General Physics 1",
+  PHYS2: "General Physics 2",
+  GENPHYS2: "General Physics 2",
+  STAT11: "Statistics and Probability",
+  STAT: "Statistics and Probability",
+  STATPROB: "Statistics and Probability",
+  ORALCOMM: "Oral Communication in Context",
+  COMM11: "Oral Communication in Context",
+  RWS: "Reading and Writing Skills",
+  RWS11: "Reading and Writing Skills",
+  KPW: "Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino",
+  KOM11: "Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino",
+  PPIT: "Pagbasa at Pagsusuri ng Iba't Ibang Teksto",
+  PAGBASA11: "Pagbasa at Pagsusuri ng Iba't Ibang Teksto",
+  DRRR: "Disaster Readiness and Risk Reduction",
+  ELS: "Earth and Life Science",
+  ES11: "Earth and Life Science",
+  PS11: "Physical Science",
+  PHYSCI: "Physical Science",
+  UCSP: "Understanding Culture, Society and Politics",
+  MIL: "Media and Information Literacy",
+  EMP_TECH: "Empowerment Technologies",
+  EMPTECH: "Empowerment Technologies",
+  PE11: "Physical Education and Health 1",
+  PE12: "Physical Education and Health 2",
+  ENTREP: "Entrepreneurship",
+  PR1: "Practical Research 1",
+  PR2: "Practical Research 2",
+  INQ: "Inquiries, Investigations, and Immersion",
+};
+
+export function resolveSubjectName(
+  code: string,
+  explicitName?: string,
+  catalogName?: string,
+): string {
+  if (explicitName && explicitName.trim()) {
+    return explicitName.trim();
+  }
+  if (catalogName && catalogName.trim()) {
+    return catalogName.trim();
+  }
+
+  const clean = code.trim();
+  if (!clean) return "—";
+
+  const upperKey = clean.toUpperCase();
+  const directMatch = KNOWN_SUBJECT_NAMES[upperKey];
+  if (directMatch) return directMatch;
+
+  const strippedKey = upperKey.replace(/[\s_-]+/g, "");
+  const strippedMatch = KNOWN_SUBJECT_NAMES[strippedKey];
+  if (strippedMatch) return strippedMatch;
+
+  // Pattern matching for standard Dept of Ed naming (e.g. MATH7 -> Mathematics 7)
+  const prefixMatch = strippedKey.match(/^([A-Z]+?)(\d+)$/);
+  if (prefixMatch) {
+    const [, prefix, num] = prefixMatch;
+    const prefixMap: Record<string, string> = {
+      MATH: "Mathematics",
+      ENMATH: "Enhanced Mathematics",
+      EMATH: "Enhanced Mathematics",
+      SCI: "Science",
+      SCIE: "Science",
+      ESCIE: "Enhanced Science",
+      ENG: "English",
+      FIL: "Filipino",
+      AP: "Araling Panlipunan",
+      ESP: "Edukasyon sa Pagpapakatao",
+      TLE: "Technology and Livelihood Education",
+      MAPEH: "MAPEH",
+      BIO: "General Biology",
+      GENBIO: "General Biology",
+      CHEM: "General Chemistry",
+      GENCHEM: "General Chemistry",
+      PHYS: "General Physics",
+      GENPHYS: "General Physics",
+      PRECAL: "Pre-Calculus",
+      BASICAL: "Basic Calculus",
+      GENMATH: "General Mathematics",
+      STAT: "Statistics and Probability",
+    };
+    if (prefixMap[prefix]) {
+      return `${prefixMap[prefix]} ${num}`;
+    }
+  }
+
+  return clean;
+}
 
 const CATALOG_CSV_HEADERS = [
   "subject_code",
@@ -136,6 +282,7 @@ function parseOfferingImportRows(text: string): OfferingImportDraftRow[] | null 
   const idxTerm = header.indexOf("term");
   const idxCode = header.indexOf("subject_code");
   const idxMinutes = header.indexOf("minutes");
+  const idxName = header.indexOf("subject_name") !== -1 ? header.indexOf("subject_name") : header.indexOf("subject");
 
   const parsed: OfferingImportDraftRow[] = [];
   for (let i = 1; i < matrix.length; i++) {
@@ -148,6 +295,7 @@ function parseOfferingImportRows(text: string): OfferingImportDraftRow[] | null 
       term: row[idxTerm] ?? "",
       subject_code: row[idxCode] ?? "",
       minutes: row[idxMinutes] ?? "60",
+      subject_name: idxName !== -1 ? (row[idxName] ?? "").trim() : undefined,
     });
   }
   return parsed.length > 0 ? parsed : null;
@@ -249,13 +397,30 @@ export function ImportCatalogSubjectsDialog({
 
   const catalogMap = useMemo(() => {
     const map = new Map<string, SubjectListItem>();
+    const levelIdToGrade = new Map<number, number>();
+    for (const lvl of academicLevels) {
+      levelIdToGrade.set(lvl.academic_level_id, lvl.grade_level);
+    }
+
     for (const s of catalogSubjects) {
       if (s.subject_codename) {
-        map.set(s.subject_codename.trim().toLowerCase(), s);
+        const code = s.subject_codename.trim().toLowerCase();
+        map.set(code, s);
+        const levelId = s.academic_level?.academic_level_id;
+        const gradeLevel = s.academic_level?.grade_level ?? (levelId ? levelIdToGrade.get(levelId) : undefined);
+        if (levelId) {
+          map.set(`${levelId}:${code}`, s);
+        }
+        if (gradeLevel !== undefined) {
+          map.set(`${gradeLevel}:${code}`, s);
+        }
+      }
+      if (s.subject_name) {
+        map.set(s.subject_name.trim().toLowerCase(), s);
       }
     }
     return map;
-  }, [catalogSubjects]);
+  }, [catalogSubjects, academicLevels]);
 
   const availableGradeOptions = useMemo(() => {
     const optionsMap = new Map<string, string>();
@@ -365,6 +530,7 @@ export function ImportCatalogSubjectsDialog({
         gradeNum: number;
         academicYear: string;
         subjectCode: string;
+        explicitSubjectName?: string;
         pathway: string;
         minutes: string;
         terms: Set<string>;
@@ -382,6 +548,9 @@ export function ImportCatalogSubjectsDialog({
       if (existing) {
         if (r.term.trim()) existing.terms.add(r.term.trim());
         if (r.minutes) existing.minutes = r.minutes;
+        if (r.subject_name && !existing.explicitSubjectName) {
+          existing.explicitSubjectName = r.subject_name;
+        }
       } else {
         const tSet = new Set<string>();
         if (r.term.trim()) tSet.add(r.term.trim());
@@ -390,6 +559,7 @@ export function ImportCatalogSubjectsDialog({
           gradeNum,
           academicYear: r.academic_year || "",
           subjectCode: code,
+          explicitSubjectName: r.subject_name,
           pathway: r.pathway.toLowerCase(),
           minutes: r.minutes || "60",
           terms: tSet,
@@ -399,10 +569,25 @@ export function ImportCatalogSubjectsDialog({
 
     return [...subjectGroupMap.entries()]
       .map(([key, group]) => {
-        const catalogItem = catalogMap.get(group.subjectCode.toLowerCase());
-        const subjectName = catalogItem?.subject_name || group.subjectCode;
-        const gradingTemplate = catalogItem?.grading_template?.template_name || "—";
+        const catalogItem =
+          catalogMap.get(group.subjectCode.toLowerCase()) ||
+          catalogMap.get(`${group.gradeNum}:${group.subjectCode.toLowerCase()}`);
+        const subjectName = resolveSubjectName(
+          group.subjectCode,
+          group.explicitSubjectName,
+          catalogItem?.subject_name,
+        );
         const canonPathway = canonicalizePathway(group.pathway);
+        const isSpecialized =
+          group.pathway === "stem_medical" ||
+          group.pathway === "stem_engineering" ||
+          group.pathway.includes("specialized");
+        const fallbackTemplate = gradingTemplates.find((t) =>
+          isSpecialized
+            ? t.template_name.toLowerCase().includes("specialized") || t.template_name.toLowerCase().includes("stem")
+            : t.template_name.toLowerCase().includes("core")
+        )?.template_name || (isSpecialized ? "Specialized" : "Core");
+        const gradingTemplate = catalogItem?.grading_template?.template_name || fallbackTemplate;
         const isShared =
           canonPathway === CANONICAL_PATHWAYS.BOTH || Boolean((catalogItem as any)?.is_core);
 
@@ -428,7 +613,7 @@ export function ImportCatalogSubjectsDialog({
         }
         return a.subjectName.localeCompare(b.subjectName);
       });
-  }, [offeringRows, catalogMap, allTerms]);
+  }, [offeringRows, catalogMap, allTerms, gradingTemplates]);
 
   if (!pendingImport) return null;
 

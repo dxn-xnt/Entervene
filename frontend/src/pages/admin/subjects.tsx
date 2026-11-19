@@ -1180,7 +1180,7 @@ export default function AdminSubjects() {
         onOpenChange={setIsOfferingModalOpen}
         options={offeringOptions}
         offering={editingOffering}
-        catalogSubjects={subjects}
+        catalogSubjects={catalogSubjectsForPlan}
         defaultAcademicYearId={selectedYearId}
         readOnly={isViewingInactiveAcademicYear}
         readOnlyReason={readOnlyReason}
@@ -1223,7 +1223,7 @@ export default function AdminSubjects() {
         isImportingOfferings={isImportingOfferings}
         gradingTemplates={gradingTemplates}
         academicLevels={offeringOptions?.academic_levels ?? []}
-        catalogSubjects={subjects}
+        catalogSubjects={catalogSubjectsForPlan}
         periods={curriculumPeriods}
         onClose={() => {
           if (!isImportingCatalog && !isImportingOfferings) setPendingImport(null);
