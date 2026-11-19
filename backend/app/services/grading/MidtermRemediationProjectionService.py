@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.services.prediction.DevelopmentCurrentTermPredictionService import (
     STATUS_DEVELOPMENT_PREDICTION_AVAILABLE,
     predict_development_current_term,
+    prepare_development_current_term,
+    score_prepared_development_current_term,
 )
 
 
@@ -49,14 +51,14 @@ def _unavailable(
 
 def _limitations() -> list[str]:
     return [
-        "This is a development-model estimate, not an official or guaranteed subject grade.",
-        "The estimate is associative rather than causal; a higher classwork score does not guarantee a higher model output.",
-        "A lower AI what-if estimate does not lower the student's actual classwork score or official subject grade.",
+        "This is a provisional Random Forest what-if prediction, not an official or guaranteed subject grade.",
+        "The after-value assumes each selected original classwork receives its maximum capped effective score.",
+        "The model may predict a lower or unchanged grade even when a classwork score improves because its learned response uses the complete feature vector and is not forced to be monotonic.",
+        "A lower or unchanged remediation score does not lower the student's actual classwork score or official subject grade.",
         "Reproduction requires the same evidence and the same immutable model artifact registered for this model version.",
-        "A hypothetical feature combination may be less represented in training data than an observed evidence snapshot.",
         "No missing Examination score is fabricated, and AI output is not used as academic evidence.",
-        "The baseline is recomputed from current live evidence, so it can differ from an older stored prediction snapshot.",
-        "Hypothetical scores exist only for this calculation and are not submissions, awards, or persisted prediction snapshots.",
+        "The baseline is recomputed from current live evidence (including previous graded remediation adjustments), so it can differ from an older stored prediction snapshot.",
+        "Hypothetical scores and predictions exist only for this calculation and are not submissions, awards, or persisted prediction snapshots.",
     ]
 
 
@@ -71,7 +73,7 @@ def calculate_ai_midterm_what_if(
     model_name: str | None,
     target_projections: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Replay the existing prediction pipeline with cumulative in-memory scores."""
+    """Run read-only Random Forest inference for cumulative capped WW/PT scenarios."""
     if model_version_id is None or not model_name:
         return _unavailable(
             model_version_id=model_version_id,
@@ -88,7 +90,10 @@ def calculate_ai_midterm_what_if(
         "model_name": model_name,
     }
     try:
-        baseline = predict_development_current_term(db, **scope)
+        baseline = predict_development_current_term(
+            db,
+            **scope,
+        )
     except Exception:
         return _unavailable(
             model_version_id=model_version_id,
@@ -121,7 +126,7 @@ def calculate_ai_midterm_what_if(
             raise ValueError("Each original assignment may be adjusted only once in an AI what-if estimate.")
         overrides[assignment_id] = float(maximum)
         try:
-            hypothetical = predict_development_current_term(
+            hypothetical, prepared_hypothetical = prepare_development_current_term(
                 db,
                 **scope,
                 hypothetical_ww_pt_scores=overrides,
@@ -137,7 +142,10 @@ def calculate_ai_midterm_what_if(
                 )],
                 readiness=baseline.get("readiness_result"),
             )
-        if hypothetical["status"] != STATUS_DEVELOPMENT_PREDICTION_AVAILABLE:
+        if (
+            hypothetical["status"] != STATUS_DEVELOPMENT_PREDICTION_AVAILABLE
+            or prepared_hypothetical is None
+        ):
             return _unavailable(
                 model_version_id=model_version_id,
                 model_name=model_name,
@@ -148,13 +156,29 @@ def calculate_ai_midterm_what_if(
                 )],
                 readiness=hypothetical.get("readiness_result"),
             )
-        grade = float(hypothetical["projected_final_term_grade"])
+        try:
+            scored_hypothetical = score_prepared_development_current_term(
+                hypothetical,
+                prepared_hypothetical,
+            )
+        except Exception:
+            return _unavailable(
+                model_version_id=model_version_id,
+                model_name=model_name,
+                reasons=[_reason(
+                    "MODEL_EVALUATION_UNAVAILABLE",
+                    "The selected prediction model could not score the hypothetical evidence.",
+                    assignment_id,
+                )],
+                readiness=hypothetical.get("readiness_result"),
+            )
+        grade = float(scored_hypothetical["projected_final_term_grade"])
         estimates.append({
             "assignment_id": assignment_id,
             "maximum_hypothetical_effective_score": float(maximum),
             "hypothetical_predicted_term_grade": grade,
-            "step_estimated_difference": grade - previous_grade,
-            "estimated_difference_from_baseline": grade - baseline_grade,
+            "step_estimated_difference": round(grade - previous_grade, 6),
+            "estimated_difference_from_baseline": round(grade - baseline_grade, 6),
         })
         previous_grade = grade
 

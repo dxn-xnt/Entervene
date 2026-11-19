@@ -229,6 +229,7 @@ export default function Classworks() {
                       ? (origScore / maxPoints) * 100
                       : null),
                   is_recommended: false,
+                  rubric_levels: preview?.rubric_levels ?? [],
                 };
               }
             );

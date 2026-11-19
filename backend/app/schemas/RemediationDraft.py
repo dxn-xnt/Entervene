@@ -162,9 +162,9 @@ class RemediationRubricLevelDraft(StrictModel):
     """Performance rubric level for grading classwork/PT."""
 
     level_name: str = Field(min_length=1, max_length=100)
-    description: str = Field(min_length=5, max_length=1000)
+    description: str = Field(min_length=1, max_length=2000)
     points: float = Field(ge=0, le=1000)
-    display_order: int = Field(ge=0, le=20)
+    display_order: int = Field(ge=0, le=50)
 
 
 class RemediationTeacherClassworkGuide(StrictModel):
@@ -256,7 +256,7 @@ class RemediationClassworkDraft(StrictModel):
     tasks: list[RemediationTaskDraft] = Field(min_length=1, max_length=20)
     deliverables: list[RemediationDeliverableDraft] = Field(min_length=1, max_length=10)
     supported_upload_formats: list[str] = Field(min_length=1, max_length=15)
-    rubric_levels: list[RemediationRubricLevelDraft] = Field(min_length=2, max_length=10)
+    rubric_levels: list[RemediationRubricLevelDraft] = Field(min_length=1, max_length=20)
     teacher_guide: RemediationTeacherClassworkGuide
 
     @field_validator("supported_upload_formats")
@@ -357,6 +357,7 @@ class RemediationDraftGenerationRequest(StrictModel):
     target_component: Literal["WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"]
     grade_treatment: Literal["WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION", "PRACTICE_ONLY"]
     exam_subtype: Literal["SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"] | None = None
+    target_assignment_id: int | None = Field(default=None, gt=0)
     item_count: int = Field(default=5, ge=1, le=20)
     total_points: float = Field(default=20.0, gt=0, le=1000)
     activity_mode: Literal["ONLINE", "MANUAL"] = "ONLINE"

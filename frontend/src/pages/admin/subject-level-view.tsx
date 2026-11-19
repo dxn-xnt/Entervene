@@ -4,17 +4,16 @@ import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Empty } from "@/components/retroui/Empty";
-import { Select } from "@/components/retroui/Select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Text } from "@/components/retroui/Text";
 import { useNavigate, useParams } from "react-router-dom";
 import AddSubjectModal from "./forms/add-subject";
 import { OverviewCard } from "@/components/overview-cards";
+import { SubjectClassHeader } from "@/components/subject-class-header";
 import SubjectItemLine from "@/components/item-line/subject";
 import ConfirmDialog from "@/components/confirm-dialog";
 import {
@@ -23,7 +22,6 @@ import {
   getSubjects,
   type SubjectListItem,
   type SubjectOfferingFormOptions,
-  type SubjectStatus,
 } from "@/lib/api";
 
 export default function AdminSubjectLevel() {
@@ -34,8 +32,6 @@ export default function AdminSubjectLevel() {
   const [subjects, setSubjects] = useState<SubjectListItem[]>([]);
   const [offeringOptions, setOfferingOptions] =
     useState<SubjectOfferingFormOptions | null>(null);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<SubjectStatus | "all">("active");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingArchive, setPendingArchive] = useState<SubjectListItem | null>(
@@ -85,21 +81,6 @@ export default function AdminSubjectLevel() {
       .sort((a, b) => a.subject_name.localeCompare(b.subject_name));
   }, [decodedGrade, subjects]);
 
-  const visibleSubjects = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return gradeSubjects.filter((subject) => {
-      const matchesStatus = status === "all" || subject.status === status;
-      const matchesSearch =
-        !query ||
-        [
-          subject.subject_name,
-          subject.subject_codename,
-          subject.grading_template.template_name,
-        ].some((value) => value?.toLowerCase().includes(query));
-      return matchesStatus && matchesSearch;
-    });
-  }, [gradeSubjects, search, status]);
-
   const activeYearLabel = offeringOptions?.academic_years.find(
     (year) => year.is_active,
   )?.year_label;
@@ -109,9 +90,6 @@ export default function AdminSubjectLevel() {
   const archivedSubjects = gradeSubjects.filter(
     (subject) => subject.status === "archived",
   );
-  const totalGroups = new Set(
-    gradeSubjects.map((s) => s.grading_template.template_name).filter(Boolean),
-  ).size;
 
   const handleArchive = async () => {
     if (!pendingArchive) return;
@@ -159,20 +137,14 @@ export default function AdminSubjectLevel() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              <RetroCard className="bg-accent py-3">
-                <div className="flex flex-col gap-1">
-                  <div className="flex flex-wrap items-end gap-2">
-                    <Text as="h2" className="font-sansm font-bold">
-                      {decodedGrade}
-                    </Text>
-                    {activeYearLabel ? (
-                      <p className="pb-1 text-lg font-semibold">
-                        ({activeYearLabel})
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              </RetroCard>
+              <SubjectClassHeader
+                detail={{
+                  class_id: decodedGrade,
+                  section_name: decodedGrade,
+                }}
+                teacherName={activeYearLabel ? `Academic Year ${activeYearLabel}` : undefined}
+                showViewSubjectButton={false}
+              />
 
               {error ? (
                 <RetroCard className="bg-[#fff7d6] px-4 py-3">
@@ -183,40 +155,9 @@ export default function AdminSubjectLevel() {
 
               <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <section className="flex min-w-0 flex-col gap-3">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                    <Text as="h3" className="font-sans text-xl font-bold">
-                      Subjects
-                    </Text>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <label className="relative min-w-0">
-                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                        <Input
-                          variant="search"
-                          className="w-full sm:w-72"
-                          value={search}
-                          onChange={(event) => setSearch(event.target.value)}
-                          placeholder="Search name, code, group"
-                        />
-                      </label>
-                      <Select
-                        value={status}
-                        onValueChange={(value) =>
-                          setStatus(value as SubjectStatus | "all")
-                        }
-                      >
-                        <Select.Trigger className="w-full sm:w-40">
-                          <Select.Value />
-                        </Select.Trigger>
-                        <Select.Content>
-                          <Select.Group>
-                            <Select.Item value="active">Active</Select.Item>
-                            <Select.Item value="archived">Archived</Select.Item>
-                            <Select.Item value="all">All</Select.Item>
-                          </Select.Group>
-                        </Select.Content>
-                      </Select>
-                    </div>
-                  </div>
+                  <Text as="h3" className="font-sans text-xl font-bold">
+                    Subjects
+                  </Text>
 
                   <div className="flex flex-col gap-3">
                     {isLoading ? (
@@ -224,14 +165,14 @@ export default function AdminSubjectLevel() {
                         <Loader size="sm" />
                         Loading subjects...
                       </div>
-                    ) : visibleSubjects.length === 0 ? (
+                    ) : gradeSubjects.length === 0 ? (
                       <Empty>
                         <Empty.Content>
                           <Empty.Title>No subjects found for {decodedGrade}.</Empty.Title>
                         </Empty.Content>
                       </Empty>
                     ) : (
-                      visibleSubjects.map((subject) => (
+                      gradeSubjects.map((subject) => (
                         <SubjectItemLine
                           key={subject.subject_id}
                           subjectName={subject.subject_name}
@@ -267,7 +208,6 @@ export default function AdminSubjectLevel() {
                     title="Archived Subjects"
                     count={String(archivedSubjects.length)}
                   />
-                  <OverviewCard title="Grading Templates" count={String(totalGroups)} />
                 </aside>
               </div>
             </div>

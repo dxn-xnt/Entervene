@@ -21,6 +21,7 @@ import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import QuizFeedbackAssistant from "@/components/quiz-feedback-assistant";
 import {
   formatDate,
+  formatStudentRosterName,
   isQuizType,
   submissionStatusLabel,
 } from "@/lib/classwork-utils";
@@ -79,6 +80,7 @@ export default function StudentSubmissionView({
 }: StudentSubmissionViewProps) {
   const navigate = useNavigate();
   const toast = useToast();
+  const studentDisplayName = formatStudentRosterName(selectedStudent);
   const classworkKind = selected.classwork_type?.toUpperCase();
   const supportsAiFeedback =
     classworkKind === "ASSIGNMENT"
@@ -158,9 +160,9 @@ export default function StudentSubmissionView({
                         className="block max-w-[150px] truncate sm:max-w-[250px] lg:max-w-[350px]"
                         tabIndex={0}
                       >
-                        {selectedStudent.student_name}
+                        {studentDisplayName}
                       </Breadcrumb.Page>} />
-                      <TooltipContent>{selectedStudent.student_name} submission</TooltipContent>
+                      <TooltipContent>{studentDisplayName} submission</TooltipContent>
                     </Tooltip>
                   </Breadcrumb.Item>
                 </Breadcrumb.List>
@@ -200,15 +202,15 @@ export default function StudentSubmissionView({
                       <Avatar variant="student" className="size-10 shrink-0">
                         <Avatar.Image
                           src={selectedStudent.avatar || "/avatars/student-avatars/1.svg"}
-                          alt={selectedStudent.student_name}
+                          alt={studentDisplayName}
                         />
                         <Avatar.Fallback>
-                          {selectedStudent.student_name.slice(0, 1).toUpperCase()}
+                          {studentDisplayName.slice(0, 1).toUpperCase()}
                         </Avatar.Fallback>
                       </Avatar>
                       <div className="min-w-0">
                         <Card.Title className="text-xl sm:text-2xl font-extrabold truncate mb-0">
-                          {selectedStudent.student_name}
+                          {studentDisplayName}
                         </Card.Title>
                         {selectedSubmissionDetail?.submitted_at && (
                           <p className="text-xs font-semibold text-gray-800 mt-0.5">

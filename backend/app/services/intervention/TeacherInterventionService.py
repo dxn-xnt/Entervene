@@ -24,7 +24,12 @@ from app.services.intervention.InterventionCandidateService import (
     AUTOMATIC_CANDIDATE_LEVEL,
     sync_intervention_for_persisted_prediction,
 )
-from app.services.intervention.InterventionHistoryService import resolution_projection, sent_reviewer, targeted_activities
+from app.services.intervention.InterventionHistoryService import (
+    resolution_prediction,
+    resolution_projection,
+    sent_reviewer,
+    targeted_activities,
+)
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
 from app.services.prediction.DevelopmentCurrentTermPredictionPersistenceService import generate_and_persist_development_current_term
 
@@ -64,16 +69,21 @@ def _current_candidate_status(
     source: DevelopmentCurrentTermPrediction,
     passing_threshold: float | None,
 ) -> tuple[DevelopmentCurrentTermPrediction, float | None, bool | None, str | None]:
-    latest = db.query(DevelopmentCurrentTermPrediction).filter_by(
-        student_id=row.student_id,
-        class_id=row.class_id,
-        subject_id=row.subject_id,
-        source_period_id=row.academic_period_id,
-        target_period_id=row.academic_period_id,
-        model_version_id=source.model_version_id,
-    ).order_by(DevelopmentCurrentTermPrediction.revision.desc()).first() or source
+    if row.status == "RESOLVED":
+        latest = resolution_prediction(db, row, source=source) or source
+    else:
+        latest = db.query(DevelopmentCurrentTermPrediction).filter_by(
+            student_id=row.student_id,
+            class_id=row.class_id,
+            subject_id=row.subject_id,
+            source_period_id=row.academic_period_id,
+            target_period_id=row.academic_period_id,
+            model_version_id=source.model_version_id,
+        ).order_by(DevelopmentCurrentTermPrediction.revision.desc()).first() or source
     snapshot = latest.evidence_snapshot if isinstance(latest.evidence_snapshot, dict) else {}
     raw_grade = snapshot.get("projected_final_term_grade_raw")
+    if raw_grade is None and row.status == "RESOLVED" and latest.predicted_period_grade is not None:
+        raw_grade = float(latest.predicted_period_grade)
     try:
         current_grade = float(raw_grade) if not isinstance(raw_grade, bool) else math.nan
     except (TypeError, ValueError, OverflowError):

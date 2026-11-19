@@ -6,7 +6,7 @@ Verifies:
 3. Finalized-period teacher grading and regrading of linked remediation are rejected with HTTP 409.
 4. Quiz and non-quiz remediation activities are protected.
 5. Existing Examination remediation remains protected and unchanged.
-6. Ordinary WW/PT classworks remain unaffected by remediation finalization checks.
+6. Ordinary WW/PT classworks remain unaffected by remediation-specific finalization checks while honoring general period-grade finalization locks.
 7. Correct student, subject, and academic period isolation.
 8. No grade or submission mutation occurs on rejected requests.
 9. Single-attempt policy is strictly enforced on linked remedial quizzes.
@@ -42,7 +42,8 @@ from app.schemas.Submission import GradeRequest
 from app.services.activity.ActivityService import bulk_update_activity_scores
 from app.services.classwork.ClassworkService import create_classwork_wizard_record
 from app.services.grading.RemedialExamination import ensure_remedial_period_open
-from app.services.intervention.InterventionRemediationService import PlanUpdate, save_plan
+from app.services.intervention.InterventionReadingReviewService import acknowledge_intervention_reading_review
+from app.services.intervention.InterventionRemediationService import PlanUpdate, ResourceRef, save_plan
 from app.services.quiz.QuizAnalysisService import grade_teacher_quiz_submission
 from app.services.quiz.QuizAttemptService import start_student_quiz_attempt, submit_student_quiz_attempt
 from app.services.submission.SubmissionService import grade_student_submission, submit_student_work, unsubmit_student_work
@@ -86,6 +87,49 @@ def _make_dummy_upload(filename="remedial_work.pdf", content=b"%PDF-1.4"):
     return UploadFile(filename=filename, file=file_obj)
 
 
+def _create_supporting_reading(c, title: str = "Supporting Remediation Reading") -> tuple[Classwork, ClassworkAssignment]:
+    db = c["db"]
+    reading = Classwork(
+        title=title,
+        classwork_type="READING",
+        is_graded=False,
+        total_points=None,
+        is_published=True,
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=_staff(c),
+    )
+    db.add(reading)
+    db.flush()
+    reading_assignment = ClassworkAssignment(
+        classwork_id=reading.classwork_id,
+        class_id=c["class"].class_id,
+        academic_period_id=c["period"].academic_period_id,
+        assigned_by_staff_id=_staff(c),
+        is_published=True,
+    )
+    db.add(reading_assignment)
+    db.commit()
+    return reading, reading_assignment
+
+
+def _save_plan_with_reading(c, body: PlanUpdate) -> ClassworkAssignment:
+    reading, reading_assignment = _create_supporting_reading(c)
+    plan_body = body.model_copy(
+        update={"selected_resources": [ResourceRef(kind="CLASSWORK", id=reading.classwork_id)]}
+    )
+    save_plan(c["db"], _staff(c), _id(c), plan_body)
+    return reading_assignment
+
+
+def _acknowledge_supporting_reading(c, reading_assignment: ClassworkAssignment) -> None:
+    acknowledge_intervention_reading_review(
+        c["db"],
+        intervention_id=_id(c),
+        reading_assignment_id=reading_assignment.classwork_assignment_id,
+        student=c["student"],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Test 1: Open-period non-quiz remediation submission and grading
 # ---------------------------------------------------------------------------
@@ -96,8 +140,8 @@ def test_open_period_remediation_submission_and_grading_succeeds(candidate_conte
     _activate(c)
 
     original = _make_classwork_target(c, "Original WW", score=10.0, points=30.0)
-    save_plan(
-        db, _staff(c), _id(c),
+    reading_asgn = _save_plan_with_reading(
+        c,
         PlanUpdate(
             teacher_choice="CLASSWORK",
             grade_treatment="WRITTEN_WORK",
@@ -110,6 +154,7 @@ def test_open_period_remediation_submission_and_grading_succeeds(candidate_conte
     kwargs["total_points"] = 30
     created = asyncio.run(create_classwork_wizard_record(**kwargs))
     remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    _acknowledge_supporting_reading(c, reading_asgn)
 
     # Open period: student submits work
     upload = _make_dummy_upload()
@@ -146,8 +191,8 @@ def test_finalized_period_non_quiz_submission_rejected(candidate_context):
     _activate(c)
 
     original = _make_classwork_target(c, "Original WW", score=10.0, points=30.0)
-    save_plan(
-        db, _staff(c), _id(c),
+    reading_asgn = _save_plan_with_reading(
+        c,
         PlanUpdate(
             teacher_choice="CLASSWORK",
             grade_treatment="WRITTEN_WORK",
@@ -159,6 +204,7 @@ def test_finalized_period_non_quiz_submission_rejected(candidate_context):
     kwargs["total_points"] = 30
     created = asyncio.run(create_classwork_wizard_record(**kwargs))
     remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    _acknowledge_supporting_reading(c, reading_asgn)
 
     # Finalize student's period grade
     _set_period_finalized(
@@ -196,8 +242,8 @@ def test_finalized_period_unsubmit_rejected(candidate_context):
     _activate(c)
 
     original = _make_classwork_target(c, "Original WW", score=10.0, points=30.0)
-    save_plan(
-        db, _staff(c), _id(c),
+    reading_asgn = _save_plan_with_reading(
+        c,
         PlanUpdate(
             teacher_choice="CLASSWORK",
             grade_treatment="WRITTEN_WORK",
@@ -209,6 +255,7 @@ def test_finalized_period_unsubmit_rejected(candidate_context):
     kwargs["total_points"] = 30
     created = asyncio.run(create_classwork_wizard_record(**kwargs))
     remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    _acknowledge_supporting_reading(c, reading_asgn)
 
     # Open period: student submits
     sub = StudentSubmission(
@@ -251,8 +298,8 @@ def test_finalized_period_teacher_grading_rejected_and_no_mutation(candidate_con
     _activate(c)
 
     original = _make_classwork_target(c, "Original WW", score=10.0, points=30.0)
-    save_plan(
-        db, _staff(c), _id(c),
+    _save_plan_with_reading(
+        c,
         PlanUpdate(
             teacher_choice="CLASSWORK",
             grade_treatment="WRITTEN_WORK",
@@ -331,8 +378,8 @@ def test_remedial_quiz_finalization_and_single_attempt_policy(candidate_context)
         c, "Original Quiz Target", category="WRITTEN_WORK",
         classwork_type="QUIZ", score=10.0, points=20.0,
     )
-    save_plan(
-        db, _staff(c), _id(c),
+    reading_asgn = _save_plan_with_reading(
+        c,
         PlanUpdate(
             teacher_choice="QUIZ",
             grade_treatment="WRITTEN_WORK",
@@ -349,6 +396,7 @@ def test_remedial_quiz_finalization_and_single_attempt_policy(candidate_context)
     )
     created = asyncio.run(create_classwork_wizard_record(**kwargs))
     remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    _acknowledge_supporting_reading(c, reading_asgn)
 
     # A: In open period, start quiz attempt succeeds
     attempt_res = start_student_quiz_attempt(db, c["student"], remediation.classwork_assignment_id)
@@ -493,6 +541,20 @@ def test_ordinary_ww_pt_classworks_unaffected_by_finalization_checks(candidate_c
     # Ordinary classwork assigned to the class (no remediation link)
     ordinary = _make_classwork_target(c, "Ordinary Whole-Class WW", score=20.0, points=40.0)
 
+    sub = db.query(StudentSubmission).filter_by(
+        classwork_assignment_id=ordinary.classwork_assignment_id,
+        student_id=c["student"].student_id,
+    ).one()
+
+    # In an open period, ordinary classwork grading succeeds normally
+    graded = grade_student_submission(
+        sub.submission_id,
+        GradeRequest(grade=25.0, feedback="Ordinary classwork grade update"),
+        _staff(c),
+        db,
+    )
+    assert float(graded.grade) == 25.0
+
     # Period grade is finalized
     _set_period_finalized(
         db,
@@ -503,22 +565,21 @@ def test_ordinary_ww_pt_classworks_unaffected_by_finalization_checks(candidate_c
         is_finalized=True,
     )
 
-    # ensure_remedial_period_open must return cleanly for ordinary assignments
+    # Remediation-specific ensure_remedial_period_open must return cleanly for ordinary assignments
     ensure_remedial_period_open(db, ordinary, c["student"].student_id)
 
-    # Grading ordinary classwork submission is NOT blocked by remediation finalization check
-    sub = db.query(StudentSubmission).filter_by(
-        classwork_assignment_id=ordinary.classwork_assignment_id,
-        student_id=c["student"].student_id,
-    ).one()
-
-    graded = grade_student_submission(
-        sub.submission_id,
-        GradeRequest(grade=25.0, feedback="Ordinary classwork grade update"),
-        _staff(c),
-        db,
-    )
-    assert float(graded.grade) == 25.0
+    # General period-grade finalization protection still locks regrading any submission once finalized
+    with pytest.raises(HTTPException) as exc:
+        grade_student_submission(
+            sub.submission_id,
+            GradeRequest(grade=30.0, feedback="Blocked after finalization"),
+            _staff(c),
+            db,
+        )
+    assert exc.value.status_code == 409
+    assert exc.value.detail == "The period grade is finalized"
+    db.refresh(sub)
+    assert float(sub.grade) == 25.0
 
 
 # ---------------------------------------------------------------------------
@@ -550,8 +611,8 @@ def test_student_subject_and_period_isolation(candidate_context):
 
     # Original classwork
     original = _make_classwork_target(c, "Original Target", score=10.0, points=30.0)
-    save_plan(
-        db, _staff(c), _id(c),
+    _save_plan_with_reading(
+        c,
         PlanUpdate(
             teacher_choice="CLASSWORK",
             grade_treatment="WRITTEN_WORK",

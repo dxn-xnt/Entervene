@@ -43,10 +43,14 @@ export default function StudentInterventions() {
   const [resolvedInterventions, setResolvedInterventions] = useState<StudentPersistentIntervention[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeLoadFailed, setActiveLoadFailed] = useState(false);
+  const [resolvedLoadFailed, setResolvedLoadFailed] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setActiveLoadFailed(false);
+    setResolvedLoadFailed(false);
     try {
       const [revRes, activeRes, resolvedRes] = await Promise.allSettled([
         listMyReviewers(selectedPeriodId),
@@ -56,13 +60,21 @@ export default function StudentInterventions() {
 
       if (revRes.status === "fulfilled") {
         setReviewers(revRes.value.items || []);
+      } else {
+        setReviewers([]);
       }
       if (activeRes.status === "fulfilled") {
         setActiveInterventions(activeRes.value.items || []);
+      } else {
+        setActiveInterventions([]);
       }
       if (resolvedRes.status === "fulfilled") {
         setResolvedInterventions(resolvedRes.value.items || []);
+      } else {
+        setResolvedInterventions([]);
       }
+      setActiveLoadFailed(activeRes.status === "rejected");
+      setResolvedLoadFailed(resolvedRes.status === "rejected");
 
       if (
         revRes.status === "rejected" ||
@@ -73,6 +85,10 @@ export default function StudentInterventions() {
       }
     } catch (err) {
       console.warn("Unable to load live interventions", err);
+      setActiveInterventions([]);
+      setResolvedInterventions([]);
+      setActiveLoadFailed(true);
+      setResolvedLoadFailed(true);
       setLoadError("Study support could not be loaded. Please try again later.");
     } finally {
       setLoading(false);
@@ -270,6 +286,60 @@ export default function StudentInterventions() {
     />
   );
 
+  const renderAssignedReadings = (
+    readings: StudentPersistentIntervention["required_readings"],
+    interventionId: number,
+  ) => {
+    if (!readings.length) return emptyActivitiesPlaceholder;
+    return (
+      <div className="space-y-2" aria-label="Assigned supporting readings">
+        <p className="font-semibold text-foreground text-base">Supporting Readings</p>
+        <p className="text-sm text-muted-foreground">
+          Your teacher assigned these readings while the remediation activity is being prepared.
+        </p>
+        <div className="flex flex-col gap-2">
+          {[...readings].sort((left, right) => left.order - right.order).map((reading) => {
+            const isReviewed = reading.review_status === "REVIEWED";
+            return (
+              <ClassworkItemLine
+                key={reading.assignment_id}
+                size="sm"
+                className="border-2! shadow-none!"
+                item={{
+                  classwork_id: reading.classwork_id,
+                  title: reading.title,
+                  classwork_type: "READING",
+                }}
+                showPublicationStatus={false}
+                showCategory={false}
+                showType={false}
+                rightContent={
+                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                    <Badge variant={isReviewed ? "success" : "outline"} size="sm" className="gap-1">
+                      {isReviewed ? <CheckCircle2 className="size-3.5" /> : <Timer className="size-3.5" />}
+                      {isReviewed ? "Reviewed" : "Review Required"}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      autoIcon={false}
+                      className="gap-2"
+                      aria-label={`Open reading: ${reading.title}`}
+                      onClick={() => navigate(classworkLink(reading.assignment_id, interventionId))}
+                    >
+                      <ExternalLink className="size-4" />
+                      Open Reading
+                    </Button>
+                  </div>
+                }
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-clip">
@@ -343,7 +413,9 @@ export default function StudentInterventions() {
 
                   {loading ? (
                     <p className="text-sm text-muted-foreground">Loading your active support...</p>
-                  ) : loadError ? null : activeInterventions.length === 0 ? (
+                  ) : activeLoadFailed ? (
+                    <Alert status="error">Active support could not be loaded. Please retry.</Alert>
+                  ) : activeInterventions.length === 0 ? (
                     <StudentEmptyState
                       icon={<Shield />}
                       title="No active support"
@@ -374,7 +446,7 @@ export default function StudentInterventions() {
                         >
                           {renderActivities(
                             item.activities,
-                            emptyActivitiesPlaceholder,
+                            renderAssignedReadings(item.required_readings, item.intervention_id),
                             item.intervention_id
                           )}
                         </InterventionCard>
@@ -391,7 +463,9 @@ export default function StudentInterventions() {
 
                   {loading ? (
                     <p className="text-sm text-muted-foreground">Loading past support...</p>
-                  ) : loadError ? null : resolvedInterventions.length === 0 ? (
+                  ) : resolvedLoadFailed ? (
+                    <Alert status="error">Past support could not be loaded. Please retry.</Alert>
+                  ) : resolvedInterventions.length === 0 ? (
                     <StudentEmptyState
                       icon={<History />}
                       title="No past support yet"

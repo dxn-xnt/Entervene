@@ -711,6 +711,9 @@ def assignment_tracking(assignment_id: int, staff_id: str, db: Session) -> dict:
         base = {
             "student_id": sid,
             "student_name": student_name(student),
+            "first_name": student.first_name,
+            "middle_name": student.middle_name,
+            "last_name": student.last_name,
             "avatar": avatars.get(student.student_id),
             "student_lrn": student.student_lrn,
             "email": student.email,
@@ -824,6 +827,9 @@ def classwork_tracking(classwork_id: int, staff_id: str, db: Session) -> dict:
         base = {
             "student_id": sid,
             "student_name": student_name(student),
+            "first_name": student.first_name,
+            "middle_name": student.middle_name,
+            "last_name": student.last_name,
             "avatar": avatars.get(student.student_id),
             "student_lrn": student.student_lrn,
             "email": student.email,

@@ -66,9 +66,9 @@ const unavailableProjection: SubjectGradeProjectionResponse = {
       {
         assignment_id: 7,
         maximum_hypothetical_effective_score: 42.5,
-        hypothetical_predicted_term_grade: 82.8,
-        step_estimated_difference: -0.1,
-        estimated_difference_from_baseline: -0.1,
+        hypothetical_predicted_term_grade: 88.3,
+        step_estimated_difference: 5.4,
+        estimated_difference_from_baseline: 5.4,
       },
     ],
     unavailable_reasons: [],
@@ -77,7 +77,7 @@ const unavailableProjection: SubjectGradeProjectionResponse = {
 };
 
 describe("SubjectGradeProjectionCard", () => {
-  it("shows score bounds instead of inventing an official grade when examination evidence is missing", () => {
+  it("shows only the essential score and AI values in scan order", () => {
     render(
       <SubjectGradeProjectionCard
         projection={unavailableProjection}
@@ -87,19 +87,23 @@ describe("SubjectGradeProjectionCard", () => {
       />,
     );
 
-    expect(screen.getByText("Classwork Score Adjustment")).toBeDefined();
-    expect(screen.getByText("Overall Grade Preview Unavailable")).toBeDefined();
-    expect(screen.getByText("85% Target-Score Ceiling")).toBeDefined();
+    const scoreHeading = screen.getByText("Classwork score adjustment");
+    const predictionHeading = screen.getByText("AI prediction");
+    expect(scoreHeading.compareDocumentPosition(predictionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Original score")).toBeDefined();
+    expect(screen.getByText("Max score after remediation")).toBeDefined();
+    expect(screen.getByText("Possible gain")).toBeDefined();
     expect(screen.getByText("20/50")).toBeDefined();
     expect(screen.getByText("42.5/50")).toBeDefined();
     expect(screen.getByText("+22.5 pts")).toBeDefined();
-    expect(screen.getByText(/Some required grades have not been recorded yet/)).toBeDefined();
-    expect(screen.getByText(/Summative 1, Summative 2, Term Examination/)).toBeDefined();
-    expect(screen.queryByText("Official Projection Unavailable")).toBeNull();
-    expect(screen.queryByText("Projected Subject Grade")).toBeNull();
+    expect(screen.getByText("Current AI prediction")).toBeDefined();
+    expect(screen.getByText("Predicted AI result at max score")).toBeDefined();
+    expect(screen.getByText("82.9%")).toBeDefined();
+    expect(screen.getByText("88.3%")).toBeDefined();
+    expect(screen.getByText("Preview only. Final result still depends on the student's actual remediation score.")).toBeDefined();
   });
 
-  it("keeps a non-monotonic AI estimate secondary and explains that it cannot reduce the actual grade", () => {
+  it("removes technical and repetitive grade-system explanations", () => {
     render(
       <SubjectGradeProjectionCard
         projection={unavailableProjection}
@@ -109,34 +113,14 @@ describe("SubjectGradeProjectionCard", () => {
       />,
     );
 
-    expect(screen.getByText("Provisional AI Advisory")).toBeDefined();
-    expect(screen.getByText("Not an Official Grade")).toBeDefined();
-    expect(screen.getByText("82.9%")).toBeDefined();
-    expect(screen.getByText("82.8%")).toBeDefined();
-    expect(screen.getByText("Model variation -0.1%")).toBeDefined();
-    expect(screen.getByText(/may increase or decrease/)).toBeDefined();
-    expect(screen.getByText(/does not calculate or reduce the student's actual grade/)).toBeDefined();
+    expect(screen.queryByText(/official/i)).toBeNull();
+    expect(screen.queryByText(/Random Forest/i)).toBeNull();
+    expect(screen.queryByText(/missing:/i)).toBeNull();
+    expect(screen.queryByText(/passing/i)).toBeNull();
+    expect(screen.queryByText(/predicted change/i)).toBeNull();
   });
 
-  it("normalizes negative zero in advisory differences", () => {
-    const projection = structuredClone(unavailableProjection);
-    projection.ai_midterm_what_if.target_estimates[0].estimated_difference_from_baseline = -0.04;
-    projection.ai_midterm_what_if.target_estimates[0].step_estimated_difference = -0.04;
-
-    render(
-      <SubjectGradeProjectionCard
-        projection={projection}
-        selectedTargetIds={[7]}
-        capPercentage={85}
-        gradeTreatment="PERFORMANCE_TASK"
-      />,
-    );
-
-    expect(screen.getByText("Model variation 0.0%")).toBeDefined();
-    expect(screen.queryByText(/-0\.0%/)).toBeNull();
-  });
-
-  it("prioritizes the deterministic subject-grade projection when complete evidence exists", () => {
+  it("does not add the deterministic subject-grade panel when complete evidence exists", () => {
     const projection = structuredClone(unavailableProjection);
     projection.status = "AVAILABLE";
     projection.current_initial_grade = 80;
@@ -159,11 +143,11 @@ describe("SubjectGradeProjectionCard", () => {
       />,
     );
 
-    expect(screen.getByText("Projected Subject Grade")).toBeDefined();
-    expect(screen.getByText("Authoritative")).toBeDefined();
-    expect(screen.getAllByText("82.0%").length).toBeGreaterThan(0);
-    expect(screen.getByText("86.0%")).toBeDefined();
-    expect(screen.getByText("Reaches Passing")).toBeDefined();
-    expect(screen.getByText("Provisional AI Advisory")).toBeDefined();
+    expect(screen.queryByText("Projected Subject Grade")).toBeNull();
+    expect(screen.queryByText("Authoritative")).toBeNull();
+    expect(screen.queryByText("82.0%")).toBeNull();
+    expect(screen.queryByText("86.0%")).toBeNull();
+    expect(screen.getByText("Current AI prediction")).toBeDefined();
+    expect(screen.getByText("Predicted AI result at max score")).toBeDefined();
   });
 });

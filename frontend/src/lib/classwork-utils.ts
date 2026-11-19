@@ -1,4 +1,22 @@
-import type { ActivityRubricLevel, CreateDraft, EditDraft, TeacherClasswork } from "@/types/classwork";
+import type { ActivityRubricLevel, CreateDraft, EditDraft, TeacherClasswork, TrackingStudent } from "@/types/classwork";
+
+export type SubmissionStatusFilter = "all" | "on_time" | "late" | "missing";
+export type GradingStatusFilter = "all" | "graded" | "not_graded";
+
+type StructuredStudentName = {
+  student_name?: string | null;
+  first_name?: string | null;
+  middle_name?: string | null;
+  last_name?: string | null;
+};
+
+export function formatStudentRosterName(student: StructuredStudentName) {
+  const firstName = student.first_name?.trim();
+  const lastName = student.last_name?.trim();
+  if (!firstName || !lastName) return student.student_name?.trim() || "Student";
+  const middleInitial = student.middle_name?.trim().charAt(0).toUpperCase();
+  return `${lastName}, ${firstName}${middleInitial ? ` ${middleInitial}.` : ""}`;
+}
 
 export const defaultActivityRubric: ActivityRubricLevel[] = [
   { level_name: "Excellent", points: 100, description: "Displays all required components clearly and accurately.", display_order: 0 },
@@ -126,6 +144,61 @@ export function isReadingType(value?: string | null) {
 
 export function isQuizType(value?: string | null) {
   return value?.toUpperCase() === "QUIZ";
+}
+
+export function canPublishFromClassworkDetail(
+  classwork: Pick<TeacherClasswork, "classwork_type" | "is_published" | "is_archived">,
+) {
+  return (
+    !classwork.is_published &&
+    !classwork.is_archived &&
+    ["ASSIGNMENT", "ACTIVITY", "QUIZ"].includes(classwork.classwork_type.toUpperCase())
+  );
+}
+
+export function compareTrackingStudentsBySurname(
+  left: TrackingStudent,
+  right: TrackingStudent,
+) {
+  const compare = (a?: string | null, b?: string | null) =>
+    (a ?? "").trim().localeCompare((b ?? "").trim(), undefined, {
+      sensitivity: "base",
+    });
+  const bothHaveSurnames = Boolean(left.last_name?.trim() && right.last_name?.trim());
+  if (bothHaveSurnames) {
+    return (
+      compare(left.last_name, right.last_name) ||
+      compare(left.first_name, right.first_name) ||
+      compare(left.student_name, right.student_name) ||
+      left.student_id.localeCompare(right.student_id)
+    );
+  }
+  return (
+    compare(left.student_name, right.student_name) ||
+    left.student_id.localeCompare(right.student_id)
+  );
+}
+
+export function isTrackingStudentGraded(student: TrackingStudent) {
+  return (
+    student.status === "graded" ||
+    (student.grade !== null && student.grade !== undefined)
+  );
+}
+
+export function matchesTrackingFilters(
+  student: TrackingStudent,
+  submissionFilter: SubmissionStatusFilter,
+  gradingFilter: GradingStatusFilter,
+  submissionStatus: Exclude<SubmissionStatusFilter, "all">,
+) {
+  const matchesSubmission =
+    submissionFilter === "all" || submissionStatus === submissionFilter;
+  const graded = isTrackingStudentGraded(student);
+  const matchesGrading =
+    gradingFilter === "all" ||
+    (gradingFilter === "graded" ? graded : !graded);
+  return matchesSubmission && matchesGrading;
 }
 
 export function submissionStatusLabel(status?: string | null) {
