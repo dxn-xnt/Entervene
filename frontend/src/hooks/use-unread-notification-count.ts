@@ -5,7 +5,9 @@ export function useUnreadNotificationCount(enabled = true) {
   const [unreadCount, setUnreadCount] = useState(0);
 
   const refresh = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled) {
+      return;
+    }
     try {
       const result = await getNotifications(true, 1);
       setUnreadCount(result.unread_count);
@@ -18,6 +20,7 @@ export function useUnreadNotificationCount(enabled = true) {
     if (!enabled) {
       return;
     }
+
     const handleChange = () => void refresh();
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") void refresh();
