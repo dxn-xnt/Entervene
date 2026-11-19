@@ -169,6 +169,21 @@ export class PracticeAssessmentApiError extends Error {
   }
 }
 
+const isPracticeAssessmentDetail = (value: unknown): value is PracticeAssessmentDetail => {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.practice_assessment_id === "number" &&
+    typeof item.intervention_id === "number" &&
+    typeof item.title === "string" &&
+    typeof item.status === "string" &&
+    typeof item.gatekeeper_policy === "string" &&
+    Number.isFinite(Number(item.passing_percentage)) &&
+    typeof item.version === "number" &&
+    Array.isArray(item.questions)
+  );
+};
+
 async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
   const headers: Record<string, string> = {};
@@ -213,9 +228,20 @@ export async function getTeacherPracticeAssessment(
   interventionId: number
 ): Promise<PracticeAssessmentDetail | null> {
   try {
-    return await request<PracticeAssessmentDetail>(teacherBase(interventionId));
+    const assessment = await request<unknown>(teacherBase(interventionId));
+    if (!isPracticeAssessmentDetail(assessment)) {
+      throw new PracticeAssessmentApiError(
+        502,
+        "The server returned an invalid Practice Assessment response.",
+      );
+    }
+    return assessment;
   } catch (err) {
-    if (err instanceof PracticeAssessmentApiError && err.status === 404) {
+    if (
+      err instanceof PracticeAssessmentApiError &&
+      err.status === 404 &&
+      err.message.trim().toLowerCase() === "practice assessment not found for this intervention"
+    ) {
       return null;
     }
     throw err;
@@ -250,6 +276,35 @@ export async function updateTeacherPracticeAssessment(
   return request<PracticeAssessmentDetail>(teacherBase(interventionId), "PATCH", payload);
 }
 
+/** Atomically save settings, the complete question set, and optional publication. */
+export async function saveTeacherPracticeAssessment(
+  interventionId: number,
+  payload: {
+    title: string;
+    passing_percentage: number;
+    gatekeeper_policy: PracticeGatekeeperPolicy;
+    questions?: PracticeQuestionDraft[];
+    publish?: boolean;
+  }
+): Promise<PracticeAssessmentDetail> {
+  return request<PracticeAssessmentDetail>(`${teacherBase(interventionId)}/save`, "PUT", {
+    ...payload,
+    questions: payload.questions?.map((q, idx) => ({
+      question_text: q.question_text,
+      question_type: q.question_type,
+      points: q.points ?? 1.0,
+      explanation: q.explanation || null,
+      display_order: idx + 1,
+      is_ai_generated: q.is_ai_generated ?? false,
+      options: q.options.map((opt, optIdx) => ({
+        option_text: opt.option_text,
+        is_correct: opt.is_correct,
+        option_order: optIdx + 1,
+      })),
+    })),
+  });
+}
+
 /**
  * Publish the practice assessment. Requires at least one configured question.
  */
@@ -273,7 +328,8 @@ export async function archiveTeacherPracticeAssessment(
  */
 export async function batchSavePracticeQuestions(
   interventionId: number,
-  questions: PracticeQuestionDraft[]
+  questions: PracticeQuestionDraft[],
+  options: { replaceExisting: boolean }
 ): Promise<PracticeQuestionDraft[]> {
   return request<PracticeQuestionDraft[]>(`${teacherBase(interventionId)}/questions/batch`, "POST", {
     questions: questions.map((q, idx) => ({
@@ -289,6 +345,7 @@ export async function batchSavePracticeQuestions(
         option_order: optIdx + 1,
       })),
     })),
+    replace_existing: options.replaceExisting,
   });
 }
 

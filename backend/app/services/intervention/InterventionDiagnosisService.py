@@ -13,11 +13,13 @@ from app.models.academic.Lesson import Lesson
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.classwork.Classwork import Classwork
+from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkCoverage import ClassworkCoverage
 from app.models.quiz.Question import Question
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
+from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.grading.ComponentMapper import CanonicalGradingComponent, classify_classwork_component
 from app.services.prediction.CurrentPeriodFeatureBuilderService import _classwork_rows
 
@@ -67,6 +69,139 @@ def _single_lesson_attribution(db: Session, classwork_id: int, subject_id: int) 
     if competency is None or competency.subject_id != subject_id:
         return None
     return lesson, competency
+
+
+def _single_lesson_quiz_attribution(
+    db: Session, classwork_id: int, submission_id: int, subject_id: int,
+) -> tuple[Lesson, Competency] | None:
+    """Attribute a quiz total ONLY when no per-question answers exist and 100% of quiz items map to one lesson."""
+    quiz = db.query(Quiz).filter(Quiz.classwork_id == classwork_id).first()
+    if quiz is None:
+        return None
+    # If the student recorded any per-question QuizAnswer rows (e.g. unmapped questions),
+    # never fall back to whole-activity attribution.
+    if db.query(QuizAnswer.answer_id).filter_by(submission_id=submission_id).first() is not None:
+        return None
+    single = _single_lesson_attribution(db, classwork_id, subject_id)
+    if single is None:
+        return None
+    lesson, competency = single
+    question_rows = (
+        db.query(Question.lesson_id)
+        .join(QuizQuestion, QuizQuestion.question_id == Question.question_id)
+        .filter(QuizQuestion.quiz_id == quiz.quiz_id)
+        .all()
+    )
+    if not question_rows:
+        return None
+    if any(row[0] != lesson.lesson_id for row in question_rows):
+        return None
+    return lesson, competency
+
+
+def effective_diagnosis_snapshot(db: Session | None, row: Any) -> dict[str, Any]:
+    """Return a non-mutating diagnosis view enriched with verified single-lesson quiz evidence and classwork_type."""
+    diagnosis = getattr(row, "diagnosis_snapshot", None)
+    if not isinstance(diagnosis, dict):
+        return {}
+    if db is None or not hasattr(row, "subject_id"):
+        return diagnosis
+
+    raw_activities = diagnosis.get("supporting_activities") or []
+    enriched_activities: list[dict[str, Any]] | None = None
+    for idx, act in enumerate(raw_activities):
+        if isinstance(act, dict) and not act.get("classwork_type") and isinstance(act.get("classwork_id"), int):
+            cw = db.get(Classwork, act["classwork_id"])
+            if cw is not None and cw.subject_id == row.subject_id:
+                if enriched_activities is None:
+                    enriched_activities = [dict(item) if isinstance(item, dict) else item for item in raw_activities]
+                enriched_activities[idx]["classwork_type"] = cw.classwork_type
+
+    scored = diagnosis.get("lowest_supported_competencies") or []
+    coverage = diagnosis.get("manual_assessment_coverage") or []
+    weakest = set(diagnosis.get("weakest_supported_components") or [])
+
+    hydrated_competencies: list[dict[str, Any]] | None = None
+    if not scored and not coverage and weakest and raw_activities:
+        competency_evidence: dict[int, list[dict[str, Any]]] = defaultdict(list)
+        for act in raw_activities:
+            if not isinstance(act, dict) or act.get("component") not in weakest:
+                continue
+            classwork_id = act.get("classwork_id")
+            assignment_id = act.get("classwork_assignment_id")
+            submission_id = act.get("submission_id")
+            score = act.get("score")
+            possible = act.get("possible_score")
+            if (
+                not all(isinstance(v, int) for v in (classwork_id, assignment_id, submission_id))
+                or not isinstance(score, (int, float))
+                or not isinstance(possible, (int, float))
+                or possible <= 0
+                or act.get("activity_mode") == "MANUAL"
+            ):
+                continue
+            assignment = db.get(ClassworkAssignment, assignment_id)
+            classwork = db.get(Classwork, classwork_id)
+            submission = db.get(StudentSubmission, submission_id)
+            if (
+                assignment is None or classwork is None or submission is None
+                or assignment.classwork_id != classwork_id
+                or assignment.class_id != getattr(row, "class_id", None)
+                or assignment.academic_period_id != getattr(row, "academic_period_id", None)
+                or classwork.subject_id != row.subject_id
+                or submission.classwork_assignment_id != assignment_id
+                or submission.student_id != getattr(row, "student_id", None)
+                or submission.grade is None
+                or classwork.total_points is None
+                or abs(float(submission.grade) - float(score)) >= 0.000001
+                or abs(float(classwork.total_points) - float(possible)) >= 0.000001
+            ):
+                continue
+            single = _single_lesson_quiz_attribution(db, classwork_id, submission_id, row.subject_id)
+            if single is None:
+                continue
+            lesson, competency = single
+            competency_evidence[competency.competency_id].append({
+                "source_type": "CLASSWORK_SINGLE_LESSON",
+                "lesson_id": lesson.lesson_id,
+                "lesson_title": lesson.title,
+                "competency_id": competency.competency_id,
+                "competency_code": competency.competency_code,
+                "competency_statement": competency.statement,
+                "score": float(score),
+                "possible_score": float(possible),
+                "classwork_id": classwork_id,
+                "classwork_assignment_id": assignment_id,
+                "submission_id": submission_id,
+                "activity_title": act.get("title") or classwork.title,
+                "component": act["component"],
+            })
+        if competency_evidence:
+            hydrated_competencies = []
+            for competency_id, evidence in competency_evidence.items():
+                earned = sum(item["score"] for item in evidence)
+                total_possible = sum(item["possible_score"] for item in evidence)
+                hydrated_competencies.append({
+                    "competency_id": competency_id,
+                    "competency_code": evidence[0]["competency_code"],
+                    "competency_statement": evidence[0]["competency_statement"],
+                    "percent": round(earned / total_possible * 100, 4),
+                    "score": round(earned, 4),
+                    "possible_score": round(total_possible, 4),
+                    "supporting_scores": evidence,
+                })
+            hydrated_competencies.sort(key=lambda item: (item["percent"], item["competency_id"]))
+
+    if enriched_activities is None and hydrated_competencies is None:
+        return diagnosis
+
+    updated = dict(diagnosis)
+    if enriched_activities is not None:
+        updated["supporting_activities"] = enriched_activities
+    if hydrated_competencies is not None:
+        updated["lowest_supported_competencies"] = hydrated_competencies
+        updated["competency_detail_status"] = "AVAILABLE"
+    return updated
 
 
 def _manual_coverage_at_cutoff(
@@ -189,6 +324,7 @@ def build_candidate_diagnosis(db: Session, prediction: DevelopmentCurrentTermPre
             "classwork_assignment_id": assignment.classwork_assignment_id,
             "submission_id": submission.submission_id,
             "title": classwork.title,
+            "classwork_type": classwork.classwork_type,
             "activity_mode": classwork.activity_mode,
             "component": component,
             "exam_subtype": classwork.exam_subtype,
@@ -227,10 +363,15 @@ def build_candidate_diagnosis(db: Session, prediction: DevelopmentCurrentTermPre
         if component not in weakest:
             continue
         linked = _quiz_item_evidence(db, submission.submission_id, classwork.classwork_id, prediction.subject_id)
-        # A quiz total cannot stand in for missing per-question mappings or scores.
-        # Whole-activity attribution is reserved for activities without quiz items.
-        if not linked and not db.query(Quiz.quiz_id).filter(Quiz.classwork_id == classwork.classwork_id).first():
-            single = _single_lesson_attribution(db, classwork.classwork_id, prediction.subject_id)
+        # Whole-activity attribution applies to single-lesson non-quiz activities, or to a
+        # quiz scored without per-question answers ONLY when 100% of quiz items map to that one lesson.
+        if not linked:
+            has_quiz = db.query(Quiz.quiz_id).filter(Quiz.classwork_id == classwork.classwork_id).first() is not None
+            single = (
+                _single_lesson_quiz_attribution(db, classwork.classwork_id, submission.submission_id, prediction.subject_id)
+                if has_quiz
+                else _single_lesson_attribution(db, classwork.classwork_id, prediction.subject_id)
+            )
             if single is not None:
                 lesson, competency = single
                 linked = [{

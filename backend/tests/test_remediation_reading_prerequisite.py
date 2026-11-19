@@ -903,3 +903,67 @@ def test_historical_published_activity_is_not_backfilled(candidate_context):
     assert remediation_reading_prerequisites(db, historical.classwork_assignment_id) == []
 
 
+def test_update_classwork_publish_blocks_without_readings_and_prevents_partial_state(candidate_context):
+    from app.schemas.Classwork import ClassworkUpdate
+    from app.services.classwork.ClassworkService import update_classwork_record
+
+    ctx = candidate_context
+    db = ctx["db"]
+    activate_teacher_candidate(db, _staff(ctx), _id(ctx))
+
+    intervention = ctx["candidate"]
+    intervention.remediation_plan = {
+        "teacher_choice": "CLASSWORK",
+        "grade_treatment": "PRACTICE_ONLY",
+        "selected_resources": [],
+    }
+    db.commit()
+
+    draft = asyncio.run(create_classwork_wizard_record(**_wizard_kwargs(ctx, uuid4(), is_published=False)))
+    assignment = db.query(ClassworkAssignment).filter_by(classwork_id=draft.classwork_id).one()
+    cw = db.get(Classwork, draft.classwork_id)
+    assert cw.is_published is False
+    assert assignment.is_published is False
+
+    # EditClassworkModal / ClassworkView calls PUT /classwork/{id} with is_published=True
+    # before POST /classwork/{id}/assign. It must fail before mutating classwork.is_published.
+    with pytest.raises(HTTPException) as exc:
+        update_classwork_record(draft.classwork_id, ClassworkUpdate(is_published=True), _staff(ctx), db)
+    assert exc.value.status_code == 400
+    assert "at least one valid Supporting Reading" in exc.value.detail
+
+    db.refresh(cw)
+    db.refresh(assignment)
+    assert cw.is_published is False
+    assert assignment.is_published is False
+    assert remediation_reading_prerequisites(db, assignment.classwork_assignment_id) == []
+
+    # After adding a valid Supporting Reading, PUT + assign succeeds cleanly
+    r1 = _reading(ctx, "Required Review Reading")
+    intervention.remediation_plan = {
+        "teacher_choice": "CLASSWORK",
+        "grade_treatment": "PRACTICE_ONLY",
+        "selected_resources": [{"kind": "CLASSWORK", "id": r1[0].classwork_id}],
+    }
+    db.commit()
+
+    updated = update_classwork_record(draft.classwork_id, ClassworkUpdate(is_published=True), _staff(ctx), db)
+    assert updated.is_published is True
+    identity = {"sub": str(ctx["staff"].user_id), "role": "teacher"}
+    assign_classwork_to_classes(
+        draft.classwork_id,
+        ClassworkAssignRequest(
+            class_ids=[ctx["class"].class_id],
+            academic_period_id=ctx["period"].academic_period_id,
+            is_published=True,
+        ),
+        _staff(ctx),
+        db,
+        identity,
+    )
+    db.refresh(assignment)
+    assert assignment.is_published is True
+    assert [p.reading_classwork_id for p in remediation_reading_prerequisites(db, assignment.classwork_assignment_id)] == [r1[0].classwork_id]
+
+
+

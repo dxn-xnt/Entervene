@@ -2,15 +2,20 @@
 
 from collections import defaultdict
 
+from sqlalchemy.orm import Session
+
 from app.models.intervention.Intervention import Intervention
+from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
 
 
 EXAM_SUBTYPES = {"SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"}
 COMPONENTS = {"WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"}
 
 
-def build_remediation_focus(row: Intervention) -> dict:
-    diagnosis = row.diagnosis_snapshot if isinstance(row.diagnosis_snapshot, dict) else {}
+def build_remediation_focus(row: Intervention, db: Session | None = None) -> dict:
+    diagnosis = effective_diagnosis_snapshot(db, row) if db is not None else (
+        row.diagnosis_snapshot if isinstance(row.diagnosis_snapshot, dict) else {}
+    )
     weakest = [value for value in diagnosis.get("weakest_supported_components", []) if value in COMPONENTS]
     component = weakest[0] if len(weakest) == 1 else None
     scored = diagnosis.get("lowest_supported_competencies") or []

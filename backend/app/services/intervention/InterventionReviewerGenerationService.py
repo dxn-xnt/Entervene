@@ -14,6 +14,7 @@ from app.models.intervention.InterventionSupportMaterial import InterventionSupp
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.schemas.InterventionSupportMaterial import MaterialRead
 from app.services.ai import Provider
+from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
 from app.services.intervention.InterventionSupportMaterialService import _basis, _read
 from app.services.intervention.TeacherInterventionService import _eligible_scope, _source
 
@@ -40,9 +41,13 @@ def _short(value: object, limit: int = 120) -> str:
     return str(value or "").strip()[:limit]
 
 
-def build_grounding(row: Intervention, source: DevelopmentCurrentTermPrediction) -> dict:
+def build_grounding(
+    row: Intervention,
+    source: DevelopmentCurrentTermPrediction,
+    db: Session | None = None,
+) -> dict:
     """Select only verified, bounded educational facts; never infer weakness from coverage."""
-    diagnosis = row.diagnosis_snapshot
+    diagnosis = effective_diagnosis_snapshot(db, row) if db is not None else row.diagnosis_snapshot
     scored = diagnosis.get("lowest_supported_competencies") or []
     question_scores = [
         {
@@ -87,6 +92,8 @@ def build_grounding(row: Intervention, source: DevelopmentCurrentTermPrediction)
         "component_performance": components,
         "supporting_scored_activities": [
             {"title": _short(item.get("title")), "component": item.get("component"),
+             "classwork_type": item.get("classwork_type"),
+             "activity_mode": item.get("activity_mode"),
              "score": item.get("score"), "possible_score": item.get("possible_score"),
              "evidence_meaning": "activity total; not an individual topic or competency score"}
             for item in (diagnosis.get("supporting_activities") or [])[:6]

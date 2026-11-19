@@ -1003,6 +1003,30 @@ def update_classwork_record(
             raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
         if "is_graded" in values and values["is_graded"] != classwork.is_graded:
             raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
+        targeted_assignments = [
+            a for a in classwork.assignments
+            if a.recipient_student_id is not None and a.source_intervention_id is not None
+        ]
+        if values.get("is_published") is True and targeted_assignments:
+            from app.models.intervention.Intervention import Intervention
+            from app.services.intervention.RemediationReadingPrerequisiteService import (
+                remediation_reading_prerequisites,
+                resolve_reading_prerequisite_snapshot_items,
+            )
+            for targeted_assignment in targeted_assignments:
+                if targeted_assignment.is_published:
+                    continue
+                if remediation_reading_prerequisites(db, targeted_assignment.classwork_assignment_id):
+                    continue
+                intervention = db.get(Intervention, targeted_assignment.source_intervention_id)
+                if intervention is None or intervention.status != "ACTIVE":
+                    raise HTTPException(status_code=404, detail="Active intervention not found")
+                resolve_reading_prerequisite_snapshot_items(
+                    db,
+                    intervention=intervention,
+                    remediation_assignment=targeted_assignment,
+                    require_readings=True,
+                )
         from app.services.intervention.RemediationRubricService import (
             assert_remediation_rubric_compatible,
             resolve_linked_original_classwork,

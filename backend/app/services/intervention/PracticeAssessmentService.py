@@ -28,6 +28,7 @@ from app.models.people.Student import Student
 from app.schemas.PracticeAssessment import (
     PracticeAssessmentCreate,
     PracticeAssessmentRead,
+    PracticeAssessmentSaveRequest,
     PracticeAssessmentUpdate,
     PracticeAttemptActiveOption,
     PracticeAttemptActiveQuestion,
@@ -397,16 +398,44 @@ def batch_save_questions(
 ) -> list[PracticeQuestion]:
     """Save a batch of questions (e.g. from approved AI generation or file import)."""
     assessment = get_assessment(db, staff_id, intervention_id)
+    assessment = db.query(PracticeAssessment).filter_by(
+        practice_assessment_id=assessment.practice_assessment_id,
+    ).with_for_update().one()
     _assert_no_student_attempts(db, assessment)
 
     for q in payload.questions:
         _validate_question_payload(q)
 
+    created = _save_question_batch(db, assessment, payload)
+    db.commit()
+    return created
+
+
+def _save_question_batch(
+    db: Session,
+    assessment: PracticeAssessment,
+    payload: PracticeQuestionBatchSave,
+) -> list[PracticeQuestion]:
+    """Apply a validated question batch without committing the surrounding transaction."""
     if payload.replace_existing:
+        existing_question_ids = [
+            question_id
+            for (question_id,) in db.query(PracticeQuestion.practice_question_id).filter_by(
+                practice_assessment_id=assessment.practice_assessment_id,
+                version=assessment.version,
+            ).all()
+        ]
+        if existing_question_ids:
+            # Do not depend on database-level cascades here. Explicit deletion
+            # keeps replacement consistent in SQLite tests and PostgreSQL, and
+            # prevents stale options from colliding if primary keys are reused.
+            db.query(PracticeQuestionOption).filter(
+                PracticeQuestionOption.practice_question_id.in_(existing_question_ids)
+            ).delete(synchronize_session="fetch")
         db.query(PracticeQuestion).filter_by(
             practice_assessment_id=assessment.practice_assessment_id,
             version=assessment.version,
-        ).delete()
+        ).delete(synchronize_session="fetch")
         db.flush()
         start_order = 0
     else:
@@ -439,8 +468,97 @@ def batch_save_questions(
             ))
         created.append(question)
 
-    db.commit()
     return created
+
+
+def save_assessment(
+    db: Session,
+    staff_id: str,
+    intervention_id: int,
+    payload: PracticeAssessmentSaveRequest,
+) -> PracticeAssessment:
+    """Atomically save configuration, questions, and optional publication state."""
+    intervention = db.get(Intervention, intervention_id)
+    if intervention is None:
+        raise HTTPException(status_code=404, detail="Intervention not found")
+    _require_teacher_scope(db, staff_id, intervention)
+
+    try:
+        # Validate the complete replacement before touching persistent state.
+        # The shared rollback path also closes the read transaction on failure.
+        if payload.questions is not None:
+            for question in payload.questions:
+                _validate_question_payload(question)
+
+        assessment = db.query(PracticeAssessment).filter_by(
+            intervention_id=intervention_id,
+        ).with_for_update().first()
+
+        if assessment is None:
+            assessment = PracticeAssessment(
+                intervention_id=intervention_id,
+                title=payload.title,
+                status="DRAFT",
+                gatekeeper_policy=payload.gatekeeper_policy,
+                passing_percentage=payload.passing_percentage,
+                shuffle_options=payload.shuffle_options if payload.shuffle_options is not None else True,
+                created_by_staff_id=staff_id,
+            )
+            db.add(assessment)
+            db.flush()
+
+        if payload.questions is not None:
+            _assert_no_student_attempts(db, assessment)
+            _save_question_batch(
+                db,
+                assessment,
+                PracticeQuestionBatchSave(
+                    questions=payload.questions,
+                    replace_existing=True,
+                ),
+            )
+
+        assessment.title = payload.title.strip()
+        assessment.passing_percentage = payload.passing_percentage
+        assessment.gatekeeper_policy = payload.gatekeeper_policy
+        if payload.shuffle_options is not None:
+            assessment.shuffle_options = payload.shuffle_options
+
+        if payload.publish:
+            if payload.questions is None:
+                existing_questions = list(assessment.questions)
+                if not existing_questions:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Cannot publish a practice assessment with zero questions. Add questions first.",
+                    )
+                for question in existing_questions:
+                    _validate_question_payload(PracticeQuestionCreate(
+                        question_text=question.question_text,
+                        question_type=question.question_type,  # type: ignore[arg-type]
+                        points=question.points,
+                        explanation=question.explanation,
+                        display_order=question.display_order,
+                        options=[
+                            PracticeOptionIn(
+                                option_text=option.option_text,
+                                is_correct=option.is_correct,
+                                option_order=option.option_order,
+                            )
+                            for option in question.options
+                        ],
+                    ))
+            assessment.status = "PUBLISHED"
+
+        db.commit()
+        assessment_id = assessment.practice_assessment_id
+        db.expire_all()
+        return db.query(PracticeAssessment).filter_by(
+            practice_assessment_id=assessment_id,
+        ).one()
+    except Exception:
+        db.rollback()
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -553,10 +671,13 @@ def start_or_resume_attempt(
         raise HTTPException(status_code=404, detail="Intervention not found")
     _require_student_scope(db, student_id, intervention)
 
+    # Serialize attempt creation with full-question synchronization. If an
+    # attempt commits first, the teacher save sees it and is rejected; if the
+    # teacher save commits first, the attempt snapshots the synchronized set.
     assessment = db.query(PracticeAssessment).filter_by(
         intervention_id=intervention_id,
         status="PUBLISHED",
-    ).first()
+    ).with_for_update().first()
     if assessment is None:
         raise HTTPException(status_code=404, detail="No published practice assessment available for this intervention")
 
