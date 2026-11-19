@@ -9,6 +9,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.services.subjects.SubjectShared import (
     DEFAULT_SUBJECT_STATUS,
+    ensure_standard_academic_levels,
     normalize_optional_text,
     normalized_text,
 )
@@ -28,6 +29,7 @@ def subject_import_template_csv(db: Session | None = None) -> str:
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(SUBJECT_IMPORT_HEADERS)
     if db is not None:
+        ensure_standard_academic_levels(db)
         levels = db.query(AcademicLevel).order_by(AcademicLevel.grade_level.asc()).all()
         templates = db.query(GradingTemplate).filter(GradingTemplate.status == "active").all()
         default_grade = str(levels[0].grade_level) if levels else "9"
@@ -107,7 +109,6 @@ def _resolve_academic_level(
             new_level = AcademicLevel(
                 level_name=f"Grade {grade_num}",
                 grade_level=grade_num,
-                requires_pathway=grade_num in (11, 12),
             )
             db.add(new_level)
             db.flush()
@@ -135,7 +136,7 @@ async def import_subject_catalog_csv(db: Session, file: UploadFile) -> dict:
     if errors:
         return {"total_rows": len(rows), "created_count": 0, "skipped_count": len(rows),
                 "error_count": len(errors), "errors": errors, "warnings": []}
-    all_levels = db.query(AcademicLevel).all()
+    all_levels = ensure_standard_academic_levels(db)
     levels_by_grade = {level.grade_level: level for level in all_levels}
     levels_by_name = {level.level_name.casefold(): level for level in all_levels if level.level_name}
     templates = db.query(GradingTemplate).filter(GradingTemplate.status == "active").all()

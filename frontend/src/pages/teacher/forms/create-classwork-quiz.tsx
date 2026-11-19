@@ -54,7 +54,6 @@ import type {
 import { Badge } from "@/components/retroui/Badge";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
-import { ReferenceLinkEditor } from "@/components/classwork-reference-links";
 import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
 
 interface CreateClassworkQuizModalProps {
@@ -107,7 +106,7 @@ export default function CreateClassworkQuizModal({
     const [createStep, setCreateStep] = useState<
         "quiz-source" | "details" | "quiz" | "assign"
     >("quiz-source");
-    const [referenceLinks, setReferenceLinks] = useState<ReferenceLinkDraft[]>([]);
+    const [referenceLinks] = useState<ReferenceLinkDraft[]>([]);
 
     const isSubjectLocked = Boolean(initialSubjectId) || Boolean(remediationTarget);
     const isLessonLocked = Boolean(initialLessonId);

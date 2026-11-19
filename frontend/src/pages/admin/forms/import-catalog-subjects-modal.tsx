@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Pencil } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/retroui/Badge";
@@ -142,6 +142,19 @@ export function ImportCatalogSubjectsDialog({
   const [catalogRows, setCatalogRows] = useState<CatalogImportDraftRow[] | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
+  const availableGradeOptions = useMemo(() => {
+    const optionsMap = new Map<string, string>();
+    for (const grade of TARGET_GRADES) {
+      optionsMap.set(String(grade), `Grade ${grade}`);
+    }
+    for (const lvl of academicLevels) {
+      optionsMap.set(String(lvl.grade_level), lvl.level_name);
+    }
+    return [...optionsMap.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => Number(a.value) - Number(b.value));
+  }, [academicLevels]);
+
   useEffect(() => {
     if (!pendingImport || pendingImport.kind !== "catalog") return;
     let active = true;
@@ -155,7 +168,6 @@ export function ImportCatalogSubjectsDialog({
           setCatalogRows(null);
           return;
         }
-        const validGrades = new Set(academicLevels.map((lvl) => String(lvl.grade_level)));
         const defaultGrade = academicLevels[0] ? String(academicLevels[0].grade_level) : "";
         const validTemplates = new Map(
           gradingTemplates.map((t) => [t.template_name.toLowerCase(), t.template_name]),
@@ -168,12 +180,7 @@ export function ImportCatalogSubjectsDialog({
         setCatalogRows(
           parsed.map((row) => {
             const digits = row.grade_level.replace(/\D/g, "");
-            const normalizedGrade =
-              validGrades.size > 0
-                ? validGrades.has(digits)
-                  ? digits
-                  : defaultGrade || digits
-                : digits || row.grade_level;
+            const normalizedGrade = digits || row.grade_level.trim() || defaultGrade;
             const matchedTpl = validTemplates.get(row.grading_template.toLowerCase());
             const normalizedTemplate =
               validTemplates.size > 0
@@ -298,17 +305,11 @@ export function ImportCatalogSubjectsDialog({
                             </Select.Trigger>
                             <Select.Content>
                               <Select.Group>
-                                {academicLevels.length > 0
-                                  ? academicLevels.map((lvl) => (
-                                      <Select.Item key={lvl.academic_level_id} value={String(lvl.grade_level)}>
-                                        {lvl.level_name}
-                                      </Select.Item>
-                                    ))
-                                  : [...TARGET_GRADES].map((grade) => (
-                                      <Select.Item key={grade} value={String(grade)}>
-                                        Grade {grade}
-                                      </Select.Item>
-                                    ))}
+                                {availableGradeOptions.map((opt) => (
+                                  <Select.Item key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </Select.Item>
+                                ))}
                               </Select.Group>
                             </Select.Content>
                           </Select>
@@ -365,7 +366,7 @@ export function ImportCatalogSubjectsDialog({
                         <div className="flex shrink-0 items-center gap-2">
                           {row.grade_level ? (
                             <Badge size="sm" variant="secondary">
-                              Grade {row.grade_level}
+                              {availableGradeOptions.find((opt) => opt.value === row.grade_level)?.label ?? `Grade ${row.grade_level}`}
                             </Badge>
                           ) : null}
                           <Button
