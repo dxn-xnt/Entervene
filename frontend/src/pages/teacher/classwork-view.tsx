@@ -1,5 +1,7 @@
 import {
   Archive,
+  CircleHelp,
+  Send,
   FileText,
   Pencil,
   ClipboardList,
@@ -16,9 +18,16 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import type { QuizAnalysis } from "./classworks/quiz-builder-types";
 import QuizGradingModal from "@/components/quiz-grading-modal";
 import {
+  canPublishFromClassworkDetail,
+  compareTrackingStudentsBySurname,
   formatDate,
+  formatStudentRosterName,
+  isTrackingStudentGraded,
   isQuizType,
   isReadingType,
+  matchesTrackingFilters,
+  type GradingStatusFilter,
+  type SubmissionStatusFilter,
 } from "@/lib/classwork-utils";
 import type {
   AssignmentTracking,
@@ -125,12 +134,14 @@ export default function ClassworkView({
   const [selectedGradingSubmissionId, setSelectedGradingSubmissionId] =
     useState<number | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const editDeepLinkHandledRef = useRef(false);
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "on_time" | "late" | "missing"
-  >("all");
+  const [statusFilter, setStatusFilter] = useState<SubmissionStatusFilter>("all");
+  const [gradingStatusFilter, setGradingStatusFilter] =
+    useState<GradingStatusFilter>("all");
   const [detailError, setDetailError] = useState("");
   const [submissionSort, setSubmissionSort] = useState<"name" | "score">(
     "name",
@@ -154,6 +165,7 @@ export default function ClassworkView({
   useEffect(() => {
     if (contextState === "historical") {
       setShowEditModal(false);
+      setShowPublishConfirm(false);
       setShowArchiveConfirm(false);
     }
     if (blocksLiveActions) {
@@ -301,6 +313,81 @@ export default function ClassworkView({
       toast.error({ title: "Unable to archive classwork", description: message });
     } finally {
       setIsArchiving(false);
+    }
+  };
+
+  const publishSelectedClasswork = async () => {
+    if (!selected || selected.is_published || selected.is_archived || blocksLiveActions) return;
+
+    setIsPublishing(true);
+    setDetailError("");
+    try {
+      const publishResponse = await apiFetch(
+        `/api/v1/classwork-assignments/classwork/${selected.classwork_id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_published: true }),
+        },
+      );
+      if (!publishResponse.ok) {
+        const body = await publishResponse.json().catch(() => ({}));
+        const detail = body.detail;
+        const message =
+          typeof detail === "string"
+            ? detail
+            : detail && typeof detail === "object" && typeof detail.message === "string"
+              ? detail.message
+              : "Unable to publish classwork.";
+        throw new Error(message);
+      }
+
+      const published = (await publishResponse.json()) as TeacherClasswork;
+      for (const assignment of selected.assignments ?? []) {
+        const assignmentResponse = await apiFetch(
+          `/api/v1/classwork-assignments/classwork/${selected.classwork_id}/assign`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              class_ids: [assignment.class_id],
+              due_date: assignment.due_date ?? null,
+              lock_date: assignment.lock_date ?? null,
+              allow_late_submissions: assignment.allow_late_submissions ?? false,
+              max_attempts: isQuizType(selected.classwork_type)
+                ? assignment.max_attempts ?? 1
+                : null,
+              is_published: true,
+            }),
+          },
+        );
+        if (!assignmentResponse.ok) {
+          const body = await assignmentResponse.json().catch(() => ({}));
+          const detail = body.detail;
+          throw new Error(
+            typeof detail === "string"
+              ? detail
+              : "Unable to publish classwork assignment settings.",
+          );
+        }
+      }
+
+      const refreshedResponse = await apiFetch(
+        `/api/v1/classwork-assignments/classwork/${selected.classwork_id}`,
+      );
+      const refreshed = refreshedResponse.ok
+        ? ((await refreshedResponse.json()) as TeacherClasswork)
+        : published;
+      setSelected(refreshed);
+      onUpdated?.(refreshed);
+      setShowPublishConfirm(false);
+      toast.success({ title: "Classwork published" });
+    } catch (err) {
+      setDetailError(
+        err instanceof Error ? err.message : "Unable to publish classwork.",
+      );
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -519,9 +606,12 @@ export default function ClassworkView({
     const rows = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
     return rows.sort((a, b) => {
       if (submissionSort === "score") {
-        return (b.grade ?? -1) - (a.grade ?? -1);
+        return (
+          (b.grade ?? -1) - (a.grade ?? -1) ||
+          compareTrackingStudentsBySurname(a, b)
+        );
       }
-      return a.student_name.localeCompare(b.student_name);
+      return compareTrackingStudentsBySurname(a, b);
     });
   }, [submissionSort, tracking]);
 
@@ -554,11 +644,15 @@ export default function ClassworkView({
   );
 
   const filteredTrackingRows = useMemo(() => {
-    return trackingRows.filter((student) => {
-      if (statusFilter === "all") return true;
-      return getStudentSubmissionStatus(student) === statusFilter;
-    });
-  }, [statusFilter, trackingRows, getStudentSubmissionStatus]);
+    return trackingRows.filter((student) =>
+      matchesTrackingFilters(
+        student,
+        statusFilter,
+        gradingStatusFilter,
+        getStudentSubmissionStatus(student),
+      ),
+    );
+  }, [gradingStatusFilter, statusFilter, trackingRows, getStudentSubmissionStatus]);
 
   const isReading = Boolean(selected && isReadingType(selected.classwork_type));
   const totalStudents = tracking?.total_students ?? 0;
@@ -573,11 +667,7 @@ export default function ClassworkView({
   );
 
   const gradedCount =
-    tracking?.submitted?.filter(
-      (student) =>
-        (student.grade !== null && student.grade !== undefined) ||
-        student.status === "graded",
-    ).length ?? 0;
+    tracking?.submitted?.filter(isTrackingStudentGraded).length ?? 0;
 
   const gradingRate =
     submittedCount > 0 ? Math.round((gradedCount / submittedCount) * 100) : 0;
@@ -786,6 +876,33 @@ export default function ClassworkView({
             </div>
 
             <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
+              {canPublishFromClassworkDetail(selected) && (
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <span className="inline-flex">
+                      <Button
+                        type="button"
+                        size="header"
+                        variant="outline"
+                        onClick={() => setShowPublishConfirm(true)}
+                        disabled={isPublishing || isArchiving || blocksLiveActions}
+                        className="whitespace-nowrap gap-2"
+                      >
+                        <Send size={16} />
+                        {isPublishing ? "Publishing..." : "Publish Now"}
+                      </Button>
+                    </span>
+                  } />
+                  {blocksLiveActions && (
+                    <TooltipContent>
+                      {isFuturePlanning
+                        ? "Future-term classwork cannot be published yet"
+                        : "Historical records are read-only"}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              )}
+
               <Tooltip>
                 <TooltipTrigger render={
                   <span className="inline-flex">
@@ -794,11 +911,11 @@ export default function ClassworkView({
                       size="header"
                       variant="outline"
                       onClick={() => setShowEditModal(true)}
-                      disabled={isArchiving || isReadOnly}
+                      disabled={isPublishing || isArchiving || isReadOnly}
                       className="whitespace-nowrap gap-2"
                     >
                       <Pencil size={16} />
-                      Edit Classwork
+                      Edit
                     </Button>
                   </span>
                 } />
@@ -813,11 +930,11 @@ export default function ClassworkView({
                       size="header"
                       variant="outline"
                       onClick={() => setShowArchiveConfirm(true)}
-                      disabled={isArchiving || isReadOnly}
+                      disabled={isPublishing || isArchiving || isReadOnly}
                       className="whitespace-nowrap gap-2 bg-primary"
                     >
                       <Archive size={16} />
-                      Archive Classwork
+                      Archive
                     </Button>
                   </span>
                 } />
@@ -920,25 +1037,27 @@ export default function ClassworkView({
                   </Card.Content>
                 </Card>
 
-                <Card className="w-full p-0 border-0! shadow-none px-2">
-                  <Card.Content className="space-y-3">
-                    <Card.Title className="mb-1 text-lg">
-                      Attached Files
-                    </Card.Title>
+                {!isQuizType(selected.classwork_type) && (
+                  <Card className="w-full p-0 border-0! shadow-none px-2">
+                    <Card.Content className="space-y-3">
+                      <Card.Title className="mb-1 text-lg">
+                        Attached Files
+                      </Card.Title>
 
-                    {selected.attachments.length > 0 ? (
-                      <AttachmentDisplay
-                        attachments={selected.attachments}
-                        type="classwork"
-                        downloadUrl={(attachmentId) =>
-                          `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
-                        }
-                      />
-                    ) : (
-                      <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={<FileText />} title="No files attached" description="This classwork has no attached files." />
-                    )}
-                  </Card.Content>
-                </Card>
+                      {selected.attachments.length > 0 ? (
+                        <AttachmentDisplay
+                          attachments={selected.attachments}
+                          type="classwork"
+                          downloadUrl={(attachmentId) =>
+                            `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
+                          }
+                        />
+                      ) : (
+                        <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={<FileText />} title="No files attached" description="This classwork has no attached files." />
+                      )}
+                    </Card.Content>
+                  </Card>
+                )}
                 {!!selected.reference_links?.length && <Card className="w-full p-0 border-0! shadow-none px-2">
                   <Card.Content className="space-y-3">
                     <Card.Title className="mb-1 text-lg">Reference Links</Card.Title>
@@ -975,6 +1094,17 @@ export default function ClassworkView({
                   </Card.Content>
                 </Card>
               )}
+              <ConfirmDialog
+                open={showPublishConfirm && !blocksLiveActions}
+                onOpenChange={setShowPublishConfirm}
+                title="Publish Classwork"
+                confirmationTitle={`Publish "${selected.title}" now?`}
+                description="This will run the existing publication checks and make the classwork available to students in its assigned sections."
+                confirmLabel={isPublishing ? "Publishing..." : "Publish Now"}
+                isLoading={isPublishing}
+                onCancel={() => setShowPublishConfirm(false)}
+                onConfirm={publishSelectedClasswork}
+              />
               <ConfirmDialog
                 open={showArchiveConfirm && !isReadOnly}
                 onOpenChange={setShowArchiveConfirm}
@@ -1233,7 +1363,20 @@ export default function ClassworkView({
                       {needsGrading && (
                         <div className="space-y-1.5">
                           <div className="flex justify-between items-center text-sm text-foreground">
-                            <span>Grading Completion</span>
+                            <Tooltip>
+                              <TooltipTrigger render={
+                                <span
+                                  className="inline-flex items-center gap-1 font-medium"
+                                  tabIndex={0}
+                                >
+                                  Grading Completion
+                                  <CircleHelp className="size-3.5 text-muted-foreground" />
+                                </span>
+                              } />
+                              <TooltipContent>
+                                Percentage of submitted work that has been graded.
+                              </TooltipContent>
+                            </Tooltip>
                             <span>
                               {isTrackingLoading && !tracking
                                 ? "Loading..."
@@ -1253,35 +1396,69 @@ export default function ClassworkView({
 
                   <div className="space-y-4 mt-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex flex-wrap items-center gap-3">
-                        {/* Status Filter Chips */}
-                        <div className="flex flex-row items-center gap-2 overflow pb-1 px-2">
-                          <span className="shrink-0 text-sm font-regular text-muted-foreground">
-                            Status:
-                          </span>
-                          {[
-                            { id: "all" as const, label: "All" },
-                            { id: "on_time" as const, label: "On Time" },
-                            { id: "late" as const, label: "Late" },
-                            { id: "missing" as const, label: "Missing" },
-                          ].map((chip) => (
-                            <Button
-                              key={chip.id}
-                              autoIcon={false}
-                              variant={statusFilter === chip.id ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setStatusFilter(chip.id)}
-                              className="shrink-0 border-black shadow-none"
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div className="flex min-w-40 flex-col gap-1">
+                          <label
+                            htmlFor="submission-status-filter"
+                            className="text-xs font-semibold text-muted-foreground"
+                          >
+                            Submission Status
+                          </label>
+                          <Select
+                            value={statusFilter}
+                            onValueChange={(value) =>
+                              setStatusFilter(value as SubmissionStatusFilter)
+                            }
+                          >
+                            <Select.Trigger
+                              id="submission-status-filter"
+                              className="h-8 min-w-40 shadow-none"
                             >
-                              {chip.label}
-                            </Button>
-                          ))}
+                              <Select.Value />
+                            </Select.Trigger>
+                            <Select.Content>
+                              <Select.Item value="all">All</Select.Item>
+                              <Select.Item value="on_time">On Time</Select.Item>
+                              <Select.Item value="late">Late</Select.Item>
+                              <Select.Item value="missing">Missing</Select.Item>
+                            </Select.Content>
+                          </Select>
+                        </div>
+
+                        <div className="flex min-w-40 flex-col gap-1">
+                          <label
+                            htmlFor="grading-status-filter"
+                            className="text-xs font-semibold text-muted-foreground"
+                          >
+                            Grading Status
+                          </label>
+                          <Select
+                            value={gradingStatusFilter}
+                            onValueChange={(value) =>
+                              setGradingStatusFilter(value as GradingStatusFilter)
+                            }
+                          >
+                            <Select.Trigger
+                              id="grading-status-filter"
+                              className="h-8 min-w-40 shadow-none"
+                            >
+                              <Select.Value />
+                            </Select.Trigger>
+                            <Select.Content>
+                              <Select.Item value="all">All</Select.Item>
+                              <Select.Item value="graded">Graded</Select.Item>
+                              <Select.Item value="not_graded">Not Graded</Select.Item>
+                            </Select.Content>
+                          </Select>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-semibold">
-                          Sort by
+                      <div className="flex min-w-40 flex-col gap-1">
+                        <label
+                          htmlFor="submission-sort"
+                          className="text-xs font-semibold text-muted-foreground"
+                        >
+                          Sort By
                         </label>
                         <Select
                           value={submissionSort}
@@ -1289,7 +1466,10 @@ export default function ClassworkView({
                             setSubmissionSort(value as "name" | "score")
                           }
                         >
-                          <Select.Trigger className="h-8 shadow-none">
+                          <Select.Trigger
+                            id="submission-sort"
+                            className="h-8 min-w-40 shadow-none"
+                          >
                             <Select.Value placeholder="Sort by" />
                           </Select.Trigger>
                           <Select.Content>
@@ -1327,6 +1507,7 @@ export default function ClassworkView({
                           </Table.Row>
                         ) : filteredTrackingRows.length > 0 ? (
                           filteredTrackingRows.map((student) => {
+                            const studentDisplayName = formatStudentRosterName(student);
                             const isGraded =
                               student.grade !== null &&
                               student.grade !== undefined;
@@ -1347,14 +1528,14 @@ export default function ClassworkView({
                                     <Avatar variant="student" className="size-8 shrink-0">
                                       <Avatar.Image
                                         src={student.avatar || "/avatars/student-avatars/1.svg"}
-                                        alt={student.student_name}
+                                        alt={studentDisplayName}
                                       />
                                       <Avatar.Fallback>
-                                        {student.student_name.slice(0, 1).toUpperCase()}
+                                        {studentDisplayName.slice(0, 1).toUpperCase()}
                                       </Avatar.Fallback>
                                     </Avatar>
                                     <span className="text-base font-semibold">
-                                      {student.student_name}
+                                      {studentDisplayName}
                                     </span>
                                   </div>
                                 </Table.Cell>
@@ -1387,8 +1568,8 @@ export default function ClassworkView({
                                 compact
                                 className="rounded! border-0 bg-card shadow-none hover:shadow-none"
                                 icon={<ClipboardList />}
-                                title={statusFilter === "all" ? "No students found" : statusFilter === "late" ? "No late submissions" : statusFilter === "on_time" ? "No on-time submissions" : "No missing submissions"}
-                                description={statusFilter === "all" ? "Students assigned to this classwork will appear here." : "No students match this status filter. Try viewing all statuses."}
+                                title={statusFilter === "all" && gradingStatusFilter === "all" ? "No students found" : "No matching students"}
+                                description={statusFilter === "all" && gradingStatusFilter === "all" ? "Students assigned to this classwork will appear here." : "No students match the selected submission and grading filters."}
                               />
                             </Table.Cell>
                           </Table.Row>

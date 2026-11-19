@@ -219,6 +219,9 @@ class QuizStudentQuestionAnswerOut(BaseModel):
 class QuizStudentScoreOut(BaseModel):
     student_id: str
     student_name: str
+    first_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    last_name: Optional[str] = None
     avatar: Optional[str] = None
     submission_id: Optional[int] = None
     status: str
@@ -264,6 +267,9 @@ class TeacherQuizSubmissionDetailResponse(BaseModel):
     classwork_id: int
     student_id: str
     student_name: str
+    first_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    last_name: Optional[str] = None
     avatar: Optional[str] = None
     status: str
     attempt_count: int
