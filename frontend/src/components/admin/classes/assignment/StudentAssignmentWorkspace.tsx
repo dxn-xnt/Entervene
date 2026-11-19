@@ -262,7 +262,8 @@ export default function StudentAssignmentWorkspace({
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-3">
+    <>
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 p-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-lg font-bold">
@@ -355,10 +356,8 @@ export default function StudentAssignmentWorkspace({
           </div>
         </div>
       </DndContext>
-      <Dialog.Footer
-        position="static"
-        className="-mx-4 -mb-4 mt-0 w-[calc(100%+2rem)] justify-between"
-      >
+      </div>
+      <Dialog.Footer className="justify-between">
         <Button variant="outline" autoIcon={false} onClick={onClose}>
           Close
         </Button>
@@ -383,7 +382,7 @@ export default function StudentAssignmentWorkspace({
           onClose={() => setDetailsSectionId(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 

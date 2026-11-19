@@ -17,7 +17,12 @@ import { useToast } from "@/components/retroui/Toast";
 type Step = "choose" | "import" | "manual";
 type Role = "Teacher" | "Student" | "Admin";
 type ImportRole = "Teacher" | "Student";
-type ImportErrorItem = { row: number; field: string; value: string; reason: string };
+type ImportErrorItem = {
+  row: number;
+  field: string;
+  value: string;
+  reason: string;
+};
 type ImportResult = {
   message?: string;
   created?: number;
@@ -207,12 +212,24 @@ function isValidDobFormat(value: string): boolean {
 
   if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(clean)) {
     const [p1, p2, year] = clean.split("/").map(Number);
-    return year >= 1900 && year <= 2100 && ((p1 >= 1 && p1 <= 12 && p2 >= 1 && p2 <= 31) || (p2 >= 1 && p2 <= 12 && p1 >= 1 && p1 <= 31));
+    return (
+      year >= 1900 &&
+      year <= 2100 &&
+      ((p1 >= 1 && p1 <= 12 && p2 >= 1 && p2 <= 31) ||
+        (p2 >= 1 && p2 <= 12 && p1 >= 1 && p1 <= 31))
+    );
   }
 
   if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(clean)) {
     const [year, month, day] = clean.split("/").map(Number);
-    return year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31;
+    return (
+      year >= 1900 &&
+      year <= 2100 &&
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= 31
+    );
   }
 
   return false;
@@ -224,16 +241,26 @@ function requiredColumnsForRole(role: ImportRole) {
     : ["first_name", "last_name", "email"];
 }
 
-async function validateCsvImportFile(file: File, role: ImportRole): Promise<ImportResult | null> {
+async function validateCsvImportFile(
+  file: File,
+  role: ImportRole,
+): Promise<ImportResult | null> {
   if (!file.name.toLowerCase().endsWith(".csv")) return null;
 
   const rows = parseCsvRows(await file.text());
-  const headers = rows[0]?.map((header, index) => index === 0 ? header.replace(/^\uFEFF/, "").trim() : header.trim()) ?? [];
+  const headers =
+    rows[0]?.map((header, index) =>
+      index === 0 ? header.replace(/^\uFEFF/, "").trim() : header.trim(),
+    ) ?? [];
   const headerSet = new Set(headers);
-  const missingRequired = requiredColumnsForRole(role).filter((column) => !headerSet.has(column));
+  const missingRequired = requiredColumnsForRole(role).filter(
+    (column) => !headerSet.has(column),
+  );
   const hasStudentGradeColumn =
     role !== "Student" ||
-    ["grade_level", "academic_level", "academic_level_id"].some((column) => headerSet.has(column));
+    ["grade_level", "academic_level", "academic_level_id"].some((column) =>
+      headerSet.has(column),
+    );
 
   if (missingRequired.length || !hasStudentGradeColumn) {
     return {
@@ -252,7 +279,9 @@ async function validateCsvImportFile(file: File, role: ImportRole): Promise<Impo
     };
   }
 
-  const dobIndex = headers.findIndex((header) => header === "dob" || header === "date_of_birth");
+  const dobIndex = headers.findIndex(
+    (header) => header === "dob" || header === "date_of_birth",
+  );
   if (dobIndex === -1) return null;
 
   const errors: ImportErrorItem[] = [];
@@ -289,8 +318,9 @@ function importSummary(result: ImportResult) {
   if (result.errors?.length) {
     return result.message ?? "Import failed. Please check the errors below.";
   }
-  return `${result.message ? `${result.message}. ` : ""}Imported ${result.created_count ?? result.created ?? 0
-    } user(s); failed ${result.failed_count ?? result.skipped ?? 0} user(s).`;
+  return `${result.message ? `${result.message}. ` : ""}Imported ${
+    result.created_count ?? result.created ?? 0
+  } user(s); failed ${result.failed_count ?? result.skipped ?? 0} user(s).`;
 }
 
 function backendImportResult(data: unknown, role: ImportRole): ImportResult {
@@ -298,7 +328,14 @@ function backendImportResult(data: unknown, role: ImportRole): ImportResult {
     return {
       message: "Import failed. Please check the file and try again.",
       failed_count: 1,
-      errors: [{ row: 1, field: "file", value: "", reason: "The server did not return a readable error." }],
+      errors: [
+        {
+          row: 1,
+          field: "file",
+          value: "",
+          reason: "The server did not return a readable error.",
+        },
+      ],
     };
   }
 
@@ -339,7 +376,13 @@ export default function AddUserModal({
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [manualSubmitting, setManualSubmitting] = useState(false);
-  const [manualErrors, setManualErrors] = useState<{ firstName?: string; lastName?: string; email?: string; contactNumber?: string; dob?: string }>({});
+  const [manualErrors, setManualErrors] = useState<{
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    contactNumber?: string;
+    dob?: string;
+  }>({});
   const [manualApiError, setManualApiError] = useState<string | null>(null);
   const [manualValidationAttempt, setManualValidationAttempt] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -365,7 +408,10 @@ export default function AddUserModal({
   const handleImportSubmit = async () => {
     if (!uploadedFile) return;
 
-    const validationResult = await validateCsvImportFile(uploadedFile, importRole);
+    const validationResult = await validateCsvImportFile(
+      uploadedFile,
+      importRole,
+    );
     if (validationResult) {
       setImportResult(validationResult);
       return;
@@ -387,17 +433,30 @@ export default function AddUserModal({
       );
 
       const data = await res.json().catch(() => ({}));
-      setImportResult(res.ok ? data : res.status === 400 || res.status === 422 ? backendImportResult(data, importRole) : null);
+      setImportResult(
+        res.ok
+          ? data
+          : res.status === 400 || res.status === 422
+            ? backendImportResult(data, importRole)
+            : null,
+      );
 
       if (res.ok) {
         onUserAdded?.(form);
         const created = data.created_count ?? data.created ?? 0;
-        if (created > 0) toast.success({ title: `${created} user${created === 1 ? "" : "s"} imported` });
+        if (created > 0)
+          toast.success({
+            title: `${created} user${created === 1 ? "" : "s"} imported`,
+          });
       } else if (res.status !== 400 && res.status !== 422) {
-        toast.error({ title: "User import failed", description: backendImportResult(data, importRole).message });
+        toast.error({
+          title: "User import failed",
+          description: backendImportResult(data, importRole).message,
+        });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to import users.";
+      const message =
+        error instanceof Error ? error.message : "Unable to import users.";
       toast.error({ title: "User import failed", description: message });
     } finally {
       setImporting(false);
@@ -415,11 +474,16 @@ export default function AddUserModal({
       }
       return { ...prev, [field]: value };
     });
-    if (field === "contactNumber" && (!value || /^\d{11}$/.test(value))) setManualErrors((current) => ({ ...current, contactNumber: undefined }));
-    if (field === "dob" && (!value || /^\d{4}-\d{2}-\d{2}$/.test(value))) setManualErrors((current) => ({ ...current, dob: undefined }));
-    if (field === "firstName" && value.trim()) setManualErrors((current) => ({ ...current, firstName: undefined }));
-    if (field === "lastName" && value.trim()) setManualErrors((current) => ({ ...current, lastName: undefined }));
-    if (field === "email" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) setManualErrors((current) => ({ ...current, email: undefined }));
+    if (field === "contactNumber" && (!value || /^\d{11}$/.test(value)))
+      setManualErrors((current) => ({ ...current, contactNumber: undefined }));
+    if (field === "dob" && (!value || /^\d{4}-\d{2}-\d{2}$/.test(value)))
+      setManualErrors((current) => ({ ...current, dob: undefined }));
+    if (field === "firstName" && value.trim())
+      setManualErrors((current) => ({ ...current, firstName: undefined }));
+    if (field === "lastName" && value.trim())
+      setManualErrors((current) => ({ ...current, lastName: undefined }));
+    if (field === "email" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()))
+      setManualErrors((current) => ({ ...current, email: undefined }));
   };
 
   const handleManualSubmit = async () => {
@@ -428,9 +492,21 @@ export default function AddUserModal({
     const nextErrors = {
       firstName: !form.firstName.trim() ? "Enter a first name." : undefined,
       lastName: !form.lastName.trim() ? "Enter a last name." : undefined,
-      email: !form.email.trim() ? "Enter an email address." : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) ? "Enter a valid email address." : undefined,
-      contactNumber: form.role !== "Admin" && form.contactNumber && !/^\d{11}$/.test(form.contactNumber) ? "Contact number must contain exactly 11 digits." : undefined,
-      dob: form.dob && !/^\d{4}-\d{2}-\d{2}$/.test(form.dob) ? "DOB must use YYYY-MM-DD format." : undefined,
+      email: !form.email.trim()
+        ? "Enter an email address."
+        : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+          ? "Enter a valid email address."
+          : undefined,
+      contactNumber:
+        form.role !== "Admin" &&
+        form.contactNumber &&
+        !/^\d{11}$/.test(form.contactNumber)
+          ? "Contact number must contain exactly 11 digits."
+          : undefined,
+      dob:
+        form.dob && !/^\d{4}-\d{2}-\d{2}$/.test(form.dob)
+          ? "DOB must use YYYY-MM-DD format."
+          : undefined,
     };
     if (Object.values(nextErrors).some(Boolean)) {
       setManualErrors(nextErrors);
@@ -456,7 +532,9 @@ export default function AddUserModal({
         student_lrn: form.studentLrn.trim(),
         grade_level: form.gradeLevel ? Number(form.gradeLevel) : null,
         prior_gwa: form.priorGwa.trim() ? Number(form.priorGwa.trim()) : null,
-        general_average: form.priorGwa.trim() ? Number(form.priorGwa.trim()) : null,
+        general_average: form.priorGwa.trim()
+          ? Number(form.priorGwa.trim())
+          : null,
       };
 
       if (form.role !== "Admin") {
@@ -472,19 +550,30 @@ export default function AddUserModal({
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const detail = typeof data.detail === "string" ? data.detail : "Unable to send invite.";
+        const detail =
+          typeof data.detail === "string"
+            ? data.detail
+            : "Unable to send invite.";
         if (res.status === 400 || res.status === 422) {
           setManualApiError(detail);
           setManualValidationAttempt((attempt) => attempt + 1);
-        } else toast.error({ title: "Unable to create user", description: detail });
+        } else
+          toast.error({ title: "Unable to create user", description: detail });
         return;
       }
 
       onUserAdded?.(form);
       handleClose();
-      toast.success({ title: "User created", description: `${form.firstName.trim()} ${form.lastName.trim()} was added successfully.` });
+      toast.success({
+        title: "User created",
+        description: `${form.firstName.trim()} ${form.lastName.trim()} was added successfully.`,
+      });
     } catch (error) {
-      toast.error({ title: "Unable to create user", description: error instanceof Error ? error.message : "Unable to send invite." });
+      toast.error({
+        title: "Unable to create user",
+        description:
+          error instanceof Error ? error.message : "Unable to send invite.",
+      });
     } finally {
       setManualSubmitting(false);
     }
@@ -518,8 +607,17 @@ export default function AddUserModal({
   const hasImportErrors = Boolean(importResult?.errors?.length);
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
-      <Dialog.Content size="md" data-admin-user-import={step === "import" ? "" : undefined} className="w-[calc(100vw-1.5rem)] max-w-lg rounded-none font-sans lg:max-w-[40%]">
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) handleClose();
+      }}
+    >
+      <Dialog.Content
+        size="md"
+        data-admin-user-import={step === "import" ? "" : undefined}
+        className="w-[calc(100vw-1.5rem)] max-w-lg rounded-none font-sans lg:max-w-[40%]"
+      >
         <Dialog.Header className="bg-primary text-black font-sans flex items-center justify-between">
           <div>
             <span className="text-xl font-bold normal-case">
@@ -563,7 +661,12 @@ export default function AddUserModal({
           <>
             <div className="flex flex-col gap-4 p-5">
               <Field label="Role for imported users">
-                <Select value={importRole} onValueChange={(val) => handleImportRoleChange(val as ImportRole)}>
+                <Select
+                  value={importRole}
+                  onValueChange={(val) =>
+                    handleImportRoleChange(val as ImportRole)
+                  }
+                >
                   <Select.Trigger className="w-full">
                     <Select.Value />
                   </Select.Trigger>
@@ -574,7 +677,10 @@ export default function AddUserModal({
                 </Select>
               </Field>
 
-              <div data-import-surface className="flex items-center justify-between rounded border-2 border-black bg-muted/40 p-3 shadow-[2px_2px_0_#000]">
+              <div
+                data-import-surface
+                className="flex items-center justify-between rounded border-2 border-black bg-muted/40 p-3 shadow-[2px_2px_0_#000]"
+              >
                 <span className="text-xs font-semibold text-foreground">
                   Download CSV template for {importRole}
                 </span>
@@ -604,7 +710,7 @@ export default function AddUserModal({
                     ? "border-destructive bg-destructive/10"
                     : dragOver
                       ? "border-primary bg-primary/10"
-                      : "border-black/40 bg-background hover:bg-muted/30"
+                      : "border-black/40 bg-background hover:bg-muted/30",
                 )}
               >
                 {uploadedFile ? (
@@ -630,7 +736,8 @@ export default function AddUserModal({
                   <>
                     <Upload className="size-8 text-muted-foreground" />
                     <div className="text-xs font-semibold text-foreground">
-                      Drag & drop CSV file here, or <span className="text-primary underline">browse</span>
+                      Drag & drop CSV file here, or{" "}
+                      <span className="text-primary underline">browse</span>
                     </div>
                   </>
                 )}
@@ -649,13 +756,26 @@ export default function AddUserModal({
 
               {importResult && (
                 <div className="grid gap-1 text-sm">
-                  {importResult.errors?.length ? <FormMessage>Import needs attention</FormMessage> : <p className="font-medium text-foreground">Import complete</p>}
-                  {importResult.errors?.length ? <FormMessage>{importSummary(importResult)}</FormMessage> : <p>{importSummary(importResult)}</p>}
+                  {importResult.errors?.length ? (
+                    <FormMessage>Import needs attention</FormMessage>
+                  ) : (
+                    <p className="font-medium text-foreground">
+                      Import complete
+                    </p>
+                  )}
+                  {importResult.errors?.length ? (
+                    <FormMessage>{importSummary(importResult)}</FormMessage>
+                  ) : (
+                    <p>{importSummary(importResult)}</p>
+                  )}
                   {importResult.skipped_emails?.length
                     ? ` Skipped: ${importResult.skipped_emails.join(", ")}`
                     : ""}
                   {importResult.errors?.length ? (
-                    <ul className="mt-1 max-h-24 overflow-y-auto list-disc pl-4 text-destructive" role="alert">
+                    <ul
+                      className="mt-1 max-h-24 overflow-y-auto list-disc pl-4 text-destructive"
+                      role="alert"
+                    >
                       {importResult.errors.slice(0, 5).map((error, index) => (
                         <li key={`${error.row}-${error.field}-${index}`}>
                           {formatImportError(error)}
@@ -663,7 +783,8 @@ export default function AddUserModal({
                       ))}
                       {importResult.errors.length > 5 ? (
                         <li>
-                          {importResult.errors.length - 5} more error(s). Fix the first errors and try again.
+                          {importResult.errors.length - 5} more error(s). Fix
+                          the first errors and try again.
                         </li>
                       ) : null}
                     </ul>
@@ -694,10 +815,25 @@ export default function AddUserModal({
               <AdminValidationAlert
                 message={manualApiError}
                 attempt={manualValidationAttempt}
-                firstInvalidFieldId={manualErrors.firstName ? "new-user-first-name" : manualErrors.lastName ? "new-user-last-name" : manualErrors.email ? "new-user-email" : manualErrors.contactNumber ? "new-user-contact-number" : manualErrors.dob ? "new-user-dob" : undefined}
+                firstInvalidFieldId={
+                  manualErrors.firstName
+                    ? "new-user-first-name"
+                    : manualErrors.lastName
+                      ? "new-user-last-name"
+                      : manualErrors.email
+                        ? "new-user-email"
+                        : manualErrors.contactNumber
+                          ? "new-user-contact-number"
+                          : manualErrors.dob
+                            ? "new-user-dob"
+                            : undefined
+                }
               />
               <Field label="Role">
-                <Select value={form.role} onValueChange={(val) => handleField("role", val)}>
+                <Select
+                  value={form.role}
+                  onValueChange={(val) => handleField("role", val)}
+                >
                   <Select.Trigger className="w-full">
                     <Select.Value />
                   </Select.Trigger>
@@ -714,25 +850,47 @@ export default function AddUserModal({
                   <Input
                     id="new-user-first-name"
                     aria-invalid={!!manualErrors.firstName}
-                    aria-describedby={manualErrors.firstName ? "new-user-first-name-error" : undefined}
+                    aria-describedby={
+                      manualErrors.firstName
+                        ? "new-user-first-name-error"
+                        : undefined
+                    }
                     placeholder="John"
                     value={form.firstName}
                     onChange={(e) => handleField("firstName", e.target.value)}
-                    className={cn("w-full bg-background border-2", manualErrors.firstName ? "border-destructive focus:border-destructive" : "border-black")}
+                    className={cn(
+                      "w-full bg-background border-2",
+                      manualErrors.firstName
+                        ? "border-destructive focus:border-destructive"
+                        : "border-black",
+                    )}
                   />
-                  <FormMessage id="new-user-first-name-error">{manualErrors.firstName}</FormMessage>
+                  <FormMessage id="new-user-first-name-error">
+                    {manualErrors.firstName}
+                  </FormMessage>
                 </Field>
                 <Field label="Last Name">
                   <Input
                     id="new-user-last-name"
                     aria-invalid={!!manualErrors.lastName}
-                    aria-describedby={manualErrors.lastName ? "new-user-last-name-error" : undefined}
+                    aria-describedby={
+                      manualErrors.lastName
+                        ? "new-user-last-name-error"
+                        : undefined
+                    }
                     placeholder="Doe"
                     value={form.lastName}
                     onChange={(e) => handleField("lastName", e.target.value)}
-                    className={cn("w-full bg-background border-2", manualErrors.lastName ? "border-destructive focus:border-destructive" : "border-black")}
+                    className={cn(
+                      "w-full bg-background border-2",
+                      manualErrors.lastName
+                        ? "border-destructive focus:border-destructive"
+                        : "border-black",
+                    )}
                   />
-                  <FormMessage id="new-user-last-name-error">{manualErrors.lastName}</FormMessage>
+                  <FormMessage id="new-user-last-name-error">
+                    {manualErrors.lastName}
+                  </FormMessage>
                 </Field>
               </div>
 
@@ -761,20 +919,32 @@ export default function AddUserModal({
                 <Input
                   id="new-user-email"
                   aria-invalid={!!manualErrors.email}
-                  aria-describedby={manualErrors.email ? "new-user-email-error" : undefined}
+                  aria-describedby={
+                    manualErrors.email ? "new-user-email-error" : undefined
+                  }
                   type="email"
                   placeholder="john@example.com"
                   value={form.email}
                   onChange={(e) => handleField("email", e.target.value)}
-                  className={cn("w-full bg-background border-2", manualErrors.email ? "border-destructive focus:border-destructive" : "border-black")}
+                  className={cn(
+                    "w-full bg-background border-2",
+                    manualErrors.email
+                      ? "border-destructive focus:border-destructive"
+                      : "border-black",
+                  )}
                 />
-                <FormMessage id="new-user-email-error">{manualErrors.email}</FormMessage>
+                <FormMessage id="new-user-email-error">
+                  {manualErrors.email}
+                </FormMessage>
               </Field>
 
               {!isAdmin && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Gender">
-                    <Select value={form.gender} onValueChange={(val) => handleField("gender", val)}>
+                    <Select
+                      value={form.gender}
+                      onValueChange={(val) => handleField("gender", val)}
+                    >
                       <Select.Trigger className="w-full">
                         <Select.Value placeholder="Select gender" />
                       </Select.Trigger>
@@ -797,11 +967,22 @@ export default function AddUserModal({
                       onChange={(e) =>
                         handleField("contactNumber", e.target.value)
                       }
-                      className={cn("w-full bg-background border-2", manualErrors.contactNumber ? "border-destructive focus:border-destructive" : "border-black")}
+                      className={cn(
+                        "w-full bg-background border-2",
+                        manualErrors.contactNumber
+                          ? "border-destructive focus:border-destructive"
+                          : "border-black",
+                      )}
                       aria-invalid={!!manualErrors.contactNumber}
-                      aria-describedby={manualErrors.contactNumber ? "new-user-contact-number-error" : undefined}
+                      aria-describedby={
+                        manualErrors.contactNumber
+                          ? "new-user-contact-number-error"
+                          : undefined
+                      }
                     />
-                    <FormMessage id="new-user-contact-number-error">{manualErrors.contactNumber}</FormMessage>
+                    <FormMessage id="new-user-contact-number-error">
+                      {manualErrors.contactNumber}
+                    </FormMessage>
                   </Field>
                 </div>
               )}
@@ -824,11 +1005,20 @@ export default function AddUserModal({
                     id="new-user-dob"
                     value={form.dob}
                     onValueChange={(value) => handleField("dob", value)}
-                    className={cn("w-full bg-background border-2", manualErrors.dob ? "border-destructive focus:border-destructive" : "border-black shadow-none")}
+                    className={cn(
+                      "w-full bg-background border-2",
+                      manualErrors.dob
+                        ? "border-destructive focus:border-destructive"
+                        : "border-black shadow-none",
+                    )}
                     aria-invalid={!!manualErrors.dob}
-                    aria-describedby={manualErrors.dob ? "new-user-dob-error" : undefined}
+                    aria-describedby={
+                      manualErrors.dob ? "new-user-dob-error" : undefined
+                    }
                   />
-                  <FormMessage id="new-user-dob-error">{manualErrors.dob}</FormMessage>
+                  <FormMessage id="new-user-dob-error">
+                    {manualErrors.dob}
+                  </FormMessage>
                 </Field>
               )}
 
@@ -837,21 +1027,28 @@ export default function AddUserModal({
                   <Field label="Hired Date">
                     <DatePicker
                       value={form.hiredDate}
-                      onValueChange={(value) =>
-                        handleField("hiredDate", value)
-                      }
+                      onValueChange={(value) => handleField("hiredDate", value)}
                       className="w-full shadow-none bg-background border-2 border-black"
                     />
                   </Field>
                   <Field label="Employment Status">
-                    <Select value={form.employmentStatus} onValueChange={(val) => handleField("employmentStatus", val)}>
+                    <Select
+                      value={form.employmentStatus}
+                      onValueChange={(val) =>
+                        handleField("employmentStatus", val)
+                      }
+                    >
                       <Select.Trigger className="w-full">
                         <Select.Value placeholder="Select status" />
                       </Select.Trigger>
                       <Select.Content>
-                        <Select.Item value="Regular/Permanent">Permanent</Select.Item>
+                        <Select.Item value="Regular/Permanent">
+                          Permanent
+                        </Select.Item>
                         <Select.Item value="Substitute">Substitute</Select.Item>
-                        <Select.Item value="Probationary">Probationary</Select.Item>
+                        <Select.Item value="Probationary">
+                          Probationary
+                        </Select.Item>
                       </Select.Content>
                     </Select>
                   </Field>
@@ -876,7 +1073,10 @@ export default function AddUserModal({
                       />
                     </Field>
                     <Field label="Grade Level">
-                      <Select value={form.gradeLevel} onValueChange={(val) => handleField("gradeLevel", val)}>
+                      <Select
+                        value={form.gradeLevel}
+                        onValueChange={(val) => handleField("gradeLevel", val)}
+                      >
                         <Select.Trigger className="w-full">
                           <Select.Value placeholder="Select grade level" />
                         </Select.Trigger>
@@ -941,7 +1141,9 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-sm font-medium text-black normal-case">{label}</label>
+      <label className="text-sm font-medium text-black normal-case">
+        {label}
+      </label>
       {children}
     </div>
   );

@@ -1,19 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 import { getNotifications, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notifications-api";
 
-export function useUnreadNotificationCount() {
+export function useUnreadNotificationCount(enabled = true) {
   const [unreadCount, setUnreadCount] = useState(0);
 
   const refresh = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
     try {
       const result = await getNotifications(true, 1);
       setUnreadCount(result.unread_count);
     } catch (error) {
       console.error("Failed to load unread notification count:", error);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const handleChange = () => void refresh();
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") void refresh();
@@ -30,7 +37,7 @@ export function useUnreadNotificationCount() {
       window.removeEventListener("focus", handleChange);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [refresh]);
+  }, [enabled, refresh]);
 
-  return unreadCount;
+  return enabled ? unreadCount : 0;
 }
