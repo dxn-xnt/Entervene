@@ -32,6 +32,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     periods,
     selectedPeriodId,
     setSelectedPeriodId,
+    selectedYear,
+    selectedPeriod,
   } = useAcademicPeriod()
   const unreadNotificationCount = useUnreadNotificationCount()
 
@@ -69,7 +71,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               aria-label="Select academic year"
               className="w-full min-w-0! rounded-none! border-0 border-r-2 border-border m-0 shadow-none px-2 text-xs"
             >
-              <Select.Value className="text-xs" placeholder="Academic Year" />
+              <span className="flex! min-w-0 items-center gap-1.5 overflow-visible! whitespace-nowrap!">
+                <Select.Value className="text-xs" placeholder="Academic Year" />
+                {selectedYear?.is_active && (
+                  <span
+                    className="size-2 shrink-0 rounded-full border border-black bg-success"
+                    title="Active academic year"
+                    aria-label="Active academic year"
+                  />
+                )}
+              </span>
             </Select.Trigger>
             <Select.Content className="w-max! max-w-[calc(100vw-2rem)]! min-w-64">
               <Select.Group>
@@ -92,10 +103,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               aria-label="Select academic term"
               className="w-full min-w-0! rounded-none! border-0 m-0 shadow-none px-2 text-xs"
             >
-              <Select.Value
-                className="text-xs"
-                placeholder={periods.length === 0 ? "No terms available" : "Active Period"}
-              />
+              <span className="flex! min-w-0 items-center gap-1.5 overflow-visible! whitespace-nowrap!">
+                <Select.Value
+                  className="text-xs"
+                  placeholder={periods.length === 0 ? "No terms available" : "Active Period"}
+                />
+                {selectedPeriod?.is_active && (
+                  <span
+                    className="size-2 shrink-0 rounded-full border border-black bg-success"
+                    title="Active academic term"
+                    aria-label="Active academic term"
+                  />
+                )}
+              </span>
             </Select.Trigger>
             <Select.Content className="w-max! max-w-[calc(100vw-2rem)]! min-w-64">
               <Select.Group>

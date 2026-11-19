@@ -2,10 +2,23 @@
 
 import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, ArrowRight, Check, CheckCheck, FileText, Plus, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CheckCheck,
+  FileText,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/teacher/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/retroui/Tooltip";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
@@ -30,16 +43,35 @@ import type {
   TeacherClassLoad,
   TeacherLesson,
 } from "@/types/classwork";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
-import { activityRubricMaximum, defaultActivityRubric, scaleRubricLevels, validateActivityRubric } from "@/lib/classwork-utils";
+import {
+  activityRubricMaximum,
+  defaultActivityRubric,
+  scaleRubricLevels,
+  validateActivityRubric,
+} from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
-import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination, RemediationClassworkTarget, RemediationResource } from "@/lib/teacher-interventions-api";
+import type {
+  TeacherInterventionDetail,
+  RemediationFocus,
+  OriginalExamination,
+  RemediationClassworkTarget,
+  RemediationResource,
+} from "@/lib/teacher-interventions-api";
 import { categoryFromFocus } from "@/lib/remediation-authoring";
 import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
 import { ReferenceLinkEditor } from "@/components/classwork-reference-links";
-import { validateReferenceLinks, type ReferenceLinkDraft } from "@/lib/classwork-reference-links";
-
+import {
+  validateReferenceLinks,
+  type ReferenceLinkDraft,
+} from "@/lib/classwork-reference-links";
 
 interface CreateClassworkModalProps {
   draftOnly?: boolean;
@@ -55,7 +87,12 @@ interface CreateClassworkModalProps {
   remediationDraft?: boolean;
   remediationTarget?: TeacherInterventionDetail | null;
   remediationFocus?: RemediationFocus | null;
-  remediationGradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
+  remediationGradeTreatment?:
+    | "PRACTICE_ONLY"
+    | "WRITTEN_WORK"
+    | "PERFORMANCE_TASK"
+    | "EXAMINATION"
+    | null;
   remediationOriginalExam?: OriginalExamination | null;
   remediationOriginalTargets?: RemediationClassworkTarget[];
   initialTargetAssignmentId?: number | null;
@@ -89,46 +126,79 @@ export default function CreateClassworkModal({
   onBack,
 }: CreateClassworkModalProps) {
   const [createStep, setCreateStep] = useState<"details" | "assign">("details");
-  const [selectedTargetId, setSelectedTargetId] = useState<number | null>(() => {
-    if (initialTargetAssignmentId && remediationOriginalTargets.some((t) => t.assignment_id === initialTargetAssignmentId)) {
-      return initialTargetAssignmentId;
-    }
-    return null;
-  });
+  const [selectedTargetId, setSelectedTargetId] = useState<number | null>(
+    () => {
+      if (
+        initialTargetAssignmentId &&
+        remediationOriginalTargets.some(
+          (t) => t.assignment_id === initialTargetAssignmentId,
+        )
+      ) {
+        return initialTargetAssignmentId;
+      }
+      return null;
+    },
+  );
 
   const selectedOriginalTarget = useMemo(() => {
-    return remediationOriginalTargets.find((t) => t.assignment_id === selectedTargetId) ?? null;
+    return (
+      remediationOriginalTargets.find(
+        (t) => t.assignment_id === selectedTargetId,
+      ) ?? null
+    );
   }, [remediationOriginalTargets, selectedTargetId]);
 
   const [draft, setDraft] = useState<CreateDraft>(() => {
     const preferredId =
-      initialSubjectId && subjects.some((s) => String(s.id) === String(initialSubjectId))
+      initialSubjectId &&
+      subjects.some((s) => String(s.id) === String(initialSubjectId))
         ? String(initialSubjectId)
         : subjects[0]
           ? String(subjects[0].id)
           : "";
     const targetPoints = remediationOriginalExam
       ? String(remediationOriginalExam.total_points)
-      : (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && selectedOriginalTarget
+      : (remediationGradeTreatment === "WRITTEN_WORK" ||
+            remediationGradeTreatment === "PERFORMANCE_TASK") &&
+          selectedOriginalTarget
         ? String(selectedOriginalTarget.max_points)
         : emptyClassworkDraft.total_points;
     return {
       ...emptyClassworkDraft,
       title: initialTitle || "",
       instructions: initialInstructions || "",
-      is_published: remediationDraft || draftOnly ? false : emptyClassworkDraft.is_published,
-      classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment === "EXAMINATION" ? "QUARTERLY_ASSESSMENT" : remediationGradeTreatment || "") : categoryFromFocus(null),
+      is_published:
+        remediationDraft || draftOnly
+          ? false
+          : emptyClassworkDraft.is_published,
+      classwork_category: remediationDraft
+        ? remediationGradeTreatment === "PRACTICE_ONLY"
+          ? ""
+          : remediationGradeTreatment === "EXAMINATION"
+            ? "QUARTERLY_ASSESSMENT"
+            : remediationGradeTreatment || ""
+        : categoryFromFocus(null),
       exam_subtype: remediationOriginalExam?.subtype ?? "",
       total_points: targetPoints,
       subject_id: preferredId,
     };
   });
-  const isSubjectLocked = Boolean(initialSubjectId) || Boolean(remediationTarget);
+  const isSubjectLocked =
+    Boolean(initialSubjectId) || Boolean(remediationTarget);
   const isLessonLocked = Boolean(initialLessonId);
 
   useEffect(() => {
-    if (initialSubjectId && subjects.some((subject) => String(subject.id) === String(initialSubjectId))) {
-      setDraft((current) => current.subject_id === String(initialSubjectId) ? current : { ...current, subject_id: String(initialSubjectId) });
+    if (
+      initialSubjectId &&
+      subjects.some(
+        (subject) => String(subject.id) === String(initialSubjectId),
+      )
+    ) {
+      setDraft((current) =>
+        current.subject_id === String(initialSubjectId)
+          ? current
+          : { ...current, subject_id: String(initialSubjectId) },
+      );
     }
   }, [initialSubjectId, subjects]);
   useEffect(() => {
@@ -137,7 +207,9 @@ export default function CreateClassworkModal({
     }
   }, [draftOnly]);
   const [materials, setMaterials] = useState<File[]>([]);
-  const [referenceLinks, setReferenceLinks] = useState<ReferenceLinkDraft[]>([]);
+  const [referenceLinks, setReferenceLinks] = useState<ReferenceLinkDraft[]>(
+    [],
+  );
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>(() => {
     if (remediationTarget) return [remediationTarget.class_id];
     if (initialClassId) return [initialClassId];
@@ -147,7 +219,7 @@ export default function CreateClassworkModal({
   const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
   const toast = useToast();
   const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>(() =>
-    initialLessonId ? [initialLessonId] : []
+    initialLessonId ? [initialLessonId] : [],
   );
 
   useEffect(() => {
@@ -183,26 +255,35 @@ export default function CreateClassworkModal({
     }));
   }, [remediationDraft, remediationGradeTreatment, selectedOriginalTarget]);
 
-  const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(() => {
-    const defaultLevels = defaultActivityRubric.map((level) => ({ ...level }));
-    if (
-      remediationDraft &&
-      (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") &&
-      remediationOriginalTargets.length
-    ) {
-      const target = remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId);
-      if (target?.rubric_levels?.length) {
-        return target.rubric_levels.map((level, index) => ({
-          level_name: level.level_name,
-          description: level.description,
-          points: level.points,
-          display_order: level.display_order ?? index,
-        }));
+  const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(
+    () => {
+      const defaultLevels = defaultActivityRubric.map((level) => ({
+        ...level,
+      }));
+      if (
+        remediationDraft &&
+        (remediationGradeTreatment === "WRITTEN_WORK" ||
+          remediationGradeTreatment === "PERFORMANCE_TASK") &&
+        remediationOriginalTargets.length
+      ) {
+        const target = remediationOriginalTargets.find(
+          (t) => t.assignment_id === initialTargetAssignmentId,
+        );
+        if (target?.rubric_levels?.length) {
+          return target.rubric_levels.map((level, index) => ({
+            level_name: level.level_name,
+            description: level.description,
+            points: level.points,
+            display_order: level.display_order ?? index,
+          }));
+        }
+        return target
+          ? scaleRubricLevels(defaultLevels, target.max_points)
+          : defaultLevels;
       }
-      return target ? scaleRubricLevels(defaultLevels, target.max_points) : defaultLevels;
-    }
-    return defaultLevels;
-  });
+      return defaultLevels;
+    },
+  );
 
   useEffect(() => {
     if (
@@ -214,12 +295,14 @@ export default function CreateClassworkModal({
       return;
     }
     if (selectedOriginalTarget.rubric_levels?.length) {
-      const cloned = selectedOriginalTarget.rubric_levels.map((level, index) => ({
-        level_name: level.level_name,
-        description: level.description,
-        points: level.points,
-        display_order: level.display_order ?? index,
-      }));
+      const cloned = selectedOriginalTarget.rubric_levels.map(
+        (level, index) => ({
+          level_name: level.level_name,
+          description: level.description,
+          points: level.points,
+          display_order: level.display_order ?? index,
+        }),
+      );
       setRubricLevels(cloned);
       setDraft((cur) => ({
         ...cur,
@@ -232,10 +315,19 @@ export default function CreateClassworkModal({
       total_points: String(selectedOriginalTarget.max_points),
     }));
     if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
-      const freshDefaults = defaultActivityRubric.map((level) => ({ ...level }));
-      setRubricLevels(scaleRubricLevels(freshDefaults, selectedOriginalTarget.max_points));
+      const freshDefaults = defaultActivityRubric.map((level) => ({
+        ...level,
+      }));
+      setRubricLevels(
+        scaleRubricLevels(freshDefaults, selectedOriginalTarget.max_points),
+      );
     }
-  }, [remediationDraft, remediationGradeTreatment, selectedOriginalTarget, selectedType]);
+  }, [
+    remediationDraft,
+    remediationGradeTreatment,
+    selectedOriginalTarget,
+    selectedType,
+  ]);
 
   const setFormError = (msg: string) => {
     toast.error({ title: msg });
@@ -298,7 +390,10 @@ export default function CreateClassworkModal({
 
   const toggleClass = (classId: number) => {
     if (remediationTarget) return;
-    if (validationError === "Select at least one section to assign this classwork.") {
+    if (
+      validationError ===
+      "Select at least one section to assign this classwork."
+    ) {
       setValidationError("");
     }
     setSelectedClassIds((current) =>
@@ -313,25 +408,50 @@ export default function CreateClassworkModal({
     if (linksError) return linksError;
     if (!draft.subject_id) return "Choose a subject.";
     if (!draft.title.trim()) return "Topic title is required.";
-    if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
-    if (remediationGradeTreatment === "EXAMINATION" && (!remediationOriginalExam || draft.exam_subtype !== remediationOriginalExam.subtype || Number(draft.total_points) !== remediationOriginalExam.total_points)) return "Remedial Examination must match the original subtype and maximum points.";
-    if (remediationDraft && (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK")) {
-      if (!selectedOriginalTarget) return "Select the original classwork to link this remediation activity.";
+    if (
+      remediationDraft &&
+      (draft.classwork_category === "QUARTERLY_ASSESSMENT" ||
+        draft.classwork_category === "EXAMS") &&
+      !draft.exam_subtype
+    )
+      return "Choose an Examination sub-type explicitly.";
+    if (
+      remediationGradeTreatment === "EXAMINATION" &&
+      (!remediationOriginalExam ||
+        draft.exam_subtype !== remediationOriginalExam.subtype ||
+        Number(draft.total_points) !== remediationOriginalExam.total_points)
+    )
+      return "Remedial Examination must match the original subtype and maximum points.";
+    if (
+      remediationDraft &&
+      (remediationGradeTreatment === "WRITTEN_WORK" ||
+        remediationGradeTreatment === "PERFORMANCE_TASK")
+    ) {
+      if (!selectedOriginalTarget)
+        return "Select the original classwork to link this remediation activity.";
       const targetMaxPoints = selectedOriginalTarget.max_points;
-      const hasRubric = selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT";
-      const totalPoints = hasRubric ? activityRubricMaximum(rubricLevels) : Number(draft.total_points);
+      const hasRubric =
+        selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT";
+      const totalPoints = hasRubric
+        ? activityRubricMaximum(rubricLevels)
+        : Number(draft.total_points);
       if (Math.abs(totalPoints - targetMaxPoints) > 0.001) {
         return `Remedial classwork points (${totalPoints}) must equal the original classwork maximum points (${targetMaxPoints}).`;
       }
     }
     if (!isReadingType(selectedType)) {
-      const hasRubric = selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT";
+      const hasRubric =
+        selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT";
       if (hasRubric) {
         const rubricError = validateActivityRubric(rubricLevels);
         if (rubricError) return rubricError;
       }
       const points = Number(draft.total_points);
-      if (!hasRubric && draft.total_points && (!Number.isFinite(points) || points <= 0)) {
+      if (
+        !hasRubric &&
+        draft.total_points &&
+        (!Number.isFinite(points) || points <= 0)
+      ) {
         return "Total points must be greater than zero.";
       }
     }
@@ -379,8 +499,7 @@ export default function CreateClassworkModal({
             )
             .then((list) =>
               list.filter(
-                (l) =>
-                  Number(l.subject_id) === subjectIdNum && !l.is_archived,
+                (l) => Number(l.subject_id) === subjectIdNum && !l.is_archived,
               ),
             )
             .catch(() => []),
@@ -415,7 +534,9 @@ export default function CreateClassworkModal({
         setAvailableLessons(lessons);
         setSelectedLessonIds((current) => {
           if (remediationFocus) {
-            return remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id));
+            return remediationFocus.lesson_ids.filter((id) =>
+              uniqueLessons.has(id),
+            );
           }
           const filtered = current.filter((id) => uniqueLessons.has(id));
           if (filtered.length > 0) return filtered;
@@ -472,9 +593,12 @@ export default function CreateClassworkModal({
     setIsCreating(true);
     try {
       const isReading = isReadingType(selectedType);
-      const totalPoints = selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT"
-        ? activityRubricMaximum(rubricLevels)
-        : !isReading && draft.total_points ? Number(draft.total_points) : null;
+      const totalPoints =
+        selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT"
+          ? activityRubricMaximum(rubricLevels)
+          : !isReading && draft.total_points
+            ? Number(draft.total_points)
+            : null;
       const formData = new FormData();
       formData.append("title", draft.title.trim());
       formData.append("description", draft.description.trim());
@@ -493,22 +617,55 @@ export default function CreateClassworkModal({
         formData.append("rubric_payload", JSON.stringify(rubricLevels));
       }
       formData.append("subject_id", String(draft.subject_id));
-      formData.append("is_published", String(draftOnly ? false : draft.is_published));
+      formData.append(
+        "is_published",
+        String(draftOnly ? false : draft.is_published),
+      );
       formData.append("show_scores", String(draft.show_scores));
-      const autoAiSupported = !remediationDraft && !remediationTarget && (selectedType === "ASSIGNMENT" || selectedType === "ACTIVITY");
-      formData.append("auto_ai_feedback_enabled", String(autoAiSupported && draft.auto_ai_feedback_enabled));
+      const autoAiSupported =
+        !remediationDraft &&
+        !remediationTarget &&
+        (selectedType === "ASSIGNMENT" || selectedType === "ACTIVITY");
+      formData.append(
+        "auto_ai_feedback_enabled",
+        String(autoAiSupported && draft.auto_ai_feedback_enabled),
+      );
       formData.append("class_ids", JSON.stringify(selectedClassIds));
       if (remediationTarget) {
-        formData.append("intervention_id", String(remediationTarget.intervention_id));
+        formData.append(
+          "intervention_id",
+          String(remediationTarget.intervention_id),
+        );
         formData.append("remediation_request_id", remediationRequestId);
-        if (remediationOriginalExam && remediationGradeTreatment === "EXAMINATION") {
-          formData.append("original_exam_assignment_id", String(remediationOriginalExam.assignment_id));
-        } else if (selectedOriginalTarget && (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK")) {
-          formData.append("original_classwork_assignment_id", String(selectedOriginalTarget.assignment_id));
+        if (
+          remediationOriginalExam &&
+          remediationGradeTreatment === "EXAMINATION"
+        ) {
+          formData.append(
+            "original_exam_assignment_id",
+            String(remediationOriginalExam.assignment_id),
+          );
+        } else if (
+          selectedOriginalTarget &&
+          (remediationGradeTreatment === "WRITTEN_WORK" ||
+            remediationGradeTreatment === "PERFORMANCE_TASK")
+        ) {
+          formData.append(
+            "original_classwork_assignment_id",
+            String(selectedOriginalTarget.assignment_id),
+          );
         }
       }
       formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
-      formData.append("reference_links", JSON.stringify(referenceLinks.map((link) => ({ url: link.url.trim(), title: link.title.trim() || null }))));
+      formData.append(
+        "reference_links",
+        JSON.stringify(
+          referenceLinks.map((link) => ({
+            url: link.url.trim(),
+            title: link.title.trim() || null,
+          })),
+        ),
+      );
       if (draft.due_date) {
         formData.append("due_date", new Date(draft.due_date).toISOString());
       }
@@ -525,7 +682,10 @@ export default function CreateClassworkModal({
           selectedClassIds.includes(l.class_id),
       );
       if (selectedLoad?.academic_period_id) {
-        formData.append("academic_period_id", String(selectedLoad.academic_period_id));
+        formData.append(
+          "academic_period_id",
+          String(selectedLoad.academic_period_id),
+        );
       }
 
       materials.forEach((material) => formData.append("files", material));
@@ -545,19 +705,22 @@ export default function CreateClassworkModal({
           const msgs = detail
             .map((e: { loc?: (string | number)[]; msg?: string }) => {
               const field = (e.loc || []).filter((x) => x !== "body").join(".");
-              return field ? `${field}: ${e.msg}` : (e.msg || "Validation error");
+              return field ? `${field}: ${e.msg}` : e.msg || "Validation error";
             })
             .join("; ");
           throw new Error(msgs || "Validation error");
         }
-        throw new Error(typeof detail === "string" ? detail : "Unable to create classwork.");
+        throw new Error(
+          typeof detail === "string" ? detail : "Unable to create classwork.",
+        );
       }
       const createdData = await createResponse.json();
 
       toast.success({ title: "Classwork created successfully." });
       onSuccess(createdData);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to create classwork.";
+      const message =
+        err instanceof Error ? err.message : "Unable to create classwork.";
       setFormError(message);
     } finally {
       setIsCreating(false);
@@ -579,7 +742,9 @@ export default function CreateClassworkModal({
       <Dialog.Content
         size="lg"
         className={nested ? "z-[1001]!" : undefined}
-        overlay={nested ? { forceRender: true, className: "z-[1000]!" } : undefined}
+        overlay={
+          nested ? { forceRender: true, className: "z-[1000]!" } : undefined
+        }
       >
         <Dialog.Header position="fixed" asChild>
           <div className="flex items-center justify-between w-full">
@@ -616,25 +781,39 @@ export default function CreateClassworkModal({
                   selectedTargetId={selectedTargetId}
                   onSelectTargetId={(nextId) => {
                     setSelectedTargetId(nextId);
-                    const target = remediationOriginalTargets.find((t) => t.assignment_id === nextId);
+                    const target = remediationOriginalTargets.find(
+                      (t) => t.assignment_id === nextId,
+                    );
                     if (target) {
                       if (target.rubric_levels?.length) {
-                        const cloned = target.rubric_levels.map((level, index) => ({
-                          level_name: level.level_name,
-                          description: level.description,
-                          points: level.points,
-                          display_order: level.display_order ?? index,
-                        }));
+                        const cloned = target.rubric_levels.map(
+                          (level, index) => ({
+                            level_name: level.level_name,
+                            description: level.description,
+                            points: level.points,
+                            display_order: level.display_order ?? index,
+                          }),
+                        );
                         setRubricLevels(cloned);
                         setDraft((cur) => ({
                           ...cur,
                           total_points: String(activityRubricMaximum(cloned)),
                         }));
                       } else {
-                        setDraft((cur) => ({ ...cur, total_points: String(target.max_points) }));
-                        if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
-                          const freshDefaults = defaultActivityRubric.map((level) => ({ ...level }));
-                          setRubricLevels(scaleRubricLevels(freshDefaults, target.max_points));
+                        setDraft((cur) => ({
+                          ...cur,
+                          total_points: String(target.max_points),
+                        }));
+                        if (
+                          selectedType === "ACTIVITY" ||
+                          selectedType === "ASSIGNMENT"
+                        ) {
+                          const freshDefaults = defaultActivityRubric.map(
+                            (level) => ({ ...level }),
+                          );
+                          setRubricLevels(
+                            scaleRubricLevels(freshDefaults, target.max_points),
+                          );
                         }
                       }
                     }
@@ -667,7 +846,10 @@ export default function CreateClassworkModal({
                   <Select.Content className="border-2 border-black rounded bg-white">
                     <Select.Group>
                       {subjects.map((subject) => (
-                        <Select.Item key={subject.id} value={String(subject.id)}>
+                        <Select.Item
+                          key={subject.id}
+                          value={String(subject.id)}
+                        >
                           {subject.name}
                         </Select.Item>
                       ))}
@@ -678,7 +860,9 @@ export default function CreateClassworkModal({
 
               <Field label="Lesson">
                 <Select
-                  value={selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""}
+                  value={
+                    selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""
+                  }
                   onValueChange={(val) => {
                     if (isLessonLocked) return;
                     setSelectedLessonIds(val ? [Number(val)] : []);
@@ -726,11 +910,17 @@ export default function CreateClassworkModal({
                 const selectedLesson = availableLessons.find(
                   (l) => l.lesson_id === selectedLessonIds[0],
                 );
-                if (selectedLesson && (selectedLesson.competency_statement || selectedLesson.competency_code)) {
+                if (
+                  selectedLesson &&
+                  (selectedLesson.competency_statement ||
+                    selectedLesson.competency_code)
+                ) {
                   return (
                     <Field label="Learning Competency">
                       <div className="w-full rounded border-2 border-black bg-muted/40 px-3 py-2 text-sm text-foreground">
-                        {selectedLesson.competency_code ? `[${selectedLesson.competency_code}] ` : ""}
+                        {selectedLesson.competency_code
+                          ? `[${selectedLesson.competency_code}] `
+                          : ""}
                         {selectedLesson.competency_statement}
                       </div>
                     </Field>
@@ -738,8 +928,6 @@ export default function CreateClassworkModal({
                 }
                 return null;
               })()}
-
-
 
               <Field label="Topic Title" isRequired={true}>
                 <Input
@@ -752,20 +940,28 @@ export default function CreateClassworkModal({
                     if (event.target.value.trim()) setValidationError("");
                   }}
                   aria-invalid={validationError === "Topic title is required."}
-                  aria-describedby={validationError === "Topic title is required." ? "classwork-topic-title-error" : undefined}
+                  aria-describedby={
+                    validationError === "Topic title is required."
+                      ? "classwork-topic-title-error"
+                      : undefined
+                  }
                   disabled={isCreating}
                   placeholder="Introduction to Programming Reading Materials"
                   className={`w-full bg-white border-2 rounded shadow-md ${validationError === "Topic title is required." ? "border-destructive focus:border-destructive" : "border-black"}`}
                 />
                 {validationError === "Topic title is required." && (
-                  <FormMessage id="classwork-topic-title-error">{validationError}</FormMessage>
+                  <FormMessage id="classwork-topic-title-error">
+                    {validationError}
+                  </FormMessage>
                 )}
               </Field>
 
               <Field label="Instructions">
                 {remediationDraft && (
                   <p className="text-xs text-muted-foreground -mt-1 mb-1">
-                    Student Instructions (Visible to student): Specify what the student needs to read, answer, or submit for this remedial task.
+                    Student Instructions (Visible to student): Specify what the
+                    student needs to read, answer, or submit for this remedial
+                    task.
                   </p>
                 )}
                 <textarea
@@ -783,12 +979,17 @@ export default function CreateClassworkModal({
               </Field>
 
               {!isReadingType(selectedType) && (
-                <div className={`grid gap-4 ${(draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") || (selectedType !== "ACTIVITY" && selectedType !== "ASSIGNMENT") ? "sm:grid-cols-2" : ""}`}>
-                  {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" ?
+                <div
+                  className={`grid gap-4 ${draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS" || (selectedType !== "ACTIVITY" && selectedType !== "ASSIGNMENT") ? "sm:grid-cols-2" : ""}`}
+                >
+                  {remediationDraft &&
+                  remediationGradeTreatment === "PRACTICE_ONLY" ? (
                     <p className="rounded border border-green-700 bg-green-50 p-3 text-sm font-semibold">
-                      Practice only · No official grading component. Score and completion remain visible in Intervention progress.
+                      Practice only · No official grading component. Score and
+                      completion remain visible in Intervention progress.
                     </p>
-                    : <Field label="Grading Component">
+                  ) : (
+                    <Field label="Grading Component">
                       <Select
                         value={draft.classwork_category}
                         onValueChange={(val) =>
@@ -810,25 +1011,37 @@ export default function CreateClassworkModal({
                             <Select.Item value="PERFORMANCE_TASK">
                               Performance Task
                             </Select.Item>
-                            {(!remediationDraft || remediationGradeTreatment === "EXAMINATION") && <Select.Item value="QUARTERLY_ASSESSMENT">
-                              Exams
-                            </Select.Item>}
+                            {(!remediationDraft ||
+                              remediationGradeTreatment === "EXAMINATION") && (
+                              <Select.Item value="QUARTERLY_ASSESSMENT">
+                                Exams
+                              </Select.Item>
+                            )}
                           </Select.Group>
                         </Select.Content>
                       </Select>
-                    </Field>}
+                    </Field>
+                  )}
 
-                  {(draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && (
+                  {(draft.classwork_category === "QUARTERLY_ASSESSMENT" ||
+                    draft.classwork_category === "EXAMS") && (
                     <Field label="Exam Sub-type">
                       <Select
-                        value={remediationDraft ? draft.exam_subtype : (draft.exam_subtype || "SUMMATIVE_1")}
+                        value={
+                          remediationDraft
+                            ? draft.exam_subtype
+                            : draft.exam_subtype || "SUMMATIVE_1"
+                        }
                         onValueChange={(val) =>
                           setDraft((current) => ({
                             ...current,
                             exam_subtype: val,
                           }))
                         }
-                        disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
+                        disabled={
+                          isCreating ||
+                          remediationGradeTreatment === "EXAMINATION"
+                        }
                       >
                         <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                           <Select.Value placeholder="Select Sub-type" />
@@ -850,41 +1063,58 @@ export default function CreateClassworkModal({
                     </Field>
                   )}
 
-                  {selectedType !== "ACTIVITY" && selectedType !== "ASSIGNMENT" && <Field label="Total points">
-                    <Input
-                      type="number"
-                      min="1"
-                      step="1"
-                      inputMode="decimal"
-                      value={draft.total_points}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          total_points: event.target.value,
-                        }))
-                      }
-                      disabled={isCreating || remediationGradeTreatment === "EXAMINATION" || remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK"}
-                      className="w-full bg-white border-2 border-black rounded shadow-md"
-                    />
-                  </Field>}
+                  {selectedType !== "ACTIVITY" &&
+                    selectedType !== "ASSIGNMENT" && (
+                      <Field label="Total points">
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          inputMode="decimal"
+                          value={draft.total_points}
+                          onChange={(event) =>
+                            setDraft((current) => ({
+                              ...current,
+                              total_points: event.target.value,
+                            }))
+                          }
+                          disabled={
+                            isCreating ||
+                            remediationGradeTreatment === "EXAMINATION" ||
+                            remediationGradeTreatment === "WRITTEN_WORK" ||
+                            remediationGradeTreatment === "PERFORMANCE_TASK"
+                          }
+                          className="w-full bg-white border-2 border-black rounded shadow-md"
+                        />
+                      </Field>
+                    )}
                 </div>
               )}
 
-              <ReferenceLinkEditor links={referenceLinks} onChange={setReferenceLinks} disabled={isCreating} />
+              <ReferenceLinkEditor
+                links={referenceLinks}
+                onChange={setReferenceLinks}
+                disabled={isCreating}
+              />
 
-              <Field label={remediationDraft ? "Upload Material (Optional)" : "Upload Material"}>
-
+              <Field
+                label={
+                  remediationDraft
+                    ? "Upload Material (Optional)"
+                    : "Upload Material"
+                }
+              >
                 {materials.length === 0 ? (
                   <Empty className="shadow-md rounded! hover:shadow-none transition-shadow">
                     <EmptyHeader>
-                      <EmptyTitle>{remediationDraft ? "No Additional Files Attached" : "No Materials Added"}</EmptyTitle>
+                      <EmptyTitle>
+                        {remediationDraft
+                          ? "No Additional Files Attached"
+                          : "No Materials Added"}
+                      </EmptyTitle>
                       <EmptyDescription className="flex flex-col -gap-3 text-center whitespace-nowrap">
-                        <span className="font-semibold">
-                          Max 10mb
-                        </span>
-                        <span>
-                          (pdf, docx, pptx, jpg & png)
-                        </span>
+                        <span className="font-semibold">Max 10mb</span>
+                        <span>(pdf, docx, pptx, jpg & png)</span>
                       </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>
@@ -897,7 +1127,9 @@ export default function CreateClassworkModal({
                       >
                         <label>
                           <Plus size={14} className="mr-1" />
-                          {remediationDraft ? "Attach Optional Files" : "Add Materials"}
+                          {remediationDraft
+                            ? "Attach Optional Files"
+                            : "Add Materials"}
                           <input
                             type="file"
                             multiple
@@ -921,15 +1153,21 @@ export default function CreateClassworkModal({
                         className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
                       >
                         <Tooltip>
-                          <TooltipTrigger render={<span className="absolute right-1 top-1 inline-flex"><button
-                            type="button"
-                            onClick={() => removeMaterial(index)}
-                            disabled={isCreating}
-                            className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                            aria-label={`Remove ${material.name}`}
-                          >
-                            <Trash2 size={13} />
-                          </button></span>} />
+                          <TooltipTrigger
+                            render={
+                              <span className="absolute right-1 top-1 inline-flex">
+                                <button
+                                  type="button"
+                                  onClick={() => removeMaterial(index)}
+                                  disabled={isCreating}
+                                  className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                  aria-label={`Remove ${material.name}`}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </span>
+                            }
+                          />
                           <TooltipContent>Remove file</TooltipContent>
                         </Tooltip>
                         <FileText className="mx-auto mt-5" size={22} />
@@ -961,12 +1199,14 @@ export default function CreateClassworkModal({
                 )}
                 {remediationDraft && (
                   <p className="text-sm font-normal text-muted-foreground mb-2">
-                    Selected materials from plan are already available to the student. Attach files only when you have new worksheets.
+                    Selected materials from plan are already available to the
+                    student. Attach files only when you have new worksheets.
                   </p>
                 )}
               </Field>
 
-              {(selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") && (
+              {(selectedType === "ACTIVITY" ||
+                selectedType === "ASSIGNMENT") && (
                 <ActivityRubricEditor
                   levels={rubricLevels}
                   onChange={setRubricLevels}
@@ -984,7 +1224,9 @@ export default function CreateClassworkModal({
 
           {createStep === "assign" && (
             <div className="space-y-4">
-              <div className={`grid gap-4 ${isReadingType(selectedType) ? "" : "sm:grid-cols-2"}`}>
+              <div
+                className={`grid gap-4 ${isReadingType(selectedType) ? "" : "sm:grid-cols-2"}`}
+              >
                 {!isReadingType(selectedType) && (
                   <Field label="Due Date">
                     <DatePicker
@@ -997,55 +1239,55 @@ export default function CreateClassworkModal({
                         }))
                       }
                       disabled={isCreating}
-                      className="w-full bg-white border-2 border-black rounded shadow-md"
+                      className="w-full bg-white border-2 border-black rounded shadow-none"
                     />
                   </Field>
                 )}
 
-                <Field label="Publish Status">
-                  <Select
-                    value={draft.is_published ? "published" : "draft"}
-                    onValueChange={(val) =>
+                <Field label="Locked Until">
+                  <DatePicker
+                    includeTime
+                    value={draft.lock_date}
+                    onValueChange={(value) =>
                       setDraft((current) => ({
                         ...current,
-                        is_published: val === "published",
+                        lock_date: value,
                       }))
                     }
-                    disabled={isCreating || draftOnly}
-                  >
-                    <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
-                      <Select.Value />
-                    </Select.Trigger>
-                    <Select.Content className="border-2 border-black rounded bg-white">
-                      <Select.Group>
-                        <Select.Item value="published">Publish now</Select.Item>
-                        <Select.Item value="draft">
-                          Keep hidden from students
-                        </Select.Item>
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                  {draftOnly && (
-                    <p className="mt-2 text-xs font-semibold text-muted-foreground">
-                      Future-term planning is saved as an unpublished draft.
-                    </p>
-                  )}
+                    disabled={isCreating || !draft.is_published}
+                    className="w-full bg-white border-2 border-black rounded shadow-none disabled:bg-gray-100 disabled:opacity-55"
+                  />
                 </Field>
               </div>
 
-              <Field label="Locked Until">
-                <DatePicker
-                  includeTime
-                  value={draft.lock_date}
-                  onValueChange={(value) =>
+              <Field label="Publish Status">
+                <Select
+                  value={draft.is_published ? "published" : "draft"}
+                  onValueChange={(val) =>
                     setDraft((current) => ({
                       ...current,
-                      lock_date: value,
+                      is_published: val === "published",
                     }))
                   }
-                  disabled={isCreating || !draft.is_published}
-                  className="w-full bg-white border-2 border-black rounded shadow-md disabled:bg-gray-100 disabled:opacity-55"
-                />
+                  disabled={isCreating || draftOnly}
+                >
+                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                    <Select.Value />
+                  </Select.Trigger>
+                  <Select.Content className="border-2 border-black rounded bg-white">
+                    <Select.Group>
+                      <Select.Item value="published">Publish now</Select.Item>
+                      <Select.Item value="draft">
+                        Keep hidden from students
+                      </Select.Item>
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
+                {draftOnly && (
+                  <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                    Future-term planning is saved as an unpublished draft.
+                  </p>
+                )}
               </Field>
 
               <div className="flex flex-col gap-3">
@@ -1064,20 +1306,23 @@ export default function CreateClassworkModal({
                   />
                 )}
 
-                {!remediationDraft && !remediationTarget && (selectedType === "ASSIGNMENT" || selectedType === "ACTIVITY") && (
-                  <ClassworkSettingRow
-                    label="Automatic AI Feedback"
-                    tooltip="Automatically prepares a feedback draft after grading. When contextual AI is authorized and feedback focus points are selected, AI can use those evaluation points. Otherwise, a score-based template is prepared. Submitted files and links are not read by AI. Teachers must review and approve feedback before students can see it."
-                    checked={draft.auto_ai_feedback_enabled}
-                    onCheckedChange={(checked) =>
-                      setDraft((current) => ({
-                        ...current,
-                        auto_ai_feedback_enabled: checked,
-                      }))
-                    }
-                    disabled={isCreating}
-                  />
-                )}
+                {!remediationDraft &&
+                  !remediationTarget &&
+                  (selectedType === "ASSIGNMENT" ||
+                    selectedType === "ACTIVITY") && (
+                    <ClassworkSettingRow
+                      label="Automatic AI Feedback"
+                      tooltip="Automatically prepares a feedback draft after grading. When contextual AI is authorized and feedback focus points are selected, AI can use those evaluation points. Otherwise, a score-based template is prepared. Submitted files and links are not read by AI. Teachers must review and approve feedback before students can see it."
+                      checked={draft.auto_ai_feedback_enabled}
+                      onCheckedChange={(checked) =>
+                        setDraft((current) => ({
+                          ...current,
+                          auto_ai_feedback_enabled: checked,
+                        }))
+                      }
+                      disabled={isCreating}
+                    />
+                  )}
 
                 {draft.due_date && !isReadingType(selectedType) && (
                   <ClassworkSettingRow
@@ -1095,17 +1340,22 @@ export default function CreateClassworkModal({
               </div>
 
               <div className="mt-4">
-
-
                 <Field label="Assign to Sections" isRequired>
                   {remediationTarget ? (
                     <Card className="mb-3 rounded border-2 border-black bg-primary p-3 space-y-1">
                       <div className="flex items-start justify-between">
-                        <span className="text-base font-bold">Single-Student Remedial Assignment</span>
-                        <Badge variant="solid" size="sm">Individual Recipient</Badge>
+                        <span className="text-base font-bold">
+                          Single-Student Remedial Assignment
+                        </span>
+                        <Badge variant="solid" size="sm">
+                          Individual Recipient
+                        </Badge>
                       </div>
                       <p className="text-sm text-foreground font-normal mt-2">
-                        This activity is exclusively assigned to <strong>{remediationTarget.student_name}</strong> in section <strong>{remediationTarget.class_name}</strong>. Other students will not receive or see this assignment.
+                        This activity is exclusively assigned to{" "}
+                        <strong>{remediationTarget.student_name}</strong> in
+                        section <strong>{remediationTarget.class_name}</strong>.
+                        Other students will not receive or see this assignment.
                       </p>
                     </Card>
                   ) : (
@@ -1117,11 +1367,16 @@ export default function CreateClassworkModal({
                             className="shadow-none -mt-1"
                             autoIcon={false}
                             onClick={() => {
-                              if (validationError === "Select at least one section to assign this classwork.") {
+                              if (
+                                validationError ===
+                                "Select at least one section to assign this classwork."
+                              ) {
                                 setValidationError("");
                               }
                               setSelectedClassIds(
-                                selectedSubjectLoads.map((load) => load.class_id),
+                                selectedSubjectLoads.map(
+                                  (load) => load.class_id,
+                                ),
                               );
                             }}
                             disabled={isCreating || Boolean(remediationTarget)}
@@ -1134,22 +1389,23 @@ export default function CreateClassworkModal({
                     </div>
                   )}
 
-
-
                   {selectedSubjectLoads.length > 0 ? (
                     <Card className="-mt-1 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                       {selectedSubjectLoads.map((load) => {
-                        const isSelected = selectedClassIds.includes(load.class_id);
+                        const isSelected = selectedClassIds.includes(
+                          load.class_id,
+                        );
                         return (
                           <button
                             key={load.subject_load_id}
                             type="button"
                             onClick={() => toggleClass(load.class_id)}
                             disabled={isCreating || Boolean(remediationTarget)}
-                            className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
-                              ? "bg-primary text-black"
-                              : "bg-white text-black hover:bg-accent"
-                              }`}
+                            className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                              isSelected
+                                ? "bg-primary text-black"
+                                : "bg-white text-black hover:bg-accent"
+                            }`}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between">
@@ -1157,8 +1413,11 @@ export default function CreateClassworkModal({
                                   {load.section_name}
                                 </p>
                                 <div
-                                  className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${isSelected ? "bg-black text-white" : "bg-white text-transparent"
-                                    }`}
+                                  className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${
+                                    isSelected
+                                      ? "bg-black text-white"
+                                      : "bg-white text-transparent"
+                                  }`}
                                 >
                                   <Check className="size-3.5 stroke-[3]" />
                                 </div>
@@ -1166,21 +1425,26 @@ export default function CreateClassworkModal({
 
                               <div className="mt-1 flex items-center justify-between w-full">
                                 <p
-                                  className={`text-xs font-medium ${isSelected
-                                    ? "text-foreground"
-                                    : "text-muted-foreground"
-                                    }`}
+                                  className={`text-xs font-medium ${
+                                    isSelected
+                                      ? "text-foreground"
+                                      : "text-muted-foreground"
+                                  }`}
                                 >
                                   {load.grade_level || "Active Section"}
                                 </p>
                                 {typeof load.student_count === "number" && (
                                   <p
-                                    className={`text-xs font-medium ${isSelected
-                                      ? "text-foreground"
-                                      : "text-muted-foreground"
-                                      }`}
+                                    className={`text-xs font-medium ${
+                                      isSelected
+                                        ? "text-foreground"
+                                        : "text-muted-foreground"
+                                    }`}
                                   >
-                                    {load.student_count} {load.student_count === 1 ? "student" : "students"}
+                                    {load.student_count}{" "}
+                                    {load.student_count === 1
+                                      ? "student"
+                                      : "students"}
                                   </p>
                                 )}
                               </div>
@@ -1200,23 +1464,19 @@ export default function CreateClassworkModal({
                     </Empty>
                   )}
 
-                  {validationError === "Select at least one section to assign this classwork." && (
+                  {validationError ===
+                    "Select at least one section to assign this classwork." && (
                     <FormMessage>{validationError}</FormMessage>
                   )}
                 </Field>
               </div>
-
             </div>
           )}
         </section>
 
         <Dialog.Footer position="fixed" variant="default">
           <div className="flex flex-row w-full justify-between">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="gap-2"
-            >
+            <Button variant="outline" onClick={onClose} className="gap-2">
               <X className="size-4" />
               Close
             </Button>
@@ -1238,7 +1498,11 @@ export default function CreateClassworkModal({
               </Button>
 
               {createStep === "details" ? (
-                <Button onClick={goToAssignStep} disabled={isCreating} className="gap-2">
+                <Button
+                  onClick={goToAssignStep}
+                  disabled={isCreating}
+                  className="gap-2"
+                >
                   Next
                   <ArrowRight className="size-4" />
                 </Button>
