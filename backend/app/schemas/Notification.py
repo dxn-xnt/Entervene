@@ -10,6 +10,9 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 NotificationType = Literal[
     "assignment_due",
+    "classwork_due_soon",
+    "classwork_due_today",
+    "classwork_overdue",
     "risk_alert",
     "announcement",
     "grade_released",

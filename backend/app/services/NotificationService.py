@@ -25,6 +25,7 @@ INTERVENTION_NOTIFICATION_TYPES = (
     "intervention_assessment_submitted", "intervention_passed",
     "intervention_assessment_not_passed",
 )
+EXCLUDED_FEED_NOTIFICATION_TYPES = ("announcement",)
 
 
 def _admin_account(db: Session, user_id: uuid.UUID) -> bool:
@@ -86,8 +87,14 @@ def get_notifications_for_user(
 ) -> NotificationListResponse:
     """Return notifications for a user, newest first."""
     uid = _to_uuid(user_id)
-    query = db.query(Notification).filter(Notification.user_id == uid)
-    unread_query = db.query(Notification).filter(Notification.user_id == uid)
+    query = db.query(Notification).filter(
+        Notification.user_id == uid,
+        Notification.notification_type.notin_(EXCLUDED_FEED_NOTIFICATION_TYPES),
+    )
+    unread_query = db.query(Notification).filter(
+        Notification.user_id == uid,
+        Notification.notification_type.notin_(EXCLUDED_FEED_NOTIFICATION_TYPES),
+    )
     if _has_intervention_notifications(db, uid) and _admin_account(db, uid):
         query = query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
         unread_query = unread_query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
@@ -119,7 +126,11 @@ def mark_notification_read(db: Session, notification_id: str, user_id: uuid.UUID
         Notification.user_id == uid,
     ).first()
 
-    if not record or (record.notification_type in INTERVENTION_NOTIFICATION_TYPES and _admin_account(db, uid)):
+    if (
+        not record
+        or record.notification_type in EXCLUDED_FEED_NOTIFICATION_TYPES
+        or (record.notification_type in INTERVENTION_NOTIFICATION_TYPES and _admin_account(db, uid))
+    ):
         raise HTTPException(status_code=404, detail="Notification not found")
 
     record.is_read = True
@@ -132,7 +143,11 @@ def mark_notification_read(db: Session, notification_id: str, user_id: uuid.UUID
 def mark_all_notifications_read(db: Session, user_id: uuid.UUID | str) -> dict:
     """Mark every unread notification for a user as read."""
     uid = _to_uuid(user_id)
-    query = db.query(Notification).filter(Notification.user_id == uid, Notification.is_read == False)  # noqa: E712
+    query = db.query(Notification).filter(
+        Notification.user_id == uid,
+        Notification.is_read == False,  # noqa: E712
+        Notification.notification_type.notin_(EXCLUDED_FEED_NOTIFICATION_TYPES),
+    )
     if _has_intervention_notifications(db, uid) and _admin_account(db, uid):
         query = query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
     updated = query.all()

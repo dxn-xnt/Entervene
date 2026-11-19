@@ -35,7 +35,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     selectedYear,
     selectedPeriod,
   } = useAcademicPeriod()
-  const unreadNotificationCount = useUnreadNotificationCount()
+  const unreadNotificationCount = useUnreadNotificationCount(role !== "admin")
 
   return (
     <Sidebar collapsible="offcanvas" className="no-scrollbar" {...props}>
