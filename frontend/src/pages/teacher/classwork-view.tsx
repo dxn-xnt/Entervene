@@ -961,25 +961,13 @@ export default function ClassworkView({
               <Card className="w-full border-0! p-0 shadow-none">
                 <Card.Content className="flex flex-col gap-1">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <Card.Title className="flex min-w-0 w-full flex-row items-center gap-3 mb-0 text-3xl font-bold">
+                    <Card.Title className="mb-0 flex min-w-0 flex-1 flex-row items-start gap-3 text-3xl font-bold">
                       <IconContainer variant="primary" size="xl" className="shrink-0">
                         <ClassworkTypeIcon type={selected.classwork_type} size={48} />
                       </IconContainer>
 
                       <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="min-w-0 flex-1 break-words">{selected.title}</span>
-                          <Badge variant="secondary" size="sm" className="shrink-0">
-                            {formatToTitleCase(selected.classwork_type)}
-                          </Badge>
-                          {!isReadingType(selected.classwork_type) && selected.classwork_category && (
-                            <Badge variant="outline" size="sm" className="shrink-0 whitespace-nowrap">{formatToTitleCase(selected.classwork_category)}</Badge>
-                          )}
-                          <Badge variant={selected.is_published ? "solid" : "default"} size="sm" className="shrink-0 whitespace-nowrap">
-                            {selected.is_published ? "Published" : "Draft"}
-                          </Badge>
-                          {selected.is_locked && <Badge variant="destructive" size="sm" className="shrink-0 whitespace-nowrap">Locked</Badge>}
-                        </div>
+                        <span className="min-w-0 break-words">{selected.title}</span>
 
                         <div className="gap-3">
                           {(Boolean(selected.linked_lessons?.length) || Boolean(selected.subject_name)) && (
@@ -1030,6 +1018,24 @@ export default function ClassworkView({
                       </div>
 
                     </Card.Title>
+                    <div className="flex flex-wrap justify-end gap-2 self-end md:shrink-0 md:self-start">
+                      <Badge variant="secondary" size="sm" className="shrink-0">
+                        {formatToTitleCase(selected.classwork_type)}
+                      </Badge>
+                      {!isReadingType(selected.classwork_type) && selected.classwork_category && (
+                        <Badge variant="outline" size="sm" className="shrink-0 whitespace-nowrap">
+                          {formatToTitleCase(selected.classwork_category)}
+                        </Badge>
+                      )}
+                      <Badge variant={selected.is_published ? "solid" : "default"} size="sm" className="shrink-0 whitespace-nowrap">
+                        {selected.is_published ? "Published" : "Draft"}
+                      </Badge>
+                      {selected.is_locked && (
+                        <Badge variant="destructive" size="sm" className="shrink-0 whitespace-nowrap">
+                          Locked
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </Card.Content>
               </Card>
