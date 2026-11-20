@@ -79,6 +79,10 @@ class SubjectFormOptions(BaseModel):
     grading_template_details: list[SubjectTemplateInline]
 
 
+class SubjectCodePreview(BaseModel):
+    subject_codename: str
+
+
 class SubjectImportError(BaseModel):
     row: int | None
     message: str
@@ -91,3 +95,21 @@ class SubjectImportResponse(BaseModel):
     error_count: int
     errors: list[SubjectImportError]
     warnings: list[str] = []
+
+
+class SubjectImportPreviewRow(BaseModel):
+    row: int
+    subject_code: str | None
+    subject_name: str
+    grade_level: str
+    grading_template: str
+    description: str
+    errors: list[str] = Field(default_factory=list)
+
+
+class SubjectImportPreviewResponse(BaseModel):
+    total_rows: int
+    valid_count: int
+    error_count: int
+    errors: list[SubjectImportError]
+    rows: list[SubjectImportPreviewRow]

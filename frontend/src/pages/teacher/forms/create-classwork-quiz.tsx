@@ -1,3 +1,4 @@
+
 "use client";
 
 import { DatePicker } from "@/components/retroui/DatePicker";
@@ -94,11 +95,11 @@ interface CreateClassworkQuizModalProps {
   remediationTarget?: TeacherInterventionDetail | null;
   remediationFocus?: RemediationFocus | null;
   remediationGradeTreatment?:
-    | "PRACTICE_ONLY"
-    | "WRITTEN_WORK"
-    | "PERFORMANCE_TASK"
-    | "EXAMINATION"
-    | null;
+  | "PRACTICE_ONLY"
+  | "WRITTEN_WORK"
+  | "PERFORMANCE_TASK"
+  | "EXAMINATION"
+  | null;
   remediationOriginalExam?: OriginalExamination | null;
   remediationOriginalTargets?: RemediationClassworkTarget[];
   initialTargetAssignmentId?: number | null;
@@ -161,7 +162,7 @@ export default function CreateClassworkQuizModal({
           setContextLesson(data);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       active = false;
     };
@@ -192,7 +193,7 @@ export default function CreateClassworkQuizModal({
   const [draft, setDraft] = useState<CreateDraft>(() => {
     const preferredId =
       initialSubjectId &&
-      subjects.some((s) => String(s.id) === String(initialSubjectId))
+        subjects.some((s) => String(s.id) === String(initialSubjectId))
         ? String(initialSubjectId)
         : subjects[0]
           ? String(subjects[0].id)
@@ -405,11 +406,11 @@ export default function CreateClassworkQuizModal({
           : isGradedWWPT && selectedOriginalTarget
             ? String(selectedOriginalTarget.max_points)
             : String(
-                importedQuestions.reduce(
-                  (sum, q) => sum + Number(q.points || 0),
-                  0,
-                ) || current.total_points,
-              ),
+              importedQuestions.reduce(
+                (sum, q) => sum + Number(q.points || 0),
+                0,
+              ) || current.total_points,
+            ),
       }));
       setCreateStep("details");
     } catch (err) {
@@ -440,9 +441,9 @@ export default function CreateClassworkQuizModal({
           next.options =
             patch.question_type === "MULTIPLE_CHOICE"
               ? [
-                  { option_text: "", is_correct: true, option_order: 1 },
-                  { option_text: "", is_correct: false, option_order: 2 },
-                ]
+                { option_text: "", is_correct: true, option_order: 1 },
+                { option_text: "", is_correct: false, option_order: 2 },
+              ]
               : [];
         }
         return next;
@@ -467,11 +468,11 @@ export default function CreateClassworkQuizModal({
       current.length === 1
         ? current
         : current
-            .filter((question) => question.id !== id)
-            .map((question, index) => ({
-              ...question,
-              display_order: index + 1,
-            })),
+          .filter((question) => question.id !== id)
+          .map((question, index) => ({
+            ...question,
+            display_order: index + 1,
+          })),
     );
   };
 
@@ -484,13 +485,13 @@ export default function CreateClassworkQuizModal({
       current.map((question) =>
         question.id === questionId
           ? {
-              ...question,
-              options: question.options.map((option, index) =>
-                index === optionIndex
-                  ? { ...option, option_text: optionText }
-                  : option,
-              ),
-            }
+            ...question,
+            options: question.options.map((option, index) =>
+              index === optionIndex
+                ? { ...option, option_text: optionText }
+                : option,
+            ),
+          }
           : question,
       ),
     );
@@ -501,12 +502,12 @@ export default function CreateClassworkQuizModal({
       current.map((question) =>
         question.id === questionId
           ? {
-              ...question,
-              options: question.options.map((option, index) => ({
-                ...option,
-                is_correct: index === optionIndex,
-              })),
-            }
+            ...question,
+            options: question.options.map((option, index) => ({
+              ...option,
+              is_correct: index === optionIndex,
+            })),
+          }
           : question,
       ),
     );
@@ -517,19 +518,19 @@ export default function CreateClassworkQuizModal({
       current.map((question) =>
         question.id === questionId
           ? {
-              ...question,
-              options: [
-                ...question.options,
-                {
-                  option_text: "",
-                  is_correct:
-                    question.question_type === "SHORT_ANSWER"
-                      ? true
-                      : isCorrect,
-                  option_order: question.options.length + 1,
-                },
-              ],
-            }
+            ...question,
+            options: [
+              ...question.options,
+              {
+                option_text: "",
+                is_correct:
+                  question.question_type === "SHORT_ANSWER"
+                    ? true
+                    : isCorrect,
+                option_order: question.options.length + 1,
+              },
+            ],
+          }
           : question,
       ),
     );
@@ -868,7 +869,7 @@ export default function CreateClassworkQuizModal({
       summary_release_mode: quizSettings.summary_release_mode,
       summary_release_at:
         quizSettings.summary_release_mode === "SCHEDULED" &&
-        quizSettings.summary_release_at
+          quizSettings.summary_release_at
           ? new Date(quizSettings.summary_release_at).toISOString()
           : null,
     },
@@ -887,18 +888,18 @@ export default function CreateClassworkQuizModal({
       options:
         question.question_type === "MULTIPLE_CHOICE"
           ? question.options.map((option, optionIndex) => ({
-              option_text: option.option_text.trim(),
-              is_correct: option.is_correct,
-              option_order: optionIndex + 1,
-            }))
+            option_text: option.option_text.trim(),
+            is_correct: option.is_correct,
+            option_order: optionIndex + 1,
+          }))
           : question.question_type === "IDENTIFICATION"
             ? question.options
-                .filter((opt) => opt.option_text.trim().length > 0)
-                .map((option, optionIndex) => ({
-                  option_text: option.option_text.trim(),
-                  is_correct: true,
-                  option_order: optionIndex + 1,
-                }))
+              .filter((opt) => opt.option_text.trim().length > 0)
+              .map((option, optionIndex) => ({
+                option_text: option.option_text.trim(),
+                is_correct: true,
+                option_order: optionIndex + 1,
+              }))
             : [],
     })),
   });
@@ -1156,53 +1157,53 @@ export default function CreateClassworkQuizModal({
                 {(aiLinkedSubjectName ||
                   (aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0) ||
                   aiPromptScope) && (
-                  <div className="rounded border-2 border-black bg-[#F6E9B2] p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-                        <span>AI Generation & Curriculum Context</span>
+                    <div className="rounded border-2 border-black bg-[#F6E9B2] p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                          <span>AI Generation & Curriculum Context</span>
+                        </div>
+                        <span className="text-[10px] font-extrabold uppercase bg-black text-white px-2 py-0.5">
+                          Auto-Linked
+                        </span>
                       </div>
-                      <span className="text-[10px] font-extrabold uppercase bg-black text-white px-2 py-0.5">
-                        Auto-Linked
-                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
+                          <span className="font-bold text-black/70 shrink-0">
+                            Subject:
+                          </span>
+                          <span className="font-extrabold text-black truncate">
+                            {aiLinkedSubjectName ||
+                              subjects.find(
+                                (s) => String(s.id) === String(draft.subject_id),
+                              )?.name ||
+                              "Subject"}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
+                          <span className="font-bold text-black/70 shrink-0">
+                            Linked Lessons:
+                          </span>
+                          <span className="font-extrabold text-black">
+                            {aiLinkedLessonTitles &&
+                              aiLinkedLessonTitles.length > 0
+                              ? aiLinkedLessonTitles.join(", ")
+                              : `${selectedLessonIds.length} lesson(s) selected`}
+                          </span>
+                        </div>
+                      </div>
+                      {aiPromptScope && (
+                        <div className="text-xs bg-white/80 border border-black/20 p-2 flex items-start gap-1.5">
+                          <span className="font-bold text-black/70 shrink-0">
+                            Custom Scope:
+                          </span>
+                          <span className="font-semibold text-black/90">
+                            "{aiPromptScope}"
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
-                        <span className="font-bold text-black/70 shrink-0">
-                          Subject:
-                        </span>
-                        <span className="font-extrabold text-black truncate">
-                          {aiLinkedSubjectName ||
-                            subjects.find(
-                              (s) => String(s.id) === String(draft.subject_id),
-                            )?.name ||
-                            "Subject"}
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
-                        <span className="font-bold text-black/70 shrink-0">
-                          Linked Lessons:
-                        </span>
-                        <span className="font-extrabold text-black">
-                          {aiLinkedLessonTitles &&
-                          aiLinkedLessonTitles.length > 0
-                            ? aiLinkedLessonTitles.join(", ")
-                            : `${selectedLessonIds.length} lesson(s) selected`}
-                        </span>
-                      </div>
-                    </div>
-                    {aiPromptScope && (
-                      <div className="text-xs bg-white/80 border border-black/20 p-2 flex items-start gap-1.5">
-                        <span className="font-bold text-black/70 shrink-0">
-                          Custom Scope:
-                        </span>
-                        <span className="font-semibold text-black/90">
-                          "{aiPromptScope}"
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
                 {remediationDraft && remediationTarget && (
                   <RemediationTeacherGuidanceBanner
                     remediationTarget={remediationTarget}
@@ -1300,15 +1301,15 @@ export default function CreateClassworkQuizModal({
                     </Field>
                     {(contextLesson.competency_statement ||
                       contextLesson.competency_code) && (
-                      <Field label="Learning Competency">
-                        <div className="w-full rounded border-2 border-black bg-muted/40 px-3 py-2 text-sm text-foreground">
-                          {contextLesson.competency_code
-                            ? `[${contextLesson.competency_code}] `
-                            : ""}
-                          {contextLesson.competency_statement}
-                        </div>
-                      </Field>
-                    )}
+                        <Field label="Learning Competency">
+                          <div className="w-full rounded border-2 border-black bg-muted/40 px-3 py-2 text-sm text-foreground">
+                            {contextLesson.competency_code
+                              ? `[${contextLesson.competency_code}] `
+                              : ""}
+                            {contextLesson.competency_statement}
+                          </div>
+                        </Field>
+                      )}
                   </>
                 )}
 
@@ -1336,7 +1337,7 @@ export default function CreateClassworkQuizModal({
 
                 <div className="grid gap-4 sm:grid-cols-3">
                   {remediationDraft &&
-                  remediationGradeTreatment === "PRACTICE_ONLY" ? (
+                    remediationGradeTreatment === "PRACTICE_ONLY" ? (
                     <p className="rounded border border-green-700 bg-green-50 p-3 text-sm font-semibold">
                       Practice only · No official grading component. Score and
                       completion remain visible in Intervention progress.
@@ -1366,10 +1367,10 @@ export default function CreateClassworkQuizModal({
                             </Select.Item>
                             {(!remediationDraft ||
                               remediationGradeTreatment === "EXAMINATION") && (
-                              <Select.Item value="QUARTERLY_ASSESSMENT">
-                                Exams
-                              </Select.Item>
-                            )}
+                                <Select.Item value="QUARTERLY_ASSESSMENT">
+                                  Exams
+                                </Select.Item>
+                              )}
                           </Select.Group>
                         </Select.Content>
                       </Select>
@@ -1378,64 +1379,64 @@ export default function CreateClassworkQuizModal({
 
                   {(draft.classwork_category === "QUARTERLY_ASSESSMENT" ||
                     draft.classwork_category === "EXAMS") && (
-                    <Field label="Exam Sub-type" isRequired>
-                      <Select
-                        value={draft.exam_subtype}
-                        onValueChange={(val) => {
-                          if (
-                            val &&
-                            createError ===
+                      <Field label="Exam Sub-type" isRequired>
+                        <Select
+                          value={draft.exam_subtype}
+                          onValueChange={(val) => {
+                            if (
+                              val &&
+                              createError ===
                               "Choose an Examination sub-type explicitly."
-                          )
-                            setCreateError("");
-                          setDraft((current) => ({
-                            ...current,
-                            exam_subtype: val,
-                          }));
-                        }}
-                        disabled={
-                          isCreating ||
-                          remediationGradeTreatment === "EXAMINATION"
-                        }
-                      >
-                        <Select.Trigger
-                          id="quiz-exam-subtype"
-                          aria-invalid={
-                            createError ===
-                            "Choose an Examination sub-type explicitly."
+                            )
+                              setCreateError("");
+                            setDraft((current) => ({
+                              ...current,
+                              exam_subtype: val,
+                            }));
+                          }}
+                          disabled={
+                            isCreating ||
+                            remediationGradeTreatment === "EXAMINATION"
                           }
-                          aria-describedby={
-                            createError ===
-                            "Choose an Examination sub-type explicitly."
-                              ? "quiz-exam-subtype-error"
-                              : undefined
-                          }
-                          className="w-full shadow-none aria-[invalid=true]:border-destructive"
                         >
-                          <Select.Value placeholder="Select Sub-type" />
-                        </Select.Trigger>
-                        <Select.Content className="border-2 border-black rounded bg-white shadow-none">
-                          <Select.Group>
-                            <Select.Item value="SUMMATIVE_1">
-                              Summative 1 (30%)
-                            </Select.Item>
-                            <Select.Item value="SUMMATIVE_2">
-                              Summative 2 (30%)
-                            </Select.Item>
-                            <Select.Item value="TERM_EXAM">
-                              Term Exam (40%)
-                            </Select.Item>
-                          </Select.Group>
-                        </Select.Content>
-                      </Select>
-                      {createError ===
-                        "Choose an Examination sub-type explicitly." && (
-                        <FormMessage id="quiz-exam-subtype-error">
-                          {createError}
-                        </FormMessage>
-                      )}
-                    </Field>
-                  )}
+                          <Select.Trigger
+                            id="quiz-exam-subtype"
+                            aria-invalid={
+                              createError ===
+                              "Choose an Examination sub-type explicitly."
+                            }
+                            aria-describedby={
+                              createError ===
+                                "Choose an Examination sub-type explicitly."
+                                ? "quiz-exam-subtype-error"
+                                : undefined
+                            }
+                            className="w-full shadow-none aria-[invalid=true]:border-destructive"
+                          >
+                            <Select.Value placeholder="Select Sub-type" />
+                          </Select.Trigger>
+                          <Select.Content className="border-2 border-black rounded bg-white shadow-none">
+                            <Select.Group>
+                              <Select.Item value="SUMMATIVE_1">
+                                Summative 1 (30%)
+                              </Select.Item>
+                              <Select.Item value="SUMMATIVE_2">
+                                Summative 2 (30%)
+                              </Select.Item>
+                              <Select.Item value="TERM_EXAM">
+                                Term Exam (40%)
+                              </Select.Item>
+                            </Select.Group>
+                          </Select.Content>
+                        </Select>
+                        {createError ===
+                          "Choose an Examination sub-type explicitly." && (
+                            <FormMessage id="quiz-exam-subtype-error">
+                              {createError}
+                            </FormMessage>
+                          )}
+                      </Field>
+                    )}
 
                   {isGradedWWPT && (
                     <Field
@@ -1443,7 +1444,7 @@ export default function CreateClassworkQuizModal({
                       isRequired={true}
                     >
                       {remediationOriginalTargets &&
-                      remediationOriginalTargets.length > 1 ? (
+                        remediationOriginalTargets.length > 1 ? (
                         <Select
                           value={
                             selectedTargetId ? String(selectedTargetId) : ""
@@ -1535,7 +1536,7 @@ export default function CreateClassworkQuizModal({
                         if (
                           Number(event.target.value) > 0 &&
                           createError ===
-                            "Total points must be greater than zero."
+                          "Total points must be greater than zero."
                         )
                           setCreateError("");
                         setDraft((current) => ({
@@ -1549,7 +1550,7 @@ export default function CreateClassworkQuizModal({
                       }
                       aria-describedby={
                         createError ===
-                        "Total points must be greater than zero."
+                          "Total points must be greater than zero."
                           ? "quiz-total-points-error"
                           : undefined
                       }
@@ -1562,10 +1563,10 @@ export default function CreateClassworkQuizModal({
                     />
                     {createError ===
                       "Total points must be greater than zero." && (
-                      <FormMessage id="quiz-total-points-error">
-                        {createError}
-                      </FormMessage>
-                    )}
+                        <FormMessage id="quiz-total-points-error">
+                          {createError}
+                        </FormMessage>
+                      )}
                   </Field>
                 </div>
 
@@ -1573,7 +1574,7 @@ export default function CreateClassworkQuizModal({
                   <p className="rounded border p-3 text-sm">
                     Evidence focus: {focusGuidance(remediationFocus)}
                     {remediationGradeTreatment === "EXAMINATION" &&
-                    remediationOriginalExam
+                      remediationOriginalExam
                       ? ` Original ${remediationOriginalExam.title}: ${remediationOriginalExam.score}/${remediationOriginalExam.total_points}. The higher result will count.`
                       : ""}
                     {isGradedWWPT && selectedOriginalTarget
@@ -1600,53 +1601,53 @@ export default function CreateClassworkQuizModal({
                 {(aiLinkedSubjectName ||
                   (aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0) ||
                   aiPromptScope) && (
-                  <div className="rounded border-2 border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-                        <span>AI Generation & Curriculum Context</span>
+                    <div className="rounded border-2 border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                          <span>AI Generation & Curriculum Context</span>
+                        </div>
+                        <span className="text-[10px] font-extrabold uppercase bg-black text-white px-2 py-0.5">
+                          Auto-Linked
+                        </span>
                       </div>
-                      <span className="text-[10px] font-extrabold uppercase bg-black text-white px-2 py-0.5">
-                        Auto-Linked
-                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
+                          <span className="font-bold text-black/70 shrink-0">
+                            Subject:
+                          </span>
+                          <span className="font-extrabold text-black truncate">
+                            {aiLinkedSubjectName ||
+                              subjects.find(
+                                (s) => String(s.id) === String(draft.subject_id),
+                              )?.name ||
+                              "Subject"}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
+                          <span className="font-bold text-black/70 shrink-0">
+                            Linked Lessons:
+                          </span>
+                          <span className="font-extrabold text-black">
+                            {aiLinkedLessonTitles &&
+                              aiLinkedLessonTitles.length > 0
+                              ? aiLinkedLessonTitles.join(", ")
+                              : `${selectedLessonIds.length} lesson(s) selected`}
+                          </span>
+                        </div>
+                      </div>
+                      {aiPromptScope && (
+                        <div className="text-xs bg-white/80 border border-black/20 p-2 flex items-start gap-1.5">
+                          <span className="font-bold text-black/70 shrink-0">
+                            Custom Scope:
+                          </span>
+                          <span className="font-semibold text-black/90">
+                            "{aiPromptScope}"
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
-                        <span className="font-bold text-black/70 shrink-0">
-                          Subject:
-                        </span>
-                        <span className="font-extrabold text-black truncate">
-                          {aiLinkedSubjectName ||
-                            subjects.find(
-                              (s) => String(s.id) === String(draft.subject_id),
-                            )?.name ||
-                            "Subject"}
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
-                        <span className="font-bold text-black/70 shrink-0">
-                          Linked Lessons:
-                        </span>
-                        <span className="font-extrabold text-black">
-                          {aiLinkedLessonTitles &&
-                          aiLinkedLessonTitles.length > 0
-                            ? aiLinkedLessonTitles.join(", ")
-                            : `${selectedLessonIds.length} lesson(s) selected`}
-                        </span>
-                      </div>
-                    </div>
-                    {aiPromptScope && (
-                      <div className="text-xs bg-white/80 border border-black/20 p-2 flex items-start gap-1.5">
-                        <span className="font-bold text-black/70 shrink-0">
-                          Custom Scope:
-                        </span>
-                        <span className="font-semibold text-black/90">
-                          "{aiPromptScope}"
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
 
                 <Card className="block w-full rounded! p-4 shadow-none hover:shadow-none">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2266,9 +2267,8 @@ export default function CreateClassworkQuizModal({
                       >
                         <span>{setting.label}</span>
                         <span
-                          className={`rounded border border-black px-2 py-0.5 text-[10px] ${
-                            enabled ? "bg-[#7ABA78]" : "bg-gray-100"
-                          }`}
+                          className={`rounded border border-black px-2 py-0.5 text-[10px] ${enabled ? "bg-[#7ABA78]" : "bg-gray-100"
+                            }`}
                         >
                           {enabled ? "On" : "Off"}
                         </span>
@@ -2508,11 +2508,10 @@ export default function CreateClassworkQuizModal({
                             type="button"
                             onClick={() => toggleClass(load.class_id)}
                             disabled={isCreating || isSubjectLocked}
-                            className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
-                              isSelected
+                            className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
                                 ? "bg-primary text-black"
                                 : "bg-white text-black hover:bg-accent"
-                            }`}
+                              }`}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between">
@@ -2520,11 +2519,10 @@ export default function CreateClassworkQuizModal({
                                   {load.section_name}
                                 </p>
                                 <div
-                                  className={`flex size-5 shrink-0 items-center justify-center rounded-md border-2 border-black transition-colors ${
-                                    isSelected
+                                  className={`flex size-5 shrink-0 items-center justify-center rounded-md border-2 border-black transition-colors ${isSelected
                                       ? "bg-primary text-black"
                                       : "bg-white text-transparent"
-                                  }`}
+                                    }`}
                                 >
                                   <Check className="size-3.5 stroke-[3]" />
                                 </div>
@@ -2532,21 +2530,19 @@ export default function CreateClassworkQuizModal({
 
                               <div className="mt-1 flex items-center justify-between w-full">
                                 <p
-                                  className={`text-xs font-medium ${
-                                    isSelected
+                                  className={`text-xs font-medium ${isSelected
                                       ? "text-foreground"
                                       : "text-muted-foreground"
-                                  }`}
+                                    }`}
                                 >
                                   {load.grade_level || "Active Section"}
                                 </p>
                                 {typeof load.student_count === "number" && (
                                   <p
-                                    className={`text-xs font-medium ${
-                                      isSelected
+                                    className={`text-xs font-medium ${isSelected
                                         ? "text-foreground"
                                         : "text-muted-foreground"
-                                    }`}
+                                      }`}
                                   >
                                     {load.student_count}{" "}
                                     {load.student_count === 1
@@ -2582,15 +2578,15 @@ export default function CreateClassworkQuizModal({
                     <p className="mt-2 rounded border p-2 text-xs">
                       Evidence focus: {focusGuidance(remediationFocus)}
                       {remediationGradeTreatment === "EXAMINATION" &&
-                      remediationOriginalExam
+                        remediationOriginalExam
                         ? ` Original ${remediationOriginalExam.title} fixes the subtype and ${remediationOriginalExam.total_points} possible points.`
                         : ""}
                     </p>
                   )}
                   {createError ===
                     "Select at least one section to assign this quiz." && (
-                    <FormMessage>{createError}</FormMessage>
-                  )}
+                      <FormMessage>{createError}</FormMessage>
+                    )}
                 </Field>
 
                 <Field label="Link under lesson (Coverage)" isRequired>
@@ -2620,11 +2616,10 @@ export default function CreateClassworkQuizModal({
                             type="button"
                             onClick={() => toggleLesson(lesson.lesson_id)}
                             disabled={isCreating || isLessonLocked}
-                            className={`rounded-lg border-2 border-black px-3 py-2 text-left text-xs font-bold cursor-pointer transition-colors shadow-none ${
-                              isSelected
+                            className={`rounded-lg border-2 border-black px-3 py-2 text-left text-xs font-bold cursor-pointer transition-colors shadow-none ${isSelected
                                 ? "bg-success/70 hover:bg-success/70"
                                 : "bg-white hover:bg-muted"
-                            }`}
+                              }`}
                           >
                             <span className="block truncate">
                               {lesson.title}
@@ -2645,8 +2640,8 @@ export default function CreateClassworkQuizModal({
                   )}
                   {createError ===
                     "Select the lesson where this quiz should appear." && (
-                    <FormMessage>{createError}</FormMessage>
-                  )}
+                      <FormMessage>{createError}</FormMessage>
+                    )}
                 </Field>
 
                 {selectedLessonIds.length > 0 &&
@@ -2797,17 +2792,16 @@ export default function CreateClassworkQuizModal({
                             );
                             const currentVal =
                               question.lesson_id &&
-                              selectedLessonIds.includes(question.lesson_id)
+                                selectedLessonIds.includes(question.lesson_id)
                                 ? String(question.lesson_id)
                                 : "";
                             return (
                               <div
                                 key={question.id}
-                                className={`rounded-lg border px-3 py-2 transition ${
-                                  isChecked
+                                className={`rounded-lg border px-3 py-2 transition ${isChecked
                                     ? "border-black bg-yellow-50"
                                     : "border-gray-200 bg-white"
-                                }`}
+                                  }`}
                               >
                                 <div className="mb-2 flex min-w-0 items-center gap-2">
                                   <Checkbox
@@ -3100,11 +3094,11 @@ export default function CreateClassworkQuizModal({
                 : isGradedWWPT && selectedOriginalTarget
                   ? String(selectedOriginalTarget.max_points)
                   : String(
-                      questions.reduce(
-                        (sum, q) => sum + Number(q.points || 0),
-                        0,
-                      ) || current.total_points,
-                    ),
+                    questions.reduce(
+                      (sum, q) => sum + Number(q.points || 0),
+                      0,
+                    ) || current.total_points,
+                  ),
             }));
             if (associatedLessonIds && associatedLessonIds.length > 0) {
               setSelectedLessonIds(associatedLessonIds);

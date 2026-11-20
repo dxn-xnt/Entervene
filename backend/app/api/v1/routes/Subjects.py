@@ -6,14 +6,17 @@ from app.core.Dependencies import require_role
 from app.db.Session import get_db
 from app.schemas.Subject import (
     SubjectCreate,
+    SubjectCodePreview,
     SubjectFormOptions,
     SubjectImportResponse,
+    SubjectImportPreviewResponse,
     SubjectListResponse,
     SubjectResponse,
     SubjectUpdate,
 )
 from app.services.subjects.SubjectImportService import (
     import_subject_catalog_csv,
+    preview_subject_catalog_csv,
     subject_import_template_csv,
 )
 from app.services.subjects.SubjectQueryService import (
@@ -24,6 +27,7 @@ from app.services.subjects.SubjectQueryService import (
 from app.services.subjects.SubjectService import (
     archive_subject_record,
     create_subject_record,
+    preview_subject_code_record,
     restore_subject_record,
     update_subject_record,
 )
@@ -70,6 +74,22 @@ def download_subject_import_template(
     )
 
 
+@router.get("/code-preview", response_model=SubjectCodePreview)
+def preview_subject_code(
+    subject_name: str = Query(..., min_length=1, max_length=150),
+    academic_level_id: int = Query(...),
+    subject_id: int | None = Query(None),
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return preview_subject_code_record(
+        db=db,
+        subject_name=subject_name,
+        academic_level_id=academic_level_id,
+        subject_id=subject_id,
+    )
+
+
 @router.post("/import", response_model=SubjectImportResponse)
 async def import_subjects(
     file: UploadFile = File(...),
@@ -77,6 +97,15 @@ async def import_subjects(
     db: Session = Depends(get_db),
 ):
     return await import_subject_catalog_csv(db=db, file=file)
+
+
+@router.post("/import-preview", response_model=SubjectImportPreviewResponse)
+async def preview_subject_import(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return await preview_subject_catalog_csv(db=db, file=file)
 
 
 @router.get("/{subject_id}", response_model=SubjectResponse)
