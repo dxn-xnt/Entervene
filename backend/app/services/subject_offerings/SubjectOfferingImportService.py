@@ -279,12 +279,6 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             else:
                 row_errors.append(f"Unrecognized pathway '{pathway_text}'. Must match an active pathway code or name.")
 
-        if academic_level is not None and not row_errors:
-            if academic_level.grade_level <= 10 and norm_text != "general":
-                row_errors.append(f"Grade {academic_level.grade_level} offerings must use the general pathway (Grade 7 to Grade 10).")
-            elif academic_level.grade_level >= 11 and norm_text == "general":
-                row_errors.append(f"Grade {academic_level.grade_level} offerings require a specific pathway (Grade 11 and Grade 12).")
-
         subject = None
         if not subject_code:
             row_errors.append("subject_code cannot be blank.")
@@ -302,8 +296,24 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             if subject is None:
                 row_errors.append("subject_code must exist for the selected grade level.")
 
-        if subject is not None and getattr(subject, "is_core", False) and pathway_ids:
-            row_errors.append("Core subjects are mandatory for all pathways and cannot have pathway restrictions.")
+        if academic_level is not None and academic_year is not None and not row_errors:
+            is_core_subject = bool(subject is not None and getattr(subject, "is_core", False))
+            if is_core_subject:
+                if pathway_ids:
+                    row_errors.append("Core subjects are mandatory for all pathways and cannot have pathway restrictions.")
+            else:
+                from app.services.pathways.PathwayScopeService import resolve_pathway_scope
+                requires_pathway = resolve_pathway_scope(
+                    db, academic_year.academic_year_id, academic_level.academic_level_id
+                )
+                if not requires_pathway and norm_text != "general":
+                    row_errors.append(
+                        f"Grade {academic_level.grade_level} offerings must use the general pathway for this academic year."
+                    )
+                elif requires_pathway and norm_text == "general":
+                    row_errors.append(
+                        f"Grade {academic_level.grade_level} offerings require a specific pathway for this academic year."
+                    )
 
         if not row_errors and subject is not None and academic_year is not None and academic_level is not None and academic_period is not None:
             scope_key = (

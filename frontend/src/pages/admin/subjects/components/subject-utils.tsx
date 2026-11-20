@@ -85,8 +85,8 @@ export function offeringQueryFromFilters(filters: OfferingFilters, options: Subj
 
   const level = filters.grade !== ALL_VALUE
     ? options.academic_levels.find(
-        (item) => String(item.grade_level) === filters.grade || String(item.academic_level_id) === filters.grade
-      )
+      (item) => String(item.grade_level) === filters.grade || String(item.academic_level_id) === filters.grade
+    )
     : undefined;
   if (filters.grade !== ALL_VALUE && !level) return null;
 
@@ -157,10 +157,36 @@ export function gradeValueForLevel(level: SubjectAcademicLevel | null | undefine
   return String(level.grade_level) as CurriculumGradeValue;
 }
 
-export function defaultPathwayForGrade(grade: CurriculumGradeValue): CurriculumPathwayValue {
+export function defaultPathwayForGrade(
+  grade: CurriculumGradeValue,
+  requiresPathway?: boolean,
+): CurriculumPathwayValue {
+  if (grade === ALL_VALUE) return ALL_VALUE;
+  if (requiresPathway === true) return "all";
+  if (requiresPathway === false) return "general";
   if (grade === "7" || grade === "8" || grade === "9" || grade === "10") return "general";
-  if (grade === "11" || grade === "12") return "all";
+  if (grade === "11") return "all";
+  if (grade === "12") return "general";
   return ALL_VALUE;
+}
+
+export function levelRequiresPathway(
+  pathwayScopes: SubjectOfferingFormOptions["pathway_scopes"] | undefined,
+  academicYearId: number | null | undefined,
+  academicLevelId: number | null | undefined,
+  gradeLevel: number | null | undefined,
+): boolean {
+  if (gradeLevel != null && gradeLevel < 11) return false;
+  if (pathwayScopes?.length && academicYearId) {
+    const exact = pathwayScopes.find(
+      (scope) =>
+        scope.academic_year_id === academicYearId &&
+        ((academicLevelId != null && scope.academic_level_id === academicLevelId) ||
+          (gradeLevel != null && scope.grade_level === gradeLevel)),
+    );
+    if (exact) return exact.requires_pathway;
+  }
+  return gradeLevel === 11;
 }
 
 export function gradeLabel(grade: CurriculumGradeValue) {

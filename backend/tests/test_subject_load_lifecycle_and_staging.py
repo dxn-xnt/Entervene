@@ -962,21 +962,39 @@ def test_mixed_save_is_atomic_and_other_section_stays_editable(test_setup):
     assert (locked_baseline.start_time, locked_baseline.section_revision) == ("08:00", 1)
 
 
-def test_auto_schedule_endpoint_removed_and_unauthorized_unlock_denied(test_setup):
+def test_auto_schedule_preserves_locked_sections_and_unauthorized_access_denied(test_setup):
     request, load, headers = _publish_locked_fixture(test_setup)
     teacher_token = create_access_token(str(test_setup["staff_a"].user_id), "teacher")
-    denied = test_setup["client"].post(
+    denied_unlock = test_setup["client"].post(
         "/api/v1/subject-loads/unlock-section",
         json={"academic_period_id": request["academic_period_id"], "class_id": load["class_id"]},
         headers={"Authorization": f"Bearer {teacher_token}"},
     )
-    assert denied.status_code == 403
-    removed = test_setup["client"].post(
+    assert denied_unlock.status_code == 403
+    denied_autogen = test_setup["client"].post(
         "/api/v1/subject-loads/auto-schedule",
-        json={"academic_period_id": request["academic_period_id"], "loads": [{**load, "start_time": "10:00", "end_time": "11:00"}]},
+        json={"academic_period_id": request["academic_period_id"], "loads": []},
+        headers={"Authorization": f"Bearer {teacher_token}"},
+    )
+    assert denied_autogen.status_code == 403
+
+    preview = test_setup["client"].post(
+        "/api/v1/subject-loads/auto-schedule",
+        json={
+            "academic_period_id": request["academic_period_id"],
+            "target_class_ids": [load["class_id"]],
+            "overwrite_existing_drafts": True,
+            "loads": [{**load, "start_time": "10:00", "end_time": "11:00"}],
+        },
         headers=headers,
     )
-    assert removed.status_code == 404
+    assert preview.status_code == 200, preview.text
+    preview_data = preview.json()
+    assert preview_data["summary"]["locked_sections_count"] == 1
+    assert preview_data["summary"]["generated_count"] == 0
+    assert preview_data["scheduled_loads"][0]["start_time"] == "08:00"
+    assert preview_data["scheduled_loads"][0]["end_time"] == "09:00"
+
     baseline = test_setup["db"].query(SubjectLoad).filter(
         SubjectLoad.class_id == load["class_id"],
         SubjectLoad.is_active_version.is_(True),

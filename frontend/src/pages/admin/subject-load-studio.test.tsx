@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
   getSubjectLoadStudioData: vi.fn(),
   validateSubjectLoads: vi.fn(),
+  autoScheduleSubjectLoads: vi.fn(),
   batchSaveSubjectLoads: vi.fn(),
   unlockSection: vi.fn(),
   discardDraft: vi.fn(),
@@ -101,6 +102,7 @@ vi.mock("@/lib/api", () => ({
   apiFetch: mocks.apiFetch,
   getSubjectLoadStudioData: mocks.getSubjectLoadStudioData,
   validateSubjectLoads: mocks.validateSubjectLoads,
+  autoScheduleSubjectLoads: mocks.autoScheduleSubjectLoads,
   batchSaveSubjectLoads: mocks.batchSaveSubjectLoads,
   unlockSection: mocks.unlockSection,
   discardDraft: mocks.discardDraft,
@@ -318,7 +320,7 @@ describe("buildInitialStudioLoads", () => {
 });
 
 describe("AdminSubjectLoadStudio", () => {
-  it("omits Auto-Generate and Auto-Fit Section and does not mutate existing schedules on open", async () => {
+  it("exposes Auto-Generate controls without mutating existing schedules on open", async () => {
     const data = makeStudioData({
       classes: [
         { class_id: 10, section_name: "Archimedes", academic_level_id: 9, academic_year_id: 1, period_template_group: "JHS_45MIN" },
@@ -365,8 +367,8 @@ describe("AdminSubjectLoadStudio", () => {
       expect(screen.getByText("Filipino 9")).toBeTruthy();
     });
 
-    expect(screen.queryByRole("button", { name: /auto-generate/i })).toBeNull();
-    expect(screen.queryByText(/auto-fit section/i)).toBeNull();
+    expect(screen.getByRole("button", { name: /^auto-generate$/i })).toBeTruthy();
+    expect(mocks.autoScheduleSubjectLoads).not.toHaveBeenCalled();
     expect(mocks.batchSaveSubjectLoads).not.toHaveBeenCalled();
 
     // Opening the page validated the preserved published loads and kept fresh section 11 unscheduled.
@@ -393,9 +395,10 @@ describe("AdminSubjectLoadStudio", () => {
       expect(screen.getByLabelText("Monday 8:00 AM - 8:45 AM")).toBeTruthy();
     });
 
-    // No subject card is pre-placed on the timetable grid.
+    // No subject card is pre-placed on the timetable grid, while Auto-Generate Section is available in More options.
     expect(screen.queryByText("Filipino 9")).toBeNull();
-    expect(screen.queryByRole("button", { name: /more options/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /more options/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /auto-generate section/i })).toBeTruthy();
 
     // Click empty cell -> Add Subject -> Filipino 9
     fireEvent.click(screen.getByLabelText("Monday 8:00 AM - 8:45 AM"));
@@ -1532,5 +1535,282 @@ describe("Task 5: Standardized SHS period scheduling", () => {
     expect(normalized[1].slot_id).toBeNull();
     expect(normalized[1].start_time).toBe("08:15");
     expect(normalized[1].end_time).toBe("09:27");
+  });
+});
+
+describe("Task 1: Restored Auto-Generate preview, conflict visibility, and draft-only saving", () => {
+  it("previews generated, unscheduled, and skipped items with reasons, surfaces existing conflicts, and saves strictly as draft", async () => {
+    const data = makeStudioData({
+      existing_loads: [
+        {
+          subject_load_id: 501,
+          class_id: 10,
+          subject_id: 100,
+          staff_id: "T001",
+          academic_period_id: 1,
+          slot_id: 2,
+          start_time: "08:00",
+          end_time: "08:45",
+          days_of_week: ["MON", "TUE", "WED", "THU", "FRI"],
+          status: "draft",
+          is_locked: false,
+        },
+      ],
+      has_pending_draft_by_class: { 10: true },
+    });
+    mocks.getSubjectLoadStudioData.mockResolvedValue(data);
+    mocks.autoScheduleSubjectLoads.mockResolvedValue({
+      is_valid: false,
+      existing_conflicts: [
+        {
+          rule: "TEACHER_OVERLAP",
+          severity: "error",
+          message: "Teacher Angel Alcantara is double-booked on MON (08:00-08:45).",
+          class_id: 10,
+          subject_id: 100,
+          staff_id: "T001",
+          affected_key: "10_100",
+        },
+      ],
+      conflicts: [
+        {
+          rule: "TEACHER_OVERLAP",
+          severity: "error",
+          message: "Teacher Angel Alcantara is double-booked on MON (08:00-08:45).",
+          class_id: 10,
+          subject_id: 100,
+          staff_id: "T001",
+          affected_key: "10_100",
+        },
+      ],
+      teacher_workloads: [],
+      scheduled_loads: [
+        {
+          subject_load_id: 501,
+          class_id: 10,
+          subject_id: 100,
+          staff_id: "T001",
+          academic_period_id: 1,
+          slot_id: 2,
+          start_time: "08:00",
+          end_time: "08:45",
+          days_of_week: ["MON", "TUE", "WED", "THU", "FRI"],
+          status: "draft",
+          is_locked: false,
+        },
+        {
+          class_id: 10,
+          subject_id: 101,
+          staff_id: null,
+          academic_period_id: 1,
+          slot_id: 9,
+          start_time: "13:00",
+          end_time: "14:00",
+          days_of_week: ["MON", "TUE", "WED", "THU", "FRI"],
+          status: "draft",
+          is_locked: false,
+        },
+      ],
+      items: [
+        {
+          class_id: 10,
+          section_name: "Archimedes",
+          subject_id: 100,
+          subject_name: "Filipino 9",
+          staff_id: "T001",
+          staff_name: "Angel Alcantara",
+          outcome: "skipped",
+          reason_code: "PRESERVED_MANUAL_DRAFT",
+          reason: "Preserved existing manual schedule (08:00-08:45, Mon–Fri).",
+          replaced_existing: false,
+          slot_id: 2,
+          start_time: "08:00",
+          end_time: "08:45",
+          days_of_week: ["MON", "TUE", "WED", "THU", "FRI"],
+        },
+        {
+          class_id: 10,
+          section_name: "Archimedes",
+          subject_id: 101,
+          subject_name: "Mathematics 9",
+          staff_id: null,
+          staff_name: null,
+          outcome: "generated",
+          reason_code: "SCHEDULED_5_DAY",
+          reason: "Scheduled in Enhanced Period 1 (13:00–14:00, Mon–Fri).",
+          replaced_existing: false,
+          slot_id: 9,
+          slot_name: "Enhanced Period 1",
+          start_time: "13:00",
+          end_time: "14:00",
+          days_of_week: ["MON", "TUE", "WED", "THU", "FRI"],
+        },
+      ],
+      summary: {
+        target_sections_count: 1,
+        locked_sections_count: 0,
+        generated_count: 1,
+        skipped_count: 1,
+        unscheduled_count: 0,
+        replaced_count: 0,
+        existing_error_conflicts_count: 1,
+        resulting_error_conflicts_count: 1,
+      },
+      unscheduled_loads: [],
+    });
+    mocks.batchSaveSubjectLoads.mockResolvedValue({
+      message: "Saved as draft.",
+      saved_count: 2,
+      status: "draft",
+      is_valid: true,
+      conflicts: [],
+    });
+
+    render(<AdminSubjectLoadStudio />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^auto-generate$/i })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^auto-generate$/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => {
+      expect(within(dialog).getByText(/Scheduled in Enhanced Period 1/i)).toBeTruthy();
+    });
+
+    // Preserved manual draft and existing conflict are both clearly shown before saving
+    expect(within(dialog).getByText(/Preserved existing manual schedule/i)).toBeTruthy();
+    expect(within(dialog).getByText(/1 existing schedule conflict detected/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Teacher Angel Alcantara is double-booked/i)).toBeTruthy();
+
+    // Default call preserves existing drafts (overwriteExistingDrafts: false)
+    expect(mocks.autoScheduleSubjectLoads).toHaveBeenCalledWith(
+      1,
+      expect.any(Array),
+      expect.objectContaining({ overwriteExistingDrafts: false }),
+    );
+    expect(mocks.batchSaveSubjectLoads).not.toHaveBeenCalled();
+
+    // Save as Draft persists strictly with action="draft" (never publish)
+    fireEvent.click(within(dialog).getByRole("button", { name: /save as draft/i }));
+
+    await waitFor(() => {
+      expect(mocks.batchSaveSubjectLoads).toHaveBeenCalledWith(
+        1,
+        9,
+        "draft",
+        expect.arrayContaining([
+          expect.objectContaining({ class_id: 10, subject_id: 101, slot_id: 9, status: "draft" }),
+        ]),
+        "section",
+        null,
+        10,
+        null,
+      );
+    });
+  });
+
+  it("requires explicit opt-in checkbox before requesting overwrite of existing manual drafts and leaves state unchanged on Cancel", async () => {
+    const data = makeStudioData({
+      existing_loads: [
+        {
+          subject_load_id: 601,
+          class_id: 10,
+          subject_id: 100,
+          staff_id: "T001",
+          academic_period_id: 1,
+          slot_id: 2,
+          start_time: "08:00",
+          end_time: "08:45",
+          days_of_week: ["MON", "TUE", "WED", "THU", "FRI"],
+          status: "draft",
+          is_locked: false,
+        },
+      ],
+      has_pending_draft_by_class: { 10: true },
+    });
+    mocks.getSubjectLoadStudioData.mockResolvedValue(data);
+    mocks.autoScheduleSubjectLoads.mockImplementation(async (_periodId, _loads, options) => ({
+      is_valid: true,
+      existing_conflicts: [],
+      conflicts: [],
+      teacher_workloads: [],
+      scheduled_loads: [
+        {
+          subject_load_id: 601,
+          class_id: 10,
+          subject_id: 100,
+          staff_id: "T001",
+          academic_period_id: 1,
+          slot_id: options?.overwriteExistingDrafts ? 3 : 2,
+          start_time: options?.overwriteExistingDrafts ? "08:45" : "08:00",
+          end_time: options?.overwriteExistingDrafts ? "09:30" : "08:45",
+          days_of_week: ["MON", "TUE", "WED", "THU", "FRI"],
+          status: "draft",
+          is_locked: false,
+        },
+      ],
+      items: [
+        {
+          class_id: 10,
+          section_name: "Archimedes",
+          subject_id: 100,
+          subject_name: "Filipino 9",
+          staff_id: "T001",
+          staff_name: "Angel Alcantara",
+          outcome: options?.overwriteExistingDrafts ? "generated" : "skipped",
+          reason_code: options?.overwriteExistingDrafts ? "SCHEDULED_5_DAY" : "PRESERVED_MANUAL_DRAFT",
+          reason: options?.overwriteExistingDrafts
+            ? "Regenerated in Period 2 (08:45–09:30, Mon–Fri)."
+            : "Preserved existing manual schedule (08:00-08:45, Mon–Fri).",
+          replaced_existing: Boolean(options?.overwriteExistingDrafts),
+          slot_id: options?.overwriteExistingDrafts ? 3 : 2,
+          slot_name: options?.overwriteExistingDrafts ? "Period 2" : "Period 1",
+          start_time: options?.overwriteExistingDrafts ? "08:45" : "08:00",
+          end_time: options?.overwriteExistingDrafts ? "09:30" : "08:45",
+          days_of_week: ["MON", "TUE", "WED", "THU", "FRI"],
+        },
+      ],
+      summary: {
+        target_sections_count: 1,
+        locked_sections_count: 0,
+        generated_count: options?.overwriteExistingDrafts ? 1 : 0,
+        skipped_count: options?.overwriteExistingDrafts ? 0 : 1,
+        unscheduled_count: 0,
+        replaced_count: options?.overwriteExistingDrafts ? 1 : 0,
+        existing_error_conflicts_count: 0,
+        resulting_error_conflicts_count: 0,
+      },
+      unscheduled_loads: [],
+    }));
+
+    render(<AdminSubjectLoadStudio />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /auto-generate section/i })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /auto-generate section/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/Preserved existing manual schedule/i)).toBeTruthy();
+    });
+
+    // Apply/Save buttons disabled when nothing new would be generated
+    expect((within(dialog).getByRole("button", { name: /save as draft/i }) as HTMLButtonElement).disabled).toBe(true);
+
+    // Check explicit overwrite opt-in
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/Explicit overwrite confirmation required/i)).toBeTruthy();
+      expect(within(dialog).getByRole("button", { name: /replace & save draft/i })).toBeTruthy();
+    });
+
+    // Cancelling closes without saving or changing loads
+    fireEvent.click(within(dialog).getByRole("button", { name: /^cancel$/i }));
+    expect(mocks.batchSaveSubjectLoads).not.toHaveBeenCalled();
   });
 });
