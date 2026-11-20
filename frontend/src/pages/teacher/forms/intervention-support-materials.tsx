@@ -77,8 +77,12 @@ import {
   type TeacherInterventionSummary,
   type OriginalExamination,
   type RemediationGenerationEligibility,
+  type InterventionRecipientScopes,
+  type ResourceRecipientScope,
 } from "@/lib/teacher-interventions-api";
 import { SubjectGradeProjectionCard } from "./subject-grade-projection-card";
+import { InterventionResourceRecipientSelector } from "./intervention-resource-recipient-selector";
+import { formatResourceScopeBadgeLabel } from "@/lib/intervention-resource-scope";
 import { formatToTitleCase } from "@/lib/formatters";
 import CreateClassworkModal from "./create-classwork";
 import EditClassworkModal from "./edit-classwork";
@@ -387,6 +391,8 @@ const InterventionSupportMaterials = forwardRef<
   const [materials, setMaterials] = useState<SupportMaterial[]>([]);
   const [resources, setResources] = useState<RemediationResource[]>([]);
   const [focus, setFocus] = useState<RemediationFocus | null>(null);
+  const [recipientScopes, setRecipientScopes] = useState<InterventionRecipientScopes | null>(null);
+  const [resourceRecipientScope, setResourceRecipientScope] = useState<ResourceRecipientScope>("THIS_STUDENT");
   const [generationEligibility, setGenerationEligibility] = useState<RemediationGenerationEligibility | null>(null);
   const [refreshingEvidence, setRefreshingEvidence] = useState(false);
   const [progress, setProgress] = useState<RemediationProgress | null>(null);
@@ -494,6 +500,7 @@ const InterventionSupportMaterials = forwardRef<
     try {
       const updatedWorkspace = await getRemediationWorkspace(interventionId);
       setResources(updatedWorkspace.resources);
+      setRecipientScopes(updatedWorkspace.recipient_scopes ?? null);
 
       const createdObj = createdData as { classwork_id?: number; id?: number; title?: string } | undefined;
       const createdId = createdObj?.classwork_id ?? createdObj?.id;
@@ -629,6 +636,8 @@ const InterventionSupportMaterials = forwardRef<
       ]);
       setMaterials(support.items);
       setResources(workspace.resources);
+      setRecipientScopes(workspace.recipient_scopes ?? null);
+      setResourceRecipientScope("THIS_STUDENT");
       const hasExistingAssessment = Boolean(
         (workspace.progress?.assigned_remediation && workspace.progress.assigned_remediation.length > 0) ||
         (workspace.progress?.completed_remediation && workspace.progress.completed_remediation.length > 0)
@@ -1570,6 +1579,15 @@ const InterventionSupportMaterials = forwardRef<
           ? "Assessment coverage only"
           : "Component-level evidence only";
 
+  const scoredCompetencySummary =
+    focus?.evidence_level === "QUESTION_SCORE" ||
+    focus?.evidence_level === "SCORED_COMPETENCY"
+      ? focus.competencies
+          .map((item) => item.label.trim())
+          .filter(Boolean)
+          .join("; ")
+      : "";
+
   const hasSupportingResources = selectedResources.length > 0;
   const hasRemediationActivity = assigned.length > 0;
   const hasConfiguredSupport = Boolean(hasSupportingResources && hasRemediationActivity);
@@ -1588,11 +1606,19 @@ const InterventionSupportMaterials = forwardRef<
     }
   };
 
-  function planValues(value: RemediationPlan, targets: number[], cap: string, availableResources: RemediationResource[]) {
+  function planValues(
+    value: RemediationPlan,
+    targets: number[],
+    cap: string,
+    availableResources: RemediationResource[],
+    scope: ResourceRecipientScope = "THIS_STUDENT",
+  ) {
+    const reconciled = reconcileSelectedResources(value.selected_resources, availableResources);
     return {
       teacher_choice: value.teacher_choice,
       grade_treatment: value.grade_treatment ?? null,
-      selected_resources: unorderedValues(reconcileSelectedResources(value.selected_resources, availableResources)),
+      selected_resources: unorderedValues(reconciled),
+      resource_recipient_scope: reconciled.length > 0 ? scope : "THIS_STUDENT",
       original_exam_assignment_id: value.grade_treatment === "EXAMINATION" ? value.original_exam_assignment_id ?? targets[0] ?? null : null,
       targets: value.grade_treatment && value.grade_treatment !== "PRACTICE_ONLY" ? unorderedValues(targets) : [],
       cap: value.grade_treatment && value.grade_treatment !== "PRACTICE_ONLY" ? Number(cap) : null,
@@ -1600,7 +1626,7 @@ const InterventionSupportMaterials = forwardRef<
   }
   const changes = useEditFormChanges({
     initialValues: savedPlanValues,
-    values: planValues(plan, selectedActivityIds, capInput, resources),
+    values: planValues(plan, selectedActivityIds, capInput, resources, resourceRecipientScope),
     resetKey: interventionId,
   });
   useEffect(() => {
@@ -1608,6 +1634,7 @@ const InterventionSupportMaterials = forwardRef<
   }, [loading, workspaceError, changes.hasChanges, onChangesChange]);
   const saveAdjustments = async (options?: SaveAdjustmentsOptions): Promise<boolean> => {
     const reconciledSelectedResources = reconcileSelectedResources(plan.selected_resources, resources);
+    const shouldIncludeRecipientScope = reconciledSelectedResources.length > 0;
     if (options?.readingsOnly) {
       const persisted = persistedPlanRef.current;
       if (!persisted) return true;
@@ -1615,7 +1642,9 @@ const InterventionSupportMaterials = forwardRef<
       const resourcesUnchanged =
         JSON.stringify(unorderedValues(reconciledSelectedResources)) ===
         JSON.stringify(unorderedValues(persistedResources));
-      if (resourcesUnchanged) return true;
+      const scopeUnchanged =
+        !shouldIncludeRecipientScope || resourceRecipientScope === "THIS_STUDENT";
+      if (resourcesUnchanged && scopeUnchanged) return true;
 
       setWorking(true);
       try {
@@ -1628,6 +1657,9 @@ const InterventionSupportMaterials = forwardRef<
           teacher_choice: persisted.teacher_choice,
           grade_treatment: persistedTreatment ?? null,
           selected_resources: reconciledSelectedResources,
+          ...(shouldIncludeRecipientScope
+            ? { resource_recipient_scope: resourceRecipientScope }
+            : {}),
           ...(persistedTreatment === "EXAMINATION"
             ? {
               original_exam_assignment_id:
@@ -1665,11 +1697,13 @@ const InterventionSupportMaterials = forwardRef<
           selected_resources: normalizedPersistedPlan.selected_resources,
           ai_suggestion: normalizedPersistedPlan.ai_suggestion,
         }));
+        setResourceRecipientScope("THIS_STUDENT");
         setSavedPlanValues(planValues(
           normalizedPersistedPlan,
           activeUnlinked == null ? [] : [activeUnlinked],
           String(result.plan.score_adjustment_cap ?? persisted.score_adjustment_cap ?? 75),
-          result.resources
+          result.resources,
+          "THIS_STUDENT",
         ));
         const updatedSavedReadings = (result.plan.selected_resources || [])
           .filter((r) => r.kind === "CLASSWORK")
@@ -1680,6 +1714,9 @@ const InterventionSupportMaterials = forwardRef<
           setPredictionImpact(result.prediction_impact ?? null);
         }
         setResources(result.resources);
+        if (result.recipient_scopes !== undefined) {
+          setRecipientScopes(result.recipient_scopes ?? null);
+        }
         toast.success({ title: "Adjustments saved successfully." });
         return true;
       } catch (cause) {
@@ -1742,6 +1779,9 @@ const InterventionSupportMaterials = forwardRef<
         teacher_choice: plan.teacher_choice,
         grade_treatment: treatmentToUse ?? null,
         selected_resources: reconciledSelectedResources,
+        ...(shouldIncludeRecipientScope
+          ? { resource_recipient_scope: resourceRecipientScope }
+          : {}),
         ...(treatmentToUse === "EXAMINATION"
           ? {
             original_exam_assignment_id:
@@ -1779,17 +1819,22 @@ const InterventionSupportMaterials = forwardRef<
       persistedPlanRef.current = normalizedSavedPlan;
       setSelectedActivityIds(nextSelectedIds);
       setPlan(normalizedSavedPlan);
+      setResourceRecipientScope("THIS_STUDENT");
       setSavedPlanValues(planValues(
         normalizedSavedPlan,
         nextSelectedIds,
         String(result.plan.score_adjustment_cap ?? capInput),
-        result.resources
+        result.resources,
+        "THIS_STUDENT",
       ));
       const updatedSavedReadings = (result.plan.selected_resources || [])
         .filter((r) => r.kind === "CLASSWORK")
         .map((r) => r.id);
       setSavedReadingIds(updatedSavedReadings);
       setResources(result.resources);
+      if (result.recipient_scopes !== undefined) {
+        setRecipientScopes(result.recipient_scopes ?? null);
+      }
       if (result.progress) setProgress(result.progress);
       if (result.prediction_impact !== undefined) {
         setPredictionImpact(result.prediction_impact ?? null);
@@ -2301,6 +2346,7 @@ const InterventionSupportMaterials = forwardRef<
 
   const resourceOption = (item: RemediationResource) => {
     const checked = selected.has(`${item.kind}:${item.id}`);
+    const scopeLabel = formatResourceScopeBadgeLabel(item.current_recipient_scope);
     return (
       <ClassworkItemLine
         key={`${item.kind}:${item.id}`}
@@ -2312,8 +2358,13 @@ const InterventionSupportMaterials = forwardRef<
         showType={false}
         onClick={() => !working && toggleResource(item)}
         rightContent={
-          <div className="flex items-center gap-2">
-            {item.recommended && <Badge variant="solid" size="sm">Recommended</Badge>}
+          <div className="flex flex-wrap items-center gap-2">
+            {item.added_by_teacher ? (
+              <Badge variant="surface" size="sm">Added by teacher</Badge>
+            ) : item.recommended ? (
+              <Badge variant="solid" size="sm">Recommended</Badge>
+            ) : null}
+            {scopeLabel && <Badge variant="surface" size="sm">{scopeLabel}</Badge>}
             <Badge variant="outline" size="sm">{formatToTitleCase(item.classwork_type ?? item.kind)}</Badge>
             <Checkbox
               checked={checked}
@@ -2335,6 +2386,15 @@ const InterventionSupportMaterials = forwardRef<
         <h4 className="font-semibold">Select Supporting Readings</h4>
         <span className="text-sm text-muted-foreground">{selectedResources.length} selected</span>
       </div>
+      <InterventionResourceRecipientSelector
+        value={resourceRecipientScope}
+        onChange={setResourceRecipientScope}
+        scopes={recipientScopes}
+        fallbackStudentName={detail.student_name}
+        fallbackClassName={detail.class_name}
+        fallbackSubjectName={subjectName}
+        disabled={working}
+      />
       <Field label="Lesson">
         <Select value={lessonFilter} onValueChange={setLessonFilter}>
           <Select.Trigger className="w-full"><Select.Value placeholder="All Lessons" /></Select.Trigger>
@@ -2467,36 +2527,25 @@ const InterventionSupportMaterials = forwardRef<
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1">
                 <h3 className="font-black">Academic Diagnosis</h3>
-                <Card className="grid grid-cols-4 w-full mb-1">
-                  <p className="text-base cols-span-1">
-                    Support focus: <strong>{focusName}</strong>
-                    <span className="text-sm text-muted-foreground ml-1">{sourceName ? `(${sourceName})` : ""}</span>
-                  </p>
-                  <p className="text-base col-span-3">
-                    Strongest available evidence: <strong>{strongestEvidenceText}</strong>
-                  </p>
+                <Card className="flex flex-col gap-2 w-full">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                    <p className="text-base">
+                      Support focus: <strong>{focusName}</strong>
+                      {sourceName && (
+                        <span className="text-sm text-muted-foreground ml-1">
+                          ({sourceName})
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-base">
+                      Strongest available evidence:{" "}
+                      <strong>{strongestEvidenceText}</strong>
+                    </p>
+                  </div>
 
-                  {focus?.evidence_level === "QUESTION_SCORE" && (
-                    <>
-                      <p className="text-base col-span-full">
-                        Scored competency focus:{" "}
-                        {focus.competencies.map((item) => item.label).join("; ")}
-                      </p>
-                      {focus.question_evidence.map((item, index) => (
-                        <p
-                          key={`${item.quiz_question_id ?? "unknown"}-${index}`}
-                          className="text-sm col-span-full"
-                        >
-                          Question #{item.quiz_question_id ?? "unknown"}: {item.score}/
-                          {item.possible_score}
-                        </p>
-                      ))}
-                    </>
-                  )}
-                  {focus?.evidence_level === "SCORED_COMPETENCY" && (
-                    <p className="text-base col-span-full">
-                      Scored competency focus:{" "}
-                      {focus.competencies.map((item) => item.label).join("; ")}
+                  {scoredCompetencySummary && (
+                    <p className="text-base">
+                      Scored competency focus: {scoredCompetencySummary}
                     </p>
                   )}
                 </Card>
@@ -2754,11 +2803,15 @@ const InterventionSupportMaterials = forwardRef<
                                 showCategory={false}
                                 rightContent={
                                   <div className="flex items-center gap-1.5">
-                                    {item.recommended && (
+                                    {item.added_by_teacher ? (
+                                      <Badge variant="surface" size="sm">
+                                        Added by teacher
+                                      </Badge>
+                                    ) : item.recommended ? (
                                       <Badge variant="solid" size="sm">
                                         Recommended
                                       </Badge>
-                                    )}
+                                    ) : null}
                                   </div>
                                 }
                               />
@@ -2948,6 +3001,15 @@ const InterventionSupportMaterials = forwardRef<
                     </Dialog.Title>
                   </Dialog.Header>
                   <div className="flex-1 space-y-3 overflow-y-auto p-4 pr-3">
+                    <InterventionResourceRecipientSelector
+                      value={resourceRecipientScope}
+                      onChange={setResourceRecipientScope}
+                      scopes={recipientScopes}
+                      fallbackStudentName={detail.student_name}
+                      fallbackClassName={detail.class_name}
+                      fallbackSubjectName={subjectName}
+                      disabled={working}
+                    />
                     <Field label="">
                       <Select value={lessonFilter} onValueChange={(val) => setLessonFilter(val)}>
                         <Select.Trigger className="w-full h-10">
@@ -3115,17 +3177,17 @@ const InterventionSupportMaterials = forwardRef<
                     loads={effectiveLoads}
                     initialSubjectId={String(detail.subject_id)}
                     initialClassId={detail.class_id}
-                    initialLessonId={
-                      lessonFilter !== "ALL"
-                        ? focus?.lessons.find((l) => l.title === lessonFilter)?.id ??
-                        resources.find(
-                          (r) =>
-                            r.kind === "LESSON" &&
-                            (r.title === lessonFilter || r.lesson === lessonFilter)
-                        )?.id ??
-                        undefined
-                        : undefined
-                    }
+                    interventionResourceContext={{
+                      interventionId: detail.intervention_id,
+                      studentId: detail.student_id,
+                      studentName: detail.student_name,
+                      classId: detail.class_id,
+                      className: detail.class_name,
+                      subjectId: detail.subject_id,
+                      subjectName,
+                      academicPeriodId: detail.academic_period_id,
+                      recipientScopes,
+                    }}
                     onClose={() => setIsCreatingReading(false)}
                     onBack={() => setIsCreatingReading(false)}
                     onSuccess={handleReadingCreated}

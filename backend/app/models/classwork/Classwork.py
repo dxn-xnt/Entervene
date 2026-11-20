@@ -29,12 +29,22 @@ class Classwork(Base):
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     subject_id: Mapped[int] = mapped_column(Integer, ForeignKey("subject.subject_id"), nullable=False)
     created_by_staff_id: Mapped[str] = mapped_column(String(20), ForeignKey("academic_staff.staff_id"), nullable=False)
+    intervention_resource_origin_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("intervention.intervention_id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
     subject: Mapped[object] = relationship("Subject", backref="classworks")
     staff: Mapped[object] = relationship("AcademicStaff", backref="classworks")
+    intervention_resource_origin: Mapped[object | None] = relationship(
+        "Intervention",
+        foreign_keys=[intervention_resource_origin_id],
+    )
     attachments: Mapped[list["ClassworkAttachment"]] = relationship("ClassworkAttachment", back_populates="classwork", cascade="all, delete-orphan")
     reference_links: Mapped[list["ClassworkReferenceLink"]] = relationship(
         "ClassworkReferenceLink", back_populates="classwork", cascade="all, delete-orphan",

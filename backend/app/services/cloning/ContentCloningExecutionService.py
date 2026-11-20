@@ -71,6 +71,7 @@ def _period_for_classwork(classwork: Classwork) -> int | None:
         )
         for assignment in classwork.assignments
         if assignment.recipient_student_id is None
+        and not (getattr(assignment, "recipients", None) or [])
         and assignment.source_intervention_id is None
         and assignment.remediation_request_id is None
         and assignment.original_exam_assignment_id is None
