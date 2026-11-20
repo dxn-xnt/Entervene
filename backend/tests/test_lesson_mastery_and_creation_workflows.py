@@ -33,6 +33,9 @@ from app.models.classwork.ActivityRubricLevel import ActivityRubricLevel
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkAssignmentRecipient import (
+    ClassworkAssignmentRecipient,
+)
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.classwork.ClassworkReferenceLink import ClassworkReferenceLink
 from app.models.people.AcademicStaff import AcademicStaff
@@ -67,6 +70,7 @@ TABLES = [
     ClassworkAttachment.__table__,
     ActivityRubricLevel.__table__,
     ClassworkAssignment.__table__,
+    ClassworkAssignmentRecipient.__table__,
     ClassworkLesson.__table__,
     ClassworkReferenceLink.__table__,
     Notification.__table__,
