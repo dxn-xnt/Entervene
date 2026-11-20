@@ -756,6 +756,8 @@ async def create_classwork_wizard_record(
                 quiz_builder.settings.max_attempts = max_attempts
             # Save quiz builder rows before committing so classwork+quiz creation is atomic.
             upsert_quiz_builder(db, classwork, quiz_builder)
+            if is_published:
+                ensure_published_quiz_student_ready(db, classwork)
 
         if intervention and is_published:
             from app.services.intervention.RemediationReadingPrerequisiteService import (
