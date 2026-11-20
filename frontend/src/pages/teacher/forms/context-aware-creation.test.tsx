@@ -56,6 +56,41 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return {
     ...actual,
     apiFetch: vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/intervention-resource-recipient-context")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              current_scope: "THIS_STUDENT",
+              recipient_scopes: {
+                default_scope: "THIS_STUDENT",
+                this_student: {
+                  scope: "THIS_STUDENT",
+                  student_id: "student-1",
+                  student_name: "Morgan Striving",
+                  class_id: 100,
+                  class_name: "Diamond",
+                  student_count: 1,
+                },
+                entire_class: {
+                  scope: "ENTIRE_CLASS",
+                  class_id: 100,
+                  class_name: "Diamond",
+                  student_count: 17,
+                },
+                all_subject_students: {
+                  scope: "ALL_SUBJECT_STUDENTS",
+                  subject_id: 10,
+                  subject_name: "English 8",
+                  class_ids: [100],
+                  class_names: ["Diamond"],
+                  section_count: 1,
+                  student_count: 17,
+                },
+              },
+            }),
+        });
+      }
       if (url.includes("/api/v1/competencies/subject/")) {
         return Promise.resolve({
           ok: true,
@@ -314,6 +349,7 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     expect(screen.getByRole("region", { name: "Editable Settings" }).className).toContain("order-1");
     expect(screen.getByRole("region", { name: "Reference Links / Materials" }).className).toContain("order-2");
     expect(screen.getByRole("region", { name: "Assign to Sections" }).className).toContain("order-4");
+    expect(screen.queryByText("Share reading with")).toBeNull();
     expect(screen.getByTestId("edit-classwork-modal-body").className).toContain("overflow-y-auto");
 
     // Rerender with Assignment
@@ -332,6 +368,59 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     expect(screen.getByText("Reference Links")).toBeDefined();
     expect(screen.getByText(/Add Reference Link/i)).toBeDefined();
     expect(screen.getByRole("region", { name: "Scoring Rubric" }).className).toContain("order-3");
+  });
+
+  it("places intervention-created reading recipients after Publish Status and before materials", async () => {
+    const reading: TeacherClasswork = {
+      classwork_id: 16,
+      title: "Targeted Reading",
+      classwork_type: "READING",
+      is_graded: false,
+      total_points: null,
+      is_published: true,
+      show_scores: false,
+      is_locked: false,
+      is_archived: false,
+      subject_id: 10,
+      subject_name: "English 8",
+      attachments: [],
+      reference_links: [],
+      intervention_resource_origin_id: 6,
+      assignments: [
+        {
+          classwork_assignment_id: 16,
+          classwork_id: 16,
+          class_id: 100,
+          is_published: true,
+          show_scores: false,
+          recipient_student_ids: ["student-1"],
+        },
+      ],
+    };
+
+    render(
+      <MemoryRouter>
+        <EditClassworkModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classwork={reading}
+          onSuccess={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Share reading with")).toBeDefined();
+    expect(
+      screen.getByRole("region", { name: "Resource recipients" }).className,
+    ).toContain("order-2");
+    expect(
+      screen.getByRole("region", { name: "Reference Links / Materials" })
+        .className,
+    ).toContain("order-3");
+    expect(screen.getByText("Publish Status")).toBeDefined();
+    expect(
+      screen.getByText("Assigned to: 1 student (Morgan Striving in Diamond)"),
+    ).toBeDefined();
   });
 
   it("restores editable quiz creation settings before attempts", async () => {

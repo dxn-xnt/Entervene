@@ -703,7 +703,13 @@ def assignment_tracking(assignment_id: int, staff_id: str, db: Session) -> dict:
     )
     if assignment.recipient_student_id:
         roster_query = roster_query.filter(Student.student_id == assignment.recipient_student_id)
-    roster_rows = roster_query.order_by(Student.last_name.asc(), Student.first_name.asc()).all()
+    roster_rows = [
+        student
+        for student in roster_query.order_by(
+            Student.last_name.asc(), Student.first_name.asc()
+        ).all()
+        if assignment_allows_student(assignment, student.student_id)
+    ]
     avatars = dict(
         db.query(Student.student_id, UserAccount.avatar_path)
         .join(UserAccount, Student.user_id == UserAccount.user_id)
@@ -770,9 +776,12 @@ def classwork_tracking(classwork_id: int, staff_id: str, db: Session) -> dict:
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
 
-    assignments = db.query(ClassworkAssignment).filter(
-        ClassworkAssignment.classwork_id == classwork_id
-    ).all()
+    assignments = (
+        db.query(ClassworkAssignment)
+        .options(selectinload(ClassworkAssignment.recipients))
+        .filter(ClassworkAssignment.classwork_id == classwork_id)
+        .all()
+    )
     if not assignments:
         return {
             "classwork_id": classwork_id,
@@ -802,9 +811,19 @@ def classwork_tracking(classwork_id: int, staff_id: str, db: Session) -> dict:
     if not enrolled_rows:
         enrolled_rows = db.query(StudentClass).filter(StudentClass.class_id.in_(class_ids)).all()
 
-    recipients_by_class = {assignment.class_id: assignment.recipient_student_id for assignment in assignments}
-    roster_student_ids = list({str(row.student_id) for row in enrolled_rows
-        if recipients_by_class.get(row.class_id) is None or str(recipients_by_class[row.class_id]) == str(row.student_id)})
+    assignments_by_class: dict[int, list[ClassworkAssignment]] = {}
+    for assignment in assignments:
+        assignments_by_class.setdefault(assignment.class_id, []).append(assignment)
+    roster_student_ids = list(
+        {
+            str(row.student_id)
+            for row in enrolled_rows
+            if any(
+                assignment_allows_student(assignment, row.student_id)
+                for assignment in assignments_by_class.get(row.class_id, [])
+            )
+        }
+    )
     all_student_ids = list(set(roster_student_ids) | set(subs_by_student.keys()))
     if not all_student_ids:
         return {

@@ -64,14 +64,29 @@ import type {
   OriginalExamination,
   RemediationClassworkTarget,
   RemediationResource,
+  InterventionRecipientScopes,
+  ResourceRecipientScope,
 } from "@/lib/teacher-interventions-api";
 import { categoryFromFocus } from "@/lib/remediation-authoring";
 import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
+import { InterventionResourceRecipientSelector } from "./intervention-resource-recipient-selector";
 import { ReferenceLinkEditor } from "@/components/classwork-reference-links";
 import {
   validateReferenceLinks,
   type ReferenceLinkDraft,
 } from "@/lib/classwork-reference-links";
+
+export interface InterventionResourceContext {
+  interventionId: number;
+  studentId: string;
+  studentName: string;
+  classId: number;
+  className: string;
+  subjectId: number;
+  subjectName: string;
+  academicPeriodId: number;
+  recipientScopes?: InterventionRecipientScopes | null;
+}
 
 interface CreateClassworkModalProps {
   draftOnly?: boolean;
@@ -84,6 +99,7 @@ interface CreateClassworkModalProps {
   initialLessonId?: number;
   initialTitle?: string;
   initialInstructions?: string;
+  interventionResourceContext?: InterventionResourceContext | null;
   remediationDraft?: boolean;
   remediationTarget?: TeacherInterventionDetail | null;
   remediationFocus?: RemediationFocus | null;
@@ -113,6 +129,7 @@ export default function CreateClassworkModal({
   initialLessonId,
   initialTitle,
   initialInstructions,
+  interventionResourceContext = null,
   remediationDraft = false,
   remediationTarget,
   remediationFocus = null,
@@ -183,9 +200,20 @@ export default function CreateClassworkModal({
       subject_id: preferredId,
     };
   });
+  const isInterventionResourceMode = Boolean(
+    interventionResourceContext && isReadingType(selectedType),
+  );
+  const [recipientScope, setRecipientScope] =
+    useState<ResourceRecipientScope>("THIS_STUDENT");
   const isSubjectLocked =
-    Boolean(initialSubjectId) || Boolean(remediationTarget);
+    Boolean(initialSubjectId) ||
+    Boolean(remediationTarget) ||
+    isInterventionResourceMode;
   const isLessonLocked = Boolean(initialLessonId);
+
+  useEffect(() => {
+    setRecipientScope("THIS_STUDENT");
+  }, [interventionResourceContext?.interventionId]);
 
   useEffect(() => {
     if (
@@ -407,6 +435,9 @@ export default function CreateClassworkModal({
     const linksError = validateReferenceLinks(referenceLinks);
     if (linksError) return linksError;
     if (!draft.subject_id) return "Choose a subject.";
+    if (isInterventionResourceMode && selectedLessonIds.length === 0) {
+      return "Choose a lesson for this reading.";
+    }
     if (!draft.title.trim()) return "Topic title is required.";
     if (
       remediationDraft &&
@@ -488,12 +519,19 @@ export default function CreateClassworkModal({
     const loadSubjectLessons = async () => {
       try {
         const subjectIdNum = Number(draft.subject_id);
-        const relatedLoads = loads.filter(
-          (load) => load.subject_id === subjectIdNum,
-        );
+        const relatedLoads = isInterventionResourceMode && interventionResourceContext
+          ? [
+              {
+                class_id: interventionResourceContext.classId,
+                academic_period_id:
+                  interventionResourceContext.academicPeriodId,
+              },
+            ]
+          : loads.filter((load) => load.subject_id === subjectIdNum);
 
         const fetchPromises: Promise<TeacherLesson[]>[] = [
-          apiFetch("/api/v1/lessons/my-lessons")
+          ...(!isInterventionResourceMode
+            ? [apiFetch("/api/v1/lessons/my-lessons")
             .then(async (res) =>
               res.ok ? ((await res.json()) as TeacherLesson[]) : [],
             )
@@ -502,11 +540,15 @@ export default function CreateClassworkModal({
                 (l) => Number(l.subject_id) === subjectIdNum && !l.is_archived,
               ),
             )
-            .catch(() => []),
+            .catch(() => [])]
+            : []),
           ...relatedLoads.map(async (load) => {
             try {
+              const periodQuery = load.academic_period_id
+                ? `?academic_period_id=${load.academic_period_id}`
+                : "";
               const res = await apiFetch(
-                `/api/v1/lessons/my-class/${load.class_id}/subject/${draft.subject_id}`,
+                `/api/v1/lessons/my-class/${load.class_id}/subject/${draft.subject_id}${periodQuery}`,
               );
               return res.ok ? ((await res.json()) as TeacherLesson[]) : [];
             } catch {
@@ -533,7 +575,7 @@ export default function CreateClassworkModal({
 
         setAvailableLessons(lessons);
         setSelectedLessonIds((current) => {
-          if (remediationFocus) {
+          if (remediationFocus && !isInterventionResourceMode) {
             return remediationFocus.lesson_ids.filter((id) =>
               uniqueLessons.has(id),
             );
@@ -566,7 +608,14 @@ export default function CreateClassworkModal({
       isActive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft.subject_id, initialLessonId, loads, remediationFocus]);
+  }, [
+    draft.subject_id,
+    initialLessonId,
+    interventionResourceContext,
+    isInterventionResourceMode,
+    loads,
+    remediationFocus,
+  ]);
 
   const handleCreateClasswork = async () => {
     const validationError = validateDetails();
@@ -576,7 +625,7 @@ export default function CreateClassworkModal({
       setCreateStep("details");
       return;
     }
-    if (selectedClassIds.length === 0) {
+    if (!isInterventionResourceMode && selectedClassIds.length === 0) {
       const msg = "Select at least one section to assign this classwork.";
       setValidationError(msg);
       toast.error({ title: msg });
@@ -630,8 +679,23 @@ export default function CreateClassworkModal({
         "auto_ai_feedback_enabled",
         String(autoAiSupported && draft.auto_ai_feedback_enabled),
       );
-      formData.append("class_ids", JSON.stringify(selectedClassIds));
-      if (remediationTarget) {
+      const effectiveClassIds =
+        isInterventionResourceMode && interventionResourceContext
+          ? recipientScope === "ALL_SUBJECT_STUDENTS" &&
+            interventionResourceContext.recipientScopes?.all_subject_students
+              .class_ids.length
+            ? interventionResourceContext.recipientScopes.all_subject_students
+                .class_ids
+            : [interventionResourceContext.classId]
+          : selectedClassIds;
+      formData.append("class_ids", JSON.stringify(effectiveClassIds));
+      if (isInterventionResourceMode && interventionResourceContext) {
+        formData.append(
+          "intervention_id",
+          String(interventionResourceContext.interventionId),
+        );
+        formData.append("recipient_scope", recipientScope);
+      } else if (remediationTarget) {
         formData.append(
           "intervention_id",
           String(remediationTarget.intervention_id),
@@ -682,6 +746,9 @@ export default function CreateClassworkModal({
           selectedClassIds.includes(l.class_id),
       );
       const academicPeriodId =
+        (isInterventionResourceMode
+          ? interventionResourceContext?.academicPeriodId
+          : undefined) ??
         remediationTarget?.academic_period_id ??
         selectedLoad?.academic_period_id;
       if (academicPeriodId) {
@@ -865,7 +932,7 @@ export default function CreateClassworkModal({
                 </Select>
               </Field>
 
-              <Field label="Lesson">
+              <Field label="Lesson" isRequired={isInterventionResourceMode}>
                 <Select
                   value={
                     selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""
@@ -917,18 +984,23 @@ export default function CreateClassworkModal({
                 const selectedLesson = availableLessons.find(
                   (l) => l.lesson_id === selectedLessonIds[0],
                 );
-                if (
-                  selectedLesson &&
-                  (selectedLesson.competency_statement ||
-                    selectedLesson.competency_code)
-                ) {
+                if (selectedLesson) {
                   return (
                     <Field label="Learning Competency">
                       <div className="w-full rounded border-2 border-black bg-muted/40 px-3 py-2 text-sm text-foreground">
-                        {selectedLesson.competency_code
-                          ? `[${selectedLesson.competency_code}] `
-                          : ""}
-                        {selectedLesson.competency_statement}
+                        {selectedLesson.competency_statement ||
+                        selectedLesson.competency_code ? (
+                          <>
+                            {selectedLesson.competency_code
+                              ? `[${selectedLesson.competency_code}] `
+                              : ""}
+                            {selectedLesson.competency_statement}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            No learning competency is linked to this lesson.
+                          </span>
+                        )}
                       </div>
                     </Field>
                   );
@@ -1347,7 +1419,18 @@ export default function CreateClassworkModal({
               </div>
 
               <div className="mt-4">
-                <Field label="Assign to Sections" isRequired>
+                {isInterventionResourceMode && interventionResourceContext ? (
+                  <InterventionResourceRecipientSelector
+                    value={recipientScope}
+                    onChange={setRecipientScope}
+                    scopes={interventionResourceContext.recipientScopes}
+                    fallbackStudentName={interventionResourceContext.studentName}
+                    fallbackClassName={interventionResourceContext.className}
+                    fallbackSubjectName={interventionResourceContext.subjectName}
+                    disabled={isCreating}
+                  />
+                ) : (
+                  <Field label="Assign to Sections" isRequired>
                   {remediationTarget ? (
                     <Card className="mb-3 rounded border-2 border-black bg-primary p-3 space-y-1">
                       <div className="flex items-start justify-between">
@@ -1476,6 +1559,7 @@ export default function CreateClassworkModal({
                     <FormMessage>{validationError}</FormMessage>
                   )}
                 </Field>
+                )}
               </div>
             </div>
           )}

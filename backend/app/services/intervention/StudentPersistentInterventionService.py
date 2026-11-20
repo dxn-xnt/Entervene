@@ -103,9 +103,12 @@ def resolve_required_readings(
             ))
             continue
 
-        assignment = next((item for item in scope_assignments if (
-            item.recipient_student_id is None or item.recipient_student_id == student_id
-        )), None)
+        from app.services.classwork.ClassworkAccessService import assignment_allows_student
+
+        assignment = next(
+            (item for item in scope_assignments if assignment_allows_student(item, student_id)),
+            None,
+        )
         if assignment is None:
             issues.append(StudentRequiredReadingIssue(
                 resource_id=resource_id, order=order, reason="INACCESSIBLE",

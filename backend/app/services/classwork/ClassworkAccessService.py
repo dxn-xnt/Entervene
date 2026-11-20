@@ -17,8 +17,38 @@ from app.services.intervention.RemediationPrerequisiteService import require_rem
 
 
 def assignment_allows_student(assignment: ClassworkAssignment, student_id) -> bool:
-    """A null recipient preserves the established classwide assignment contract."""
-    return assignment.recipient_student_id is None or str(assignment.recipient_student_id) == str(student_id)
+    """Enforce single-student, scoped-recipient, and classwide assignment visibility.
+
+    - Legacy/remedial targeted assignments (`recipient_student_id` set) allow only that student.
+    - Scoped resource assignments (non-empty `recipients`) allow only listed students.
+    - Unscoped assignments (`recipient_student_id` None and no `recipients`) remain classwide.
+    """
+    target = str(student_id)
+    if assignment.recipient_student_id is not None:
+        return str(assignment.recipient_student_id) == target
+    recipients = getattr(assignment, "recipients", None)
+    if recipients:
+        return any(str(recipient.student_id) == target for recipient in recipients)
+    return True
+
+
+def student_assignment_visibility_filter(student_id):
+    """SQLAlchemy filter mirroring ``assignment_allows_student`` for query-level scoping."""
+    from sqlalchemy import and_, or_
+    from app.models.classwork.ClassworkAssignmentRecipient import ClassworkAssignmentRecipient
+
+    return or_(
+        ClassworkAssignment.recipient_student_id == student_id,
+        and_(
+            ClassworkAssignment.recipient_student_id.is_(None),
+            or_(
+                ~ClassworkAssignment.recipients.any(),
+                ClassworkAssignment.recipients.any(
+                    ClassworkAssignmentRecipient.student_id == student_id
+                ),
+            ),
+        ),
+    )
 
 
 def user_id_from_claims(current_user: dict):

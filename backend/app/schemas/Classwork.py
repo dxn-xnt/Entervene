@@ -1,6 +1,6 @@
 # app/schemas/Classwork.py
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 from uuid import UUID
 
@@ -83,6 +83,7 @@ class ClassworkUpdate(BaseModel):
     rubric_levels: Optional[list[ActivityRubricLevelInput]] = None
     confirm_rubric_change: bool = False
     reference_links: Optional[list[ClassworkReferenceLinkInput]] = None
+    recipient_scope: Optional[Literal["THIS_STUDENT", "ENTIRE_CLASS", "ALL_SUBJECT_STUDENTS"]] = None
 
     @model_validator(mode="after")
     def validate_rubric(self):
@@ -137,6 +138,7 @@ class CwAssignmentRow(BaseModel):
     is_locked: Optional[bool] = False
     recipient_student_id: Optional[UUID] = None
     recipient_student_name: Optional[str] = None
+    recipient_student_ids: list[UUID] = Field(default_factory=list)
     source_intervention_id: Optional[int] = None
 
 
@@ -159,6 +161,7 @@ class ClassworkResponse(BaseModel):
     subject_id: int
     subject_name: Optional[str] = None
     created_by_staff_id: str
+    intervention_resource_origin_id: Optional[int] = None
     teacher_name: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
     reference_links: list[ClassworkReferenceLinkResponse] = Field(default_factory=list)
