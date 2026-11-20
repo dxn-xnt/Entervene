@@ -297,3 +297,47 @@ def test_subject_offering_import_requires_admin(client, offering_data):
     response = upload(client, HEADER + "\n2026-2027,11,both,Term 1,GENBIO1,96")
 
     assert response.status_code == 403
+
+
+
+def test_subject_offering_import_template_uses_canonical_genbio1_and_supports_legacy_aliases(client, db, offering_data):
+    template_response = client.get("/api/v1/subject-offerings/import-template")
+    assert template_response.status_code == 200
+    assert ",GENBIO1," in template_response.text
+    assert ",BIO1," not in template_response.text
+
+    # Legacy code BIO1 in Grade 11 resolves to canonical active GENBIO1.
+    legacy_upload = upload(
+        client,
+        "\n".join([
+            HEADER,
+            "2026-2027,Grade 11,stem_medical,Term 2,BIO1,96",
+        ]),
+    )
+    assert legacy_upload.status_code == 200
+    assert legacy_upload.json()["created_count"] == 1
+    assert legacy_upload.json()["error_count"] == 0
+    offering = db.query(SubjectOffering).one()
+    assert offering.subject_id == offering_data["biology"].subject_id
+
+
+def test_subject_offering_import_direct_match_beats_legacy_alias(client, db, offering_data):
+    grade_9 = AcademicLevel(level_name="Grade 9", grade_level=9)
+    db.add(grade_9)
+    db.flush()
+    math_9 = Subject(subject_name="Mathematics 9", subject_codename="MATH9", status="active", academic_level_id=grade_9.academic_level_id)
+    enmath_9 = Subject(subject_name="Enhanced Mathematics 9", subject_codename="ENMATH9", status="active", academic_level_id=grade_9.academic_level_id)
+    db.add_all([math_9, enmath_9])
+    db.commit()
+
+    response = upload(
+        client,
+        "\n".join([
+            HEADER,
+            "2026-2027,Grade 9,general,Term 1,MATH9,45",
+        ]),
+    )
+    assert response.status_code == 200
+    assert response.json()["created_count"] == 1
+    offering = db.query(SubjectOffering).one()
+    assert offering.subject_id == math_9.subject_id

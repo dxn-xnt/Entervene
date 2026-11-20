@@ -278,6 +278,22 @@ export type SubjectImportResult = {
   errors: Array<{ row: number | null; message: string }>;
   warnings?: string[];
 };
+export type SubjectImportPreviewRow = {
+  row: number;
+  subject_code: string | null;
+  subject_name: string;
+  grade_level: string;
+  grading_template: string;
+  description: string;
+  errors: string[];
+};
+export type SubjectImportPreviewResult = {
+  total_rows: number;
+  valid_count: number;
+  error_count: number;
+  errors: Array<{ row: number | null; message: string }>;
+  rows: SubjectImportPreviewRow[];
+};
 export type SubjectCreatePayload = {
   subject_name: string;
   subject_codename?: string | null;
@@ -1305,6 +1321,24 @@ export async function getSubjectFormOptions(): Promise<SubjectFormOptions> {
   return (await response.json()) as SubjectFormOptions;
 }
 
+export async function previewSubjectCode(params: {
+  subject_name: string;
+  academic_level_id: number;
+  subject_id?: number;
+}): Promise<{ subject_codename: string }> {
+  const query = new URLSearchParams({
+    subject_name: params.subject_name,
+    academic_level_id: String(params.academic_level_id),
+  });
+  if (params.subject_id !== undefined) query.set("subject_id", String(params.subject_id));
+  const response = await apiFetch(`/api/v1/subjects/code-preview?${query.toString()}`);
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(apiErrorMessage(data, "Unable to generate a subject code."), response.status, data);
+  }
+  return (await response.json()) as { subject_codename: string };
+}
+
 export async function getSubjects(params: {
   status?: SubjectStatus;
   academic_level_id?: number;
@@ -1402,6 +1436,20 @@ export async function uploadSubjectImportCsv(file: File): Promise<SubjectImportR
     throw new ApiRequestError(apiErrorMessage(data, "Unable to import subjects."), response.status, data);
   }
   return (await response.json()) as SubjectImportResult;
+}
+
+export async function previewSubjectImportCsv(file: File): Promise<SubjectImportPreviewResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await apiFetch("/api/v1/subjects/import-preview", {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(apiErrorMessage(data, "Unable to preview subject import."), response.status, data);
+  }
+  return (await response.json()) as SubjectImportPreviewResult;
 }
 
 export async function getSubjectOfferingFormOptions(): Promise<SubjectOfferingFormOptions> {

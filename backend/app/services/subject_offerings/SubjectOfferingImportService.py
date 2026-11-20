@@ -10,6 +10,7 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectOffering import SubjectOffering
+from app.services.subjects.SubjectCodeGenerator import normalize_subject_code
 from app.services.subject_offerings.SubjectOfferingShared import (
     ALLOWED_PATHWAYS,
     GENERAL_PATHWAY,
@@ -30,13 +31,37 @@ SUBJECT_OFFERING_IMPORT_HEADERS = [
 ]
 
 
+# Explicit grade-scoped fallback aliases for legacy offering CSVs authored
+# before Task 6 subject-code reconciliation. Direct matches on active subject
+# codes always take precedence over these aliases.
+LEGACY_OFFERING_SUBJECT_CODE_ALIASES: dict[tuple[int, str], str] = {
+    (8, "EMATH8"): "ENMATH8",
+    (8, "ESCIE8"): "ENSCI8",
+    (8, "SRES8"): "SCIRES8",
+    (8, "VE8"): "VALED8",
+    (9, "MATH9"): "ENMATH9",
+    (9, "SCI9"): "ENSCI9",
+    (10, "EN10"): "ENMATH10",
+    (10, "RSRCH1"): "RSRCH10",
+    (10, "VA10"): "VALREC10",
+    (11, "BIO1"): "GENBIO1",
+    (11, "CAD1"): "CADF11",
+    (11, "HAP1"): "HAP11",
+    (11, "HSF1"): "HSF11",
+    (11, "INTROENG1"): "INTROENG11",
+    (11, "RESEARCH1"): "RSRCH1",
+    (11, "STATPROB"): "STATPROB11",
+    (12, "PHYS1"): "GENPHYS1",
+}
+
+
 def subject_offering_import_template_csv() -> str:
     output = io.StringIO()
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(SUBJECT_OFFERING_IMPORT_HEADERS)
     writer.writerow(["2026-2027", "Grade 7", "general", "Term 1", "MATH7", "60"])
     writer.writerow(["2026-2027", "Grade 11", "both", "Term 1", "GENMATH11", "60"])
-    writer.writerow(["2026-2027", "Grade 11", "stem_medical", "Term 2", "BIO1", "96"])
+    writer.writerow(["2026-2027", "Grade 11", "stem_medical", "Term 2", "GENBIO1", "96"])
     writer.writerow(["2026-2027", "Grade 11", "stem_engineering", "Term 2", "PRECAL11", "96"])
     return output.getvalue()
 
@@ -135,9 +160,19 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
     years = {year.year_label.casefold(): year for year in db.query(AcademicYear).all()}
     levels = {level.grade_level: level for level in db.query(AcademicLevel).all()}
     periods = db.query(AcademicPeriod).all()
+    active_subjects = (
+        db.query(Subject)
+        .filter(func.lower(func.coalesce(Subject.status, "active")) == "active")
+        .all()
+    )
     subjects = {
         (subject.academic_level_id, (subject.subject_codename or "").casefold()): subject
-        for subject in db.query(Subject).filter(func.lower(func.coalesce(Subject.status, "active")) == "active").all()
+        for subject in active_subjects
+        if subject.subject_codename
+    }
+    subjects_normalized = {
+        (subject.academic_level_id, normalize_subject_code(subject.subject_codename)): subject
+        for subject in active_subjects
         if subject.subject_codename
     }
 
@@ -255,6 +290,15 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             row_errors.append("subject_code cannot be blank.")
         elif academic_level is not None:
             subject = subjects.get((academic_level.academic_level_id, subject_code.casefold()))
+            if subject is None:
+                normalized_code = normalize_subject_code(subject_code)
+                subject = subjects_normalized.get((academic_level.academic_level_id, normalized_code))
+                if subject is None:
+                    alias_code = LEGACY_OFFERING_SUBJECT_CODE_ALIASES.get(
+                        (academic_level.grade_level, normalized_code)
+                    )
+                    if alias_code is not None:
+                        subject = subjects_normalized.get((academic_level.academic_level_id, alias_code))
             if subject is None:
                 row_errors.append("subject_code must exist for the selected grade level.")
 
