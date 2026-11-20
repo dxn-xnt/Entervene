@@ -315,6 +315,7 @@ def build_classwork_snapshot(cw: Classwork) -> dict[str, Any]:
             a.academic_period_id for a in cw.assignments
             if a.academic_period_id is not None
             and a.recipient_student_id is None
+            and not (getattr(a, "recipients", None) or [])
             and a.source_intervention_id is None
             and a.remediation_request_id is None
             and a.original_exam_assignment_id is None

@@ -66,6 +66,11 @@ import {
   type ReferenceLinkDraft,
 } from "@/lib/classwork-reference-links";
 import { toDateTimeLocal } from "@/lib/classwork-utils";
+import type {
+  InterventionRecipientScopes,
+  ResourceRecipientScope,
+} from "@/lib/teacher-interventions-api";
+import { InterventionResourceRecipientSelector } from "./intervention-resource-recipient-selector";
 
 type QuizReleaseMode = "IMMEDIATE" | "SCHEDULED" | "AFTER_DUE_DATE" | "NEVER";
 
@@ -198,6 +203,15 @@ export default function EditClassworkModal({
       ),
     );
   const [quizRevealConfirmation, setQuizRevealConfirmation] = useState(false);
+  const [recipientScope, setRecipientScope] =
+    useState<ResourceRecipientScope | null>(null);
+  const [initialRecipientScope, setInitialRecipientScope] =
+    useState<ResourceRecipientScope | null>(null);
+  const [recipientScopes, setRecipientScopes] =
+    useState<InterventionRecipientScopes | null>(null);
+  const [recipientScopeError, setRecipientScopeError] = useState<string | null>(
+    null,
+  );
   const toast = useToast();
   const targetedAssignment = useMemo(
     () =>
@@ -206,6 +220,10 @@ export default function EditClassworkModal({
           assignment.recipient_student_id && assignment.source_intervention_id,
       ) ?? null,
     [currentClasswork.assignments],
+  );
+  const isInterventionCreatedReading = Boolean(
+    currentClasswork.intervention_resource_origin_id &&
+      isReadingType(currentClasswork.classwork_type),
   );
 
   const autoAiSupported = useMemo(() => {
@@ -230,7 +248,7 @@ export default function EditClassworkModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    if (targetedAssignment) {
+    if (targetedAssignment || isInterventionCreatedReading) {
       setLoads([]);
       return;
     }
@@ -241,8 +259,69 @@ export default function EditClassworkModal({
           setLoads(data);
         }
       })
-      .catch(() => {});
-  }, [isOpen, targetedAssignment]);
+      .catch(() => { });
+  }, [isInterventionCreatedReading, isOpen, targetedAssignment]);
+
+  useEffect(() => {
+    const originId = currentClasswork.intervention_resource_origin_id;
+    if (!isOpen || !isInterventionCreatedReading || !originId) {
+      setRecipientScope(null);
+      setInitialRecipientScope(null);
+      setRecipientScopes(null);
+      setRecipientScopeError(null);
+      return;
+    }
+
+    let active = true;
+    setRecipientScopeError(null);
+    void apiFetch(
+      `/api/v1/classwork-assignments/classwork/${currentClasswork.classwork_id}/intervention-resource-recipient-context`,
+    )
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(
+            typeof body.detail === "string"
+              ? body.detail
+              : "Unable to load recipient settings.",
+          );
+        }
+        return (await response.json()) as {
+          current_scope: string;
+          recipient_scopes: InterventionRecipientScopes;
+        };
+      })
+      .then((context) => {
+        if (!active) return;
+        const scope = context.current_scope;
+        if (
+          scope !== "THIS_STUDENT" &&
+          scope !== "ENTIRE_CLASS" &&
+          scope !== "ALL_SUBJECT_STUDENTS"
+        ) {
+          throw new Error("The saved recipient scope could not be resolved.");
+        }
+        setRecipientScopes(context.recipient_scopes);
+        setRecipientScope(scope);
+        setInitialRecipientScope(scope);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setRecipientScopeError(
+          cause instanceof Error
+            ? cause.message
+            : "Unable to load recipient settings.",
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    currentClasswork.classwork_id,
+    currentClasswork.intervention_resource_origin_id,
+    isInterventionCreatedReading,
+    isOpen,
+  ]);
 
   useEffect(() => {
     setCurrentClasswork(classwork);
@@ -353,7 +432,7 @@ export default function EditClassworkModal({
           ),
           max_attempts: String(
             settings?.max_attempts ??
-              classworkToEditDraft(classwork).max_attempts,
+            classworkToEditDraft(classwork).max_attempts,
           ),
         };
         setInitialQuizConfiguration(configuration);
@@ -599,7 +678,7 @@ export default function EditClassworkModal({
     };
   };
   const changes = useEditFormChanges({
-    resetKey: `${isOpen}:${classwork.classwork_id}:${initialQuizResults.loaded}:${initialQuizConfiguration.loaded}`,
+    resetKey: `${isOpen}:${classwork.classwork_id}:${initialQuizResults.loaded}:${initialQuizConfiguration.loaded}:${initialRecipientScope ?? "none"}`,
     initialValues: {
       draft: draftValues(
         classworkToEditDraft(classwork),
@@ -621,6 +700,7 @@ export default function EditClassworkModal({
       ),
       files: [],
       referenceLinks: editReferenceLinks(classwork),
+      recipientScope: initialRecipientScope,
     },
     values: {
       draft: draftValues(editDraft, rubricLevels),
@@ -629,9 +709,9 @@ export default function EditClassworkModal({
         : null,
       quizConfiguration: isQuizType(editDraft.classwork_type)
         ? quizConfigurationComparable({
-            ...quizConfigurationDraft,
-            max_attempts: editDraft.max_attempts,
-          })
+          ...quizConfigurationDraft,
+          max_attempts: editDraft.max_attempts,
+        })
         : null,
       classes: unorderedValues([...new Set(selectedClassIds)]),
       lessons: unorderedValues(selectedLessonIds),
@@ -642,6 +722,7 @@ export default function EditClassworkModal({
         file.type,
       ]),
       referenceLinks,
+      recipientScope,
     },
   });
   const saveClassworkEdit = async (
@@ -693,7 +774,7 @@ export default function EditClassworkModal({
       isQuiz &&
       quizResultsDraft.loaded &&
       JSON.stringify(quizResultsComparable(quizResultsDraft)) !==
-        JSON.stringify(quizResultsComparable(initialQuizResults));
+      JSON.stringify(quizResultsComparable(initialQuizResults));
     const quizConfigurationChanged =
       isQuiz &&
       quizConfigurationDraft.loaded &&
@@ -703,18 +784,18 @@ export default function EditClassworkModal({
           max_attempts: editDraft.max_attempts,
         }),
       ) !==
-        JSON.stringify(quizConfigurationComparable(initialQuizConfiguration));
+      JSON.stringify(quizConfigurationComparable(initialQuizConfiguration));
     const lockedQuizFieldsChanged =
       isQuiz &&
       quizConfigurationDraft.loaded &&
       (quizConfigurationDraft.duration_minutes !==
         initialQuizConfiguration.duration_minutes ||
         quizConfigurationDraft.is_shuffle_questions !==
-          initialQuizConfiguration.is_shuffle_questions ||
+        initialQuizConfiguration.is_shuffle_questions ||
         quizConfigurationDraft.enable_per_question_scoring !==
-          initialQuizConfiguration.enable_per_question_scoring ||
+        initialQuizConfiguration.enable_per_question_scoring ||
         quizConfigurationDraft.enable_per_question_time_limits !==
-          initialQuizConfiguration.enable_per_question_time_limits);
+        initialQuizConfiguration.enable_per_question_time_limits);
     if (lockedQuizFieldsChanged && quizConfigurationDraft.has_attempts) {
       setFormError(
         "Quiz duration and question behavior cannot be changed after an attempt has started.",
@@ -752,10 +833,10 @@ export default function EditClassworkModal({
       }
       const releaseChanged =
         quizResultsDraft.summary_release_mode !==
-          initialQuizResults.summary_release_mode ||
+        initialQuizResults.summary_release_mode ||
         (quizResultsDraft.summary_release_mode === "SCHEDULED" &&
           quizResultsDraft.summary_release_at !==
-            initialQuizResults.summary_release_at);
+          initialQuizResults.summary_release_at);
       const visibilityTurnedOn =
         quizResultsDraft.show_quiz_results === true &&
         initialQuizResults.show_quiz_results !== true;
@@ -773,7 +854,13 @@ export default function EditClassworkModal({
         return;
       }
     }
-    if (selectedClassIds.length === 0) {
+    if (isInterventionCreatedReading && recipientScope == null) {
+      setFormError(
+        recipientScopeError || "Wait for recipient settings to finish loading.",
+      );
+      return;
+    }
+    if (!isInterventionCreatedReading && selectedClassIds.length === 0) {
       setFormError("Select at least one section to assign.");
       return;
     }
@@ -842,12 +929,15 @@ export default function EditClassworkModal({
             lesson_ids: selectedLessonIds,
             reference_links:
               JSON.stringify(referenceLinks) ===
-              JSON.stringify(editReferenceLinks(currentClasswork))
+                JSON.stringify(editReferenceLinks(currentClasswork))
                 ? undefined
                 : referenceLinks.map((link) => ({
-                    url: link.url.trim(),
-                    title: link.title.trim() || null,
-                  })),
+                  url: link.url.trim(),
+                  title: link.title.trim() || null,
+                })),
+            recipient_scope: isInterventionCreatedReading
+              ? recipientScope
+              : undefined,
           }),
         },
       );
@@ -867,15 +957,15 @@ export default function EditClassworkModal({
           typeof detail === "string"
             ? detail
             : detail &&
-                typeof detail === "object" &&
-                typeof detail.message === "string"
+              typeof detail === "object" &&
+              typeof detail.message === "string"
               ? detail.message
               : "Unable to update classwork.",
         );
       }
 
       let updated = (await response.json()) as TeacherClasswork;
-      if (selectedClassIds.length > 0) {
+      if (!isInterventionCreatedReading && selectedClassIds.length > 0) {
         const assignResponse = await apiFetch(
           `/api/v1/classwork-assignments/classwork/${currentClasswork.classwork_id}/assign`,
           {
@@ -962,7 +1052,7 @@ export default function EditClassworkModal({
               summary_release_mode: quizResultsDraft.summary_release_mode,
               summary_release_at:
                 quizResultsDraft.summary_release_mode === "SCHEDULED" &&
-                quizResultsDraft.summary_release_at
+                  quizResultsDraft.summary_release_at
                   ? new Date(quizResultsDraft.summary_release_at).toISOString()
                   : null,
               confirm_answer_reveal: quizRevealConfirmed,
@@ -984,8 +1074,8 @@ export default function EditClassworkModal({
             typeof detail === "string"
               ? detail
               : detail &&
-                  typeof detail === "object" &&
-                  typeof detail.message === "string"
+                typeof detail === "object" &&
+                typeof detail.message === "string"
                 ? detail.message
                 : "Unable to update quiz results visibility.";
           throw new Error(message);
@@ -1195,15 +1285,14 @@ export default function EditClassworkModal({
 
                   {!isReadingType(editDraft.classwork_type) && (
                     <div
-                      className={`grid gap-4 ${
-                        editDraft.classwork_category ===
+                      className={`grid gap-4 ${editDraft.classwork_category ===
                           "QUARTERLY_ASSESSMENT" ||
-                        editDraft.classwork_category === "EXAMS" ||
-                        (editDraft.classwork_type !== "ACTIVITY" &&
-                          editDraft.classwork_type !== "ASSIGNMENT")
+                          editDraft.classwork_category === "EXAMS" ||
+                          (editDraft.classwork_type !== "ACTIVITY" &&
+                            editDraft.classwork_type !== "ASSIGNMENT")
                           ? "sm:grid-cols-2"
                           : ""
-                      }`}
+                        }`}
                     >
                       <Field label="Grading Component">
                         <Select
@@ -1239,36 +1328,36 @@ export default function EditClassworkModal({
                       {(editDraft.classwork_category ===
                         "QUARTERLY_ASSESSMENT" ||
                         editDraft.classwork_category === "EXAMS") && (
-                        <Field label="Exam Sub-type">
-                          <Select
-                            value={editDraft.exam_subtype || "SUMMATIVE_1"}
-                            onValueChange={(val) =>
-                              setEditDraft((current) => ({
-                                ...current,
-                                exam_subtype: val,
-                              }))
-                            }
-                            disabled={isSavingEdit}
-                          >
-                            <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
-                              <Select.Value placeholder="Select Sub-type" />
-                            </Select.Trigger>
-                            <Select.Content className="border-2 border-black rounded bg-white">
-                              <Select.Group>
-                                <Select.Item value="SUMMATIVE_1">
-                                  Summative 1 (30%)
-                                </Select.Item>
-                                <Select.Item value="SUMMATIVE_2">
-                                  Summative 2 (30%)
-                                </Select.Item>
-                                <Select.Item value="TERM_EXAM">
-                                  Term Exam (40%)
-                                </Select.Item>
-                              </Select.Group>
-                            </Select.Content>
-                          </Select>
-                        </Field>
-                      )}
+                          <Field label="Exam Sub-type">
+                            <Select
+                              value={editDraft.exam_subtype || "SUMMATIVE_1"}
+                              onValueChange={(val) =>
+                                setEditDraft((current) => ({
+                                  ...current,
+                                  exam_subtype: val,
+                                }))
+                              }
+                              disabled={isSavingEdit}
+                            >
+                              <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                                <Select.Value placeholder="Select Sub-type" />
+                              </Select.Trigger>
+                              <Select.Content className="border-2 border-black rounded bg-white">
+                                <Select.Group>
+                                  <Select.Item value="SUMMATIVE_1">
+                                    Summative 1 (30%)
+                                  </Select.Item>
+                                  <Select.Item value="SUMMATIVE_2">
+                                    Summative 2 (30%)
+                                  </Select.Item>
+                                  <Select.Item value="TERM_EXAM">
+                                    Term Exam (40%)
+                                  </Select.Item>
+                                </Select.Group>
+                              </Select.Content>
+                            </Select>
+                          </Field>
+                        )}
 
                       {editDraft.classwork_type !== "ACTIVITY" &&
                         editDraft.classwork_type !== "ASSIGNMENT" && (
@@ -1296,7 +1385,7 @@ export default function EditClassworkModal({
 
                 <section
                   aria-labelledby="edit-classwork-reference-materials"
-                  className="order-2 space-y-3 pt-2"
+                  className={`${isInterventionCreatedReading ? "order-3" : "order-2"} space-y-3 pt-2`}
                 >
                   <h3
                     id="edit-classwork-reference-materials"
@@ -1313,7 +1402,7 @@ export default function EditClassworkModal({
 
                   <Field label="Upload Material">
                     {currentClasswork.attachments.length === 0 &&
-                    editMaterials.length === 0 ? (
+                      editMaterials.length === 0 ? (
                       <Empty className="shadow-md hover:shadow-none transition-shadow rounded!">
                         <EmptyHeader>
                           <EmptyTitle>No Materials Added</EmptyTitle>
@@ -1369,7 +1458,7 @@ export default function EditClassworkModal({
                                       disabled={
                                         isSavingEdit ||
                                         removingAttachmentId ===
-                                          attachment.classwork_attachment_id
+                                        attachment.classwork_attachment_id
                                       }
                                       className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
                                       aria-label={`Remove ${attachment.file_name}`}
@@ -1451,34 +1540,34 @@ export default function EditClassworkModal({
 
                 {(editDraft.classwork_type === "ACTIVITY" ||
                   editDraft.classwork_type === "ASSIGNMENT") && (
-                  <section
-                    aria-label="Scoring Rubric"
-                    className="order-3 space-y-3"
-                  >
-                    <ActivityRubricEditor
-                      levels={rubricLevels}
-                      onChange={setRubricLevels}
-                      disabled={
-                        isSavingEdit ||
-                        Boolean(currentClasswork.has_graded_submissions)
-                      }
-                      disabledReason={
-                        currentClasswork.has_graded_submissions
-                          ? "This rubric is locked because a submission has already been graded. Existing scores keep their original denominator."
-                          : undefined
-                      }
-                      readOnly={Boolean(
-                        classwork.is_graded !== false &&
-                        classwork.rubric_levels?.length &&
-                        classwork.assignments?.some(
-                          (assignment) =>
-                            assignment.source_intervention_id != null,
-                        ),
-                      )}
-                      readOnlyMessage="Inherited from the linked original classwork. Instructions and tasks can be edited, while scoring standards remain aligned with the original classwork."
-                    />
-                  </section>
-                )}
+                    <section
+                      aria-label="Scoring Rubric"
+                      className="order-3 space-y-3"
+                    >
+                      <ActivityRubricEditor
+                        levels={rubricLevels}
+                        onChange={setRubricLevels}
+                        disabled={
+                          isSavingEdit ||
+                          Boolean(currentClasswork.has_graded_submissions)
+                        }
+                        disabledReason={
+                          currentClasswork.has_graded_submissions
+                            ? "This rubric is locked because a submission has already been graded. Existing scores keep their original denominator."
+                            : undefined
+                        }
+                        readOnly={Boolean(
+                          classwork.is_graded !== false &&
+                          classwork.rubric_levels?.length &&
+                          classwork.assignments?.some(
+                            (assignment) =>
+                              assignment.source_intervention_id != null,
+                          ),
+                        )}
+                        readOnlyMessage="Inherited from the linked original classwork. Instructions and tasks can be edited, while scoring standards remain aligned with the original classwork."
+                      />
+                    </section>
+                  )}
               </div>
 
               <div className="contents">
@@ -1507,13 +1596,12 @@ export default function EditClassworkModal({
                       </Alert>
                     )}
                   <div
-                    className={`grid gap-4 ${
-                      isReadingType(editDraft.classwork_type)
+                    className={`grid gap-4 ${isReadingType(editDraft.classwork_type)
                         ? ""
                         : isQuizType(editDraft.classwork_type)
                           ? "sm:grid-cols-2"
                           : "sm:grid-cols-2"
-                    }`}
+                      }`}
                   >
                     {!isReadingType(editDraft.classwork_type) && (
                       <Field
@@ -1752,10 +1840,10 @@ export default function EditClassworkModal({
                         <div className="flex flex-col justify-end">
                           <div className="rounded! border-2 border-dashed bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
                             {quizResultsDraft.summary_release_mode ===
-                            "AFTER_DUE_DATE"
+                              "AFTER_DUE_DATE"
                               ? "Summary unlocks automatically after the due date."
                               : quizResultsDraft.summary_release_mode ===
-                                  "NEVER"
+                                "NEVER"
                                 ? "Students cannot view the quiz answer summary."
                                 : "Students can view the summary right after submitting."}
                           </div>
@@ -1847,13 +1935,45 @@ export default function EditClassworkModal({
 
                 <section
                   aria-label={
-                    targetedAssignment
+                    isInterventionCreatedReading
+                      ? "Resource recipients"
+                      : targetedAssignment
                       ? "Assigned student"
                       : "Assign to Sections"
                   }
-                  className="order-4"
+                  className={
+                    isInterventionCreatedReading ? "order-2" : "order-4"
+                  }
                 >
-                  {targetedAssignment ? (
+                  {isInterventionCreatedReading ? (
+                    recipientScopeError ? (
+                      <Alert status="error">
+                        <Alert.Title className="font-bold">
+                          Recipient settings unavailable
+                        </Alert.Title>
+                        <Alert.Description className="text-inherit">
+                          {recipientScopeError}
+                        </Alert.Description>
+                      </Alert>
+                    ) : recipientScope && recipientScopes ? (
+                      <InterventionResourceRecipientSelector
+                        value={recipientScope}
+                        onChange={setRecipientScope}
+                        scopes={recipientScopes}
+                        fallbackStudentName="Study Support student"
+                        fallbackClassName="original class"
+                        fallbackSubjectName={
+                          currentClasswork.subject_name || "this subject"
+                        }
+                        disabled={isSavingEdit}
+                        label="Share reading with"
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Loading recipient settings...
+                      </p>
+                    )
+                  ) : targetedAssignment ? (
                     <Field
                       label="Assigned student"
                       className="gap-2 [&>span]:text-lg [&>span]:font-bold"
@@ -1913,11 +2033,10 @@ export default function EditClassworkModal({
                                 type="button"
                                 onClick={() => toggleClass(load.class_id)}
                                 disabled={isSavingEdit}
-                                className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
-                                  isSelected
+                                className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
                                     ? "bg-primary text-black"
                                     : "bg-white text-black hover:bg-accent"
-                                }`}
+                                  }`}
                               >
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center justify-between">
@@ -1925,11 +2044,10 @@ export default function EditClassworkModal({
                                       {load.section_name}
                                     </p>
                                     <div
-                                      className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${
-                                        isSelected
+                                      className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${isSelected
                                           ? "bg-black text-white"
                                           : "bg-white text-transparent"
-                                      }`}
+                                        }`}
                                     >
                                       <Check className="size-3.5 stroke-[3]" />
                                     </div>
@@ -1937,21 +2055,19 @@ export default function EditClassworkModal({
 
                                   <div className="mt-1 flex items-center justify-between w-full">
                                     <p
-                                      className={`text-xs font-medium ${
-                                        isSelected
+                                      className={`text-xs font-medium ${isSelected
                                           ? "text-foreground"
                                           : "text-muted-foreground"
-                                      }`}
+                                        }`}
                                     >
                                       {load.grade_level || "Active Section"}
                                     </p>
                                     {typeof load.student_count === "number" && (
                                       <p
-                                        className={`text-xs font-medium ${
-                                          isSelected
+                                        className={`text-xs font-medium ${isSelected
                                             ? "text-foreground"
                                             : "text-muted-foreground"
-                                        }`}
+                                          }`}
                                       >
                                         {load.student_count}{" "}
                                         {load.student_count === 1

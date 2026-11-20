@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.Config import settings
 from app.models.academic.Lesson import Lesson
@@ -19,8 +19,16 @@ from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTer
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.classwork.ClassworkShared import assignment_is_available, assignment_is_locked
 from app.models.intervention.Intervention import Intervention
+from app.services.intervention.InterventionResourceRecipientService import (
+    ResourceRecipientScope,
+    apply_resource_recipient_scope,
+    describe_resource_recipient_scope,
+    resolve_authorized_subject_class_ids,
+    resolve_intervention_recipient_scopes,
+)
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.ai import Provider
 from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
@@ -65,6 +73,7 @@ class ResourceRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: str
     id: int = Field(gt=0)
+    recipient_scope: ResourceRecipientScope | None = None
 
 
 class PlanUpdate(BaseModel):
@@ -75,6 +84,7 @@ class PlanUpdate(BaseModel):
     target_assignment_ids: list[int] | None = None
     score_adjustment_cap: float | None = None
     selected_resources: list[ResourceRef] = Field(default_factory=list, max_length=30)
+    resource_recipient_scope: ResourceRecipientScope | None = None
 
 
 class Advisory(BaseModel):
@@ -185,15 +195,38 @@ def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
         Classwork.is_graded == False,
     ).order_by(Classwork.title).all()
 
+    authorized_subject_class_ids = set(
+        resolve_authorized_subject_class_ids(
+            db, staff_id, row.subject_id, row.academic_period_id
+        )
+    ) | {row.class_id}
+
     for cw in classworks:
-        assignments = db.query(ClassworkAssignment).filter_by(classwork_id=cw.classwork_id).all()
-        if assignments and not any(a.class_id == row.class_id and a.academic_period_id == row.academic_period_id for a in assignments):
+        assignments = (
+            db.query(ClassworkAssignment)
+            .options(selectinload(ClassworkAssignment.recipients))
+            .filter_by(classwork_id=cw.classwork_id)
+            .all()
+        )
+        if assignments and not any(
+            a.class_id in authorized_subject_class_ids
+            and a.academic_period_id == row.academic_period_id
+            for a in assignments
+        ):
             continue
         accessible = bool(cw.is_published and any(
-            a.class_id == row.class_id and a.academic_period_id == row.academic_period_id
-            and assignment_is_available(a) and not assignment_is_locked(a)
+            a.class_id == row.class_id
+            and a.academic_period_id == row.academic_period_id
+            and assignment_allows_student(a, row.student_id)
+            and assignment_is_available(a)
+            and not assignment_is_locked(a)
             for a in assignments
         ))
+        current_scope = describe_resource_recipient_scope(
+            assignments,
+            row=row,
+            authorized_subject_class_ids=authorized_subject_class_ids,
+        )
         linked_lessons = {lesson.lesson_id for lesson in cw.lessons}
         linked_competencies = {lesson.competency_id for lesson in cw.lessons if lesson.competency_id is not None}
         for coverage in db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all():
@@ -236,10 +269,12 @@ def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
             "access": "ALREADY_ACCESSIBLE" if accessible else "PLANNING_ONLY",
             "ai_read": "METADATA_ONLY",
             "recommended": recommended,
+            "added_by_teacher": cw.intervention_resource_origin_id is not None,
             "match_reason": reason,
             "match_level": match_level,
             "match_rank": rank,
             "is_graded": False,
+            "current_recipient_scope": current_scope,
         })
     return sorted(result, key=lambda item: (-item["match_rank"], item["title"]))
 
@@ -732,6 +767,7 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     )
     return {"plan": plan_data,
             "resources": resources(db, row, staff_id), "focus": focus,
+            "recipient_scopes": resolve_intervention_recipient_scopes(db, staff_id, row),
             "generation_eligibility": eligibility,
             "original_exams": original_exams(db, row),
             "progress": progress_data,
@@ -1079,10 +1115,30 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         "original_exam_assignment_id": requested_exam_id,
         "target_assignment_ids": target_ids,
         "score_adjustment_cap": resolved_cap,
-        "selected_resources": [ref.model_dump() for ref in body.selected_resources],
+        "selected_resources": [
+            {"kind": ref.kind, "id": ref.id} for ref in body.selected_resources
+        ],
         "evidence_basis": _basis(row, diagnosis_override=effective_diagnosis_snapshot(db, row)),
     })
     row.remediation_plan = plan
+
+    newly_shared_notifications: list[tuple[Classwork, list[int]]] = []
+    for ref in body.selected_resources:
+        effective_scope = ref.recipient_scope or body.resource_recipient_scope
+        if ref.kind == "CLASSWORK" and effective_scope is not None:
+            cw = db.get(Classwork, ref.id)
+            if cw is not None:
+                scope_result = apply_resource_recipient_scope(
+                    db,
+                    classwork=cw,
+                    intervention=row,
+                    staff_id=staff_id,
+                    scope=effective_scope,
+                )
+                shared_cids = scope_result.get("newly_classwide_published_class_ids") or []
+                if shared_cids:
+                    newly_shared_notifications.append((cw, shared_cids))
+
     if selected:
         # Backfill active interventions created before activation notifications
         # existed. The stable intervention URL makes repeated saves idempotent.
@@ -1091,6 +1147,42 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         )
         stage_intervention_study_support_available(db, row)
     db.commit()
+
+    if newly_shared_notifications:
+        from app.models.classwork.ClassworkLesson import ClassworkLesson
+        from app.services.classwork.ClassworkService import (
+            build_classwork_notification_details,
+            notify_students_for_classwork,
+        )
+        for cw, shared_cids in newly_shared_notifications:
+            try:
+                lesson_rows = (
+                    db.query(ClassworkLesson.lesson_id)
+                    .filter(ClassworkLesson.classwork_id == cw.classwork_id)
+                    .all()
+                )
+                lesson_ids_list = [r[0] for r in lesson_rows] if lesson_rows else None
+                notif_title, notif_body = build_classwork_notification_details(
+                    db=db,
+                    classwork_title=cw.title,
+                    staff_id=staff_id,
+                    subject_id=cw.subject_id,
+                    lesson_ids=lesson_ids_list,
+                    due_date=None,
+                    action_type="New",
+                )
+                notify_students_for_classwork(
+                    db=db,
+                    class_ids=shared_cids,
+                    title=notif_title,
+                    body_text=notif_body,
+                    notification_type="assignment_due",
+                    classwork_id=cw.classwork_id,
+                    subject_id=cw.subject_id,
+                )
+            except Exception:
+                pass
+
     return get_workspace(db, staff_id, intervention_id)
 
 

@@ -826,6 +826,8 @@ def _student_assignment_rows(
     ]
     if not class_ids:
         return []
+    from app.services.classwork.ClassworkAccessService import student_assignment_visibility_filter
+
     return (
         db.query(ClassworkAssignment, Classwork, Subject)
         .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
@@ -833,7 +835,7 @@ def _student_assignment_rows(
         .filter(ClassworkAssignment.class_id.in_(class_ids))
         .filter(ClassworkAssignment.academic_period_id == target_period.academic_period_id)
         .filter(ClassworkAssignment.is_published.is_(True))
-        .filter(or_(ClassworkAssignment.recipient_student_id.is_(None), ClassworkAssignment.recipient_student_id == student_id))
+        .filter(student_assignment_visibility_filter(student_id))
         .filter(Classwork.is_archived.is_(False))
         .filter(Classwork.is_graded.is_(True))
         .filter(Classwork.classwork_type != "READING")

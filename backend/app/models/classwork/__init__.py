@@ -1,5 +1,6 @@
 from .Classwork import Classwork
 from .ClassworkAssignment import ClassworkAssignment
+from .ClassworkAssignmentRecipient import ClassworkAssignmentRecipient
 from .ClassworkAttachment import ClassworkAttachment
 from .ClassworkReferenceLink import ClassworkReferenceLink
 from .ClassworkLesson import ClassworkLesson

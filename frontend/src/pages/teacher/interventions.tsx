@@ -444,8 +444,8 @@ export default function TeacherInterventions() {
         : activeView
           ? (b.activated_at || "").localeCompare(a.activated_at || "")
           : (a.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) -
-              (b.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) ||
-            b.created_at.localeCompare(a.created_at),
+          (b.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) ||
+          b.created_at.localeCompare(a.created_at),
     );
   }, [periodScopedList, resolvedView, activeView]);
 
@@ -520,22 +520,22 @@ export default function TeacherInterventions() {
   const previousResolved =
     detail?.status === "ACTIVE"
       ? resolvedItems.find(
-          (row) =>
-            sameScope(row, detail) &&
-            row.resolved_at &&
-            Date.parse(row.resolved_at) <
-              Date.parse(detail.activated_at || detail.created_at),
-        )
+        (row) =>
+          sameScope(row, detail) &&
+          row.resolved_at &&
+          Date.parse(row.resolved_at) <
+          Date.parse(detail.activated_at || detail.created_at),
+      )
       : undefined;
 
   const newerActive =
     detail?.status === "RESOLVED" && detail.resolved_at
       ? activeItems.find(
-          (row) =>
-            sameScope(row, detail) &&
-            row.activated_at &&
-            Date.parse(row.activated_at) > Date.parse(detail.resolved_at!),
-        )
+        (row) =>
+          sameScope(row, detail) &&
+          row.activated_at &&
+          Date.parse(row.activated_at) > Date.parse(detail.resolved_at!),
+      )
       : undefined;
 
   return (
@@ -776,8 +776,8 @@ export default function TeacherInterventions() {
                                 {candidate.level_name ||
                                   (candidate.grade_level != null
                                     ? String(candidate.grade_level).startsWith(
-                                        "Grade",
-                                      )
+                                      "Grade",
+                                    )
                                       ? candidate.grade_level
                                       : `Grade ${candidate.grade_level}`
                                     : "—")}
@@ -811,7 +811,7 @@ export default function TeacherInterventions() {
                                 {!activeView &&
                                   !resolvedView &&
                                   candidate.candidate_activation_eligible ===
-                                    false && (
+                                  false && (
                                     <Badge
                                       variant="outline"
                                       size="sm"
@@ -824,7 +824,7 @@ export default function TeacherInterventions() {
                                   !resolvedView &&
                                   candidate.current_intervention_level &&
                                   candidate.current_intervention_level !==
-                                    candidate.triggering_intervention_level && (
+                                  candidate.triggering_intervention_level && (
                                     <span className="text-xs text-muted-foreground">
                                       Current:{" "}
                                       {label(
@@ -840,7 +840,7 @@ export default function TeacherInterventions() {
                                   <span className="text-sm font-semibold">
                                     {label(
                                       candidate.resolution_reason ||
-                                        "Unavailable",
+                                      "Unavailable",
                                     )}
                                   </span>
                                   <span className="text-xs text-muted-foreground">

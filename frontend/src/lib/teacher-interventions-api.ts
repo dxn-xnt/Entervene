@@ -198,12 +198,41 @@ export const sendStudentReviewer = (id: number, materialId: number) => read<Supp
 
 export type RemediationFormat = "QUIZ" | "TOS" | "CLASSWORK" | "EXISTING_MATERIAL_ONLY";
 export type RemediationGradeTreatment = "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
+export type ResourceRecipientScope = "THIS_STUDENT" | "ENTIRE_CLASS" | "ALL_SUBJECT_STUDENTS";
+export interface InterventionRecipientScopes {
+  default_scope: ResourceRecipientScope;
+  this_student: {
+    scope: "THIS_STUDENT";
+    student_id: string;
+    student_name: string;
+    class_id: number;
+    class_name: string;
+    student_count: number;
+  };
+  entire_class: {
+    scope: "ENTIRE_CLASS";
+    class_id: number;
+    class_name: string;
+    student_count: number;
+  };
+  all_subject_students: {
+    scope: "ALL_SUBJECT_STUDENTS";
+    subject_id: number;
+    subject_name: string;
+    class_ids: number[];
+    class_names: string[];
+    section_count: number;
+    student_count: number;
+  };
+}
 export interface RemediationResource {
   kind: "LESSON" | "CLASSWORK"; id: number; title: string; description: string;
   lesson: string; topic: string; attachments: string[]; classwork_type?: string;
   access: "ALREADY_ACCESSIBLE" | "PLANNING_ONLY"; ai_read: "METADATA_ONLY";
   recommended: boolean; match_reason: string | null; match_level: "COMPETENCY" | "LESSON" | "SOURCE_ACTIVITY" | null; match_rank: number;
+  added_by_teacher?: boolean;
   is_graded?: boolean;
+  current_recipient_scope?: ResourceRecipientScope | "UNASSIGNED" | "OTHER_RECIPIENTS";
 }
 export interface RemediationFocus {
   basis: "FROZEN_TRIGGER_DIAGNOSIS";
@@ -304,6 +333,7 @@ export interface RemediationWorkspace {
   plan: RemediationPlan;
   resources: RemediationResource[];
   focus: RemediationFocus;
+  recipient_scopes?: InterventionRecipientScopes | null;
   progress: RemediationProgress;
   prediction_impact?: RemediationPredictionImpact | null;
   original_exams: OriginalExamination[];
@@ -332,7 +362,18 @@ export const eligibleRemediationLessonIds = (eligibility: RemediationGenerationE
   eligibility?.eligible_taught_lessons.map((lesson) => lesson.lesson_id) ?? [];
 export const getRemediationWorkspace = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation`);
 export const refreshRemediationEvidence = (id: number) => read<RemediationGenerationEligibility>(`${base}/${id}/remediation/evidence/refresh`, "POST");
-export const saveRemediationPlan = (id: number, plan: Pick<RemediationPlan, "teacher_choice" | "selected_resources" | "grade_treatment"> & Partial<Pick<RemediationPlan, "original_exam_assignment_id" | "target_assignment_ids" | "score_adjustment_cap">>) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
+export interface SaveRemediationResourceRef {
+  kind: "LESSON" | "CLASSWORK";
+  id: number;
+  recipient_scope?: ResourceRecipientScope;
+}
+export const saveRemediationPlan = (
+  id: number,
+  plan: Omit<Pick<RemediationPlan, "teacher_choice" | "grade_treatment">, "selected_resources"> & {
+    selected_resources: SaveRemediationResourceRef[];
+    resource_recipient_scope?: ResourceRecipientScope;
+  } & Partial<Pick<RemediationPlan, "original_exam_assignment_id" | "target_assignment_ids" | "score_adjustment_cap">>,
+) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
 export const generateRemediationAdvisory = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation/advisory`, "POST");
 export const previewScoreAdjustment = (
   id: number,

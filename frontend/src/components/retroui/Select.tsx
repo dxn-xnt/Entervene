@@ -79,7 +79,7 @@ const SelectContent = ({
           position === "popper" &&
           "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1 max-w-[var(--radix-select-trigger-width)] w-[var(--radix-select-trigger-width)]",
           className,
-          insideDialog && "shadow-none!",
+          insideDialog && "z-[1002] shadow-none!",
         )}
         position={position}
         side={side}
