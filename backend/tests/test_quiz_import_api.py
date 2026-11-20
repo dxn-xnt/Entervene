@@ -508,6 +508,101 @@ ANSWER KEY
     body = response.json()
     assert body["questions"][0]["options"][0]["is_correct"] is True
     assert any("inline answer key (A) took precedence over trailing key (B)" in w for w in body["warnings"])
+    assert body["notices"][0]["severity"] == "warning"
+    assert body["notices"][0]["code"] == "conflicting_answer_keys"
+    assert body["summary"]["needs_attention_count"] == 1
+
+
+def test_import_matching_decorated_answer_keys_are_confirmed_without_warning():
+    identity = {"sub": uuid.uuid4(), "role": "teacher"}
+    app = FastAPI()
+    app.include_router(quizzes_router, prefix="/api/v1/quizzes")
+    app.dependency_overrides[get_current_user] = lambda: identity
+    app.dependency_overrides[get_db] = lambda: None
+    app.dependency_overrides[get_staff_id] = lambda: "T-IMPORT"
+
+    content = b"""
+Literature Quiz
+1. (A) What is the perspective from which a story is told?
+A) Point of View
+B) Setting
+C) Theme
+D) Conflict
+
+ANSWER KEY
+1. A - Point of View
+"""
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(
+            "/api/v1/quizzes/import-preview",
+            files={"file": ("quiz.txt", content, "text/plain")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["warnings"] == []
+    assert body["questions"][0]["options"][0]["is_correct"] is True
+    assert body["summary"]["normalized_key_count"] == 1
+    assert body["summary"]["needs_attention_count"] == 0
+    assert body["notices"][0]["severity"] == "info"
+    assert body["notices"][0]["code"] == "answer_key_format_normalized"
+
+
+def test_import_preserves_standalone_explanation_and_continuation():
+    identity = {"sub": uuid.uuid4(), "role": "teacher"}
+    app = FastAPI()
+    app.include_router(quizzes_router, prefix="/api/v1/quizzes")
+    app.dependency_overrides[get_current_user] = lambda: identity
+    app.dependency_overrides[get_db] = lambda: None
+    app.dependency_overrides[get_staff_id] = lambda: "T-IMPORT"
+
+    content = b"""
+Networking Quiz
+1. What does a border router do?
+A) Filters traffic at a network boundary
+B) Stores local passwords
+Answer: A
+Rationale: A border router controls traffic between network boundaries.
+It helps prevent untrusted traffic from entering the internal network.
+"""
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(
+            "/api/v1/quizzes/import-preview",
+            files={"file": ("quiz.txt", content, "text/plain")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    question = body["questions"][0]
+    assert question["options"][0]["is_correct"] is True
+    assert question["explanation"] == (
+        "A border router controls traffic between network boundaries.\n"
+        "It helps prevent untrusted traffic from entering the internal network."
+    )
+    assert "Rationale:" not in question["options"][1]["option_text"]
+    assert body["summary"]["preserved_explanation_count"] == 1
+    assert body["warnings"] == []
+
+
+def test_import_does_not_accept_a_label_with_another_options_text_as_agreement():
+    from app.services.quiz.QuizImportService import _parse_questions_detailed
+
+    questions, notices, summary = _parse_questions_detailed("""
+Quiz
+1. (A) Which element identifies where a story happens?
+A) Point of View
+B) Setting
+
+ANSWER KEY
+1. A - Setting
+""")
+
+    assert questions[0].options[0].is_correct is True
+    assert notices[0].severity == "warning"
+    assert notices[0].code == "conflicting_answer_keys"
+    assert summary.needs_attention_count == 1
 
 
 def test_import_unkeyed_question_does_not_default_to_option_a():

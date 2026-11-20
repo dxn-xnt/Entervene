@@ -3,7 +3,6 @@
 import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
-  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -17,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/teacher/button";
+import { buttonVariants } from "@/components/retroui/Button";
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +33,7 @@ import { ClassworkSettingRow } from "@/components/classwork-setting-row";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import Field from "@/components/admin/classes/fields/Field";
 import { Card } from "@/components/retroui/Card";
+import { Alert } from "@/components/retroui/Alert";
 import {
   Empty,
   EmptyDescription,
@@ -59,8 +60,15 @@ import {
   interventionQuizCreationDefaults,
 } from "../classworks/quiz-builder-utils";
 import {
+  applyBulkQuestionLessonAssignment,
+  clearQuestionMappingsForLesson,
+  getQuizLessonMappingState,
+  hasLinkedLessonMapping,
   isUnkeyed,
+  mapUnmappedQuestionsToLesson,
   normalizeIncomingQuestions,
+  sanitizeQuestionLessonId,
+  selectUnmappedQuestionIds,
   switchQuestionType,
 } from "../classworks/quiz-question-rules";
 import { exportQuizPdf, exportQuizDocx } from "@/lib/quiz-export";
@@ -79,6 +87,7 @@ import {
   validateReferenceLinks,
   type ReferenceLinkDraft,
 } from "@/lib/classwork-reference-links";
+import { cn } from "@/lib/utils";
 
 interface CreateClassworkQuizModalProps {
   draftOnly?: boolean;
@@ -261,6 +270,12 @@ export default function CreateClassworkQuizModal({
     show_correct_answers: creationDefaults.showScores,
   }));
   const [quizImportWarnings, setQuizImportWarnings] = useState<string[]>([]);
+  const [quizImportNotices, setQuizImportNotices] = useState<
+    NonNullable<QuizImportPreview["notices"]>
+  >([]);
+  const [quizImportSummary, setQuizImportSummary] = useState<
+    QuizImportPreview["summary"] | null
+  >(null);
   const [isImportingQuiz, setIsImportingQuiz] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiPromptScope, setAiPromptScope] = useState<string | undefined>(
@@ -307,6 +322,12 @@ export default function CreateClassworkQuizModal({
     () => new Set(),
   );
   const [bulkLessonId, setBulkLessonId] = useState<string>("");
+  const [pendingLessonRemoval, setPendingLessonRemoval] = useState<{
+    lessonId: number;
+    lessonTitle: string;
+    mappedQuestionCount: number;
+  } | null>(null);
+  const [coverageMappingNotice, setCoverageMappingNotice] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState("");
 
@@ -317,6 +338,32 @@ export default function CreateClassworkQuizModal({
       ).length,
     [quizQuestions],
   );
+  const lessonMappingState = useMemo(
+    () =>
+      getQuizLessonMappingState(
+        quizQuestions,
+        selectedLessonIds,
+        selectedQuestionIds,
+      ),
+    [quizQuestions, selectedLessonIds, selectedQuestionIds],
+  );
+  const actionableImportNotices = useMemo(
+    () => quizImportNotices.filter((notice) => notice.severity !== "info"),
+    [quizImportNotices],
+  );
+
+  useEffect(() => {
+    if (selectedLessonIds.length !== 1) return;
+    const onlyLessonId = selectedLessonIds[0];
+    setQuizQuestions((questions) => {
+      if (questions.every((question) => question.lesson_id === onlyLessonId)) {
+        return questions;
+      }
+      return mapUnmappedQuestionsToLesson(questions, onlyLessonId);
+    });
+    setSelectedQuestionIds(new Set());
+    setBulkLessonId("");
+  }, [selectedLessonIds]);
 
   const selectedSubjectLoads = useMemo(() => {
     const filtered = loads.filter(
@@ -346,6 +393,8 @@ export default function CreateClassworkQuizModal({
   const useManualQuizBuilder = () => {
     setCreateError("");
     setQuizImportWarnings([]);
+    setQuizImportNotices([]);
+    setQuizImportSummary(null);
     setCreateStep("details");
   };
 
@@ -354,6 +403,8 @@ export default function CreateClassworkQuizModal({
     setIsImportingQuiz(true);
     setCreateError("");
     setQuizImportWarnings([]);
+    setQuizImportNotices([]);
+    setQuizImportSummary(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -396,6 +447,8 @@ export default function CreateClassworkQuizModal({
           : [createEmptyQuizQuestion(1)],
       );
       setQuizImportWarnings(preview.warnings);
+      setQuizImportNotices(preview.notices || []);
+      setQuizImportSummary(preview.summary || null);
       setDraft((current) => ({
         ...current,
         title: current.title || preview.title || "",
@@ -575,11 +628,41 @@ export default function CreateClassworkQuizModal({
     if (isLessonLocked) return;
     if (createError === "Select the lesson where this quiz should appear.")
       setCreateError("");
+    if (selectedLessonIds.includes(lessonId)) {
+      const mappedQuestionCount = quizQuestions.filter(
+        (question) => question.lesson_id === lessonId,
+      ).length;
+      if (mappedQuestionCount > 0) {
+        const lessonTitle =
+          availableLessons.find((lesson) => lesson.lesson_id === lessonId)
+            ?.title || "this lesson";
+        setPendingLessonRemoval({
+          lessonId,
+          lessonTitle,
+          mappedQuestionCount,
+        });
+        return;
+      }
+      setSelectedLessonIds((current) =>
+        current.filter((id) => id !== lessonId),
+      );
+      return;
+    }
+    setSelectedLessonIds((current) => [...current, lessonId]);
+  };
+
+  const confirmLessonRemoval = () => {
+    if (!pendingLessonRemoval) return;
+    const lessonId = pendingLessonRemoval.lessonId;
     setSelectedLessonIds((current) =>
-      current.includes(lessonId)
-        ? current.filter((id) => id !== lessonId)
-        : [...current, lessonId],
+      current.filter((id) => id !== lessonId),
     );
+    setQuizQuestions((questions) =>
+      clearQuestionMappingsForLesson(questions, lessonId),
+    );
+    setSelectedQuestionIds(new Set());
+    setBulkLessonId("");
+    setPendingLessonRemoval(null);
   };
 
   const validateDetails = () => {
@@ -706,6 +789,8 @@ export default function CreateClassworkQuizModal({
       );
       return current.filter((id) => validIds.has(id));
     });
+    setSelectedQuestionIds(new Set());
+    setBulkLessonId("");
     setCreateError("");
     setCreateStep("assign");
   };
@@ -815,13 +900,23 @@ export default function CreateClassworkQuizModal({
           ) {
             next = [initialLessonId];
           }
-          // Auto-prefill: when exactly one lesson is available or selected, map every unmapped question to it
-          if (next.length === 1) {
-            const autoId = next[0];
-            setQuizQuestions((qs) =>
-              qs.map((q) => (q.lesson_id ? q : { ...q, lesson_id: autoId })),
+          const nextSet = new Set(next);
+          setQuizQuestions((questions) => {
+            const affectedCount = questions.filter(
+              (question) =>
+                question.lesson_id !== null && !nextSet.has(question.lesson_id),
+            ).length;
+            if (affectedCount > 0) {
+              setCoverageMappingNotice(
+                `${affectedCount} question mapping${affectedCount === 1 ? " was" : "s were"} cleared because the lesson is not available in every selected section.`,
+              );
+            }
+            return questions.map((question) =>
+              question.lesson_id !== null && !nextSet.has(question.lesson_id)
+                ? { ...question, lesson_id: null }
+                : question,
             );
-          }
+          });
           return next;
         });
         setCreateError("");
@@ -879,10 +974,10 @@ export default function CreateClassworkQuizModal({
       display_order: index + 1,
       difficulty_level: question.difficulty_level,
       explanation: question.explanation.trim() || null,
-      lesson_id:
-        question.lesson_id && selectedLessonIds.includes(question.lesson_id)
-          ? question.lesson_id
-          : null,
+      lesson_id: sanitizeQuestionLessonId(
+        question.lesson_id,
+        selectedLessonIds,
+      ),
       is_ai_generated: Boolean(question.is_ai_generated),
       options:
         question.question_type === "MULTIPLE_CHOICE"
@@ -926,6 +1021,13 @@ export default function CreateClassworkQuizModal({
     }
     if (selectedLessonIds.length === 0) {
       const msg = "Select the lesson where this quiz should appear.";
+      setCreateError(msg);
+      toast.error({ title: msg });
+      return;
+    }
+    if (draft.is_published && lessonMappingState.unmappedCount > 0) {
+      const count = lessonMappingState.unmappedCount;
+      const msg = `${count} question${count === 1 ? " still needs" : "s still need"} lesson mapping.`;
       setCreateError(msg);
       toast.error({ title: msg });
       return;
@@ -1123,6 +1225,8 @@ export default function CreateClassworkQuizModal({
                   disabled={isCreating || isImportingQuiz}
                   onClick={() => {
                     setQuizImportWarnings([]);
+                    setQuizImportNotices([]);
+                    setQuizImportSummary(null);
                     setIsAIModalOpen(true);
                   }}
                 />
@@ -1666,18 +1770,62 @@ export default function CreateClassworkQuizModal({
                 </Card>
 
                 <div className="space-y-4">
-                  {quizImportWarnings.length > 0 && (
-                    <div className="rounded border-2 border-amber-400 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900 shadow-sm">
-                      <p className="font-bold flex items-center gap-1.5">
-                        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />{" "}
-                        Generation / Import notes
-                      </p>
-                      <ul className="mt-1.5 list-disc pl-5 space-y-0.5">
-                        {quizImportWarnings.map((warning, wIdx) => (
-                          <li key={`${warning}-${wIdx}`}>{warning}</li>
-                        ))}
-                      </ul>
-                    </div>
+                  {quizImportSummary && (
+                    <Alert
+                      status={
+                        actionableImportNotices.some(
+                          (notice) => notice.severity === "error",
+                        )
+                          ? "error"
+                          : actionableImportNotices.length > 0
+                            ? "warning"
+                            : "success"
+                      }
+                      className="p-3 text-xs"
+                    >
+                      <Alert.Title className="font-bold">
+                        Import complete
+                      </Alert.Title>
+                      <Alert.Description className="mt-1 text-inherit">
+                        {quizImportSummary.question_count} question
+                        {quizImportSummary.question_count === 1 ? "" : "s"}{" "}
+                        imported · {quizImportSummary.keyed_question_count}{" "}
+                        answer key
+                        {quizImportSummary.keyed_question_count === 1
+                          ? ""
+                          : "s"}{" "}
+                        found
+                        {quizImportSummary.preserved_explanation_count > 0
+                          ? ` · ${quizImportSummary.preserved_explanation_count} explanation${quizImportSummary.preserved_explanation_count === 1 ? "" : "s"} preserved`
+                          : ""}
+                        {actionableImportNotices.length === 0
+                          ? " · No issues need attention."
+                          : ` · ${actionableImportNotices.length} item${actionableImportNotices.length === 1 ? "" : "s"} need review.`}
+                        {actionableImportNotices.length > 0 && (
+                          <ul className="mt-2 list-disc space-y-1 pl-5 font-semibold">
+                            {actionableImportNotices.map((notice, index) => (
+                              <li key={`${notice.code}-${notice.question_number ?? index}-${index}`}>
+                                {notice.message}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </Alert.Description>
+                    </Alert>
+                  )}
+                  {!quizImportSummary && quizImportWarnings.length > 0 && (
+                    <Alert status="warning" className="p-3 text-xs">
+                      <Alert.Title className="font-bold">
+                        Generation needs review
+                      </Alert.Title>
+                      <Alert.Description className="mt-1 text-inherit">
+                        <ul className="list-disc space-y-1 pl-5 font-semibold">
+                          {quizImportWarnings.map((warning, index) => (
+                            <li key={`${warning}-${index}`}>{warning}</li>
+                          ))}
+                        </ul>
+                      </Alert.Description>
+                    </Alert>
                   )}
                   {quizQuestions.map((question, questionIndex) => {
                     const unkeyed = isUnkeyed(question);
@@ -2643,6 +2791,52 @@ export default function CreateClassworkQuizModal({
                       No shared lesson is assigned to all selected sections.
                     </p>
                   )}
+                  {pendingLessonRemoval && (
+                    <Alert status="warning" className="mt-3 p-3 text-xs">
+                      <Alert.Title className="font-bold">
+                        Remove {pendingLessonRemoval.lessonTitle} from coverage?
+                      </Alert.Title>
+                      <Alert.Description className="mt-1 text-inherit">
+                        {pendingLessonRemoval.mappedQuestionCount} question
+                        {pendingLessonRemoval.mappedQuestionCount === 1
+                          ? " is"
+                          : "s are"}{" "}
+                        mapped to this lesson. Removing it will{" "}
+                        {selectedLessonIds.length === 2
+                          ? "move those questions to the one remaining linked lesson"
+                          : "clear only those mappings"}
+                        ; other lesson mappings will be kept.
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPendingLessonRemoval(null)}
+                          >
+                            Keep lesson
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={confirmLessonRemoval}
+                          >
+                            Remove and unmap
+                          </Button>
+                        </div>
+                      </Alert.Description>
+                    </Alert>
+                  )}
+                  {coverageMappingNotice && (
+                    <Alert
+                      status="info"
+                      className="mt-3 p-3 text-xs"
+                      onClose={() => setCoverageMappingNotice("")}
+                    >
+                      <Alert.Description className="text-inherit">
+                        {coverageMappingNotice}
+                      </Alert.Description>
+                    </Alert>
+                  )}
                   {createError ===
                     "Select the lesson where this quiz should appear." && (
                     <FormMessage>{createError}</FormMessage>
@@ -2654,17 +2848,37 @@ export default function CreateClassworkQuizModal({
                     const linkedLessons = availableLessons.filter((l) =>
                       selectedLessonIds.includes(l.lesson_id),
                     );
-                    const mappedCount = quizQuestions.filter(
-                      (q) =>
-                        q.lesson_id && selectedLessonIds.includes(q.lesson_id),
+                    const mappingState = lessonMappingState;
+                    const {
+                      mappedCount,
+                      unmappedCount,
+                      totalCount,
+                      selectedCount,
+                      allSelected,
+                      someSelected,
+                      showSelectUnmapped,
+                    } = mappingState;
+                    const unmappedQuestionIds = selectUnmappedQuestionIds(
+                      quizQuestions,
+                      selectedLessonIds,
+                    );
+                    const selectedUnmappedCount = [...unmappedQuestionIds].filter(
+                      (questionId) => selectedQuestionIds.has(questionId),
                     ).length;
-                    const totalCount = quizQuestions.length;
-                    const allChecked = selectedQuestionIds.size === totalCount;
-                    const someChecked =
-                      selectedQuestionIds.size > 0 && !allChecked;
+                    const allUnmappedSelected =
+                      unmappedCount > 0 &&
+                      selectedUnmappedCount === unmappedCount;
+                    const someUnmappedSelected =
+                      selectedUnmappedCount > 0 && !allUnmappedSelected;
+                    const selectionControlClass = cn(
+                      buttonVariants({ variant: "outline", size: "sm" }),
+                      "h-8 gap-1.5 px-3 py-1 text-xs font-semibold text-gray-700",
+                      (isCreating || isLessonLocked) &&
+                        "cursor-not-allowed opacity-50",
+                    );
 
                     const toggleSelectAll = () => {
-                      if (allChecked) {
+                      if (allSelected) {
                         setSelectedQuestionIds(new Set());
                       } else {
                         setSelectedQuestionIds(
@@ -2673,17 +2887,29 @@ export default function CreateClassworkQuizModal({
                       }
                     };
 
+                    const toggleSelectUnmapped = () => {
+                      if (allUnmappedSelected) {
+                        setSelectedQuestionIds((current) => {
+                          const next = new Set(current);
+                          unmappedQuestionIds.forEach((questionId) =>
+                            next.delete(questionId),
+                          );
+                          return next;
+                        });
+                      } else {
+                        setSelectedQuestionIds(unmappedQuestionIds);
+                      }
+                    };
+
                     const applyBulkLesson = () => {
-                      if (!bulkLessonId || selectedQuestionIds.size === 0)
-                        return;
-                      setQuizQuestions((qs) =>
-                        qs.map((q) =>
-                          selectedQuestionIds.has(q.id)
-                            ? { ...q, lesson_id: Number(bulkLessonId) }
-                            : q,
-                        ),
+                      if (!bulkLessonId || selectedCount === 0) return;
+                      const result = applyBulkQuestionLessonAssignment(
+                        quizQuestions,
+                        selectedQuestionIds,
+                        Number(bulkLessonId),
                       );
-                      setSelectedQuestionIds(new Set());
+                      setQuizQuestions(result.questions);
+                      setSelectedQuestionIds(result.selectedQuestionIds);
                       setBulkLessonId("");
                     };
 
@@ -2704,7 +2930,10 @@ export default function CreateClassworkQuizModal({
                                   : "secondary"
                             }
                           >
-                            {mappedCount} / {totalCount} questions mapped
+                            {mappedCount} / {totalCount} mapped
+                            {unmappedCount > 0
+                              ? ` · ${unmappedCount} unmapped`
+                              : ""}
                           </Badge>
                         </div>
                         <p className="text-xs text-gray-600">
@@ -2712,27 +2941,51 @@ export default function CreateClassworkQuizModal({
                           linked competency is used only when that student's
                           answer has a score.
                         </p>
+                        {unmappedCount > 0 && (
+                          <p className="text-xs font-semibold text-amber-800">
+                            {unmappedCount} question
+                            {unmappedCount === 1 ? " still needs" : "s still need"}{" "}
+                            lesson mapping.
+                          </p>
+                        )}
 
                         {/* Bulk action toolbar */}
                         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2">
-                          {/* Select-all checkbox */}
-                          <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-gray-700">
+                          <label className={selectionControlClass}>
                             <Checkbox
                               id="question-mapping-select-all"
                               size="sm"
                               checked={
-                                someChecked ? "indeterminate" : allChecked
+                                someSelected ? "indeterminate" : allSelected
                               }
                               onCheckedChange={toggleSelectAll}
                               disabled={isCreating || isLessonLocked}
                               className="cursor-pointer"
                             />
-                            {selectedQuestionIds.size === 0
-                              ? "Select all"
-                              : `${selectedQuestionIds.size} selected`}
+                            Select all
                           </label>
+                          {showSelectUnmapped && (
+                            <label className={selectionControlClass}>
+                              <Checkbox
+                                id="question-mapping-select-unmapped"
+                                size="sm"
+                                checked={
+                                  someUnmappedSelected
+                                    ? "indeterminate"
+                                    : allUnmappedSelected
+                                }
+                                onCheckedChange={toggleSelectUnmapped}
+                                disabled={isCreating || isLessonLocked}
+                                className="cursor-pointer"
+                              />
+                              Select unmapped ({unmappedCount})
+                            </label>
+                          )}
+                          <span className="text-xs font-semibold text-gray-700">
+                            {selectedCount} selected
+                          </span>
 
-                          {selectedQuestionIds.size > 0 && (
+                          {selectedCount > 0 && (
                             <>
                               <span className="text-gray-400 text-xs">—</span>
                               <div className="w-56">
@@ -2767,14 +3020,16 @@ export default function CreateClassworkQuizModal({
                                 autoIcon={false}
                                 onClick={() => {
                                   if (bulkLessonId === "__clear__") {
-                                    setQuizQuestions((qs) =>
-                                      qs.map((q) =>
-                                        selectedQuestionIds.has(q.id)
-                                          ? { ...q, lesson_id: null }
-                                          : q,
-                                      ),
+                                    const result =
+                                      applyBulkQuestionLessonAssignment(
+                                        quizQuestions,
+                                        selectedQuestionIds,
+                                        null,
+                                      );
+                                    setQuizQuestions(result.questions);
+                                    setSelectedQuestionIds(
+                                      result.selectedQuestionIds,
                                     );
-                                    setSelectedQuestionIds(new Set());
                                     setBulkLessonId("");
                                   } else {
                                     applyBulkLesson();
@@ -2796,10 +3051,13 @@ export default function CreateClassworkQuizModal({
                               question.id,
                             );
                             const currentVal =
-                              question.lesson_id &&
-                              selectedLessonIds.includes(question.lesson_id)
+                              hasLinkedLessonMapping(
+                                question,
+                                selectedLessonIds,
+                              ) && question.lesson_id !== null
                                 ? String(question.lesson_id)
                                 : "";
+                            const isUnmapped = !currentVal;
                             return (
                               <div
                                 key={question.id}
@@ -2829,6 +3087,11 @@ export default function CreateClassworkQuizModal({
                                   <span className="truncate text-sm font-bold">
                                     Q{index + 1}: {question.question_text}
                                   </span>
+                                  {isUnmapped && (
+                                    <Badge size="sm" variant="default">
+                                      Unmapped
+                                    </Badge>
+                                  )}
                                 </div>
                                 <div className="w-full min-w-0">
                                   <Select
@@ -3028,11 +3291,17 @@ export default function CreateClassworkQuizModal({
                       autoIcon={false}
                       onClick={handleCreateQuiz}
                       disabled={
-                        isCreating || (draft.is_published && unkeyedIdCount > 0)
+                        isCreating ||
+                        (draft.is_published &&
+                          (unkeyedIdCount > 0 ||
+                            lessonMappingState.unmappedCount > 0))
                       }
                       title={
                         draft.is_published && unkeyedIdCount > 0
                           ? `Cannot publish: ${unkeyedIdCount} Identification question(s) have no answer key. Add keys or save as draft.`
+                          : draft.is_published &&
+                              lessonMappingState.unmappedCount > 0
+                            ? `Cannot assign: ${lessonMappingState.unmappedCount} question(s) still need lesson mapping.`
                           : undefined
                       }
                       className="gap-2 disabled:opacity-50"
@@ -3081,6 +3350,8 @@ export default function CreateClassworkQuizModal({
               questions.length > 0 ? questions : [createEmptyQuizQuestion(1)],
             );
             setQuizImportWarnings(warnings || []);
+            setQuizImportNotices([]);
+            setQuizImportSummary(null);
             setAiPromptScope(additionalCoverageScope);
             setAiLinkedLessonTitles(associatedLessonTitles || []);
             const subjName = subjects.find(

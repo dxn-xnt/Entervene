@@ -100,6 +100,19 @@ export type QuizImportPreview = {
     is_ai_generated?: boolean;
     options: QuizOptionDraft[];
   }>;
+  notices?: Array<{
+    severity: "info" | "warning" | "error";
+    code: string;
+    message: string;
+    question_number?: number | null;
+  }>;
+  summary?: {
+    question_count: number;
+    keyed_question_count: number;
+    normalized_key_count: number;
+    preserved_explanation_count: number;
+    needs_attention_count: number;
+  };
   warnings: string[];
 };
 
