@@ -202,7 +202,7 @@ def validate_quiz_payload(db: Session, classwork: Classwork, payload: QuizBuilde
 
 def quiz_readiness(db: Session, classwork: Classwork, quiz: Quiz | None = None) -> QuizReadinessResponse:
     quiz = quiz or get_quiz_for_classwork(db, classwork.classwork_id)
-    errors = _readiness_errors(classwork, quiz)
+    errors = _readiness_errors(db, classwork, quiz)
     return QuizReadinessResponse(
         classwork_id=classwork.classwork_id,
         quiz_id=quiz.quiz_id if quiz else None,
@@ -549,6 +549,11 @@ def _builder_errors(db: Session, classwork: Classwork, payload: QuizBuilderUpser
             errors.append(f"Question {index} difficulty must be EASY, MEDIUM, or HARD")
         if question.lesson_id is not None and not _lesson_belongs_to_classwork(db, classwork, question.lesson_id):
             errors.append(f"Question {index} lesson must belong to the same teacher and subject")
+        if status == "PUBLISHED":
+            if question.lesson_id is None:
+                errors.append(f"Question {index} needs a lesson mapping before publishing")
+            elif not _lesson_is_linked_to_classwork(db, classwork, question.lesson_id):
+                errors.append(f"Question {index} lesson must be linked to this quiz before publishing")
         errors.extend(_option_errors(index, question_type, question.options, status))
     if status == "PUBLISHED":
         for index, question in enumerate(payload.questions, start=1):
@@ -593,7 +598,7 @@ def _option_errors(index: int, question_type: str, options: Iterable, status: st
     return errors
 
 
-def _readiness_errors(classwork: Classwork, quiz: Quiz | None) -> list[str]:
+def _readiness_errors(db: Session, classwork: Classwork, quiz: Quiz | None) -> list[str]:
     errors: list[str] = []
     if not quiz:
         return ["Quiz has not been created"]
@@ -609,6 +614,21 @@ def _readiness_errors(classwork: Classwork, quiz: Quiz | None) -> list[str]:
     )
     if classwork.total_points is not None and question_points != Decimal(str(classwork.total_points)):
         errors.append("Sum of question points must match classwork total points")
+
+    linked_lesson_ids = {
+        lesson_id
+        for (lesson_id,) in db.query(ClassworkLesson.lesson_id).filter(
+            ClassworkLesson.classwork_id == classwork.classwork_id,
+        )
+    }
+
+    # Block publish when a question has no valid mapping inside quiz coverage.
+    for link in quiz.questions:
+        question = link.question
+        if question and question.lesson_id not in linked_lesson_ids:
+            errors.append(
+                f"Question {link.display_order} needs a lesson mapping to one of the quiz's linked lessons"
+            )
 
     # Block publish when an IDENTIFICATION question has no non-blank answer key (decision #1)
     for link in quiz.questions:
@@ -626,6 +646,13 @@ def _readiness_errors(classwork: Classwork, quiz: Quiz | None) -> list[str]:
                     "Add at least one acceptable answer before publishing."
                 )
     return errors
+
+
+def _lesson_is_linked_to_classwork(db: Session, classwork: Classwork, lesson_id: int) -> bool:
+    return db.query(ClassworkLesson).filter_by(
+        classwork_id=classwork.classwork_id,
+        lesson_id=lesson_id,
+    ).first() is not None
 
 
 def _lesson_belongs_to_classwork(db: Session, classwork: Classwork, lesson_id: int) -> bool:

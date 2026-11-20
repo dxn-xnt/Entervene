@@ -304,7 +304,7 @@ def _bearer(context, account_name: str, role: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _valid_quiz_payload() -> dict:
+def _valid_quiz_payload(lesson_id: int | None = None) -> dict:
     return {
         "duration_minutes": 30,
         "status": "READY",
@@ -325,7 +325,7 @@ def _valid_quiz_payload() -> dict:
                 "display_order": 1,
                 "difficulty_level": "EASY",
                 "explanation": None,
-                "lesson_id": None,
+                "lesson_id": lesson_id,
                 "options": [
                     {"option_text": "x", "is_correct": True, "option_order": 1},
                     {"option_text": "print", "is_correct": False, "option_order": 2},
@@ -742,6 +742,15 @@ def test_cross_year_assignment_is_hidden_from_student_reads(authz_context):
 
 def test_quiz_classwork_creation_saves_builder_atomically(authz_context):
     c = authz_context
+    lesson = Lesson(
+        title="Quiz coverage",
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+        is_draft=False,
+    )
+    c["db"].add(lesson)
+    c["db"].flush()
     response = c["client"].post(
         "/api/v1/classwork-assignments/with-assignments",
         data={
@@ -753,10 +762,10 @@ def test_quiz_classwork_creation_saves_builder_atomically(authz_context):
             "is_published": "true",
             "class_ids": json.dumps([c["allowed_class"].class_id]),
             "academic_period_id": str(c["period"].academic_period_id),
-            "lesson_ids": json.dumps([]),
+            "lesson_ids": json.dumps([lesson.lesson_id]),
             "due_date": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
             "max_attempts": "1",
-            "quiz_payload": json.dumps(_valid_quiz_payload()),
+            "quiz_payload": json.dumps(_valid_quiz_payload(lesson.lesson_id)),
         },
     )
 
@@ -772,7 +781,16 @@ def test_quiz_classwork_creation_rolls_back_when_builder_fails(authz_context):
     c = authz_context
     before_classworks = c["db"].query(Classwork).count()
     before_quizzes = c["db"].query(Quiz).count()
-    payload = _valid_quiz_payload()
+    lesson = Lesson(
+        title="Broken quiz coverage",
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+        is_draft=False,
+    )
+    c["db"].add(lesson)
+    c["db"].flush()
+    payload = _valid_quiz_payload(lesson.lesson_id)
     payload["questions"][0]["options"][1]["is_correct"] = True
 
     response = c["client"].post(
@@ -786,7 +804,7 @@ def test_quiz_classwork_creation_rolls_back_when_builder_fails(authz_context):
             "is_published": "true",
             "class_ids": json.dumps([c["allowed_class"].class_id]),
             "academic_period_id": str(c["period"].academic_period_id),
-            "lesson_ids": json.dumps([]),
+            "lesson_ids": json.dumps([lesson.lesson_id]),
             "due_date": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
             "max_attempts": "1",
             "quiz_payload": json.dumps(payload),

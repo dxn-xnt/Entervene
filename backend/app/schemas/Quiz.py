@@ -40,10 +40,28 @@ class QuizBuilderUpsert(BaseModel):
     questions: list[QuizQuestionIn] = Field(default_factory=list)
 
 
+class QuizImportNotice(BaseModel):
+    severity: Literal["info", "warning", "error"]
+    code: str
+    message: str
+    question_number: Optional[int] = None
+
+
+class QuizImportSummary(BaseModel):
+    question_count: int = 0
+    keyed_question_count: int = 0
+    normalized_key_count: int = 0
+    preserved_explanation_count: int = 0
+    needs_attention_count: int = 0
+
+
 class QuizImportPreviewResponse(BaseModel):
     title: Optional[str] = None
     instructions: Optional[str] = None
     questions: list[QuizQuestionIn] = Field(default_factory=list)
+    notices: list[QuizImportNotice] = Field(default_factory=list)
+    summary: QuizImportSummary = Field(default_factory=QuizImportSummary)
+    # Backward-compatible actionable messages for existing import consumers.
     warnings: list[str] = Field(default_factory=list)
 
 
