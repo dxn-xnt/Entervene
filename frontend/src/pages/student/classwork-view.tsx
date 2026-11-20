@@ -111,7 +111,7 @@ export default function StudentClassworkView() {
   const fromInterventionId =
     fromParam && fromParam.includes("?")
       ? new URLSearchParams(fromParam.split("?")[1]).get("intervention") ||
-        new URLSearchParams(fromParam.split("?")[1]).get("intervention_id")
+      new URLSearchParams(fromParam.split("?")[1]).get("intervention_id")
       : null;
   const rawInterventionId =
     searchParams.get("intervention_id") ||
@@ -142,7 +142,7 @@ export default function StudentClassworkView() {
   const isReading = detail?.classwork_type?.toUpperCase() === "READING";
   const isWritableContext = Boolean(
     contextState === "active" &&
-      (detail?.academic_period_id == null || detail.academic_period_id === selectedPeriodId),
+    (detail?.academic_period_id == null || detail.academic_period_id === selectedPeriodId),
   );
   useReadingFocusTracker(assignmentId, Boolean(detail && isReading && isWritableContext));
 
@@ -281,8 +281,8 @@ export default function StudentClassworkView() {
   const overdue = Boolean(dueDate && Date.now() > dueDate.getTime());
   const closed = Boolean(
     !isWritableContext ||
-      detail?.is_locked ||
-      (overdue && !detail?.allow_late_submissions),
+    detail?.is_locked ||
+    (overdue && !detail?.allow_late_submissions),
   );
   const status =
     quiz?.status ?? submission?.status ?? detail?.submission_status;
@@ -616,7 +616,7 @@ export default function StudentClassworkView() {
                                   >
                                     {lesson.title}
                                   </button>
-                                  
+
                                   {lesson.readings &&
                                     lesson.readings.length > 0 && (
                                       <div className="mt-2 space-y-2">
@@ -800,12 +800,12 @@ export default function StudentClassworkView() {
                     )}
                     {!isQuiz && !isReading && submission?.status === "graded" &&
                       (submission.grade != null || detail.show_scores === false) && (
-                      <Badge variant="success" size="md">
-                        {detail.show_scores
-                          ? `Score: ${submission.grade}${detail.total_points != null ? `/${detail.total_points}` : ""}`
-                          : "Score hidden"}
-                      </Badge>
-                    )}
+                        <Badge variant="success" size="md">
+                          {detail.show_scores
+                            ? `Score: ${submission.grade}${detail.total_points != null ? `/${detail.total_points}` : ""}`
+                            : "Score hidden"}
+                        </Badge>
+                      )}
                   </div>
                   {isReading ? (
                     submission ||
@@ -898,24 +898,24 @@ export default function StudentClassworkView() {
                           (quiz.status === "graded" &&
                             (detail.show_scores === false ||
                               quiz.show_scores === false))) && (
-                          <div className="space-y-1">
-                            <p className="font-bold">
+                            <div className="space-y-1">
+                              <p className="font-bold">
+                                {detail.show_scores &&
+                                  quiz.show_scores !== false &&
+                                  quiz.grade != null
+                                  ? `Score: ${quiz.grade}/${quiz.total_points ?? detail.total_points ?? 0}`
+                                  : "Score hidden"}
+                              </p>
                               {detail.show_scores &&
-                              quiz.show_scores !== false &&
-                              quiz.grade != null
-                                ? `Score: ${quiz.grade}/${quiz.total_points ?? detail.total_points ?? 0}`
-                                : "Score hidden"}
-                            </p>
-                            {detail.show_scores &&
-                              quiz.show_scores !== false &&
-                              quiz.is_intervention_quiz &&
-                              quiz.passing_threshold != null && (
-                                <p className="text-xs font-medium text-muted-foreground">
-                                  Passing score: {quiz.passing_threshold}%
-                                </p>
-                              )}
-                          </div>
-                        )}
+                                quiz.show_scores !== false &&
+                                quiz.is_intervention_quiz &&
+                                quiz.passing_threshold != null && (
+                                  <p className="text-xs font-medium text-muted-foreground">
+                                    Passing score: {quiz.passing_threshold}%
+                                  </p>
+                                )}
+                            </div>
+                          )}
                         {quiz.summary_message && (
                           <p className="text-muted-foreground">
                             {quiz.summary_message}
@@ -954,8 +954,8 @@ export default function StudentClassworkView() {
                                 <Alert.Title>Passing score not reached yet</Alert.Title>
                                 <Alert.Description>
                                   {detail.show_scores &&
-                                  quiz.show_scores !== false &&
-                                  quiz.passing_threshold != null
+                                    quiz.show_scores !== false &&
+                                    quiz.passing_threshold != null
                                     ? `You need at least ${quiz.passing_threshold}% to pass this Study Support assessment. Review the material and retake the quiz when you're ready.`
                                     : "You haven't reached the passing score for this Study Support assessment yet. Review the material and retake the quiz when you're ready."}
                                 </Alert.Description>
