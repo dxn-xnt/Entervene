@@ -24,6 +24,8 @@ from app.services.academic.SubjectLoadDependencyService import SubjectLoadDepend
 from app.schemas.SubjectLoad import (
     ValidateSubjectLoadRequest,
     ValidationResultResponse,
+    AutoScheduleRequest,
+    AutoScheduleResponse,
     BatchSaveSubjectLoadRequest,
     BatchSaveSubjectLoadResponse,
     SubjectLoadItem,
@@ -38,6 +40,7 @@ from app.schemas.SubjectLoad import (
 from app.services.academic.TeacherAcademicScopeService import get_teacher_academic_scope
 from pydantic import BaseModel
 from sqlalchemy import text
+from app.services.academic.AutoSchedulerService import AutoSchedulerService
 from app.services.academic.ConflictDetectorService import ConflictDetectorService
 from app.services.classes.ClassQueryService import class_pathway_code
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
@@ -1079,6 +1082,145 @@ def validate_subject_loads(
     merged = _merge_proposed_period_snapshot(db, period.academic_period_id, normalized)
     return ConflictDetectorService.validate_loads(
         db=db, loads=merged, academic_period=period, require_complete_schedule=True
+    )
+
+
+@router.post("/auto-schedule", response_model=AutoScheduleResponse)
+def auto_schedule_subject_loads(
+    payload: AutoScheduleRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """Generate a non-persisting, conflict-free draft schedule preview."""
+    period = _resolve_requested_or_active_period(db, payload.academic_period_id)
+    if any(item.academic_period_id != period.academic_period_id for item in payload.loads):
+        raise HTTPException(status_code=422, detail="Every subject load must use the requested academic period.")
+
+    ensure_default_period_templates(db)
+
+    active_classes = (
+        db.query(Class)
+        .filter(
+            Class.class_status == "active",
+            Class.academic_year_id == period.academic_year_id,
+        )
+        .all()
+    )
+    active_classes_by_id = {cls.class_id: cls for cls in active_classes}
+
+    if payload.target_class_ids is not None:
+        missing_ids = [cid for cid in payload.target_class_ids if cid not in active_classes_by_id]
+        if missing_ids:
+            raise HTTPException(status_code=404, detail=f"Class section(s) not found in this academic year: {missing_ids}")
+        target_class_ids = set(payload.target_class_ids)
+    else:
+        target_class_ids = set(active_classes_by_id.keys())
+
+    # Determine locked / non-configurable sections strictly from authoritative DB state
+    period_rows = (
+        db.query(SubjectLoad)
+        .filter(SubjectLoad.academic_period_id == period.academic_period_id)
+        .all()
+    )
+    db_rows_by_class: dict[int, list[SubjectLoad]] = {}
+    for row in period_rows:
+        db_rows_by_class.setdefault(row.class_id, []).append(row)
+
+    locked_class_ids: set[int] = set()
+    published_items_by_class: dict[int, list[SubjectLoadItem]] = {}
+    for cid in active_classes_by_id:
+        c_rows = db_rows_by_class.get(cid, [])
+        draft_rows = [r for r in c_rows if r.status == "draft"]
+        pub_rows = [
+            r for r in c_rows
+            if r.is_active_version is True and r.status in ("published", "active")
+        ]
+        if pub_rows:
+            published_items_by_class[cid] = [_to_subject_load_item(r) for r in pub_rows]
+        restriction = SubjectLoadAuthorizationService.get_configuration_restriction_reason(
+            db,
+            class_id=cid,
+            academic_period_id=period.academic_period_id,
+        )
+        if restriction is not None or (pub_rows and not draft_rows):
+            locked_class_ids.add(cid)
+
+    # Normalize only unlocked active submitted loads; locked sections always use DB published rows
+    unlocked_submitted = [
+        item for item in payload.loads
+        if item.class_id in active_classes_by_id and item.class_id not in locked_class_ids
+    ]
+    normalized_unlocked = _normalize_jhs_load_slots(db, unlocked_submitted)
+    submitted_unlocked_cids = {item.class_id for item in normalized_unlocked}
+
+    # Build authoritative school-wide baseline snapshot (active classes only) for conflict & teacher-cap checking
+    db_snapshot = _authoritative_period_snapshot(db, period.academic_period_id)
+    baseline_loads: list[SubjectLoadItem] = list(normalized_unlocked)
+    for cid in sorted(locked_class_ids):
+        baseline_loads.extend(published_items_by_class.get(cid, []))
+    for item in db_snapshot:
+        if (
+            item.class_id not in active_classes_by_id
+            or item.class_id in locked_class_ids
+            or item.class_id in submitted_unlocked_cids
+        ):
+            continue
+        baseline_loads.append(item)
+
+    existing_validation = ConflictDetectorService.validate_loads(
+        db=db,
+        loads=baseline_loads,
+        academic_period=period,
+        require_complete_schedule=False,
+    )
+
+    school_hours = get_school_hours_settings(db)
+    run_result = AutoSchedulerService.generate_draft_schedule(
+        db=db,
+        academic_period=period,
+        baseline_loads=baseline_loads,
+        target_class_ids=target_class_ids,
+        locked_class_ids=locked_class_ids,
+        overwrite_existing_drafts=payload.overwrite_existing_drafts,
+        school_hours=school_hours,
+    )
+
+    post_validation = ConflictDetectorService.validate_loads(
+        db=db,
+        loads=run_result.merged_period_loads,
+        academic_period=period,
+        require_complete_schedule=True,
+    )
+
+    run_result.summary.existing_error_conflicts_count = sum(
+        1 for c in existing_validation.conflicts if c.severity == "error"
+    )
+    run_result.summary.resulting_error_conflicts_count = sum(
+        1 for c in post_validation.conflicts if c.severity == "error"
+    )
+
+    unscheduled_loads = [
+        {
+            "class_id": item.class_id,
+            "section_name": item.section_name,
+            "subject_id": item.subject_id,
+            "subject_name": item.subject_name,
+            "reason_code": item.reason_code,
+            "reason": item.reason,
+        }
+        for item in run_result.items
+        if item.outcome == "unscheduled"
+    ]
+
+    return AutoScheduleResponse(
+        is_valid=post_validation.is_valid,
+        conflicts=post_validation.conflicts,
+        existing_conflicts=existing_validation.conflicts,
+        teacher_workloads=post_validation.teacher_workloads,
+        scheduled_loads=run_result.scheduled_loads,
+        items=run_result.items,
+        summary=run_result.summary,
+        unscheduled_loads=unscheduled_loads,
     )
 
 

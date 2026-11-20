@@ -57,6 +57,20 @@ def get_subject_offering_form_options_data(db: Session) -> dict:
         .order_by(func.lower(GradingTemplate.template_name))
         .all()
     )
+    from app.services.pathways.PathwayScopeService import resolve_pathway_scope
+
+    pathway_scopes = [
+        {
+            "academic_year_id": year.academic_year_id,
+            "academic_level_id": level.academic_level_id,
+            "grade_level": level.grade_level,
+            "requires_pathway": resolve_pathway_scope(
+                db, year.academic_year_id, level.academic_level_id
+            ),
+        }
+        for year in academic_years
+        for level in academic_levels
+    ]
     return {
         "academic_years": [
             {
@@ -97,6 +111,7 @@ def get_subject_offering_form_options_data(db: Session) -> dict:
             }
             for p in active_pathways
         ],
+        "pathway_scopes": pathway_scopes,
         "statuses": ALLOWED_OFFERING_STATUSES,
         "default_status": DEFAULT_OFFERING_STATUS,
         "active_subjects": [

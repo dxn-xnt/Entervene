@@ -45,6 +45,7 @@ import {
   SubjectCatalogCard,
   defaultPathwayForGrade,
   defaultOfferingFilters,
+  levelRequiresPathway,
   offeringQueryFromFilters,
   downloadBlob,
   friendlyErrorMessage,
@@ -81,6 +82,7 @@ import {
 } from "@/lib/api";
 
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { isChronologicallyEarlierYear } from "@/lib/academic-year-chronology";
 
 const MODULE_TABS: Array<TabItem<AdminSubjectSection>> = [
   { id: "catalog", label: "Subject Catalog", icon: BookOpen },
@@ -101,6 +103,7 @@ export default function AdminSubjects() {
   const catalogImportInputRef = useRef<HTMLInputElement | null>(null);
   const offeringImportInputRef = useRef<HTMLInputElement | null>(null);
   const offeringRequestIdRef = useRef(0);
+  const skipNextOfferingsEffectRef = useRef(false);
   const [subjects, setSubjects] = useState<SubjectListItem[]>([]);
   const [archivedSubjects, setArchivedSubjects] = useState<SubjectListItem[]>([]);
   const [offerings, setOfferings] = useState<SubjectOfferingListItem[]>([]);
@@ -180,10 +183,10 @@ export default function AdminSubjects() {
     }
   };
 
-  const loadOfferings = useCallback(async (overrideFilters?: Partial<OfferingFilters>) => {
+  const loadOfferings = useCallback(async (overrideFilters?: Partial<OfferingFilters>): Promise<boolean> => {
     const activeFilters = overrideFilters ? { ...offeringFilters, ...overrideFilters } : offeringFilters;
     const params = offeringQueryFromFilters(activeFilters, offeringOptions);
-    if (!params) return;
+    if (!params) return false;
     const requestId = ++offeringRequestIdRef.current;
     setIsLoadingOfferings(true);
     setError(null);
@@ -192,12 +195,14 @@ export default function AdminSubjects() {
         getSubjectOfferings(params),
         getSubjectOfferings({ status: "archived" }),
       ]);
-      if (requestId !== offeringRequestIdRef.current) return;
+      if (requestId !== offeringRequestIdRef.current) return false;
       setOfferings(listData.subject_offerings);
       setArchivedOfferings(archivedData.subject_offerings);
+      return true;
     } catch (err) {
-      if (requestId !== offeringRequestIdRef.current) return;
+      if (requestId !== offeringRequestIdRef.current) return false;
       setError(err instanceof Error ? err.message : "Unable to load subject offerings.");
+      return false;
     } finally {
       if (requestId === offeringRequestIdRef.current) setIsLoadingOfferings(false);
     }
@@ -219,6 +224,10 @@ export default function AdminSubjects() {
   }, [loadGradingTemplates]);
 
   useEffect(() => {
+    if (skipNextOfferingsEffectRef.current) {
+      skipNextOfferingsEffectRef.current = false;
+      return;
+    }
     void loadOfferings();
   }, [loadOfferings]);
 
@@ -406,6 +415,13 @@ export default function AdminSubjects() {
 
   const isHistoricalYear = academicYearState === "HISTORICAL";
   const isViewingInactiveAcademicYear = isHistoricalYear;
+  const previousAcademicYears = useMemo(() => {
+    if (!offeringOptions || !selectedAcademicYear) return [];
+    return offeringOptions.academic_years.filter((year) =>
+      isChronologicallyEarlierYear(year, selectedAcademicYear)
+    );
+  }, [offeringOptions, selectedAcademicYear]);
+  const canCopyPreviousYearSetup = !isHistoricalYear && previousAcademicYears.length > 0;
   const readOnlyReason = isViewingInactiveAcademicYear
     ? `Viewing historical academic year: ${selectedAcademicYear?.year_label}. Curriculum setup is read-only to protect historical grades and prediction records.`
     : undefined;
@@ -441,10 +457,22 @@ export default function AdminSubjects() {
   };
 
   const setOfferingGrade = (value: CurriculumGradeValue) => {
+    const matchedLevel = offeringOptions?.academic_levels.find(
+      (lvl) => String(lvl.grade_level) === value || String(lvl.academic_level_id) === value,
+    );
+    const requiresPathway =
+      value === ALL_VALUE
+        ? undefined
+        : levelRequiresPathway(
+            offeringOptions?.pathway_scopes,
+            selectedAcademicYear?.academic_year_id,
+            matchedLevel?.academic_level_id,
+            matchedLevel?.grade_level ?? (Number.isFinite(Number(value)) ? Number(value) : null),
+          );
     setOfferingFilters((current) => ({
       ...current,
       grade: value,
-      pathway: defaultPathwayForGrade(value),
+      pathway: defaultPathwayForGrade(value, requiresPathway),
     }));
   };
 
@@ -717,19 +745,21 @@ export default function AdminSubjects() {
                           event.target.value = "";
                         }}
                       />
-                      <Button
-                        size="header"
-                        variant="outline"
-                        className="hidden md:inline-flex"
-                        onClick={() => {
-                          setError(null);
-                          setCopyResult(null);
-                          setIsCopySetupModalOpen(true);
-                        }}
-                        disabled={isLoadingOptions || !activeAcademicYear}
-                      >
-                        <Copy className="size-4" /> Copy Previous Year Setup
-                      </Button>
+                      {canCopyPreviousYearSetup ? (
+                        <Button
+                          size="header"
+                          variant="outline"
+                          className="hidden md:inline-flex"
+                          onClick={() => {
+                            setError(null);
+                            setCopyResult(null);
+                            setIsCopySetupModalOpen(true);
+                          }}
+                          disabled={isLoadingOptions || !activeAcademicYear}
+                        >
+                          <Copy className="size-4" /> Copy Previous Year Setup
+                        </Button>
+                      ) : null}
                       <Button
                         size="header"
                         className="col-span-2 md:col-auto"
@@ -746,16 +776,18 @@ export default function AdminSubjects() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] border-2 sm:w-72">
-                          <DropdownMenuItem
-                            disabled={isLoadingOptions || !activeAcademicYear}
-                            onClick={() => {
-                              setError(null);
-                              setCopyResult(null);
-                              setIsCopySetupModalOpen(true);
-                            }}
-                          >
-                            <Copy className="mr-2 size-4" /> Copy Previous Year Setup
-                          </DropdownMenuItem>
+                          {canCopyPreviousYearSetup ? (
+                            <DropdownMenuItem
+                              disabled={isLoadingOptions || !activeAcademicYear}
+                              onClick={() => {
+                                setError(null);
+                                setCopyResult(null);
+                                setIsCopySetupModalOpen(true);
+                              }}
+                            >
+                              <Copy className="mr-2 size-4" /> Copy Previous Year Setup
+                            </DropdownMenuItem>
+                          ) : null}
                           <DropdownMenuItem
                             disabled={isImportingOfferings || isViewingInactiveAcademicYear}
                             onClick={() => offeringImportInputRef.current?.click()}
@@ -967,6 +999,8 @@ export default function AdminSubjects() {
                     pathway={offeringFilters.pathway}
                     status={offeringFilters.status}
                     academicLevels={offeringOptions?.academic_levels}
+                    pathwayScopes={offeringOptions?.pathway_scopes}
+                    selectedAcademicYearId={selectedAcademicYear?.academic_year_id}
                     onSearchChange={setOfferingSearch}
                     onGradeChange={setOfferingGrade}
                     onPathwayChange={setOfferingPathway}
@@ -1031,7 +1065,12 @@ export default function AdminSubjects() {
                         academicYearLabel={selectedYearLabel}
                         gradeLabel={group.level.level_name}
                         pathwayLabel={
-                          group.level.grade_level <= 10
+                          !levelRequiresPathway(
+                            offeringOptions?.pathway_scopes,
+                            selectedAcademicYear?.academic_year_id,
+                            group.level.academic_level_id,
+                            group.level.grade_level,
+                          )
                             ? "General / Unrestricted"
                             : selectedPathwayLabel
                         }
@@ -1177,7 +1216,10 @@ export default function AdminSubjects() {
 
       <OfferingModal
         open={isOfferingModalOpen}
-        onOpenChange={setIsOfferingModalOpen}
+        onOpenChange={(open) => {
+          setIsOfferingModalOpen(open);
+          if (!open) setEditingOffering(null);
+        }}
         options={offeringOptions}
         offering={editingOffering}
         catalogSubjects={catalogSubjectsForPlan}
@@ -1186,29 +1228,56 @@ export default function AdminSubjects() {
         readOnlyReason={readOnlyReason}
         onSaved={async (savedMeta) => {
           const message = savedMeta?.message ?? (editingOffering ? "Subject offering updated." : "Offerings saved.");
-          if (savedMeta?.partialFailure) {
-            toast.warning({ title: "Some offerings need attention", description: message });
-          } else {
-            setNotice(message);
-          }
           let nextFilters = offeringFilters;
           if (savedMeta?.gradeValue) {
             const nextGrade = savedMeta.gradeValue as CurriculumGradeValue;
-            const isShsGrade = nextGrade === "11" || nextGrade === "12";
-            nextFilters = {
-              ...offeringFilters,
-              academic_year_id: savedMeta.academicYearId ? String(savedMeta.academicYearId) : offeringFilters.academic_year_id,
-              grade: nextGrade,
-              pathway: isShsGrade ? "all" : (savedMeta.pathway ?? offeringFilters.pathway),
-            };
-            setOfferingFilters(nextFilters);
+            const nextYearId = savedMeta.academicYearId
+              ? String(savedMeta.academicYearId)
+              : offeringFilters.academic_year_id;
+            const matchedLevel = offeringOptions?.academic_levels.find(
+              (lvl) => String(lvl.grade_level) === nextGrade,
+            );
+            const nextRequiresPathway = levelRequiresPathway(
+              offeringOptions?.pathway_scopes,
+              Number(nextYearId),
+              matchedLevel?.academic_level_id,
+              matchedLevel?.grade_level ?? (Number.isFinite(Number(nextGrade)) ? Number(nextGrade) : null),
+            );
+            const nextPathway = nextRequiresPathway
+              ? "all"
+              : (savedMeta.pathway ?? "general");
+            const filtersChanged =
+              nextYearId !== offeringFilters.academic_year_id ||
+              nextGrade !== offeringFilters.grade ||
+              nextPathway !== offeringFilters.pathway;
+            if (filtersChanged) {
+              nextFilters = {
+                ...offeringFilters,
+                academic_year_id: nextYearId,
+                grade: nextGrade,
+                pathway: nextPathway,
+              };
+              skipNextOfferingsEffectRef.current = true;
+              setOfferingFilters(nextFilters);
+            }
           }
-          await Promise.all([loadSubjects(), loadOfferings(nextFilters), loadGradingTemplates()]);
+          const [, refreshedOfferings] = await Promise.all([
+            loadSubjects(),
+            loadOfferings(nextFilters),
+            loadGradingTemplates(),
+          ]);
+          if (refreshedOfferings) {
+            if (savedMeta?.partialFailure) {
+              toast.warning({ title: "Some offerings need attention", description: message });
+            } else {
+              setNotice(message);
+            }
+          }
         }}
       />
 
       <CopyPreviousYearSetupModal
-        open={isCopySetupModalOpen}
+        open={isCopySetupModalOpen && canCopyPreviousYearSetup}
         onOpenChange={setIsCopySetupModalOpen}
         options={offeringOptions}
         defaultTargetAcademicYearId={isHistoricalYear ? undefined : selectedAcademicYear?.academic_year_id}

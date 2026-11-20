@@ -82,6 +82,54 @@ class ValidateSubjectLoadRequest(BaseModel):
     loads: list[SubjectLoadItem]
 
 
+class AutoScheduleRequest(BaseModel):
+    academic_period_id: int
+    loads: list[SubjectLoadItem] = Field(default_factory=list)
+    target_class_ids: list[int] | None = None
+    overwrite_existing_drafts: bool = False
+
+
+class AutoScheduleDecisionItem(BaseModel):
+    class_id: int
+    section_name: str
+    subject_id: int
+    subject_name: str
+    staff_id: str | None = None
+    staff_name: str | None = None
+    outcome: str  # "generated" | "skipped" | "unscheduled"
+    reason_code: str
+    reason: str
+    replaced_existing: bool = False
+    slot_id: int | None = None
+    slot_name: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    days_of_week: list[str] = Field(default_factory=list)
+
+
+class AutoScheduleSummary(BaseModel):
+    target_sections_count: int = 0
+    locked_sections_count: int = 0
+    generated_count: int = 0
+    skipped_count: int = 0
+    unscheduled_count: int = 0
+    replaced_count: int = 0
+    existing_error_conflicts_count: int = 0
+    resulting_error_conflicts_count: int = 0
+    empty_curriculum_sections: list[str] = Field(default_factory=list)
+
+
+class AutoScheduleResponse(BaseModel):
+    is_valid: bool
+    conflicts: list[ConflictItem] = Field(default_factory=list)
+    existing_conflicts: list[ConflictItem] = Field(default_factory=list)
+    teacher_workloads: list[TeacherWorkloadItem] = Field(default_factory=list)
+    scheduled_loads: list[SubjectLoadItem] = Field(default_factory=list)
+    items: list[AutoScheduleDecisionItem] = Field(default_factory=list)
+    summary: AutoScheduleSummary = Field(default_factory=AutoScheduleSummary)
+    unscheduled_loads: list[dict[str, object]] = Field(default_factory=list)
+
+
 class BatchSaveSubjectLoadRequest(BaseModel):
     academic_period_id: int
     academic_level_id: int

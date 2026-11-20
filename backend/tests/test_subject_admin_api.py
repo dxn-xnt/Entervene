@@ -135,22 +135,34 @@ def test_form_options_returns_usable_subject_data(client, db):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["academic_levels"] == [
-        {"academic_level_id": grade_11.academic_level_id, "level_name": "Grade 11", "grade_level": 11},
-        {"academic_level_id": grade_12.academic_level_id, "level_name": "Grade 12", "grade_level": 12},
-    ]
+    # Form options intentionally provision the standard Grade 7-12 catalog
+    # levels while retaining already-seeded level identities.
+    assert [level["grade_level"] for level in body["academic_levels"]] == [7, 8, 9, 10, 11, 12]
+    assert next(level for level in body["academic_levels"] if level["grade_level"] == 11) == {
+        "academic_level_id": grade_11.academic_level_id,
+        "level_name": "Grade 11",
+        "grade_level": 11,
+    }
+    assert next(level for level in body["academic_levels"] if level["grade_level"] == 12) == {
+        "academic_level_id": grade_12.academic_level_id,
+        "level_name": "Grade 12",
+        "grade_level": 12,
+    }
     assert body["statuses"] == ["active", "archived"]
     assert body["default_status"] == "active"
     assert "Specialized" in body["grading_templates"]
     assert any(t["template_name"] == "Specialized" and t["passing_threshold"] == 85.0 for t in body["grading_template_details"])
 
 
-def test_create_subject_works(client, db):
+def test_create_subject_uses_backend_generated_code(client, db):
     level = add_level(db)
     template = add_template(db)
     db.commit()
 
-    response = client.post("/api/v1/subjects", json=subject_payload(level, template))
+    response = client.post(
+        "/api/v1/subjects",
+        json=subject_payload(level, template, subject_codename="UNTRUSTED CLIENT CODE"),
+    )
 
     assert response.status_code == 201
     body = response.json()
@@ -163,36 +175,85 @@ def test_create_subject_works(client, db):
     assert db.query(Subject).count() == 1
 
 
-def test_duplicate_subject_code_in_same_academic_level_is_rejected(client, db):
-    level = add_level(db)
+def test_duplicate_normalized_subject_name_including_archived_is_rejected(client, db):
+    level = add_level(db, "Grade 7", 7)
     template = add_template(db)
-    add_subject(db, level, template, code="GENBIO1")
+    add_subject(db, level, template, name="English 7", code="ENG 7", status="archived")
     db.commit()
 
     response = client.post(
         "/api/v1/subjects",
-        json=subject_payload(level, template, subject_name="General Biology Duplicate", subject_codename=" genbio1 "),
+        json=subject_payload(level, template, subject_name=" english7 ", subject_codename="IGNORED"),
     )
 
     assert response.status_code == 409
-    assert "already exists" in response.json()["detail"]
+    assert "including archived subjects" in response.json()["detail"]
     assert db.query(Subject).count() == 1
 
 
-def test_same_subject_code_in_different_academic_level_is_allowed(client, db):
+def test_generated_subject_code_conflict_is_global(client, db):
     grade_11 = add_level(db, "Grade 11", 11)
     grade_12 = add_level(db, "Grade 12", 12)
     template = add_template(db)
-    add_subject(db, grade_11, template, code="GENBIO1")
+    add_subject(db, grade_11, template, name="General Biology 1", code="GENBIO1")
     db.commit()
 
     response = client.post(
         "/api/v1/subjects",
-        json=subject_payload(grade_12, template, subject_name="General Biology 2", subject_codename="GENBIO1"),
+        json=subject_payload(grade_12, template, subject_name="General Biology 1", subject_codename="DIFFERENT"),
     )
 
-    assert response.status_code == 201
-    assert db.query(Subject).count() == 2
+    assert response.status_code == 409
+    assert 'Generated subject code "GENBIO1" is already used' in response.json()["detail"]
+    assert db.query(Subject).count() == 1
+
+
+def test_subject_code_preview_uses_backend_generation(client, db):
+    level = add_level(db, "Grade 8", 8)
+    db.commit()
+
+    response = client.get(
+        "/api/v1/subjects/code-preview",
+        params={"subject_name": " Enhanced---Science8 ", "academic_level_id": level.academic_level_id},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"subject_codename": "ENSCI8"}
+
+
+def test_subject_code_preview_preserves_legacy_code_until_edit_changes_name(client, db):
+    level = add_level(db, "Grade 8", 8)
+    template = add_template(db)
+    subject = add_subject(
+        db,
+        level,
+        template,
+        name="Enhanced Mathematics 8",
+        code="EMATH8",
+    )
+    db.commit()
+
+    unchanged = client.get(
+        "/api/v1/subjects/code-preview",
+        params={
+            "subject_name": " enhanced mathematics8 ",
+            "academic_level_id": level.academic_level_id,
+            "subject_id": subject.subject_id,
+        },
+    )
+    renamed = client.get(
+        "/api/v1/subjects/code-preview",
+        params={
+            "subject_name": "Enhanced Science 8",
+            "academic_level_id": level.academic_level_id,
+            "subject_id": subject.subject_id,
+        },
+    )
+
+    assert unchanged.status_code == 200
+    assert unchanged.json() == {"subject_codename": "EMATH8"}
+    assert renamed.status_code == 200
+    assert renamed.json() == {"subject_codename": "ENSCI8"}
 
 
 def test_list_subjects_and_search_filter_work(client, db):
@@ -244,28 +305,71 @@ def test_filter_by_academic_level_and_grading_template(client, db):
     assert [item["subject_codename"] for item in response.json()["subjects"]] == ["GENBIO1"]
 
 
-def test_update_subject_works_and_validates_duplicate_code(client, db):
+def test_update_preserves_code_until_name_changes_then_regenerates(client, db):
     level = add_level(db)
     template = add_template(db)
     subject = add_subject(db, level, template, code="GENBIO1")
-    add_subject(db, level, template, name="Pre-Calculus", code="PRECAL")
     db.commit()
 
-    conflict = client.patch(f"/api/v1/subjects/{subject.subject_id}", json={"subject_codename": "precal"})
-    assert conflict.status_code == 409
+    preserved = client.patch(
+        f"/api/v1/subjects/{subject.subject_id}",
+        json={"description": "Updated without renaming"},
+    )
+    assert preserved.status_code == 200
+    assert preserved.json()["subject_codename"] == "GENBIO1"
 
     response = client.patch(
         f"/api/v1/subjects/{subject.subject_id}",
-        json={
-            "subject_name": "General Biology Updated",
-            "subject_codename": "GENBIO1A",
-        },
+        json={"subject_name": "Enhanced Science 11"},
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["subject_name"] == "General Biology Updated"
-    assert body["subject_codename"] == "GENBIO1A"
+    assert body["subject_name"] == "Enhanced Science 11"
+    assert body["subject_codename"] == "ENSCI11"
+
+
+def test_update_rejects_client_selected_code(client, db):
+    level = add_level(db)
+    template = add_template(db)
+    subject = add_subject(db, level, template, code="GENBIO1")
+    db.commit()
+
+    response = client.patch(
+        f"/api/v1/subjects/{subject.subject_id}",
+        json={"subject_codename": "CLIENTCODE"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Subject codes are generated automatically. Change the subject name to generate a new code."
+    )
+    db.refresh(subject)
+    assert subject.subject_codename == "GENBIO1"
+
+
+def test_update_name_rejects_duplicate_and_code_conflict(client, db):
+    grade_11 = add_level(db, "Grade 11", 11)
+    grade_12 = add_level(db, "Grade 12", 12)
+    template = add_template(db)
+    subject = add_subject(db, grade_12, template, name="Work Immersion", code="WI12")
+    add_subject(db, grade_12, template, name="English 12", code="ENG12", status="archived")
+    add_subject(db, grade_11, template, name="General Biology 1", code="GENBIO1")
+    db.commit()
+
+    duplicate_name = client.patch(
+        f"/api/v1/subjects/{subject.subject_id}",
+        json={"subject_name": "english12"},
+    )
+    assert duplicate_name.status_code == 409
+    assert "including archived subjects" in duplicate_name.json()["detail"]
+
+    code_conflict = client.patch(
+        f"/api/v1/subjects/{subject.subject_id}",
+        json={"subject_name": "General Biology 1"},
+    )
+    assert code_conflict.status_code == 409
+    assert 'Generated subject code "GENBIO1" is already used' in code_conflict.json()["detail"]
 
 
 def test_non_admin_cannot_create_update_or_archive(client, db):
@@ -279,5 +383,40 @@ def test_non_admin_cannot_create_update_or_archive(client, db):
     }
 
     assert client.post("/api/v1/subjects", json=subject_payload(level, template)).status_code == 403
+    assert client.get(
+        "/api/v1/subjects/code-preview",
+        params={"subject_name": "English 11", "academic_level_id": level.academic_level_id},
+    ).status_code == 403
     assert client.patch(f"/api/v1/subjects/{subject.subject_id}", json={"subject_name": "Blocked"}).status_code == 403
     assert client.patch(f"/api/v1/subjects/{subject.subject_id}/archive").status_code == 403
+
+
+
+def test_restore_rejects_archived_duplicate_and_patch_status_cannot_bypass(client, db):
+    grade_7 = add_level(db, "Grade 7", 7)
+    template = add_template(db)
+    active_eng7 = add_subject(db, grade_7, template, name="English 7", code="ENG7", status="active")
+    archived_dup = add_subject(db, grade_7, template, name="English7", code=None, status="archived")
+    db.commit()
+
+    restore_resp = client.patch(f"/api/v1/subjects/{archived_dup.subject_id}/restore")
+    assert restore_resp.status_code == 409
+    assert "active subject" in restore_resp.json()["detail"].lower()
+
+    patch_resp = client.patch(
+        f"/api/v1/subjects/{archived_dup.subject_id}",
+        json={"status": "active"},
+    )
+    assert patch_resp.status_code == 409
+    assert "active subject" in patch_resp.json()["detail"].lower()
+
+    # Even if the active subject is archived, the codeless duplicate still cannot steal ENG7.
+    active_eng7.status = "archived"
+    db.commit()
+    restore_while_both_archived = client.patch(f"/api/v1/subjects/{archived_dup.subject_id}/restore")
+    assert restore_while_both_archived.status_code == 409
+    assert 'Generated subject code "ENG7" is already used' in restore_while_both_archived.json()["detail"]
+
+    db.refresh(archived_dup)
+    assert archived_dup.status == "archived"
+    assert archived_dup.subject_codename is None

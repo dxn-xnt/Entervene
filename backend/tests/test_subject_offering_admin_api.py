@@ -1315,3 +1315,72 @@ def test_grade11_section_query_returns_core_and_pathway_electives(client, db, of
     subject_ids = {o["subject"]["subject_id"] for o in offerings}
     assert ctx["genmath"].subject_id in subject_ids
     assert ctx["biology"].subject_id in subject_ids
+
+
+def test_form_options_exposes_resolved_pathway_scopes(client, db, offering_context):
+    ctx = offering_context
+    db.add(
+        AcademicLevelPathwayScope(
+            academic_year_id=ctx["other_year"].academic_year_id,
+            academic_level_id=ctx["grade_12"].academic_level_id,
+            requires_pathway=True,
+        )
+    )
+    db.commit()
+
+    response = client.get("/api/v1/subject-offerings/form-options")
+    assert response.status_code == 200
+    scopes = {
+        (item["academic_year_id"], item["grade_level"]): item["requires_pathway"]
+        for item in response.json()["pathway_scopes"]
+    }
+    # Default DO 017 scope in active year: Grade 11 requires pathways, Grade 12 does not.
+    assert scopes[(ctx["year"].academic_year_id, 7)] is False
+    assert scopes[(ctx["year"].academic_year_id, 11)] is True
+    assert scopes[(ctx["year"].academic_year_id, 12)] is False
+    # Explicit override in future year: Grade 12 requires pathways.
+    assert scopes[(ctx["other_year"].academic_year_id, 12)] is True
+
+
+def test_copy_academic_year_passes_pathway_ids_to_ensure_offering_available(client, db, offering_context):
+    ctx = offering_context
+    med_pathway = db.query(AcademicPathway).filter(AcademicPathway.code == "medical-courses").one()
+
+    # Source year has a general (empty pathway_ids) offering for Grade 12.
+    source_general = SubjectOffering(
+        subject_id=ctx["grade_12_subject"].subject_id,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_level_id=ctx["grade_12"].academic_level_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+        minutes=72,
+        status="active",
+    )
+    # Target year already has a pathway-specific offering for the same Grade 12 subject/term.
+    target_pathway_specific = SubjectOffering(
+        subject_id=ctx["grade_12_subject"].subject_id,
+        academic_year_id=ctx["year"].academic_year_id,
+        academic_level_id=ctx["grade_12"].academic_level_id,
+        academic_period_id=ctx["term_1"].academic_period_id,
+        minutes=72,
+        status="active",
+    )
+    db.add_all([source_general, target_pathway_specific])
+    db.flush()
+    db.add(
+        SubjectOfferingPathway(
+            subject_offering_id=target_pathway_specific.subject_offering_id,
+            pathway_id=med_pathway.id,
+        )
+    )
+    db.commit()
+
+    response = client.post(
+        "/api/v1/subject-offerings/copy-academic-year",
+        json=copy_academic_year_payload(ctx),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    # ensure_offering_available must detect the empty-pathway vs pathway-specific overlap and skip it!
+    assert body["created_count"] == 0
+    assert body["skipped_count"] == 1
+    assert "already exists" in body["skipped"][0]["reason"].lower()

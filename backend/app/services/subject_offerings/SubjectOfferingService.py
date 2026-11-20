@@ -480,6 +480,11 @@ def copy_subject_offerings_between_academic_years(
             })
             continue
 
+        src_pathway_ids = [
+            link.pathway_id
+            for link in (source_offering.offering_pathways or [])
+            if link.pathway_id is not None
+        ]
         try:
             ensure_offering_available(
                 db,
@@ -487,7 +492,7 @@ def copy_subject_offerings_between_academic_years(
                 target_year.academic_year_id,
                 source_offering.academic_level_id,
                 target_period.academic_period_id,
-                src_pw,
+                pathway_ids=src_pathway_ids,
             )
         except HTTPException as exc:
             skipped.append({

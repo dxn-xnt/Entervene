@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Pencil } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -8,6 +8,8 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { Checkbox } from "@/components/retroui/Checkbox";
+import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
 import {
   CANONICAL_PATHWAYS,
   canonicalizePathway,
@@ -19,14 +21,17 @@ import type {
   SubjectOfferingAcademicPeriod,
   SubjectOfferingFormOptions,
 } from "@/lib/api";
+import { previewSubjectImportCsv } from "@/lib/api";
 import { TARGET_GRADES } from "../subjects/components/subject-utils";
 
 type CatalogImportDraftRow = {
+  row: number;
   subject_code: string;
   subject_name: string;
   grade_level: string;
   grading_template: string;
   description: string;
+  errors: string[];
 };
 
 export type OfferingImportDraftRow = {
@@ -47,11 +52,19 @@ export const KNOWN_SUBJECT_NAMES: Record<string, string> = {
   MATH10: "Mathematics 10",
   ENMATH7: "Enhanced Mathematics 7",
   EMATH8: "Enhanced Mathematics 8",
+  ENMATH8: "Enhanced Mathematics 8",
+  ENMATH9: "Enhanced Mathematics 9",
+  ENMATH10: "Enhanced Mathematics 10",
   SCI7: "Science 7",
   SCI8: "Science 8",
   SCI9: "Science 9",
   SCI10: "Science 10",
   ESCIE8: "Enhanced Science 8",
+  ENSCI8: "Enhanced Science 8",
+  ENSCI9: "Enhanced Science 9",
+  SCIRES8: "Science Research",
+  SCIRES9: "Science Research",
+  SRES8: "Science Research",
   ENG7: "English 7",
   ENG8: "English 8",
   ENG9: "English 9",
@@ -60,6 +73,8 @@ export const KNOWN_SUBJECT_NAMES: Record<string, string> = {
   FIL8: "Filipino 8",
   FIL9: "Filipino 9",
   FIL10: "Filipino 10",
+  FRE8: "French 8",
+  FRE9: "French 9",
   AP7: "Araling Panlipunan 7",
   AP8: "Araling Panlipunan 8",
   AP9: "Araling Panlipunan 9",
@@ -68,6 +83,12 @@ export const KNOWN_SUBJECT_NAMES: Record<string, string> = {
   ESP8: "Edukasyon sa Pagpapakatao 8",
   ESP9: "Edukasyon sa Pagpapakatao 9",
   ESP10: "Edukasyon sa Pagpapakatao 10",
+  VE8: "Values Education 8",
+  VALED8: "Values Education 8",
+  VALED9: "Values Education 9",
+  VALREC10: "Values Recommendation",
+  RSRCH7: "Research",
+  RSRCH10: "Research 10",
   TLE7: "Technology and Livelihood Education 7",
   TLE8: "Technology and Livelihood Education 8",
   TLE9: "Technology and Livelihood Education 9",
@@ -100,6 +121,19 @@ export const KNOWN_SUBJECT_NAMES: Record<string, string> = {
   STAT11: "Statistics and Probability",
   STAT: "Statistics and Probability",
   STATPROB: "Statistics and Probability",
+  STATPROB11: "Statistics and Probability",
+  HAP1: "Human Anatomy and Physiology",
+  HAP11: "Human Anatomy and Physiology",
+  HSF1: "Health Science Fundamentals",
+  HSF11: "Health Science Fundamentals",
+  INTROENG1: "Introduction to Engineering",
+  INTROENG11: "Introduction to Engineering",
+  CAD1: "Computer-Aided Design Fundamentals",
+  CADF11: "Computer-Aided Design Fundamentals",
+  RESEARCH1: "Research 1",
+  RSRCH1: "Research 1",
+  ELS11: "Earth and Life Science",
+  WI12: "Work Immersion",
   ORALCOMM: "Oral Communication in Context",
   COMM11: "Oral Communication in Context",
   RWS: "Reading and Writing Skills",
@@ -159,10 +193,15 @@ export function resolveSubjectName(
       SCI: "Science",
       SCIE: "Science",
       ESCIE: "Enhanced Science",
+      ENSCI: "Enhanced Science",
+      SCIRES: "Science Research",
       ENG: "English",
       FIL: "Filipino",
+      FRE: "French",
       AP: "Araling Panlipunan",
       ESP: "Edukasyon sa Pagpapakatao",
+      VALED: "Values Education",
+      RSRCH: "Research",
       TLE: "Technology and Livelihood Education",
       MAPEH: "MAPEH",
       BIO: "General Biology",
@@ -185,7 +224,6 @@ export function resolveSubjectName(
 }
 
 const CATALOG_CSV_HEADERS = [
-  "subject_code",
   "subject_name",
   "grade_level",
   "grading_template",
@@ -245,30 +283,6 @@ function parseCsvMatrix(text: string): string[][] {
   return rows;
 }
 
-function parseCatalogImportRows(text: string): CatalogImportDraftRow[] | null {
-  const matrix = parseCsvMatrix(text);
-  if (matrix.length < 2) return null;
-  const header = matrix[0].map((h) => h.trim());
-  const isMatchingHeader =
-    header.length === CATALOG_CSV_HEADERS.length &&
-    CATALOG_CSV_HEADERS.every((expected, idx) => header[idx] === expected);
-  if (!isMatchingHeader) return null;
-
-  const parsed: CatalogImportDraftRow[] = [];
-  for (let i = 1; i < matrix.length; i++) {
-    const row = matrix[i];
-    if (!row || row.every((cell) => !cell)) continue;
-    parsed.push({
-      subject_code: row[0] ?? "",
-      subject_name: row[1] ?? "",
-      grade_level: row[2] ?? "",
-      grading_template: row[3] ?? "",
-      description: row[4] ?? "",
-    });
-  }
-  return parsed.length > 0 ? parsed : null;
-}
-
 function parseOfferingImportRows(text: string): OfferingImportDraftRow[] | null {
   const matrix = parseCsvMatrix(text);
   if (matrix.length < 2) return null;
@@ -314,7 +328,6 @@ function buildCatalogCsvFile(rows: CatalogImportDraftRow[], originalName: string
     CATALOG_CSV_HEADERS.join(","),
     ...rows.map((row) =>
       [
-        escapeCsvCell(row.subject_code),
         escapeCsvCell(row.subject_name),
         escapeCsvCell(row.grade_level),
         escapeCsvCell(row.grading_template),
@@ -387,6 +400,11 @@ export function ImportCatalogSubjectsDialog({
 }) {
   const [catalogRows, setCatalogRows] = useState<CatalogImportDraftRow[] | null>(null);
   const [editingCatalogIndex, setEditingCatalogIndex] = useState<number | null>(null);
+  const [isPreviewingCatalog, setIsPreviewingCatalog] = useState(false);
+  const [catalogPreviewError, setCatalogPreviewError] = useState<string | null>(null);
+  const [isCatalogEdited, setIsCatalogEdited] = useState(false);
+  const catalogPreviewTimer = useRef<number | null>(null);
+  const catalogPreviewRequest = useRef(0);
 
   const [offeringRows, setOfferingRows] = useState<OfferingImportDraftRow[] | null>(null);
   const [isOfferingEdited, setIsOfferingEdited] = useState(false);
@@ -440,44 +458,28 @@ export function ImportCatalogSubjectsDialog({
     let active = true;
 
     if (pendingImport.kind === "catalog") {
-      pendingImport.file
-        .text()
-        .then((text) => {
-          if (!active) return;
-          const parsed = parseCatalogImportRows(text);
-          if (!parsed) {
-            setCatalogRows(null);
-            return;
-          }
-          const defaultGrade = academicLevels[0] ? String(academicLevels[0].grade_level) : "";
-          const validTemplates = new Map(
-            gradingTemplates.map((t) => [t.template_name.toLowerCase(), t.template_name]),
-          );
-          const defaultTemplate =
-            gradingTemplates.find((t) => t.template_name.toLowerCase().includes("core"))?.template_name ??
-            gradingTemplates[0]?.template_name ??
-            "";
-
-          setCatalogRows(
-            parsed.map((row) => {
-              const digits = row.grade_level.replace(/\D/g, "");
-              const normalizedGrade = digits || row.grade_level.trim() || defaultGrade;
-              const matchedTpl = validTemplates.get(row.grading_template.toLowerCase());
-              const normalizedTemplate =
-                validTemplates.size > 0
-                  ? matchedTpl || defaultTemplate || row.grading_template
-                  : row.grading_template;
-              return {
-                ...row,
-                grade_level: normalizedGrade,
-                grading_template: normalizedTemplate,
-              };
-            }),
-          );
+      Promise.resolve()
+        .then(() => {
+          if (!active) return null;
+          setIsPreviewingCatalog(true);
+          setIsCatalogEdited(false);
+          setCatalogPreviewError(null);
+          return previewSubjectImportCsv(pendingImport.file);
         })
-        .catch(() => {
+        .then((result) => {
+          if (!active || result === null) return;
+          setCatalogRows(result.rows.map((row) => ({ ...row, subject_code: row.subject_code ?? "" })));
+          if (result.rows.length === 0 && result.errors.length > 0) {
+            setCatalogPreviewError(result.errors.map((error) => error.message).join(" "));
+          }
+        })
+        .catch((error: unknown) => {
           if (!active) return;
           setCatalogRows(null);
+          setCatalogPreviewError(error instanceof Error ? error.message : "Unable to preview subject import.");
+        })
+        .finally(() => {
+          if (active) setIsPreviewingCatalog(false);
         });
     } else if (pendingImport.kind === "offerings") {
       pendingImport.file
@@ -496,8 +498,11 @@ export function ImportCatalogSubjectsDialog({
 
     return () => {
       active = false;
+      if (catalogPreviewTimer.current !== null) {
+        window.clearTimeout(catalogPreviewTimer.current);
+      }
     };
-  }, [pendingImport, academicLevels, gradingTemplates]);
+  }, [pendingImport]);
 
   const allTerms = useMemo(() => {
     if (!offeringRows || offeringRows.length === 0) return ["Term 1", "Term 2", "Term 3"];
@@ -589,7 +594,7 @@ export function ImportCatalogSubjectsDialog({
         )?.template_name || (isSpecialized ? "Specialized" : "Core");
         const gradingTemplate = catalogItem?.grading_template?.template_name || fallbackTemplate;
         const isShared =
-          canonPathway === CANONICAL_PATHWAYS.BOTH || Boolean((catalogItem as any)?.is_core);
+          canonPathway === CANONICAL_PATHWAYS.BOTH || Boolean(catalogItem?.is_core);
 
         return {
           key,
@@ -854,16 +859,44 @@ export function ImportCatalogSubjectsDialog({
   }
 
   const updateCatalogRow = (index: number, patch: Partial<CatalogImportDraftRow>) => {
-    setCatalogRows((current) =>
-      current
-        ? current.map((row, idx) => (idx === index ? { ...row, ...patch } : row))
-        : current,
+    if (!catalogRows) return;
+    const nextRows = catalogRows.map((row, idx) =>
+      idx === index ? { ...row, ...patch, subject_code: "", errors: [] } : row,
     );
+    setCatalogRows(nextRows);
+    setIsCatalogEdited(true);
+    setCatalogPreviewError(null);
+    // Block Import until the server has re-validated the edited rows so the
+    // preview shown is always the one the final import will reproduce.
+    setIsPreviewingCatalog(true);
+    if (catalogPreviewTimer.current !== null) window.clearTimeout(catalogPreviewTimer.current);
+    catalogPreviewTimer.current = window.setTimeout(() => {
+      const requestId = ++catalogPreviewRequest.current;
+      previewSubjectImportCsv(buildCatalogCsvFile(nextRows, pendingImport.file.name))
+        .then((result) => {
+          if (requestId !== catalogPreviewRequest.current) return;
+          setCatalogRows(result.rows.map((row) => ({ ...row, subject_code: row.subject_code ?? "" })));
+          setCatalogPreviewError(
+            result.rows.length === 0 && result.errors.length > 0
+              ? result.errors.map((error) => error.message).join(" ")
+              : null,
+          );
+        })
+        .catch((error: unknown) => {
+          if (requestId !== catalogPreviewRequest.current) return;
+          setCatalogPreviewError(error instanceof Error ? error.message : "Unable to preview subject import.");
+        })
+        .finally(() => {
+          if (requestId === catalogPreviewRequest.current) setIsPreviewingCatalog(false);
+        });
+    }, 300);
   };
 
   const handleCatalogImportClick = async () => {
+    // Submit the original upload unless rows were edited, so final row numbers
+    // and legacy columns match the server preview exactly.
     const fileToSubmit =
-      catalogRows && catalogRows.length > 0
+      isCatalogEdited && catalogRows && catalogRows.length > 0
         ? buildCatalogCsvFile(catalogRows, pendingImport.file.name)
         : pendingImport.file;
     await onConfirmCatalog(fileToSubmit);
@@ -882,6 +915,11 @@ export function ImportCatalogSubjectsDialog({
         </Dialog.Header>
 
         <section className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto p-4">
+          {catalogPreviewError ? (
+            <Alert status="error">
+              <Alert.Description>{catalogPreviewError}</Alert.Description>
+            </Alert>
+          ) : null}
           {catalogRows && catalogRows.length > 0 ? (
             catalogRows.map((row, index) => {
               const isEditing = editingCatalogIndex === index;
@@ -919,8 +957,9 @@ export function ImportCatalogSubjectsDialog({
                           <label className="text-xs font-semibold">Subject Code</label>
                           <Input
                             value={row.subject_code}
-                            onChange={(e) => updateCatalogRow(index, { subject_code: e.target.value })}
-                            placeholder="Subject code"
+                            readOnly
+                            aria-readonly="true"
+                            placeholder={isPreviewingCatalog ? "Generating..." : "Generated by the server"}
                           />
                         </div>
                         <div className="flex flex-col gap-1">
@@ -1018,6 +1057,13 @@ export function ImportCatalogSubjectsDialog({
                       </div>
                     </>
                   )}
+                  {row.errors.length > 0 ? (
+                    <div className="mt-3 flex flex-col gap-1">
+                      {row.errors.map((message) => (
+                        <FormMessage key={message}>{message}</FormMessage>
+                      ))}
+                    </div>
+                  ) : null}
                 </RetroCard>
               );
             })
@@ -1031,7 +1077,7 @@ export function ImportCatalogSubjectsDialog({
             type="button"
             size="sm"
             variant="outline"
-            disabled={isImportingCatalog}
+            disabled={isImportingCatalog || isPreviewingCatalog}
             onClick={onClose}
           >
             Cancel
@@ -1039,10 +1085,10 @@ export function ImportCatalogSubjectsDialog({
           <Button
             type="button"
             size="sm"
-            disabled={isImportingCatalog}
+            disabled={isImportingCatalog || isPreviewingCatalog || !catalogRows?.length}
             onClick={() => void handleCatalogImportClick()}
           >
-            {isImportingCatalog ? "Importing..." : "Import"}
+            {isImportingCatalog ? "Importing..." : isPreviewingCatalog ? "Validating..." : "Import"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
