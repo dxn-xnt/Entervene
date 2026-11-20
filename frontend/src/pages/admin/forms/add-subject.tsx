@@ -31,7 +31,7 @@ import {
   type SubjectStatus,
 } from "@/lib/api";
 
-import { isSeniorHighGrade } from "../subjects/components/subject-utils";
+import { levelRequiresPathway } from "../subjects/components/subject-utils";
 
 type AddSubjectModalProps = {
   open?: boolean;
@@ -298,9 +298,14 @@ export default function AddSubjectModal({
       ),
     [offeringOptions, selectedYearId],
   );
-  const isShsSelection = isSeniorHighGrade(selectedLevel?.grade_level);
+  const levelUsesPathway = levelRequiresPathway(
+    offeringOptions?.pathway_scopes,
+    selectedYearId,
+    selectedLevel?.academic_level_id,
+    selectedLevel?.grade_level,
+  );
   const availablePathways = React.useMemo<SubjectOfferingPathway[]>(() => {
-    if (!isShsSelection) return [];
+    if (!levelUsesPathway) return [];
     const activePathways = offeringOptions?.pathways ?? [];
     const list: SubjectOfferingPathway[] = [];
 
@@ -313,7 +318,7 @@ export default function AddSubjectModal({
       }
     }
     return list;
-  }, [isShsSelection, offeringOptions?.pathways]);
+  }, [levelUsesPathway, offeringOptions?.pathways]);
 
   const requiresPathway = availablePathways.length > 0;
 

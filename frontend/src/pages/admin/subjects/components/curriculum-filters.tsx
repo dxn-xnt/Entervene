@@ -3,7 +3,13 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
-import type { SubjectAcademicLevel, SubjectOfferingPathway, SubjectStatus } from "@/lib/api";
+import type {
+  SubjectAcademicLevel,
+  SubjectOfferingFormPathwayScope,
+  SubjectOfferingPathway,
+  SubjectStatus,
+} from "@/lib/api";
+import { levelRequiresPathway } from "./subject-utils";
 
 export type CurriculumGradeValue = "all" | string;
 export type CurriculumPathwayValue = SubjectOfferingPathway | "all";
@@ -15,6 +21,8 @@ type CurriculumFiltersProps = {
   pathway: CurriculumPathwayValue;
   status: CurriculumStatusValue;
   academicLevels?: SubjectAcademicLevel[];
+  pathwayScopes?: SubjectOfferingFormPathwayScope[];
+  selectedAcademicYearId?: number | null;
   onSearchChange: (value: string) => void;
   onGradeChange: (value: CurriculumGradeValue) => void;
   onPathwayChange: (value: CurriculumPathwayValue) => void;
@@ -32,14 +40,6 @@ const DEFAULT_GRADE_OPTIONS: Array<{ value: CurriculumGradeValue; label: string;
 ];
 const shsPathways: SubjectOfferingPathway[] = ["both", "stem_medical", "stem_engineering"];
 
-function isJuniorHighGrade(grade: CurriculumGradeValue) {
-  return grade === "7" || grade === "8" || grade === "9" || grade === "10";
-}
-
-function isSeniorHighGrade(grade: CurriculumGradeValue) {
-  return grade === "11" || grade === "12";
-}
-
 function pathwayLabel(pathway: CurriculumPathwayValue) {
   if (pathway === "all") return "All pathways";
   if (pathway === "general") return "General";
@@ -54,32 +54,58 @@ export function CurriculumFilters({
   pathway,
   status,
   academicLevels,
+  pathwayScopes,
+  selectedAcademicYearId,
   onSearchChange,
   onGradeChange,
   onPathwayChange,
   onStatusChange,
   onReset,
 }: CurriculumFiltersProps) {
-  const isJhs = isJuniorHighGrade(grade);
-  const isShs = isSeniorHighGrade(grade);
-  const effectivePathway = isJhs ? "general" : pathway;
-  const pathwayOptions: CurriculumPathwayValue[] = isJhs
+  const isSpecificGrade = grade !== "all";
+  const gradeNumber = isSpecificGrade ? Number(grade) : null;
+  const matchedLevel = academicLevels?.find(
+    (lvl) => String(lvl.grade_level) === grade || String(lvl.academic_level_id) === grade,
+  );
+  const selectedGradeRequiresPathway = isSpecificGrade
+    ? levelRequiresPathway(
+        pathwayScopes,
+        selectedAcademicYearId,
+        matchedLevel?.academic_level_id,
+        matchedLevel?.grade_level ?? (Number.isFinite(gradeNumber) ? gradeNumber : null),
+      )
+    : false;
+  const isGeneralOnlyGrade = isSpecificGrade && !selectedGradeRequiresPathway;
+  const effectivePathway = isGeneralOnlyGrade ? "general" : pathway;
+  const pathwayOptions: CurriculumPathwayValue[] = isGeneralOnlyGrade
     ? ["general"]
-    : isShs
+    : selectedGradeRequiresPathway
       ? ["all", ...shsPathways]
       : ["all", "general", ...shsPathways];
 
   useEffect(() => {
-    if (isJhs && pathway !== "general") {
+    if (isGeneralOnlyGrade && pathway !== "general") {
       onPathwayChange("general");
     }
-  }, [isJhs, onPathwayChange, pathway]);
+  }, [isGeneralOnlyGrade, onPathwayChange, pathway]);
 
   const handleGradeChange = (value: string) => {
     const nextGrade = value as CurriculumGradeValue;
     onGradeChange(nextGrade);
-    if (isJuniorHighGrade(nextGrade)) {
-      onPathwayChange("general");
+    if (nextGrade !== "all") {
+      const nextNum = Number(nextGrade);
+      const nextLevel = academicLevels?.find(
+        (lvl) => String(lvl.grade_level) === nextGrade || String(lvl.academic_level_id) === nextGrade,
+      );
+      const nextRequires = levelRequiresPathway(
+        pathwayScopes,
+        selectedAcademicYearId,
+        nextLevel?.academic_level_id,
+        nextLevel?.grade_level ?? (Number.isFinite(nextNum) ? nextNum : null),
+      );
+      if (!nextRequires) {
+        onPathwayChange("general");
+      }
     }
   };
 
@@ -119,7 +145,7 @@ export function CurriculumFilters({
         <Select
           value={effectivePathway}
           onValueChange={(value) => onPathwayChange(value as CurriculumPathwayValue)}
-          disabled={isJhs}
+          disabled={isGeneralOnlyGrade}
         >
           <Select.Trigger className="w-full">
             <Select.Value placeholder="Pathway" />

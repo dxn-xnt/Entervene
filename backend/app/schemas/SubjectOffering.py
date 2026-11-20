@@ -161,11 +161,19 @@ class SubjectOfferingFormAcademicYear(SubjectOfferingAcademicYear):
     end_date: date
 
 
+class SubjectOfferingFormPathwayScope(BaseModel):
+    academic_year_id: int
+    academic_level_id: int
+    grade_level: int
+    requires_pathway: bool
+
+
 class SubjectOfferingFormOptions(BaseModel):
     academic_years: list[SubjectOfferingFormAcademicYear]
     academic_levels: list[SubjectOfferingAcademicLevel]
     academic_periods: list[SubjectOfferingAcademicPeriod]
     pathways: list[AcademicPathwayRead]
+    pathway_scopes: list[SubjectOfferingFormPathwayScope] = Field(default_factory=list)
     statuses: list[str]
     default_status: str
     active_subjects: list[SubjectOfferingFormSubject]

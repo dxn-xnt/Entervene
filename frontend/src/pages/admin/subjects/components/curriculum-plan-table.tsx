@@ -148,7 +148,10 @@ export function groupOfferingsForCurriculumPlan(
         subjectName: primaryOffering.subject.subject_name,
         subjectCode: primaryOffering.subject.subject_codename,
         minutes: primaryOffering.minutes ?? null,
-        gradingTemplate: catalogSubject?.grading_template.template_name ?? null,
+        gradingTemplate:
+          primaryOffering.subject.grading_template ??
+          catalogSubject?.grading_template.template_name ??
+          null,
         status: rowStatus,
         primaryOffering,
         termOfferings,

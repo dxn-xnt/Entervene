@@ -357,11 +357,19 @@ export type AcademicPathwayItem = {
   deped_cluster_id: number | null;
 };
 
+export type SubjectOfferingFormPathwayScope = {
+  academic_year_id: number;
+  academic_level_id: number;
+  grade_level: number;
+  requires_pathway: boolean;
+};
+
 export type SubjectOfferingFormOptions = {
   academic_years: Array<SubjectOfferingAcademicYear & { start_date: string; end_date: string }>;
   academic_levels: SubjectAcademicLevel[];
   academic_periods: SubjectOfferingAcademicPeriod[];
   pathways: AcademicPathwayItem[];
+  pathway_scopes?: SubjectOfferingFormPathwayScope[];
   statuses: SubjectStatus[];
   default_status: SubjectStatus;
   active_subjects: Array<{
@@ -2487,6 +2495,82 @@ export async function validateSubjectLoads(periodId: number, loads: SubjectLoadI
     throw new ApiRequestError("Failed to validate subject loads", response.status, null);
   }
   return (await response.json()) as ValidationResultResponse;
+}
+
+export type AutoScheduleDecisionItem = {
+  class_id: number;
+  section_name: string;
+  subject_id: number;
+  subject_name: string;
+  staff_id?: string | null;
+  staff_name?: string | null;
+  outcome: "generated" | "skipped" | "unscheduled";
+  reason_code: string;
+  reason: string;
+  replaced_existing: boolean;
+  slot_id?: number | null;
+  slot_name?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  days_of_week: string[];
+};
+
+export type AutoScheduleSummary = {
+  target_sections_count: number;
+  locked_sections_count: number;
+  generated_count: number;
+  skipped_count: number;
+  unscheduled_count: number;
+  replaced_count: number;
+  existing_error_conflicts_count: number;
+  resulting_error_conflicts_count: number;
+  empty_curriculum_sections?: string[];
+};
+
+export type AutoScheduleResponse = {
+  is_valid: boolean;
+  conflicts: ConflictItem[];
+  existing_conflicts: ConflictItem[];
+  teacher_workloads: TeacherWorkloadItem[];
+  scheduled_loads: SubjectLoadItem[];
+  items: AutoScheduleDecisionItem[];
+  summary: AutoScheduleSummary;
+  unscheduled_loads: Array<{
+    class_id: number;
+    section_name: string;
+    subject_id: number;
+    subject_name: string;
+    reason_code: string;
+    reason: string;
+  }>;
+};
+
+export async function autoScheduleSubjectLoads(
+  periodId: number,
+  loads: SubjectLoadItem[],
+  options?: {
+    targetClassIds?: number[] | null;
+    overwriteExistingDrafts?: boolean;
+  },
+): Promise<AutoScheduleResponse> {
+  const response = await apiFetch("/api/v1/subject-loads/auto-schedule", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      academic_period_id: periodId,
+      loads,
+      target_class_ids: options?.targetClassIds ?? null,
+      overwrite_existing_drafts: Boolean(options?.overwriteExistingDrafts),
+    }),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to generate draft schedule preview";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as AutoScheduleResponse;
 }
 
 export async function batchSaveSubjectLoads(

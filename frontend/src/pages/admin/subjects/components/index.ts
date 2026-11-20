@@ -31,6 +31,7 @@ export {
   pathwaysForGrade,
   isJuniorHighGrade,
   isSeniorHighGrade,
+  levelRequiresPathway,
   downloadBlob,
   subjectRouteGrade,
 } from "./subject-utils";
