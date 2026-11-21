@@ -36,15 +36,12 @@ export function StudentLessonMastery({
       <div className="mb-4 flex items-center justify-between gap-2">
         <Card.Title className="text-xl">Lesson Mastery</Card.Title>
         <Badge
-          variant={aggregate.badgeVariant}
           size="sm"
-          className={cn(
-            aggregate.percentage === null ? "bg-muted text-foreground" : "",
-          )}
+          className={cn(aggregate.badgeClass)}
           data-testid="subject-mastery-badge"
         >
           {aggregate.percentage !== null
-            ? `${aggregate.badgeLabel} · ${aggregate.percentage}%`
+            ? aggregate.badgeLabel
             : "Not yet rated"}
         </Badge>
       </div>
@@ -66,7 +63,7 @@ export function StudentLessonMastery({
             />
             <p className={cn("text-base font-bold text-center", aggregate.colorClass)}>
               {aggregate.percentage !== null
-                ? `${aggregate.label} (${aggregate.percentage}%)`
+                ? aggregate.label
                 : "Not yet rated"}
             </p>
             <p className="text-xs text-muted-foreground text-center">
@@ -88,14 +85,14 @@ export function StudentLessonMastery({
                       {lesson.title}
                     </h3>
                     <span className="shrink-0 text-xs font-semibold">
-                      {percent !== null ? `${mastery.label} · ${percent}%` : "Not yet rated"}
+                      {percent !== null ? mastery.label : "Not yet rated"}
                     </span>
                   </div>
                   <Progress
                     value={percent !== null ? Math.min(100, Math.max(0, percent)) : 0}
                     className="h-2"
                     aria-label={`${lesson.title} mastery`}
-                    aria-valuetext={percent !== null ? `${percent}%` : "Not yet rated"}
+                    aria-valuetext={percent !== null ? mastery.label : "Not yet rated"}
                   />
                 </Card>
               );

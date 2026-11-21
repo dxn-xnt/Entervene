@@ -27,6 +27,7 @@ class QuizSetting(Base):
         nullable=False,
     )
     is_shuffle_questions: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_shuffle_options: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     enable_per_question_scoring: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     enable_per_question_time_limits: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     max_attempts: Mapped[int | None] = mapped_column(Integer)

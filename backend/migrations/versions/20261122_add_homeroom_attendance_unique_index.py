@@ -1,7 +1,7 @@
 """add partial unique index for homeroom attendance when subject_id is null
 
 Revision ID: 20261122_add_homeroom_attendance_unique_index
-Revises: 20261121_resource_repost_scope
+Revises: 20261121_quiz_shuffle_options, 20261121_resource_repost_scope
 Create Date: 2026-11-22 04:00:00.000000
 
 """
@@ -13,7 +13,10 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "20261122_add_homeroom_attendance_unique_index"
-down_revision: Union[str, Sequence[str], None] = "20261121_resource_repost_scope"
+down_revision: Union[str, Sequence[str], None] = (
+    "20261121_quiz_shuffle_options",
+    "20261121_resource_repost_scope",
+)
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

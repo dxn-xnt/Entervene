@@ -798,9 +798,6 @@ const StoryBoard = () => {
                         />
                       ) : (
                         <>
-                          <p className="mb-4 text-sm text-muted-foreground">
-                            Based on released graded classwork by subject
-                          </p>
                           <div className="grid gap-5 sm:grid-cols-2">
                             {[
                               {
@@ -969,7 +966,7 @@ const StoryBoard = () => {
                     </Card.Content>
                   </Card> */}
 
-                  <Card className="block w-full border-border bg-white shadow-md hover:shadow-none">
+                  <Card className="block w-full min-h-[630px] border-border bg-white shadow-md hover:shadow-none">
                     <Card.Content>
                       <div className="flex items-center justify-between mb-4">
                         <Card.Title className="mb-0 text-2xl md:text-3xl">

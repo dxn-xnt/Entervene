@@ -301,8 +301,9 @@ export default function StudentInterventionView() {
       label: "Outstanding",
       badgeLabel: "Mastered",
       badgeVariant: "success" as const,
-      colorClass: "text-success dark:text-success",
-      bgClass: "bg-retro bg-success/20 border-border",
+      badgeClass: "bg-[#00e65f] text-black border-2 border-black font-bold",
+      colorClass: "text-[#00e65f] dark:text-[#00e65f]",
+      bgClass: "bg-retro bg-[#00e65f]/20 border-border",
       icon: FaceSlightlySmiling,
       description: "Difficulty overcome! You've strengthened your understanding in this target lesson.",
     }
@@ -311,8 +312,9 @@ export default function StudentInterventionView() {
         label: "Moderate",
         badgeLabel: "Improving",
         badgeVariant: "solid" as const,
-        colorClass: "text-amber-600 dark:text-amber-400",
-        bgClass: "bg-retro bg-amber-500/10 border-border",
+        badgeClass: "bg-[#ff9233] text-black border-2 border-black font-bold",
+        colorClass: "text-[#ff9233] dark:text-[#ff9233]",
+        bgClass: "bg-retro bg-[#ff9233]/15 border-border",
         icon: FaceNeutral,
         description: "Making steady progress! You're actively addressing the difficulty in this target lesson.",
       }
@@ -320,8 +322,9 @@ export default function StudentInterventionView() {
         label: "Low",
         badgeLabel: "Needs Practice",
         badgeVariant: "destructive" as const,
-        colorClass: "text-destructive",
-        bgClass: "bg-retro bg-destructive/10 border-border",
+        badgeClass: "bg-[#ff3333] text-black border-2 border-black font-bold",
+        colorClass: "text-[#ff3333] dark:text-[#ff3333]",
+        bgClass: "bg-retro bg-[#ff3333]/15 border-border",
         icon: FaceSlightlyFrowning,
         description: "Identified difficulty in this target lesson. Complete review readings and activities to build mastery.",
       };
@@ -804,7 +807,7 @@ export default function StudentInterventionView() {
                         <Card.Description className="text-lg sm:text-xl font-bold text-foreground">
                           Target Lesson
                         </Card.Description>
-                        <Badge variant={currentMastery.badgeVariant} size="sm">
+                        <Badge size="sm" className={cn(currentMastery.badgeClass)}>
                           {currentMastery.badgeLabel}
                         </Badge>
                       </div>

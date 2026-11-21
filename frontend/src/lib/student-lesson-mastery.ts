@@ -36,6 +36,7 @@ export interface ComputedMasteryResult {
   label: "Not yet rated" | "Low" | "Moderate" | "High";
   badgeLabel: "Not yet rated" | "Low" | "Moderate" | "High";
   badgeVariant: "outline" | "destructive" | "surface" | "success";
+  badgeClass: string;
   colorClass: string;
   bgClass: string;
   icon: LucideIcon;
@@ -156,6 +157,7 @@ export function classifyMasteryPercentage(
       label: "Not yet rated",
       badgeLabel: "Not yet rated",
       badgeVariant: "outline",
+      badgeClass: "bg-muted text-black border-2 border-black font-bold",
       colorClass: "text-muted-foreground",
       bgClass: "bg-retro bg-muted/40 border-border",
       icon: ScanFace,
@@ -174,11 +176,12 @@ export function classifyMasteryPercentage(
       label: "High",
       badgeLabel: "High",
       badgeVariant: "success",
-      colorClass: "text-success dark:text-success",
-      bgClass: "bg-retro bg-success/20 border-border",
+      badgeClass: "bg-[#00e65f] text-black border-2 border-black font-bold",
+      colorClass: "text-[#00e65f] dark:text-[#00e65f]",
+      bgClass: "bg-retro bg-[#00e65f]/20 border-border",
       icon: FaceSlightlySmiling,
       percentage: clamped,
-      description: "Strong performance in related classwork.",
+      description: "You've got this down. Keep shining!",
     };
   }
 
@@ -188,11 +191,12 @@ export function classifyMasteryPercentage(
       label: "Moderate",
       badgeLabel: "Moderate",
       badgeVariant: "surface",
-      colorClass: "text-amber-600 dark:text-amber-400",
-      bgClass: "bg-retro bg-amber-500/10 border-border",
+      badgeClass: "bg-[#ff9233] text-black border-2 border-black font-bold",
+      colorClass: "text-[#ff9233] dark:text-[#ff9233]",
+      bgClass: "bg-retro bg-[#ff9233]/15 border-border",
       icon: FaceNeutral,
       percentage: clamped,
-      description: "Making steady progress in related classwork.",
+      description: "You're getting there. Keep going",
     };
   }
 
@@ -201,11 +205,12 @@ export function classifyMasteryPercentage(
     label: "Low",
     badgeLabel: "Low",
     badgeVariant: "destructive",
-    colorClass: "text-destructive",
-    bgClass: "bg-retro bg-destructive/10 border-border",
+    badgeClass: "bg-[#ff3333] text-black border-2 border-black font-bold",
+    colorClass: "text-[#ff3333] dark:text-[#ff3333]",
+    bgClass: "bg-retro bg-[#ff3333]/15 border-border",
     icon: FaceSlightlyFrowning,
     percentage: clamped,
-    description: "Related classwork suggests more practice may help.",
+    description: "Every expert started here. Let's grow!",
   };
 }
 
