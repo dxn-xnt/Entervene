@@ -251,7 +251,6 @@ def project_subject_grade_endpoint(
         intervention_id=intervention_id,
         target_assignment_ids=body.target_assignment_ids,
         score_adjustment_cap=body.score_adjustment_cap,
-        predicted_grade_ceiling=body.predicted_grade_ceiling,
     )
 
 
