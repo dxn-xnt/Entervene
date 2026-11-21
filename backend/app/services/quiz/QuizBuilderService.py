@@ -348,6 +348,13 @@ def update_quiz_results_settings(
         payload.summary_release_at if release_mode == "SCHEDULED" else None
     )
     db.flush()
+    # Explicit teacher releases are delivered in the same transaction. Future
+    # scheduled/after-due policies stage nothing until the periodic scanner
+    # observes that the authoritative visibility boundary has been reached.
+    from app.services.quiz.QuizResultsNotificationService import (
+        stage_available_results_for_classwork,
+    )
+    stage_available_results_for_classwork(db, locked_classwork.classwork_id)
     return QuizResultsSettingsResponse(
         classwork_id=locked_classwork.classwork_id,
         release_policy=effective_quiz_results_release_policy(

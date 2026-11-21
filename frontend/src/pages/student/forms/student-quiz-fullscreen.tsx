@@ -66,6 +66,18 @@ export default function StudentQuizFullscreen({
     return Boolean(answer?.selected_option_id || answer?.answer_text?.trim());
   };
   const answeredCount = questions.filter(hasQuizAnswer).length;
+  const submitReviewedQuiz = () => {
+    const unansweredCount = Math.max(0, questions.length - answeredCount);
+    if (
+      unansweredCount > 0 &&
+      !window.confirm(
+        `${unansweredCount} question${unansweredCount === 1 ? " is" : "s are"} unanswered. Submit the quiz anyway? Unanswered questions will receive no credit.`,
+      )
+    ) {
+      return;
+    }
+    onSubmit(false);
+  };
   const isSummaryMode =
     selectedQuizAttempt.status !== "pending" &&
     selectedQuizAttempt.summary_available;
@@ -321,7 +333,7 @@ export default function StudentQuizFullscreen({
               </Card>
               <Button
                 type="button"
-                onClick={() => onSubmit(false)}
+                onClick={submitReviewedQuiz}
                 disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
                 className="mt-4 float-right rounded border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
               >

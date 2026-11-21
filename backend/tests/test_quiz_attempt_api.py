@@ -37,7 +37,12 @@ from app.models.quiz.QuizSetting import QuizSetting
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.notifications.Notification import Notification
 from app.services.quiz.QuizAttemptService import _summary_release_state
+from app.services.quiz.QuizResultsNotificationService import (
+    scan_due_quiz_result_releases,
+    stage_available_results_for_classwork,
+)
 
 
 TABLES = [
@@ -978,6 +983,140 @@ def test_quiz_submit_allows_unanswered_items_for_timed_autosubmit(quiz_attempt_c
     assert c["db"].query(QuizAnswer).count() == 2
 
 
+def test_quiz_submit_finalizes_once_and_requires_explicit_retake_start(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["assignment"].max_attempts = 2
+    c["setting"].max_attempts = 2
+    c["db"].commit()
+
+    first = _submit_fixture_quiz(c)
+    assert first.status_code == 200
+    assert first.json()["attempt_count"] == 1
+    stored_answers = c["db"].query(QuizAnswer).count()
+
+    repeated = _submit_fixture_quiz(c)
+    assert repeated.status_code == 409
+    assert "already finalized" in repeated.json()["detail"]
+    submission = c["db"].query(StudentSubmission).one()
+    assert submission.attempt_count == 1
+    assert c["db"].query(QuizAnswer).count() == stored_answers
+
+    started = c["client"].post(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/start"
+    )
+    assert started.status_code == 200
+    assert started.json()["status"] == "pending"
+    second = _submit_fixture_quiz(c)
+    assert second.status_code == 200
+    assert second.json()["attempt_count"] == 2
+
+
+def test_scheduled_quiz_results_notification_is_due_authorized_and_idempotent(
+    quiz_attempt_context,
+):
+    c = quiz_attempt_context
+    release_at = datetime.now(timezone.utc) + timedelta(hours=2)
+    c["setting"].summary_release_mode = "SCHEDULED"
+    c["setting"].summary_release_at = release_at
+    c["setting"].show_correct_answers = True
+    c["classwork"].show_scores = True
+    c["db"].commit()
+    assert _submit_fixture_quiz(c).status_code == 200
+
+    before = scan_due_quiz_result_releases(
+        c["db"], now=release_at - timedelta(seconds=1),
+    )
+    assert before["sent"] == 0
+    assert c["db"].query(Notification).count() == 0
+
+    due = scan_due_quiz_result_releases(c["db"], now=release_at)
+    assert due["sent"] == 1
+    notice = c["db"].query(Notification).one()
+    assert notice.notification_type == "quiz_results_available"
+    assert notice.action_url.endswith(
+        f"/student/quiz/{c['assignment'].classwork_assignment_id}/result"
+    )
+    assert c["subject"].subject_name in notice.body
+    assert c["classwork"].title in notice.body
+    assert str(c["db"].query(StudentSubmission).one().grade) not in notice.body
+    privacy_text = f"{notice.title} {notice.body}".lower()
+    assert "score" not in privacy_text
+    assert "feedback" not in privacy_text
+    assert "correct answer" not in privacy_text
+    assert "answer key" not in privacy_text
+
+    repeated = scan_due_quiz_result_releases(
+        c["db"], now=release_at + timedelta(days=1),
+    )
+    assert repeated["sent"] == 0
+    assert c["db"].query(Notification).count() == 1
+
+
+def test_changed_or_hidden_release_policy_does_not_emit_stale_result_notice(
+    quiz_attempt_context,
+):
+    c = quiz_attempt_context
+    original_release = datetime.now(timezone.utc) + timedelta(hours=2)
+    c["setting"].summary_release_mode = "SCHEDULED"
+    c["setting"].summary_release_at = original_release
+    c["setting"].show_correct_answers = True
+    c["classwork"].show_scores = True
+    c["db"].commit()
+    assert _submit_fixture_quiz(c).status_code == 200
+
+    # Moving the boundary must make the former boundary inert.
+    c["setting"].summary_release_at = original_release + timedelta(days=1)
+    c["db"].commit()
+    old_boundary = scan_due_quiz_result_releases(
+        c["db"], now=original_release + timedelta(seconds=1),
+    )
+    assert old_boundary["sent"] == 0
+
+    # Hiding results before the new boundary must also prevent both the
+    # scheduled and explicit-release producers from creating a notice.
+    c["setting"].summary_release_mode = "NEVER"
+    c["setting"].summary_release_at = None
+    c["setting"].show_correct_answers = False
+    c["classwork"].show_scores = False
+    c["db"].commit()
+    after_hidden = scan_due_quiz_result_releases(
+        c["db"], now=original_release + timedelta(days=2),
+    )
+    assert after_hidden["sent"] == 0
+    assert stage_available_results_for_classwork(
+        c["db"], c["classwork"].classwork_id,
+        now=original_release + timedelta(days=2),
+    ) == 0
+    assert c["db"].query(Notification).count() == 0
+
+
+def test_manual_immediate_release_stages_only_privacy_safe_notice(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["setting"].summary_release_mode = "NEVER"
+    c["setting"].show_correct_answers = False
+    c["classwork"].show_scores = False
+    c["db"].commit()
+    assert _submit_fixture_quiz(c).status_code == 200
+    assert c["db"].query(Notification).count() == 0
+
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["setting"].show_correct_answers = True
+    c["classwork"].show_scores = True
+    assert stage_available_results_for_classwork(
+        c["db"], c["classwork"].classwork_id,
+    ) == 1
+    c["db"].commit()
+
+    notice = c["db"].query(Notification).one()
+    assert notice.notification_type == "quiz_results_available"
+    assert notice.title == "Quiz Results Available"
+    privacy_text = f"{notice.title} {notice.body}".lower()
+    assert "score" not in privacy_text
+    assert "feedback" not in privacy_text
+    assert "correct answer" not in privacy_text
+    assert "answer key" not in privacy_text
+
+
 def test_quiz_attempt_rejects_unenrolled_locked_closed_and_over_limit(quiz_attempt_context):
     c = quiz_attempt_context
     assignment_id = c["assignment"].classwork_assignment_id
@@ -1303,4 +1442,3 @@ def test_student_attempt_shuffles_questions_and_answer_choices_while_preserving_
     assert c["correct"].is_correct is True
     assert c["wrong"].option_order == 2
     assert c["wrong"].is_correct is False
-

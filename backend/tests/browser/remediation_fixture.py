@@ -318,6 +318,7 @@ def _seed_study_support(
         intervention,
         title="Deterministic Remedial Quiz",
     )
+    quiz_assignment.max_attempts = 2
     _snapshot(db, quiz_assignment, readings)
 
     _, classwork_assignment = _create_remedial_classwork(

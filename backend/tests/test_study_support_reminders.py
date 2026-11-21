@@ -13,6 +13,7 @@ from app.models.notifications.Notification import Notification
 from app.services.intervention.StudySupportReminderService import (
     legacy_study_support_action_url,
     scan_study_support_reminders,
+    stage_intervention_study_support_available,
     stage_study_support_available,
     within_manila_school_hours,
 )
@@ -69,6 +70,37 @@ def _reminders(context):
             "study_support_final_reminder",
         )),
     ).order_by(Notification.created_at.asc(), Notification.notification_type.asc()).all()
+
+
+@pytest.mark.parametrize("producer_order", ("activation_first", "assignment_first"))
+def test_activation_and_targeted_publication_share_one_availability_event(
+    authz_context, producer_order,
+):
+    intervention, assignment, _submission = _support(authz_context)
+    db = authz_context["db"]
+
+    producers = {
+        "activation": lambda: stage_intervention_study_support_available(db, intervention),
+        "assignment": lambda: stage_study_support_available(
+            db, assignment, assignment.classwork, authz_context["subject"].subject_id,
+            now=PUBLISHED_AT,
+        ),
+    }
+    order = (
+        ("activation", "assignment")
+        if producer_order == "activation_first"
+        else ("assignment", "activation")
+    )
+
+    assert producers[order[0]]() is True
+    assert producers[order[1]]() is False
+    db.commit()
+
+    notices = db.query(Notification).filter_by(
+        notification_type="study_support_available",
+    ).all()
+    assert len(notices) == 1
+    assert str(intervention.intervention_id) in notices[0].action_url
 
 
 def test_first_and_final_reminders_are_student_safe_linked_and_duplicate_safe(authz_context):

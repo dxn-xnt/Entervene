@@ -262,8 +262,6 @@ def _valid_payload(lesson_id: int):
 def test_teacher_can_upsert_read_and_validate_quiz_builder(quiz_api_context):
     c = quiz_api_context
     classwork_id = c["quiz_classwork"].classwork_id
-    c["db"].add(ClassworkLesson(classwork_id=classwork_id, lesson_id=c["lesson"].lesson_id))
-    c["db"].commit()
     payload = _valid_payload(c["lesson"].lesson_id)
     payload["questions"][1]["lesson_id"] = c["lesson"].lesson_id
 
@@ -815,4 +813,3 @@ def test_quiz_builder_persists_shuffle_questions_and_shuffle_options_settings(qu
     setting = c["db"].query(QuizSetting).filter_by(classwork_id=classwork_id).one()
     assert setting.is_shuffle_questions is False
     assert setting.is_shuffle_options is True
-
