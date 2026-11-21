@@ -91,6 +91,46 @@ def test_historical_announcements_excluded_from_feed_and_unread_without_deletion
     assert refreshed.unread_count == 0
 
 
+def test_student_deadline_notifications_are_hidden_without_deletion_or_affecting_teachers():
+    db = _make_db()
+    student_id = uuid.uuid4()
+    teacher_id = uuid.uuid4()
+    db.add_all([
+        UserAccount(user_id=student_id, email="student2@school.edu", password_hash="hash", account_status="active"),
+        UserAccount(user_id=teacher_id, email="teacher2@school.edu", password_hash="hash", account_status="active"),
+    ])
+    student_deadline = Notification(
+        notification_id=uuid.uuid4(), user_id=student_id,
+        notification_type="classwork_due_soon", title="Classwork Due Soon", is_read=False,
+    )
+    student_classwork = Notification(
+        notification_id=uuid.uuid4(), user_id=student_id,
+        notification_type="assignment_due", title="New Classwork", is_read=False,
+    )
+    teacher_deadline = Notification(
+        notification_id=uuid.uuid4(), user_id=teacher_id,
+        notification_type="assignment_due", title="Deadline Summary", is_read=False,
+    )
+    db.add_all([student_deadline, student_classwork, teacher_deadline])
+    db.commit()
+
+    student_feed = get_notifications_for_user(db, student_id, user_role="student")
+    assert student_feed.unread_count == 1
+    assert [item.notification_id for item in student_feed.notifications] == [student_classwork.notification_id]
+
+    with pytest.raises(HTTPException) as exc:
+        mark_notification_read(
+            db, str(student_deadline.notification_id), student_id, user_role="student",
+        )
+    assert exc.value.status_code == 404
+    assert mark_all_notifications_read(db, student_id, user_role="student") == {"marked_read": 1}
+    assert db.get(Notification, student_deadline.notification_id).is_read is False
+
+    teacher_feed = get_notifications_for_user(db, teacher_id, user_role="teacher")
+    assert teacher_feed.unread_count == 1
+    assert [item.notification_id for item in teacher_feed.notifications] == [teacher_deadline.notification_id]
+
+
 def test_classwork_notification_details_prevent_duplicate_subject_and_redundant_phrasing():
     db = _make_db()
     staff_user_id = uuid.uuid4()

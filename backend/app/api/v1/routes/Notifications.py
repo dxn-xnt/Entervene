@@ -42,7 +42,13 @@ def list_notifications(
     if current_user.get("role") == "student":
         backfill_active_study_support_notifications_for_user(db=db, user_id=user_id)
 
-    return get_notifications_for_user(db=db, user_id=user_id, limit=limit, unread_only=unread_only)
+    return get_notifications_for_user(
+        db=db,
+        user_id=user_id,
+        limit=limit,
+        unread_only=unread_only,
+        user_role=current_user.get("role"),
+    )
 
 
 @router.patch("/{notification_id}/read", response_model=NotificationResponse)
@@ -53,7 +59,12 @@ def read_notification(
 ):
     """Mark a single notification as read. Returns 404 if it doesn't belong to the caller."""
     user_id = current_user["sub"]
-    return mark_notification_read(db=db, notification_id=notification_id, user_id=user_id)
+    return mark_notification_read(
+        db=db,
+        notification_id=notification_id,
+        user_id=user_id,
+        user_role=current_user.get("role"),
+    )
 
 
 @router.patch("/read-all", response_model=dict)
@@ -63,4 +74,8 @@ def read_all_notifications(
 ):
     """Mark ALL of the authenticated user's unread notifications as read at once."""
     user_id = current_user["sub"]
-    return mark_all_notifications_read(db=db, user_id=user_id)
+    return mark_all_notifications_read(
+        db=db,
+        user_id=user_id,
+        user_role=current_user.get("role"),
+    )
