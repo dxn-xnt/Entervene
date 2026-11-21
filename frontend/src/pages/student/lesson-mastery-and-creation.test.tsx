@@ -281,18 +281,18 @@ describe("StudentLessonMastery Component UI", () => {
       />,
     );
 
-    // Shows 95% High
+    // Shows High
     expect(screen.getByText("Lesson Mastery")).toBeDefined();
-    expect(screen.getByText("High (95%)")).toBeDefined();
-    expect(screen.getByTestId("subject-mastery-badge").textContent).toBe("High · 95%");
+    expect(screen.getAllByText("High").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("subject-mastery-badge").textContent).toBe("High");
 
     // Verify clicking does not change mastery (it is non-interactive)
     const summaryCard = screen.getByTestId("subject-mastery-summary");
     fireEvent.click(summaryCard);
 
-    // Percentage and label remain identical (no manual cycling)
-    expect(screen.getByText("High (95%)")).toBeDefined();
-    expect(screen.getByTestId("subject-mastery-badge").textContent).toBe("High · 95%");
+    // Label remains identical (no manual cycling)
+    expect(screen.getAllByText("High").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("subject-mastery-badge").textContent).toBe("High");
   });
 
   it("Scenario 9: Subject or academic period switch updates displayed data without stale bleeding", () => {
@@ -349,7 +349,7 @@ describe("StudentLessonMastery Component UI", () => {
     );
 
     expect(screen.getByText("Term 1 Poetry")).toBeDefined();
-    expect(screen.getByText("High (90%)")).toBeDefined();
+    expect(screen.getAllByText("High").length).toBeGreaterThan(0);
 
     // Switch to Period 2
     rerender(
@@ -362,6 +362,6 @@ describe("StudentLessonMastery Component UI", () => {
 
     expect(screen.queryByText("Term 1 Poetry")).toBeNull();
     expect(screen.getByText("Term 2 Prose")).toBeDefined();
-    expect(screen.getByText("Moderate (60%)")).toBeDefined();
+    expect(screen.getAllByText("Moderate").length).toBeGreaterThan(0);
   });
 });

@@ -924,7 +924,12 @@ def download_submission_file(
 
     path = Path(cast(str, attachment.file_path))
     if not path.exists():
-        raise HTTPException(status_code=404, detail="File not found on server")
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        candidate = base_dir / path
+        if candidate.exists():
+            path = candidate
+        else:
+            raise HTTPException(status_code=404, detail="File not found on server")
     return FileResponse(
         path=str(path),
         filename=cast(str, attachment.file_name),

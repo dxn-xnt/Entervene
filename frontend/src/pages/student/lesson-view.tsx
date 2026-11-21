@@ -101,10 +101,9 @@ export function LessonView({
             </Breadcrumb.List>
           </Breadcrumb>
         </header>
-        <div className="border-b-2 border-black" aria-hidden="true" />
       </div>
 
-      <div className="flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+      <div className="flex min-w-0 flex-col gap-4 px-3 pb-3 sm:px-4 md:px-6">
         {/* ── Hero Lesson Information Card ── */}
         <Card className="block w-full border-2 border-black bg-primary p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex flex-col gap-4">
@@ -192,15 +191,12 @@ export function LessonView({
                   Lesson Mastery
                 </Card.Description>
                 <Badge
-                  variant={mastery.badgeVariant}
                   size="sm"
-                  className={cn(
-                    mastery.percentage === null ? "bg-muted text-foreground" : "",
-                  )}
+                  className={cn(mastery.badgeClass)}
                   data-testid="lesson-mastery-badge"
                 >
                   {mastery.percentage !== null
-                    ? `${mastery.badgeLabel} · ${mastery.percentage}%`
+                    ? mastery.badgeLabel
                     : "Not yet rated"}
                 </Badge>
               </Card.Header>
@@ -219,7 +215,7 @@ export function LessonView({
                   />
                   <p className={cn("text-base font-bold text-center", mastery.colorClass)}>
                     {mastery.percentage !== null
-                      ? `${mastery.label} (${mastery.percentage}%)`
+                      ? mastery.label
                       : "Not yet rated"}
                   </p>
                 </Card>
@@ -235,9 +231,6 @@ export function LessonView({
                   <Card.Description className="text-lg sm:text-2xl font-bold text-foreground">
                     Lesson Completion
                   </Card.Description>
-                  <Badge variant="surface" size="sm" data-testid="lesson-completion-badge">
-                    {completion.percentage !== null ? `${completion.percentage}%` : "--"}
-                  </Badge>
                 </div>
 
                 <p className="text-lg font-semibold" data-testid="lesson-completion-summary">
