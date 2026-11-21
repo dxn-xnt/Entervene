@@ -22,7 +22,6 @@ import {
   formatNotificationTitle,
   getStudentNotificationBadgeLabel,
   isExcludedNotification,
-  isStudentDeadlineNotification,
   isStudentStudySupportType,
   matchesStudentNotificationTab,
   type StudentNotificationTab,
@@ -68,9 +67,7 @@ const Notifications = () => {
       setLoading(true);
       setLoadError(false);
       const data = await getNotifications(false, 50);
-      setNotifications(data.notifications.filter(
-        (item) => !isExcludedNotification(item) && !isStudentDeadlineNotification(item.notification_type),
-      ));
+      setNotifications(data.notifications.filter((item) => !isExcludedNotification(item)));
     } catch (err) {
       console.error("Failed to load notifications:", err);
       setLoadError(true);
@@ -240,7 +237,10 @@ const Notifications = () => {
                           card.created_at
                             ? new Date(
                               card.created_at,
-                            ).toLocaleDateString()
+                            ).toLocaleString([], {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })
                             : ""
                         }
                         type={getStudentNotificationBadgeLabel(card.notification_type)}

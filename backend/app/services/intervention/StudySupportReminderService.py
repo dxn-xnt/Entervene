@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, time, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid5
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import String, and_, cast, exists, literal, or_
@@ -32,6 +32,7 @@ FIRST_REMINDER_AFTER = timedelta(hours=48)
 FINAL_REMINDER_AFTER = timedelta(days=5)
 DELIVERY_START = time(8, 0)
 DELIVERY_END = time(17, 0)
+STUDY_SUPPORT_NOTIFICATION_NAMESPACE = UUID("ca20a251-a3da-4c20-a7f5-14908d958326")
 
 
 def study_support_action_url(assignment: ClassworkAssignment) -> str:
@@ -64,6 +65,33 @@ def intervention_study_support_action_url(intervention_id: int) -> str:
     return f"/student/interventions/view?intervention={intervention_id}"
 
 
+def _study_support_notification_id(user_id: UUID, intervention_id: int) -> UUID:
+    """Return the stable identity for one intervention becoming available."""
+    return uuid5(
+        STUDY_SUPPORT_NOTIFICATION_NAMESPACE,
+        f"{user_id}:intervention:{intervention_id}:available",
+    )
+
+
+def _find_intervention_study_support_notification(
+    db: Session,
+    user_id: UUID,
+    intervention_id: int,
+) -> Notification | None:
+    action_url = intervention_study_support_action_url(intervention_id)
+    return db.query(Notification).filter(
+        Notification.user_id == user_id,
+        Notification.notification_type == "study_support_available",
+        or_(
+            Notification.action_url == action_url,
+            Notification.action_url.like(f"{action_url}&%"),
+            Notification.action_url.like(
+                f"/student/classworks/%?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D{intervention_id}"
+            ),
+        ),
+    ).order_by(Notification.created_at.asc()).first()
+
+
 def stage_intervention_study_support_available(db: Session, intervention: Intervention) -> bool:
     """Stage one durable notification for an activated Study Support record."""
     if intervention.status != "ACTIVE":
@@ -82,15 +110,16 @@ def stage_intervention_study_support_available(db: Session, intervention: Interv
         return False
 
     action_url = intervention_study_support_action_url(intervention.intervention_id)
-    if db.query(Notification.notification_id).filter_by(
-        user_id=account.user_id,
-        notification_type="study_support_available",
-        action_url=action_url,
-    ).first() is not None:
+    if _find_intervention_study_support_notification(
+        db, account.user_id, intervention.intervention_id,
+    ) is not None:
         return False
 
     subject_name = intervention.subject.subject_name if intervention.subject else "your subject"
     stage_notification(db, NotificationCreate(
+        notification_id=_study_support_notification_id(
+            account.user_id, intervention.intervention_id,
+        ),
         user_id=account.user_id,
         notification_type="study_support_available",
         title="New Study Support Available",
@@ -105,18 +134,9 @@ def _has_any_intervention_study_support_notification(
     user_id: UUID,
     intervention_id: int,
 ) -> bool:
-    action_url = intervention_study_support_action_url(intervention_id)
-    return db.query(Notification.notification_id).filter(
-        Notification.user_id == user_id,
-        Notification.notification_type == "study_support_available",
-        or_(
-            Notification.action_url == action_url,
-            Notification.action_url.like(f"{action_url}&%"),
-            Notification.action_url.like(
-                f"/student/classworks/%?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D{intervention_id}"
-            ),
-        ),
-    ).first() is not None
+    return _find_intervention_study_support_notification(
+        db, user_id, intervention_id,
+    ) is not None
 
 
 def backfill_active_study_support_notifications_for_user(
@@ -200,13 +220,21 @@ def stage_study_support_available(
     if account is None or account.account_status != "active":
         return False
 
+    # Activation and targeted-publication paths can run in separate requests.
+    # Serialize both producers on the logical intervention before deduplicating.
+    intervention = (
+        db.query(Intervention)
+        .filter(Intervention.intervention_id == assignment.source_intervention_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if intervention is None or intervention.student_id != assignment.recipient_student_id:
+        return False
+
     action_url = study_support_action_url(assignment)
-    action_urls = _study_support_action_urls(assignment)
-    existing = db.query(Notification).filter(
-        Notification.user_id == account.user_id,
-        Notification.notification_type == "study_support_available",
-        Notification.action_url.in_(action_urls),
-    ).first()
+    existing = _find_intervention_study_support_notification(
+        db, account.user_id, intervention.intervention_id,
+    )
     if assignment.publish_date is None:
         assignment.publish_date = aware_utc(existing.created_at) if existing and existing.created_at else _utc(now)
     if existing is not None:
@@ -214,6 +242,9 @@ def stage_study_support_available(
 
     subject_name = classwork.subject.subject_name if classwork.subject else "your subject"
     stage_notification(db, NotificationCreate(
+        notification_id=_study_support_notification_id(
+            account.user_id, intervention.intervention_id,
+        ),
         user_id=account.user_id,
         notification_type="study_support_available",
         title="New Study Support Available",

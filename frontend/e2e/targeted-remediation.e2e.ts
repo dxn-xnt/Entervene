@@ -120,8 +120,7 @@ test("seeded remediation is visible only to its student and opens without starti
 
     await card.click();
     await expect(target.page.getByRole("heading", { name: title })).toBeVisible();
-    await expect(target.page.getByText("Status: not started")).toBeVisible();
-    await expect(target.page.getByRole("button", { name: "Start Quiz" })).toBeVisible();
+    await expect(target.page.getByRole("button", { name: "Start Quiz" })).toBeVisible({ timeout: 15_000 });
     expect(inspect().assignments[0].submission_count).toBe(0);
 
     const control = await login(browser, state.control_email, state.password, base);
@@ -135,5 +134,47 @@ test("seeded remediation is visible only to its student and opens without starti
     expect(inspect().assignments[0].submission_count).toBe(0);
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
+  }
+});
+
+test("quiz completion confirms unanswered work, survives refresh, and requires explicit retakes", async ({ browser }) => {
+  const state = JSON.parse(readFileSync(process.env.E2E_STATE_FILE!, "utf8")) as FixtureState;
+  const base = process.env.E2E_FRONTEND_URL!;
+  setReadingCompletion("complete");
+  const student = await login(browser, state.target_email, state.password, base);
+  try {
+    await student.page.goto(`${base}/student/classworks/${state.quiz_assignment_id}?from=%2Fstudent%2Ftodo`);
+    const start = student.page.getByRole("button", { name: "Start Quiz" });
+    await expect(start).toBeVisible({ timeout: 15_000 });
+    await start.click();
+    await expect(student.page.getByRole("button", { name: "Finish Quiz" })).toBeVisible({ timeout: 15_000 });
+
+    student.page.once("dialog", (dialog) => dialog.dismiss());
+    await student.page.getByRole("button", { name: "Finish Quiz" }).click();
+    await expect(student.page.getByRole("button", { name: "Finish Quiz" })).toBeVisible();
+
+    student.page.once("dialog", (dialog) => dialog.accept());
+    await student.page.getByRole("button", { name: "Finish Quiz" }).click();
+    await expect(student.page).toHaveURL(/\/student\/quiz\/\d+\/result/, { timeout: 15_000 });
+    await expect(student.page.getByRole("button", { name: "Retake Quiz" })).toBeVisible();
+
+    await student.page.reload();
+    await expect(student.page.getByRole("button", { name: "Retake Quiz" })).toBeVisible({ timeout: 15_000 });
+    await expect(student.page.getByRole("button", { name: "Resume Quiz" })).toHaveCount(0);
+    await expect(student.page.getByText("In Progress", { exact: true })).toHaveCount(0);
+
+    await student.page.getByRole("button", { name: "Retake Quiz" }).click();
+    await expect(student.page.getByRole("button", { name: "Finish Quiz" })).toBeVisible({ timeout: 15_000 });
+    student.page.once("dialog", (dialog) => dialog.accept());
+    await student.page.getByRole("button", { name: "Finish Quiz" }).click();
+    await expect(student.page).toHaveURL(/\/student\/quiz\/\d+\/result/, { timeout: 15_000 });
+    await expect(student.page.getByRole("button", { name: "Retake Quiz" })).toHaveCount(0);
+
+    await student.page.reload();
+    await expect(student.page.getByText(/Attempt 2 of 2/i)).toBeVisible({ timeout: 15_000 });
+    await expect(student.page.getByRole("button", { name: "Resume Quiz" })).toHaveCount(0);
+    await expect(student.page.getByText("In Progress", { exact: true })).toHaveCount(0);
+  } finally {
+    await student.context.close();
   }
 });

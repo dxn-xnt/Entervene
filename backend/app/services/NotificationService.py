@@ -26,11 +26,6 @@ INTERVENTION_NOTIFICATION_TYPES = (
     "intervention_assessment_not_passed",
 )
 EXCLUDED_FEED_NOTIFICATION_TYPES = ("announcement",)
-STUDENT_DEADLINE_NOTIFICATION_TYPES = (
-    "classwork_due_soon",
-    "classwork_due_today",
-    "classwork_overdue",
-)
 
 
 def _admin_account(db: Session, user_id: uuid.UUID) -> bool:
@@ -53,7 +48,7 @@ def _has_intervention_notifications(db: Session, user_id: uuid.UUID) -> bool:
 def stage_notification(db: Session, payload: NotificationCreate) -> Notification:
     """Add a notification to the caller's transaction without committing it."""
     record = Notification(
-        notification_id=uuid.uuid4(),
+        notification_id=payload.notification_id or uuid.uuid4(),
         user_id=payload.user_id,
         notification_type=payload.notification_type,
         title=payload.title,
@@ -101,9 +96,6 @@ def get_notifications_for_user(
         Notification.user_id == uid,
         Notification.notification_type.notin_(EXCLUDED_FEED_NOTIFICATION_TYPES),
     )
-    if (user_role or "").strip().lower() == "student":
-        query = query.filter(Notification.notification_type.notin_(STUDENT_DEADLINE_NOTIFICATION_TYPES))
-        unread_query = unread_query.filter(Notification.notification_type.notin_(STUDENT_DEADLINE_NOTIFICATION_TYPES))
     if _has_intervention_notifications(db, uid) and _admin_account(db, uid):
         query = query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
         unread_query = unread_query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
@@ -143,10 +135,6 @@ def mark_notification_read(
     if (
         not record
         or record.notification_type in EXCLUDED_FEED_NOTIFICATION_TYPES
-        or (
-            (user_role or "").strip().lower() == "student"
-            and record.notification_type in STUDENT_DEADLINE_NOTIFICATION_TYPES
-        )
         or (record.notification_type in INTERVENTION_NOTIFICATION_TYPES and _admin_account(db, uid))
     ):
         raise HTTPException(status_code=404, detail="Notification not found")
@@ -170,8 +158,6 @@ def mark_all_notifications_read(
         Notification.is_read == False,  # noqa: E712
         Notification.notification_type.notin_(EXCLUDED_FEED_NOTIFICATION_TYPES),
     )
-    if (user_role or "").strip().lower() == "student":
-        query = query.filter(Notification.notification_type.notin_(STUDENT_DEADLINE_NOTIFICATION_TYPES))
     if _has_intervention_notifications(db, uid) and _admin_account(db, uid):
         query = query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
     updated = query.all()

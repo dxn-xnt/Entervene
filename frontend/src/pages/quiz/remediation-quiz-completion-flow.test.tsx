@@ -183,6 +183,36 @@ describe("student remediation quiz completion, result retrieval, and resolved re
     });
   });
 
+  it("warns about unanswered questions and submits only after confirmation", async () => {
+    quizApiMocks.getQuizAttempt
+      .mockResolvedValueOnce(pendingAttempt)
+      .mockResolvedValueOnce(gradedAttempt);
+    quizApiMocks.submitQuizAttempt.mockResolvedValue(gradedAttempt);
+    const confirm = vi.spyOn(window, "confirm")
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+
+    render(
+      <MemoryRouter initialEntries={["/student/quiz/73/take"]}>
+        <Routes>
+          <Route path="/student/quiz/:assignmentId/take" element={<StudentQuizTake />} />
+          <Route path="/student/quiz/:assignmentId/result" element={<StudentQuizResult />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const finish = await screen.findByRole("button", { name: /Finish Quiz/i });
+    fireEvent.click(finish);
+    expect(confirm).toHaveBeenCalledWith(
+      "1 question is unanswered. Submit the quiz anyway? Unanswered questions will receive no credit.",
+    );
+    expect(quizApiMocks.submitQuizAttempt).not.toHaveBeenCalled();
+
+    fireEvent.click(finish);
+    await waitFor(() => expect(quizApiMocks.submitQuizAttempt).toHaveBeenCalledTimes(1));
+    confirm.mockRestore();
+  });
+
   it("redirects reopening /take for a completed remediation quiz directly to results without starting a retake", async () => {
     quizApiMocks.getQuizAttempt.mockResolvedValue(gradedAttempt);
 

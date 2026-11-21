@@ -256,7 +256,7 @@ describe("student Study Support notifications", () => {
 
     await screen.findByText("Enhanced Mathematics 9: Parallel Lines Quiz");
 
-    // Student deadline notifications and their tab are removed.
+    // Deadline events stay inside the top-level Classwork category.
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.textContent?.replace(/\d+$/, "").trim())).toEqual([
       "All",
@@ -266,17 +266,17 @@ describe("student Study Support notifications", () => {
 
     // Historical announcements excluded; duplicated subject name & redundant phrasing cleaned
     expect(screen.queryByText("Legacy Announcement")).toBeNull();
-    expect(screen.queryByText("Reminder: Worksheet 1 due tomorrow")).toBeNull();
+    expect(screen.getByText("Reminder: Worksheet 1 due tomorrow")).toBeTruthy();
     expect(screen.queryByText(/Intervention/i)).toBeNull();
     expect(screen.getByText("Classwork assigned by Angel Alcantara • Due: Nov 25, 2026.")).toBeTruthy();
     expect(screen.getByText("Science 9: Lab Report")).toBeTruthy();
 
-    // Classwork tab includes assignment_due + grade_released only
+    // Classwork tab includes new work, grade releases, and deadline events.
     fireEvent.click(tabs[1]);
     let panel = screen.getByRole("tabpanel");
     expect(within(panel).getByText("Enhanced Mathematics 9: Parallel Lines Quiz")).toBeTruthy();
     expect(within(panel).getByText("Science 9: Lab Report")).toBeTruthy();
-    expect(within(panel).queryByText("Reminder: Worksheet 1 due tomorrow")).toBeNull();
+    expect(within(panel).getByText("Reminder: Worksheet 1 due tomorrow")).toBeTruthy();
     expect(within(panel).queryByText("Study Support Reminder")).toBeNull();
 
     // Study Support tab uses structured type even when body contains "quiz" and "lesson"

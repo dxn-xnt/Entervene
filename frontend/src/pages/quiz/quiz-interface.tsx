@@ -169,7 +169,7 @@ const StudentQuizTake = () => {
   // Auto-submit on timer expiry
   useEffect(() => {
     if (secondsLeft === 0 && quiz && quiz.can_submit && !submitting) {
-      handleSubmit();
+      handleSubmit(true);
     }
   }, [secondsLeft]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -204,8 +204,20 @@ const StudentQuizTake = () => {
   // --------------------------------------------------
   // Submit
   // --------------------------------------------------
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(async (autoSubmit = false) => {
     if (!quiz || submitting || submittingRef.current) return;
+    const unansweredCount = quiz.questions.filter(
+      (question) => !answers.has(question.quiz_question_id),
+    ).length;
+    if (
+      !autoSubmit &&
+      unansweredCount > 0 &&
+      !window.confirm(
+        `${unansweredCount} question${unansweredCount === 1 ? " is" : "s are"} unanswered. Submit the quiz anyway? Unanswered questions will receive no credit.`,
+      )
+    ) {
+      return;
+    }
     submittingRef.current = true;
     setSubmitting(true);
 
@@ -296,7 +308,7 @@ const StudentQuizTake = () => {
         <Button
           autoIcon={false}
           size="header"
-          onClick={handleSubmit}
+          onClick={() => void handleSubmit(false)}
           disabled={submitting}
         >
           {submitting ? (
