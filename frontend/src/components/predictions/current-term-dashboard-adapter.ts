@@ -101,7 +101,7 @@ export function toDashboardPrediction(row: AuthorizedCurrentTermRow): DashboardP
     prediction_id: row.prediction_id,
     student_id: row.student_id,
     student_name: row.student_name || row.student_id,
-    student_lrn: "",
+    student_lrn: row.student_lrn || "",
     class_name: row.class_name,
     grade_level: row.grade_level,
     subject_name: row.subject_name,

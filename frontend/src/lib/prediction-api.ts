@@ -52,6 +52,7 @@ export interface DevelopmentCurrentTermListItem {
   revision: number;
   student_id: string;
   student_name: string | null;
+  student_lrn?: string | null;
   class_id: number;
   class_name: string;
   subject_id: number;
