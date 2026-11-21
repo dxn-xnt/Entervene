@@ -1569,6 +1569,42 @@ export default function CreateClassworkQuizModal({
                     );
                   })()}
 
+                  {pendingLessonRemoval && (
+                    <Alert status="warning" className="mt-3 p-3 text-xs">
+                      <Alert.Title className="font-bold">
+                        Remove {pendingLessonRemoval.lessonTitle} from coverage?
+                      </Alert.Title>
+                      <Alert.Description className="mt-1 text-inherit">
+                        {pendingLessonRemoval.mappedQuestionCount} question
+                        {pendingLessonRemoval.mappedQuestionCount === 1
+                          ? " is"
+                          : "s are"}{" "}
+                        mapped to this lesson. Removing it will{" "}
+                        {selectedLessonIds.length === 2
+                          ? "move those questions to the one remaining linked lesson"
+                          : "clear only those mappings"}
+                        ; other lesson mappings will be kept.
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPendingLessonRemoval(null)}
+                          >
+                            Keep lesson
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={confirmLessonRemoval}
+                          >
+                            Remove and unmap
+                          </Button>
+                        </div>
+                      </Alert.Description>
+                    </Alert>
+                  )}
+
                   {createError ===
                     "Select the lesson where this quiz should appear." && (
                       <FormMessage id="quiz-lesson-error">
