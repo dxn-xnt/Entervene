@@ -2962,106 +2962,17 @@ export default function CreateClassworkQuizModal({
                     )}
                 </Field>
 
-                <Field label="Link under lesson (Coverage)" isRequired>
-                  <p className="text-[10px] text-gray-500 -mt-0.5 mb-2 font-normal">
-                    Links this quiz to the lesson and its associated reading
-                    materials for student coverage. Only lessons assigned to
-                    every selected section are shown.
-                  </p>
-
-                  {selectedClassIds.length === 0 ? (
-                    <p className="rounded! border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
-                      Select a section first to load available lessons.
-                    </p>
-                  ) : isLessonLoading ? (
-                    <p className="rounded! border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
-                      Loading lessons...
-                    </p>
-                  ) : availableLessons.length > 0 ? (
-                    <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-                      {availableLessons.map((lesson) => {
-                        const isSelected = selectedLessonIds.includes(
-                          lesson.lesson_id,
-                        );
-                        return (
-                          <button
-                            key={lesson.lesson_id}
-                            type="button"
-                            onClick={() => toggleLesson(lesson.lesson_id)}
-                            disabled={isCreating || isLessonLocked}
-                            className={`rounded-lg border-2 border-black px-3 py-2 text-left text-xs font-bold cursor-pointer transition-colors shadow-none ${isSelected
-                                ? "bg-success/70 hover:bg-success/70"
-                                : "bg-white hover:bg-muted"
-                              }`}
-                          >
-                            <span className="block truncate">
-                              {lesson.title}
-                            </span>
-                            <span className="mt-1 block text-[10px] font-medium text-gray-600">
-                              {lesson.is_published
-                                ? "Published lesson"
-                                : "Draft lesson"}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="rounded! border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
-                      No shared lesson is assigned to all selected sections.
-                    </p>
-                  )}
-                  {pendingLessonRemoval && (
-                    <Alert status="warning" className="mt-3 p-3 text-xs">
-                      <Alert.Title className="font-bold">
-                        Remove {pendingLessonRemoval.lessonTitle} from coverage?
-                      </Alert.Title>
-                      <Alert.Description className="mt-1 text-inherit">
-                        {pendingLessonRemoval.mappedQuestionCount} question
-                        {pendingLessonRemoval.mappedQuestionCount === 1
-                          ? " is"
-                          : "s are"}{" "}
-                        mapped to this lesson. Removing it will{" "}
-                        {selectedLessonIds.length === 2
-                          ? "move those questions to the one remaining linked lesson"
-                          : "clear only those mappings"}
-                        ; other lesson mappings will be kept.
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setPendingLessonRemoval(null)}
-                          >
-                            Keep lesson
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={confirmLessonRemoval}
-                          >
-                            Remove and unmap
-                          </Button>
-                        </div>
-                      </Alert.Description>
-                    </Alert>
-                  )}
-                  {coverageMappingNotice && (
-                    <Alert
-                      status="info"
-                      className="mt-3 p-3 text-xs"
-                      onClose={() => setCoverageMappingNotice("")}
-                    >
-                      <Alert.Description className="text-inherit">
-                        {coverageMappingNotice}
-                      </Alert.Description>
-                    </Alert>
-                  )}
-                  {createError ===
-                    "Select the lesson where this quiz should appear." && (
-                      <FormMessage>{createError}</FormMessage>
-                    )}
-                </Field>
+                {coverageMappingNotice && (
+                  <Alert
+                    status="info"
+                    className="p-3 text-xs"
+                    onClose={() => setCoverageMappingNotice("")}
+                  >
+                    <Alert.Description className="text-inherit">
+                      {coverageMappingNotice}
+                    </Alert.Description>
+                  </Alert>
+                )}
 
                 {selectedLessonIds.length > 0 &&
                   (() => {
