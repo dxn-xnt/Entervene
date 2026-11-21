@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.services.MailService import send_batch_invitations, send_invitation_email as _default_single_sender
 
 from app.api.v1.routes.Auth import create_access_token, create_refresh_token, set_auth_cookies
-from app.core.Security import hash_password
+from app.core.Security import hash_password, password_validation_error
 from app.models.auth.InvitationToken import InvitationToken
 from app.models.auth.Role import Role
 from app.models.auth.UserAccount import UserAccount
@@ -108,8 +108,9 @@ def accept_invitation(
 ) -> AcceptInvitationResponse:
     if payload.password != payload.confirm_password:
         raise HTTPException(status_code=400, detail="Passwords do not match")
-    if len(payload.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    password_error = password_validation_error(payload.password)
+    if password_error:
+        raise HTTPException(status_code=400, detail=password_error)
 
     invitation = db.query(InvitationToken).filter(InvitationToken.token_hash == sha256_token(payload.token)).first()
     if not invitation:
