@@ -189,14 +189,7 @@ def stage_intervention_assessment_result_or_submission(
     return "SUBMITTED"
 
 
-def stage_intervention_notification(
-    db: Session,
-    intervention: Intervention,
-    *,
-    event: str,
-    predicted_grade: float,
-    is_remediation_adjusted: bool = False,
-) -> None:
+def stage_intervention_notification(db: Session, intervention: Intervention, *, event: str, predicted_grade: float) -> None:
     """Only the effective teacher can receive one notification for a real transition."""
     user_id = _responsible_teacher_user_id(db, intervention)
     if user_id is None:
@@ -217,17 +210,10 @@ def stage_intervention_notification(
             action_url=f"/teacher/interventions?candidate={intervention.intervention_id}",
         )
     elif event == "IMPROVED_PREDICTION":
-        body = (
-            f"{student_name}'s remediation-adjusted {subject_name} projection reached {grade}. "
-            "Intervention criteria are no longer met; the previous intervention remains in history."
-            if is_remediation_adjusted
-            else f"{student_name}'s latest {subject_name} prediction improved to {grade}. "
-            "Intervention criteria are no longer met; the previous intervention remains in history."
-        )
         payload = NotificationCreate(
             user_id=user_id, notification_type="intervention_resolved",
             title="Intervention resolved after improved prediction",
-            body=body,
+            body=f"{student_name}'s latest {subject_name} prediction improved to {grade}. Intervention criteria are no longer met; the previous intervention remains in history.",
             action_url="/teacher/interventions",
         )
     else:

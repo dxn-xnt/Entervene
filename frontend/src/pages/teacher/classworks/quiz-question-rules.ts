@@ -324,6 +324,18 @@ export function mapUnmappedQuestionsToLesson(
   );
 }
 
+export function mapQuestionsToSingleLinkedLesson(
+  questions: QuizQuestionDraft[],
+  linkedLessonIds: readonly number[],
+): QuizQuestionDraft[] {
+  if (linkedLessonIds.length !== 1) return questions;
+
+  const [lessonId] = linkedLessonIds;
+  return questions.every((question) => question.lesson_id === lessonId)
+    ? questions
+    : mapUnmappedQuestionsToLesson(questions, lessonId);
+}
+
 export function reconcileQuestionLessonMappings(
   questions: QuizQuestionDraft[],
   linkedLessonIds: readonly number[],
