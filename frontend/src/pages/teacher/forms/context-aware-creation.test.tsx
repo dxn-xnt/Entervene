@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { Dialog } from "@/components/retroui/Dialog";
 import { apiFetch } from "@/lib/api";
-import { apiFetch } from "@/lib/api";
 import CreateLessonModal from "./create-lesson";
 import CreateClassworkModal from "./create-classwork";
 import CreateClassworkQuizModal from "./create-classwork-quiz";
