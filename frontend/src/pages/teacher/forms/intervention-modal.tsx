@@ -486,6 +486,11 @@ export default function InterventionModal({
                     wizardStep={supportPage === "plan" ? wizardStep : undefined}
                     detail={detail}
                     previousResolved={previousResolved}
+                    onNavigateToStep={(step) => {
+                      setSupportPage("plan");
+                      setWizardStep(step);
+                      contentRef.current?.scrollTo({ top: 0 });
+                    }}
                     navigation={supportPage === "plan" ? (
                       <div className="overflow-x-auto no-scrollbar py-0.5">
                         <SegmentedControl
