@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Check,
   CheckCheck,
+  ChevronDown,
   FileDown,
   FileText,
   Loader2,
@@ -28,6 +29,12 @@ import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/retroui/Input";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { ClassworkSettingRow } from "@/components/classwork-setting-row";
@@ -670,6 +677,9 @@ export default function CreateClassworkQuizModal({
     const linksError = validateReferenceLinks(referenceLinks);
     if (linksError) return linksError;
     if (!draft.subject_id) return "Choose a subject.";
+    if (selectedLessonIds.length === 0) {
+      return "Select the lesson where this quiz should appear.";
+    }
     if (!draft.title.trim()) return "Topic title is required.";
     if (
       (draft.classwork_category === "QUARTERLY_ASSESSMENT" ||
@@ -839,46 +849,58 @@ export default function CreateClassworkQuizModal({
   };
 
   useEffect(() => {
-    if (
-      createStep !== "assign" ||
-      !draft.subject_id ||
-      selectedClassIds.length === 0
-    ) {
+    if (!draft.subject_id) {
       setAvailableLessons([]);
+      setSelectedLessonIds([]);
       return;
     }
 
     let isActive = true;
     setIsLessonLoading(true);
 
-    const loadEligibleLessons = async () => {
+    const loadSubjectLessons = async () => {
       try {
-        const lessonGroups = await Promise.all(
-          selectedClassIds.map(async (classId) => {
-            const response = await apiFetch(
-              `/api/v1/lessons/my-class/${classId}/subject/${draft.subject_id}`,
-            );
-            if (!response.ok) {
-              throw new Error("Unable to load lessons for selected sections.");
-            }
-            return (await response.json()) as TeacherLesson[];
-          }),
+        const subjectIdNum = Number(draft.subject_id);
+        const relatedLoads = loads.filter(
+          (load) => load.subject_id === subjectIdNum,
         );
 
+        const fetchPromises: Promise<TeacherLesson[]>[] = [
+          apiFetch("/api/v1/lessons/my-lessons")
+            .then(async (res) =>
+              res.ok ? ((await res.json()) as TeacherLesson[]) : [],
+            )
+            .then((list) =>
+              list.filter(
+                (l) => Number(l.subject_id) === subjectIdNum && !l.is_archived,
+              ),
+            )
+            .catch(() => []),
+          ...relatedLoads.map(async (load) => {
+            try {
+              const res = await apiFetch(
+                `/api/v1/lessons/my-class/${load.class_id}/subject/${draft.subject_id}`,
+              );
+              return res.ok ? ((await res.json()) as TeacherLesson[]) : [];
+            } catch {
+              return [];
+            }
+          }),
+        ];
+
+        const results = await Promise.all(fetchPromises);
         if (!isActive) return;
 
-        const commonIds = lessonGroups.reduce<Set<number> | null>(
-          (current, group) => {
-            const groupIds = new Set(group.map((lesson) => lesson.lesson_id));
-            if (!current) return groupIds;
-            return new Set([...current].filter((id) => groupIds.has(id)));
-          },
-          null,
-        );
-
         const uniqueLessons = new Map<number, TeacherLesson>();
-        lessonGroups.flat().forEach((lesson) => {
-          if (commonIds?.has(lesson.lesson_id)) {
+        if (
+          contextLesson &&
+          !contextLesson.is_archived &&
+          Number(contextLesson.subject_id) === subjectIdNum
+        ) {
+          uniqueLessons.set(contextLesson.lesson_id, contextLesson);
+        }
+        results.flat().forEach((lesson) => {
+          if (lesson && !lesson.is_archived) {
             uniqueLessons.set(lesson.lesson_id, lesson);
           }
         });
@@ -928,7 +950,7 @@ export default function CreateClassworkQuizModal({
         setCreateError(
           err instanceof Error
             ? err.message
-            : "Unable to load lessons for selected sections.",
+            : "Unable to load lessons for selected subject.",
         );
       } finally {
         if (isActive) {
@@ -937,16 +959,16 @@ export default function CreateClassworkQuizModal({
       }
     };
 
-    void loadEligibleLessons();
+    void loadSubjectLessons();
     return () => {
       isActive = false;
     };
   }, [
-    createStep,
     draft.subject_id,
+    loads,
+    contextLesson,
     initialLessonId,
     remediationFocus,
-    selectedClassIds,
   ]);
 
   const buildQuizPayload = () => ({
@@ -1330,6 +1352,7 @@ export default function CreateClassworkQuizModal({
                       if (val && createError === "Choose a subject.")
                         setCreateError("");
                       setSelectedClassIds([]);
+                      setSelectedLessonIds([]);
                     }}
                     disabled={isCreating || isSubjectLocked}
                   >
@@ -1363,6 +1386,231 @@ export default function CreateClassworkQuizModal({
                       {createError}
                     </FormMessage>
                   )}
+                </Field>
+
+                <Field label="Link under lesson (Coverage)" isRequired>
+                  <p className="text-xs text-gray-500 -mt-0.5 mb-1.5 font-normal">
+                    Links this quiz to the lesson and its associated reading
+                    materials for student coverage.
+                  </p>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        id="quiz-lesson-select"
+                        disabled={
+                          isCreating ||
+                          !draft.subject_id ||
+                          isLessonLoading ||
+                          availableLessons.length === 0 ||
+                          isLessonLocked
+                        }
+                        aria-invalid={
+                          createError ===
+                          "Select the lesson where this quiz should appear."
+                        }
+                        aria-describedby={
+                          createError ===
+                            "Select the lesson where this quiz should appear."
+                            ? "quiz-lesson-error"
+                            : undefined
+                        }
+                        className={cn(
+                          "flex h-10 w-full items-center justify-between rounded! border-2 border-black bg-white px-3 py-2 text-left font-sans text-sm text-foreground shadow-none outline-none focus:border-black disabled:cursor-not-allowed disabled:opacity-50",
+                          createError ===
+                          "Select the lesson where this quiz should appear." &&
+                          "border-destructive",
+                        )}
+                      >
+                        <span className="truncate">
+                          {!draft.subject_id
+                            ? "Select a subject first"
+                            : isLessonLoading
+                              ? "Loading lessons..."
+                              : availableLessons.length === 0
+                                ? "No lessons found for this subject"
+                                : selectedLessonIds.length === 0
+                                  ? "Choose lesson(s)"
+                                  : selectedLessonIds.length === 1
+                                    ? availableLessons.find(
+                                      (l) =>
+                                        l.lesson_id === selectedLessonIds[0],
+                                    )?.title || "1 lesson selected"
+                                    : `${selectedLessonIds.length} lessons selected`}
+                        </span>
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-70" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="z-[1000] w-[var(--radix-dropdown-menu-trigger-width)] max-h-60 overflow-y-auto rounded border-2 border-black bg-white p-1 shadow-none"
+                    >
+                      {availableLessons.length > 1 && (
+                        <div className="flex items-center justify-between border-b border-gray-200 px-2 py-1 text-xs">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (!isLessonLocked) {
+                                setSelectedLessonIds(
+                                  availableLessons.map((l) => l.lesson_id),
+                                );
+                                setCreateError("");
+                              }
+                            }}
+                            className="font-bold text-primary hover:underline cursor-pointer"
+                          >
+                            Select All
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (!isLessonLocked) setSelectedLessonIds([]);
+                            }}
+                            className="font-bold text-muted-foreground hover:underline cursor-pointer"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                      )}
+                      {availableLessons.map((lesson) => {
+                        const isSelected = selectedLessonIds.includes(
+                          lesson.lesson_id,
+                        );
+                        return (
+                          <DropdownMenuCheckboxItem
+                            key={lesson.lesson_id}
+                            checked={isSelected}
+                            onSelect={(event) => {
+                              event.preventDefault();
+                              toggleLesson(lesson.lesson_id);
+                            }}
+                            className="flex cursor-pointer items-center justify-between gap-2 rounded px-3 py-2 text-sm font-medium hover:bg-muted focus:bg-muted"
+                          >
+                            <span className="truncate">{lesson.title}</span>
+                            {!lesson.is_published && (
+                              <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                                (Draft)
+                              </span>
+                            )}
+                          </DropdownMenuCheckboxItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {selectedLessonIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1.5">
+                      {selectedLessonIds.map((id) => {
+                        const lesson = availableLessons.find(
+                          (l) => l.lesson_id === id,
+                        );
+                        if (!lesson) return null;
+                        return (
+                          <Badge
+                            key={id}
+                            variant="outline"
+                            size="sm"
+                            className="flex items-center gap-1.5 border-2 border-black bg-muted/40 px-2 py-0.5 text-xs font-bold"
+                          >
+                            <span className="max-w-[220px] truncate">
+                              {lesson.title}
+                            </span>
+                            {!isLessonLocked && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleLesson(id);
+                                }}
+                                className="ml-0.5 rounded-full p-0.5 hover:bg-black/10 cursor-pointer"
+                                aria-label={`Remove ${lesson.title}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {(() => {
+                    const selectedLessonsWithCompetency =
+                      availableLessons.filter(
+                        (l) =>
+                          selectedLessonIds.includes(l.lesson_id) &&
+                          (l.competency_statement || l.competency_code),
+                      );
+                    if (selectedLessonsWithCompetency.length === 0) return null;
+                    return (
+                      <div className="flex flex-col gap-1 pt-1">
+                        <span className="text-sm font-regular text-foreground">
+                          Learning Competenc
+                          {selectedLessonsWithCompetency.length > 1
+                            ? "ies"
+                            : "y"}
+                        </span>
+                        {selectedLessonsWithCompetency.map((lesson) => (
+                          <div
+                            key={lesson.lesson_id}
+                            className="w-full rounded! border-2 border-black bg-muted/40 px-3 py-2 text-xs text-foreground"
+                          >
+                            {selectedLessonsWithCompetency.length > 1 && (
+                              <span className="mr-1.5 font-bold">
+                                {lesson.title}:
+                              </span>
+                            )}
+                            {lesson.competency_statement}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  {pendingLessonRemoval && (
+                    <Alert status="warning" className="mt-3 p-3 text-xs">
+                      <Alert.Title className="font-bold">
+                        Remove {pendingLessonRemoval.lessonTitle} from coverage?
+                      </Alert.Title>
+                      <Alert.Description className="mt-1 text-inherit">
+                        {pendingLessonRemoval.mappedQuestionCount} question
+                        {pendingLessonRemoval.mappedQuestionCount === 1
+                          ? " is"
+                          : "s are"}{" "}
+                        mapped to this lesson. Removing it will{" "}
+                        {selectedLessonIds.length === 2
+                          ? "move those questions to the one remaining linked lesson"
+                          : "clear only those mappings"}
+                        ; other lesson mappings will be kept.
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPendingLessonRemoval(null)}
+                          >
+                            Keep lesson
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={confirmLessonRemoval}
+                          >
+                            Remove and unmap
+                          </Button>
+                        </div>
+                      </Alert.Description>
+                    </Alert>
+                  )}
+
+                  {createError ===
+                    "Select the lesson where this quiz should appear." && (
+                      <FormMessage id="quiz-lesson-error">
+                        {createError}
+                      </FormMessage>
+                    )}
                 </Field>
 
                 <Field label="Topic Title" isRequired={true}>
@@ -2343,8 +2591,23 @@ export default function CreateClassworkQuizModal({
                     </Select>
                   </Field>
 
-                  {quizSettings.summary_release_mode === "SCHEDULED" ? (
-                    <Field label="Release Date & Time" isRequired>
+                  <Field label="Locked Until">
+                    <DatePicker
+                      includeTime
+                      value={draft.lock_date}
+                      onValueChange={(value) =>
+                        setDraft((current) => ({
+                          ...current,
+                          lock_date: value,
+                        }))
+                      }
+                      disabled={isCreating || !draft.is_published}
+                      className="w-full rounded shadow-none disabled:bg-gray-100 disabled:opacity-55"
+                    />
+                  </Field>
+
+                  {quizSettings.summary_release_mode === "SCHEDULED" && (
+                    <Field label="Release Date & Time" isRequired className="sm:col-span-2">
                       <DatePicker
                         includeTime
                         value={quizSettings.summary_release_at}
@@ -2358,16 +2621,6 @@ export default function CreateClassworkQuizModal({
                         className="w-full bg-white border-2 border-black rounded shadow-none"
                       />
                     </Field>
-                  ) : (
-                    <div className="flex flex-col justify-end">
-                      <div className="rounded! border-2 border-dashed border-gray-300 px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
-                        {quizSettings.summary_release_mode === "AFTER_DUE_DATE"
-                          ? "Summary unlocks automatically after the due date."
-                          : quizSettings.summary_release_mode === "NEVER"
-                            ? "Students can see their score, but not the answer summary."
-                            : "Students can view the summary right after submitting."}
-                      </div>
-                    </div>
                   )}
                   {quizSettings.summary_release_mode === "AFTER_DUE_DATE" &&
                     !draft.due_date && (
@@ -2376,53 +2629,6 @@ export default function CreateClassworkQuizModal({
                         release mode takes effect.
                       </p>
                     )}
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  {[
-                    {
-                      key: "is_shuffle_questions",
-                      label: "Shuffle questions",
-                    },
-                    {
-                      key: "enable_per_question_scoring",
-                      label: "Enable per-question scoring",
-                    },
-                    {
-                      key: "enable_per_question_time_limits",
-                      label: "Enable individual question time limits",
-                    },
-                  ].map((setting) => {
-                    const key = setting.key as keyof Pick<
-                      QuizSettingsDraft,
-                      | "is_shuffle_questions"
-                      | "enable_per_question_scoring"
-                      | "enable_per_question_time_limits"
-                    >;
-                    const enabled = quizSettings[key];
-                    return (
-                      <button
-                        key={setting.key}
-                        type="button"
-                        onClick={() =>
-                          setQuizSettings((current) => ({
-                            ...current,
-                            [key]: !current[key],
-                          }))
-                        }
-                        disabled={isCreating}
-                        className="flex items-center justify-between rounded! border-2 border-black bg-white px-3 py-2 text-left text-xs font-bold shadow-none! cursor-pointer transition active:translate-y-0.5"
-                      >
-                        <span>{setting.label}</span>
-                        <span
-                          className={`rounded border border-black px-2 py-0.5 text-[10px] ${enabled ? "bg-[#7ABA78]" : "bg-gray-100"
-                            }`}
-                        >
-                          {enabled ? "On" : "Off"}
-                        </span>
-                      </button>
-                    );
-                  })}
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -2506,7 +2712,43 @@ export default function CreateClassworkQuizModal({
                   </Field>
                 </div>
 
-                <div className="flex flex-col gap-3 mt-2">
+                <div className="grid grid-cols-2 gap-x-5 gap-y-1 mt-2">
+                  <ClassworkSettingRow
+                    label="Shuffle questions"
+                    tooltip="Randomizes question order for each student during the quiz attempt."
+                    checked={quizSettings.is_shuffle_questions}
+                    onCheckedChange={(checked) =>
+                      setQuizSettings((current) => ({
+                        ...current,
+                        is_shuffle_questions: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
+                  <ClassworkSettingRow
+                    label="Enable per-question scoring"
+                    tooltip="Allows setting custom point values individually for each question."
+                    checked={quizSettings.enable_per_question_scoring}
+                    onCheckedChange={(checked) =>
+                      setQuizSettings((current) => ({
+                        ...current,
+                        enable_per_question_scoring: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
+                  <ClassworkSettingRow
+                    label="Enable individual question time limits"
+                    tooltip="Allows setting custom time limits individually for each question."
+                    checked={quizSettings.enable_per_question_time_limits}
+                    onCheckedChange={(checked) =>
+                      setQuizSettings((current) => ({
+                        ...current,
+                        enable_per_question_time_limits: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
                   <ClassworkSettingRow
                     label="Show quiz results to students"
                     tooltip="Controls student access to quiz scores and correct answers. When enabled, results unlock according to the configured release schedule (immediately, after due date, or scheduled time) and max attempt policies. Enabling this does not necessarily release correct answers immediately. When disabled, quiz results remain hidden."
@@ -2540,47 +2782,30 @@ export default function CreateClassworkQuizModal({
                   )}
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 mt-4">
-                  <Field label="Locked Until">
-                    <DatePicker
-                      includeTime
-                      value={draft.lock_date}
-                      onValueChange={(value) =>
-                        setDraft((current) => ({
-                          ...current,
-                          lock_date: value,
-                        }))
-                      }
-                      disabled={isCreating || !draft.is_published}
-                      className="w-full rounded shadow-none disabled:bg-gray-100 disabled:opacity-55"
-                    />
-                  </Field>
-
-                  {draft.due_date && (
-                    <div className="flex items-center pt-5">
-                      <label className="flex items-start gap-3 rounded border-2 border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold shadow-md cursor-pointer select-none">
-                        <Checkbox
-                          size="sm"
-                          checked={draft.allow_late_submissions}
-                          onCheckedChange={(checked) =>
-                            setDraft((current) => ({
-                              ...current,
-                              allow_late_submissions: Boolean(checked),
-                            }))
-                          }
-                          disabled={isCreating}
-                          className="mt-0.5"
-                        />
-                        <span>
-                          Allow late submissions
-                          <span className="block font-medium text-gray-700 text-[10px]">
-                            Accepted work after due date is marked late.
-                          </span>
+                {draft.due_date && (
+                  <div className="mt-4">
+                    <label className="inline-flex items-start gap-3 rounded border-2 border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold shadow-md cursor-pointer select-none">
+                      <Checkbox
+                        size="sm"
+                        checked={draft.allow_late_submissions}
+                        onCheckedChange={(checked) =>
+                          setDraft((current) => ({
+                            ...current,
+                            allow_late_submissions: Boolean(checked),
+                          }))
+                        }
+                        disabled={isCreating}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Allow late submissions
+                        <span className="block font-medium text-gray-700 text-[10px]">
+                          Accepted work after due date is marked late.
                         </span>
-                      </label>
-                    </div>
-                  )}
-                </div>
+                      </span>
+                    </label>
+                  </div>
+                )}
 
                 <Field label="Assign to sections" isRequired>
                   {selectedSubjectLoads.length > 0 && (
@@ -2737,106 +2962,17 @@ export default function CreateClassworkQuizModal({
                     )}
                 </Field>
 
-                <Field label="Link under lesson (Coverage)" isRequired>
-                  <p className="text-[10px] text-gray-500 -mt-0.5 mb-2 font-normal">
-                    Links this quiz to the lesson and its associated reading
-                    materials for student coverage. Only lessons assigned to
-                    every selected section are shown.
-                  </p>
-
-                  {selectedClassIds.length === 0 ? (
-                    <p className="rounded! border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
-                      Select a section first to load available lessons.
-                    </p>
-                  ) : isLessonLoading ? (
-                    <p className="rounded! border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
-                      Loading lessons...
-                    </p>
-                  ) : availableLessons.length > 0 ? (
-                    <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-                      {availableLessons.map((lesson) => {
-                        const isSelected = selectedLessonIds.includes(
-                          lesson.lesson_id,
-                        );
-                        return (
-                          <button
-                            key={lesson.lesson_id}
-                            type="button"
-                            onClick={() => toggleLesson(lesson.lesson_id)}
-                            disabled={isCreating || isLessonLocked}
-                            className={`rounded-lg border-2 border-black px-3 py-2 text-left text-xs font-bold cursor-pointer transition-colors shadow-none ${isSelected
-                                ? "bg-success/70 hover:bg-success/70"
-                                : "bg-white hover:bg-muted"
-                              }`}
-                          >
-                            <span className="block truncate">
-                              {lesson.title}
-                            </span>
-                            <span className="mt-1 block text-[10px] font-medium text-gray-600">
-                              {lesson.is_published
-                                ? "Published lesson"
-                                : "Draft lesson"}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="rounded! border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
-                      No shared lesson is assigned to all selected sections.
-                    </p>
-                  )}
-                  {pendingLessonRemoval && (
-                    <Alert status="warning" className="mt-3 p-3 text-xs">
-                      <Alert.Title className="font-bold">
-                        Remove {pendingLessonRemoval.lessonTitle} from coverage?
-                      </Alert.Title>
-                      <Alert.Description className="mt-1 text-inherit">
-                        {pendingLessonRemoval.mappedQuestionCount} question
-                        {pendingLessonRemoval.mappedQuestionCount === 1
-                          ? " is"
-                          : "s are"}{" "}
-                        mapped to this lesson. Removing it will{" "}
-                        {selectedLessonIds.length === 2
-                          ? "move those questions to the one remaining linked lesson"
-                          : "clear only those mappings"}
-                        ; other lesson mappings will be kept.
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setPendingLessonRemoval(null)}
-                          >
-                            Keep lesson
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={confirmLessonRemoval}
-                          >
-                            Remove and unmap
-                          </Button>
-                        </div>
-                      </Alert.Description>
-                    </Alert>
-                  )}
-                  {coverageMappingNotice && (
-                    <Alert
-                      status="info"
-                      className="mt-3 p-3 text-xs"
-                      onClose={() => setCoverageMappingNotice("")}
-                    >
-                      <Alert.Description className="text-inherit">
-                        {coverageMappingNotice}
-                      </Alert.Description>
-                    </Alert>
-                  )}
-                  {createError ===
-                    "Select the lesson where this quiz should appear." && (
-                      <FormMessage>{createError}</FormMessage>
-                    )}
-                </Field>
+                {coverageMappingNotice && (
+                  <Alert
+                    status="info"
+                    className="p-3 text-xs"
+                    onClose={() => setCoverageMappingNotice("")}
+                  >
+                    <Alert.Description className="text-inherit">
+                      {coverageMappingNotice}
+                    </Alert.Description>
+                  </Alert>
+                )}
 
                 {selectedLessonIds.length > 0 &&
                   (() => {

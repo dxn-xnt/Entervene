@@ -317,6 +317,7 @@ def list_latest_development_current_term_predictions(
             "revision": prediction.revision,
             "student_id": prediction.student_id,
             "student_name": _format_student_name(student),
+            "student_lrn": student.student_lrn,
             "class_id": prediction.class_id,
             "class_name": class_.section_name,
             "subject_id": prediction.subject_id,

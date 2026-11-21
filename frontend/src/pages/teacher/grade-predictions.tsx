@@ -48,7 +48,7 @@ export function AdminCurrentTermGradePredictions() {
   const [assignedScopes, setAssignedScopes] = useState<AssignedSubjectSectionScope[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [classId, setClassId] = useState<number | undefined>(routeClassId);
+  const [selectedClassId, setSelectedClassId] = useState<number | undefined>(routeClassId);
   const [subjectId, setSubjectId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
@@ -68,7 +68,7 @@ export function AdminCurrentTermGradePredictions() {
         setRows([]);
         setAssignedScopes([]);
         setSelected(null);
-        setClassId(routeClassId);
+        setSelectedClassId(routeClassId);
         setSubjectId(undefined);
       }
     });
@@ -108,10 +108,10 @@ export function AdminCurrentTermGradePredictions() {
     return [...byId.values()].sort((a, b) => a.section_name.localeCompare(b.section_name));
   }, [assignedScopes]);
 
-  const selectedClassId = sections.some((section) => section.class_id === classId)
-    ? classId
-    : routeClassId && sections.some((section) => section.class_id === routeClassId)
-      ? routeClassId
+  const effectiveClassId = selectedClassId !== undefined && sections.some((section) => section.class_id === selectedClassId)
+    ? selectedClassId
+    : selectedClassId === undefined
+      ? undefined
       : sections[0]?.class_id;
 
   return (
@@ -166,12 +166,12 @@ export function AdminCurrentTermGradePredictions() {
               rows={rows}
               assignedScopes={assignedScopes}
               sections={sections}
-              selectedClassId={selectedClassId}
+              selectedClassId={effectiveClassId}
               selectedSubjectId={subjectId}
               riskLevel={riskLevel}
               search={search}
               onClassChange={(value) => {
-                setClassId(value);
+                setSelectedClassId(value);
                 setSubjectId(undefined);
                 setRiskLevel(undefined);
                 setSearch("");
