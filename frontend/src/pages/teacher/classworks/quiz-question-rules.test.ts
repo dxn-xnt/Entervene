@@ -6,7 +6,6 @@ import {
   assignSelectedQuestionsToLesson,
   clearQuestionMappingsForLesson,
   getQuizLessonMappingState,
-  mapQuestionsToSingleLinkedLesson,
   mapUnmappedQuestionsToLesson,
   sanitizeQuestionLessonId,
   selectUnmappedQuestionIds,
@@ -56,19 +55,6 @@ describe("quiz lesson mapping helpers", () => {
     );
 
     expect(result.map((item) => item.lesson_id)).toEqual([10, 10]);
-  });
-
-  it("maps imported questions to the only linked lesson but preserves multi-lesson choices", () => {
-    const questions = [question("1", null), question("2", 20)];
-
-    expect(
-      mapQuestionsToSingleLinkedLesson(questions, [10]).map(
-        (item) => item.lesson_id,
-      ),
-    ).toEqual([10, 10]);
-    expect(mapQuestionsToSingleLinkedLesson(questions, [10, 20])).toBe(
-      questions,
-    );
   });
 
   it("bulk assigns only the selected subset to one primary lesson", () => {

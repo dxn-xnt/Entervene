@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Text } from "@/components/retroui/Text";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
@@ -10,17 +10,10 @@ import { Checkbox } from "@/components/retroui/Checkbox";
 import { Eye, EyeOff } from "lucide-react";
 import { routes } from "@/../routes";
 import { EnterveneLogo } from "@/components/logo";
-import { useToast } from "@/components/retroui/Toast";
 
 const Login = () => {
   const { login, role, isLoading } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const toast = useToast();
-  const passwordReset = Boolean(
-    (location.state as { passwordReset?: boolean } | null)?.passwordReset,
-  );
-  const passwordResetToastShown = useRef(false);
   const [username, setUsername] = useState(() => {
     return localStorage.getItem("saved_email") || "";
   });
@@ -39,16 +32,6 @@ const Login = () => {
       else if (role === "student") navigate(routes.student.board, { replace: true });
     }
   }, [isLoading, role, navigate]);
-
-  useEffect(() => {
-    if (!passwordReset || passwordResetToastShown.current) return;
-    passwordResetToastShown.current = true;
-    toast.success({
-      title: "Password updated",
-      description: "You can now sign in with your new password.",
-    });
-    navigate(routes.auth.login, { replace: true, state: null });
-  }, [navigate, passwordReset, toast]);
 
   const handleLogin = async () => {
     setError("");
@@ -139,7 +122,7 @@ const Login = () => {
                   type="button"
                   onClick={() => navigate(routes.auth.forgotPassword)}
                 >
-                  Forgot password?
+                  Forget password?
                 </Button>
               </div>
               <div className="relative">

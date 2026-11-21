@@ -28,7 +28,3 @@ class ResetPasswordRequest(BaseModel):
     token: str = Field(..., min_length=1)
     password: str = Field(..., min_length=8, max_length=128)
     confirm_password: str
-
-
-class ResetPasswordTokenRequest(BaseModel):
-    token: str = Field(..., min_length=1)

@@ -4,21 +4,6 @@ from jose import JWTError, jwt
 from app.core.Config import settings
 
 
-def password_validation_error(password: str) -> str | None:
-    """Return the shared account-password validation error, if any."""
-    if len(password) < 8:
-        return "Password must be at least 8 characters"
-    if not any(character.islower() for character in password) or not any(
-        character.isupper() for character in password
-    ):
-        return "Password must include uppercase and lowercase letters"
-    if not any(character.isdigit() for character in password):
-        return "Password must include at least one number"
-    if not any(not character.isalnum() for character in password):
-        return "Password must include at least one symbol"
-    return None
-
-
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
