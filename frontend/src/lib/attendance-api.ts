@@ -2,6 +2,61 @@ import { apiFetch } from "./api";
 
 export type AttendanceStatus = "present" | "absent" | "late" | "excused";
 export type LeaveStatus = "pending" | "approved" | "rejected";
+export type AttendanceApiErrorKind =
+  | "validation"
+  | "authorization"
+  | "not_found"
+  | "conflict"
+  | "server";
+
+export class AttendanceApiError extends Error {
+  status: number;
+  detail: string;
+  kind: AttendanceApiErrorKind;
+
+  constructor(status: number, detail: string) {
+    super(detail);
+    this.name = "AttendanceApiError";
+    this.status = status;
+    this.detail = detail;
+    if (status === 400 || status === 422) {
+      this.kind = "validation";
+    } else if (status === 401 || status === 403) {
+      this.kind = "authorization";
+    } else if (status === 404) {
+      this.kind = "not_found";
+    } else if (status === 409) {
+      this.kind = "conflict";
+    } else {
+      this.kind = "server";
+    }
+  }
+}
+
+async function parseAttendanceApiError(
+  res: Response,
+  fallbackMessage: string,
+): Promise<AttendanceApiError> {
+  let detail = fallbackMessage;
+  try {
+    const errorData = await res.json();
+    if (typeof errorData?.detail === "string" && errorData.detail.trim()) {
+      detail = errorData.detail.trim();
+    } else if (Array.isArray(errorData?.detail) && errorData.detail.length > 0) {
+      const messages = errorData.detail
+        .map((item: { msg?: unknown }) =>
+          typeof item?.msg === "string" ? item.msg.trim() : "",
+        )
+        .filter(Boolean);
+      if (messages.length > 0) {
+        detail = messages.join("; ");
+      }
+    }
+  } catch {
+    // Response was not JSON; retain fallback message.
+  }
+  return new AttendanceApiError(res.status, detail);
+}
 
 export type AttendanceRecordItem = {
   attendance_id: number;
@@ -69,8 +124,7 @@ export async function scanQRAttendance(payload: QRScanAttendancePayload): Promis
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    throw new Error(errorData?.detail || "Failed to scan QR attendance");
+    throw await parseAttendanceApiError(res, "Failed to scan QR attendance");
   }
   return res.json();
 }
@@ -81,7 +135,9 @@ export async function recordBatchAttendance(payload: BatchAttendancePayload): Pr
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error("Failed to record attendance");
+  if (!res.ok) {
+    throw await parseAttendanceApiError(res, "Failed to save attendance records.");
+  }
   return res.json();
 }
 
@@ -100,7 +156,9 @@ export async function getClassAttendanceLogs(
 
   const queryString = params.toString() ? `?${params.toString()}` : "";
   const res = await apiFetch(`/api/v1/attendance/class/${classId}${queryString}`);
-  if (!res.ok) throw new Error("Failed to fetch class attendance logs");
+  if (!res.ok) {
+    throw await parseAttendanceApiError(res, "Failed to fetch class attendance logs");
+  }
   return res.json();
 }
 
@@ -141,8 +199,7 @@ export async function exportClassAttendanceCSV(
   const queryString = params.toString() ? `?${params.toString()}` : "";
   const res = await apiFetch(`/api/v1/attendance/class/${classId}/export-csv${queryString}`);
   if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    throw new Error(errorData?.detail || "Failed to export class attendance CSV");
+    throw await parseAttendanceApiError(res, "Failed to export class attendance CSV");
   }
 
   const contentDisposition = res.headers.get("content-disposition");

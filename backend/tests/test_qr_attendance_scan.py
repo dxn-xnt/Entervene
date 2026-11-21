@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 import uuid
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -50,15 +50,22 @@ def setup_test_db():
     Session = sessionmaker(bind=engine)
     db = Session()
 
-    year = AcademicYear(academic_year_id=1, year_label="2026-2027", start_date=date(2026, 8, 1), end_date=date(2027, 5, 31), is_active=True)
+    today = date.today()
+    year = AcademicYear(
+        academic_year_id=1,
+        year_label=f"{today.year}-{today.year + 1}",
+        start_date=today - timedelta(days=60),
+        end_date=today + timedelta(days=240),
+        is_active=True,
+    )
     level = AcademicLevel(academic_level_id=2, level_name="Grade 8", grade_level=8)
     period = AcademicPeriod(
         academic_period_id=1,
         academic_year_id=1,
         period_name="Q1",
         period_type="quarter",
-        start_date=date(2026, 8, 1),
-        end_date=date(2026, 10, 31),
+        start_date=today - timedelta(days=30),
+        end_date=today + timedelta(days=30),
         is_active=True,
     )
     db.add_all([year, level, period])

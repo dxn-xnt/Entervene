@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date as date_type, datetime
 
-from sqlalchemy import String, Text, Date, DateTime, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import String, Text, Date, DateTime, ForeignKey, Integer, UniqueConstraint, Index, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -15,6 +15,15 @@ class AttendanceRecord(Base):
     __tablename__ = "attendance_record"
     __table_args__ = (
         UniqueConstraint("student_id", "class_id", "subject_id", "date", name="uq_attendance_student_class_subject_date"),
+        Index(
+            "uq_attendance_student_class_homeroom_date",
+            "student_id",
+            "class_id",
+            "date",
+            unique=True,
+            postgresql_where=text("subject_id IS NULL"),
+            sqlite_where=text("subject_id IS NULL"),
+        ),
     )
 
     attendance_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
