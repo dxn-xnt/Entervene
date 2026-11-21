@@ -4,7 +4,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Progress } from "@/components/retroui/Progress";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
-import { BookOpen, UserRound } from "lucide-react";
+import { BookOpen, CheckCircle2, UserRound } from "lucide-react";
 import type { TodoItem } from "@/lib/api";
 
 type StudentSubjectSectionCardProps = {
@@ -47,9 +47,9 @@ export function StudentSubjectSectionCard({
     >
       <Card
         variant="retro"
-        className="relative flex h-full min-h-[280px] min-w-0 cursor-pointer flex-col gap-3 border-black p-3.5 pt-4 shadow-md shadow-black transition-all hover:bg-retro hover:shadow-none group-focus-visible:bg-retro"
+        className="relative flex h-full min-w-0 cursor-pointer flex-col gap-3 border-black p-3.5 pt-4 shadow-md shadow-black transition-all hover:bg-retro hover:shadow-none group-focus-visible:bg-retro"
       >
-        <div className="flex h-24 min-w-0 items-start gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <Avatar variant="teacher" className="size-14 shrink-0 rounded-full border-2 border-black">
             <Avatar.Image src={teacherAvatar || "/avatars/teacher-avatars/12.svg"} alt="" />
             <Avatar.Fallback className="rounded-full bg-primary text-base font-bold text-primary-foreground">
@@ -73,18 +73,18 @@ export function StudentSubjectSectionCard({
 
         <div className="flex w-full flex-col gap-1">
           <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="text-muted-foreground">Your Classwork Completion</span>
+            <span className="text-muted-foreground">Classwork Completion</span>
             <span className="font-bold">{completionRate}%</span>
           </div>
           <Progress className="w-full" value={completionRate} />
         </div>
 
-        {classworks?.length ? (
-          <Card className={`flex min-h-[86px] w-full min-w-0 flex-col justify-center gap-2 border-black bg-primary px-3 py-2 shadow-none hover:shadow-none ${nextClasswork ? "transition-opacity hover:opacity-95" : ""}`}>
+        {nextClasswork ? (
+          <Card className="flex min-h-[72px] w-full min-w-0 flex-col justify-center gap-2 border-black bg-primary px-3 py-2 shadow-none hover:shadow-none transition-opacity hover:opacity-95">
             <p className="break-words text-base font-semibold">
-              {nextClasswork?.title || "All caught up"}
+              {nextClasswork.title}
             </p>
-            {nextClasswork?.deadline && (
+            {nextClasswork.deadline && (
               <Badge size="sm" variant="solid" className="self-start">
                 {nextClasswork.deadline}
               </Badge>
@@ -92,12 +92,16 @@ export function StudentSubjectSectionCard({
           </Card>
         ) : (
           <StudentEmptyState
-            icon={<BookOpen />}
-            title="No classwork yet"
-            description="Assigned classwork will appear here."
+            icon={classworks && classworks.length > 0 ? <CheckCircle2 /> : <BookOpen />}
+            title={classworks && classworks.length > 0 ? "All caught up" : "No classwork yet"}
+            description={
+              classworks && classworks.length > 0
+                ? "No pending classwork right now."
+                : "Assigned classwork will appear here."
+            }
             embedded
             compact
-            className="min-h-[86px] py-3 shadow-none hover:shadow-none"
+            className="min-h-[72px] py-2 shadow-none hover:shadow-none"
           />
         )}
       </Card>

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import { Tabs } from "../../components/retroui/Tabs";
-import ToDoItem from "../../components/to-do-item";
+import ClassworkItemLine from "@/components/item-line/classwork";
+import { Badge } from "@/components/retroui/Badge";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
@@ -62,7 +63,7 @@ export default function ToDo() {
           );
           if (match) targetClassId = match.class_id;
         }
-      } catch {}
+      } catch { }
     }
 
     if (targetClassId && item.subject_id) {
@@ -85,30 +86,67 @@ export default function ToDo() {
     (item) => item.category !== "INTERVENTION" && item.type !== "INTERVENTION",
   );
 
+  const renderTodoItem = (item: ApiTodoItem) => (
+    <ClassworkItemLine
+      key={item.assignment_id}
+      item={{
+        classwork_id: item.classwork_id,
+        title: item.title,
+        classwork_type: item.type,
+        classwork_category: item.category,
+        due_date: item.due_date,
+        total_points: item.total_points,
+      }}
+      subtitle={
+        <span className="flex items-center gap-1.5 flex-wrap">
+          <span>{item.subject}</span>
+          <span>•</span>
+          <span>
+            {item.deadline && item.deadline !== "No deadline"
+              ? (item.deadline.toLowerCase().startsWith("due") ? item.deadline : `Due ${item.deadline}`)
+              : "No deadline"}
+          </span>
+        </span>
+      }
+      showPublicationStatus={false}
+      showCategoryBadge={false}
+      showType={true}
+      showCategory={Boolean(item.category && item.category.toUpperCase() !== item.type?.toUpperCase())}
+      onClick={() => openTodo(item)}
+      rightContent={
+        item.status === "completed" && item.grade !== null && item.grade !== undefined && item.show_scores !== false ? (
+          <Badge variant="solid" size="sm">
+            {item.total_points != null ? `${item.grade} / ${item.total_points}` : `${item.grade} pts`}
+          </Badge>
+        ) : null
+      }
+    />
+  );
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
-            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
-              <SidebarTrigger className="shrink-0 md:hidden" />
-              <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
-                To Do
-              </h1>
-            </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-              <Tabs
-                tabs={todoTabs}
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-                counts={{
-                  pending: pendingItems.length,
-                  pastdue: pastDueItems.length,
-                  completed: completedItems.length,
-                }}
-              />
-            </div>
+              <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
+                  To Do
+                </h1>
+              </header>
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs
+                  tabs={todoTabs}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                  counts={{
+                    pending: pendingItems.length,
+                    pastdue: pastDueItems.length,
+                    completed: completedItems.length,
+                  }}
+                />
+              </div>
 
             </div>
 
@@ -132,83 +170,43 @@ export default function ToDo() {
                   {activeTab === "pending" && (
                     <>
                       {interventionItems.length > 0 && (
-                        <section className="flex flex-col gap-4">
+                        <section className="flex flex-col gap-3">
                           <h3 className="text-xl md:text-3xl font-semibold">
                             Study Support
                           </h3>
-                          {interventionItems.map((item) => (
-                            <ToDoItem
-                              key={item.assignment_id}
-                              title={item.title}
-                              subject={item.subject}
-                              deadline={item.deadline}
-                              type={item.type}
-                              category={item.category}
-                              onClick={() => openTodo(item)}
-                            />
-                          ))}
+                          {interventionItems.map(renderTodoItem)}
                         </section>
                       )}
 
-                      <section className="flex flex-col gap-4">
+                      <section className="flex flex-col gap-3">
                         {regularUpcomingItems.length === 0 &&
-                        interventionItems.length === 0 ? (
+                          interventionItems.length === 0 ? (
                           <StudentEmptyState icon={<CheckCircle2 />} title="You're all caught up!" description="You have no pending classwork right now." />
                         ) : regularUpcomingItems.length === 0 ? (
                           null
                         ) : (
-                          regularUpcomingItems.map((item) => (
-                            <ToDoItem
-                              key={item.assignment_id}
-                              title={item.title}
-                              subject={item.subject}
-                              deadline={item.deadline}
-                              type={item.type}
-                              category={item.category}
-                              onClick={() => openTodo(item)}
-                            />
-                          ))
+                          regularUpcomingItems.map(renderTodoItem)
                         )}
                       </section>
                     </>
                   )}
 
                   {activeTab === "pastdue" && (
-                    <section className="flex flex-col gap-4">
+                    <section className="flex flex-col gap-3">
                       {pastDueItems.length === 0 ? (
                         <StudentEmptyState icon={<Clock />} title="No past-due classwork" description="Great job keeping up with your deadlines." />
                       ) : (
-                        pastDueItems.map((item) => (
-                          <ToDoItem
-                            key={item.assignment_id}
-                            title={item.title}
-                            subject={item.subject}
-                            deadline={item.deadline}
-                            type={item.type}
-                            category={item.category}
-                            onClick={() => openTodo(item)}
-                          />
-                        ))
+                        pastDueItems.map(renderTodoItem)
                       )}
                     </section>
                   )}
 
                   {activeTab === "completed" && (
-                    <section className="flex flex-col gap-4">
+                    <section className="flex flex-col gap-3">
                       {completedItems.length === 0 ? (
                         <StudentEmptyState icon={<CheckCircle2 />} title="No completed classwork yet" description="Completed activities will appear here." />
                       ) : (
-                        completedItems.map((item) => (
-                          <ToDoItem
-                            key={item.assignment_id}
-                            title={item.title}
-                            subject={item.subject}
-                            deadline={item.deadline}
-                            type={item.type}
-                            category={item.category}
-                            onClick={() => openTodo(item)}
-                          />
-                        ))
+                        completedItems.map(renderTodoItem)
                       )}
                     </section>
                   )}

@@ -12,6 +12,8 @@ import { Progress } from "@/components/retroui/Progress";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { FileCheck2 } from "lucide-react";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { cn } from "@/lib/utils";
+import { formatToTitleCase } from "@/lib/formatters";
 
 type SubjectGradeProps = {
   classId?: number;
@@ -71,6 +73,7 @@ const SubjectGrade = ({
     (t) => t.is_graded !== false && t.type?.toUpperCase() !== "READING",
   );
   const masterySummary = computeLessonMastery(todos);
+  const MasteryIcon = masterySummary.icon;
 
   return (
     <AppLayout>
@@ -99,8 +102,8 @@ const SubjectGrade = ({
               </Breadcrumb>
             </header>
 
-            <div className="-mt-[1px] flex min-w-0 flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:gap-6 md:px-6">
-              <div className="flex flex-col gap-4 md:flex-row md:gap-6">
+            <div className="-mt-[1px] flex min-w-0 flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="flex flex-col gap-4 md:flex-row">
                 <Card className="flex flex-1 flex-row items-center justify-between gap-4 border-black bg-white p-4 shadow-md hover:shadow-none md:p-6">
                   <div className="flex flex-col gap-1">
                     <Card.Title className="text-sm font-medium">
@@ -115,40 +118,38 @@ const SubjectGrade = ({
                   <Progress variant="circular" value={completionRate} />
                 </Card>
 
-                <Card className="flex flex-1 flex-col gap-2 border-black bg-white p-4 shadow-md hover:shadow-none md:p-6">
-                  <Card.Title className="text-sm font-medium">
-                    Subject Lesson Mastery
-                  </Card.Title>
-                  <Card.Content>
+                <Card className="flex flex-1 flex-col justify-between gap-3 border-black bg-white p-4 shadow-md hover:shadow-none md:p-6">
+                  <div className="flex items-center justify-between gap-2">
+                    <Card.Title className="text-xl font-bold">
+                      Lesson Mastery
+                    </Card.Title>
                     <Badge
-                      variant="secondary"
-                      size="md"
-                      className="rounded border border-black bg-white font-bold text-black"
+                      size="sm"
+                      className={cn(masterySummary.badgeClass)}
                     >
-                      {masterySummary.label === "Not yet rated"
-                        ? "Not yet rated"
-                        : `Mastery level: ${masterySummary.label} (${masterySummary.percentage}%)`}
+                      {masterySummary.badgeLabel}
                     </Badge>
-                  </Card.Content>
+                  </div>
+
+                  <div
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-black p-3.5 text-center shadow-none",
+                      masterySummary.bgClass,
+                    )}
+                  >
+                    <MasteryIcon
+                      aria-hidden="true"
+                      className={cn("size-8 transition-colors", masterySummary.colorClass)}
+                    />
+                    <p className={cn("text-base font-bold text-center", masterySummary.colorClass)}>
+                      {masterySummary.label}
+                    </p>
+                  </div>
+
                   <p className="text-sm text-muted-foreground">
                     {masterySummary.description}
                   </p>
                 </Card>
-              </div>
-              <div className="flex flex-row justify-between items-center gap-2 md:gap-4">
-                <p className="text-2xl md:text-4xl font-bold tracking-tight">
-                  Classworks
-                </p>
-                {/* <div className="flex flex-row items-center gap-4 text-sm">
-                  <Button type="button" variant="outline" size="sm" className="gap-1 rounded border-black bg-white">
-                    <Filter className="size-4" />
-                    Add Filter
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" className="gap-1 rounded border-black bg-white">
-                    <ArrowUpDown className="size-4" />
-                    Sort By
-                  </Button>
-                </div> */}
               </div>
               <Table
                 wrapperClassName="shadow-md transition-all hover:shadow-none"
@@ -157,7 +158,7 @@ const SubjectGrade = ({
                 <Table.Header>
                   <Table.Row>
                     <Table.Head>Classwork</Table.Head>
-                    <Table.Head>Type</Table.Head>
+                    <Table.Head className="text-center">Type</Table.Head>
                     <Table.Head className="text-right">Score</Table.Head>
                   </Table.Row>
                 </Table.Header>
@@ -211,9 +212,9 @@ const SubjectGrade = ({
                           <Table.Cell className="font-medium w-1/2">
                             {item.title}
                           </Table.Cell>
-                          <Table.Cell className="w-32">
+                          <Table.Cell className="w-32 text-center">
                             <Badge variant="surface" size="sm">
-                              {item.type}
+                              {formatToTitleCase(item.type)}
                             </Badge>
                           </Table.Cell>
                           <Table.Cell className="text-right font-bold">

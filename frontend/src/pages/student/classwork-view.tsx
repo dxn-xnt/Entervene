@@ -33,12 +33,10 @@ import {
   TooltipTrigger,
 } from "@/components/retroui/Tooltip";
 import { LoadingPanel } from "@/components/loading-panel";
-import { StudentEmptyState } from "@/components/student/student-empty-state";
 import AttachmentDisplay from "@/components/attachment-display";
 import { ReferenceLinkList } from "@/components/classwork-reference-links";
 import SubmissionForm, { type SubmissionLinkDraft } from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
-import RubricsScoreBoard from "@/components/rubrics-score-board";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import StudentQuizFullscreen from "./forms/student-quiz-fullscreen";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
@@ -558,17 +556,9 @@ export default function StudentClassworkView() {
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      <Badge variant="secondary" size="sm">
-                        {formatToTitleCase(detail.classwork_type) || "Classwork"}
+                      <Badge variant="secondary">
+                        {formatToTitleCase(detail.classwork_type)}
                       </Badge>
-                      {detail.classwork_category && (
-                        <Badge
-                          variant="outline"
-                          size="sm"
-                        >
-                          {formatToTitleCase(detail.classwork_category)}
-                        </Badge>
-                      )}
                       <Badge
                         variant={
                           status === "graded" ||
@@ -579,7 +569,6 @@ export default function StudentClassworkView() {
                               ? "destructive"
                               : "outline"
                         }
-                        size="sm"
                       >
                         {closed && !submission
                           ? "Closed"
@@ -598,7 +587,8 @@ export default function StudentClassworkView() {
                         </p>
                       </Card>
                     </section>
-                    {detail.linked_lessons &&
+                    {!isReading &&
+                      detail.linked_lessons &&
                       detail.linked_lessons.length > 0 && (
                         <div className="flex flex-col gap-2">
                           <h2 className="font-bold text-lg">Learning Materials</h2>
@@ -655,9 +645,10 @@ export default function StudentClassworkView() {
                           </Card>
                         </div>
                       )}
-                    <section className="space-y-2">
-                      <h2 className="text-lg font-bold">Attached Files</h2>
-                      {detail.attachments.length > 0 ? (
+
+                    {detail.attachments.length > 0 && (
+                      <section className="space-y-2">
+                        <h2 className="text-lg font-bold">Attached Files</h2>
                         <AttachmentDisplay
                           attachments={detail.attachments}
                           type="classwork"
@@ -665,29 +656,13 @@ export default function StudentClassworkView() {
                             `${API_URL}/api/v1/classwork-assignments/classwork/${detail.classwork_id}/attachments/${id}/download`
                           }
                         />
-                      ) : (
-                        <StudentEmptyState
-                          embedded
-                          className="shadow-none"
-                          icon={<FileText />}
-                          title="No files attached"
-                          description="Your teacher has not attached files to this classwork."
-                        />
-                      )}
-                    </section>
+                      </section>
+                    )}
 
                     {!!detail.reference_links?.length && <section className="space-y-2">
                       <h2 className="text-lg font-bold">Reference Links</h2>
                       <ReferenceLinkList links={detail.reference_links} />
                     </section>}
-
-                    {detail.rubric_levels &&
-                      detail.rubric_levels.length > 0 && (
-                        <RubricsScoreBoard
-                          totalPoints={detail.total_points}
-                          rubricLevels={detail.rubric_levels}
-                        />
-                      )}
 
                     <div className="text-sm text-muted-foreground">
                       <p>
@@ -773,11 +748,11 @@ export default function StudentClassworkView() {
 
                 <Card className="block w-full">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="flex items-center gap-2 font-bold">
+                    <h2 className="flex text-xl items-center gap-2 font-bold">
                       <IconContainer
                         variant="primary"
                         size="sm"
-                        className="size-9 p-0"
+                        className="size-10 p-0"
                       >
                         <FileText size={18} />
                       </IconContainer>
@@ -800,7 +775,7 @@ export default function StudentClassworkView() {
                     )}
                     {!isQuiz && !isReading && submission?.status === "graded" &&
                       (submission.grade != null || detail.show_scores === false) && (
-                        <Badge variant="success" size="md">
+                        <Badge variant="surface" size="md">
                           {detail.show_scores
                             ? `Score: ${submission.grade}${detail.total_points != null ? `/${detail.total_points}` : ""}`
                             : "Score hidden"}
@@ -827,12 +802,11 @@ export default function StudentClassworkView() {
                           as completed.
                         </p>
                         <Button
-                          size="sm"
                           className="w-full gap-2"
                           disabled={actionLoading}
                           onClick={() => void completeReading()}
                         >
-                          {actionLoading ? "Updating..." : "Mark as Completed"}
+                          Mark as Completed
                         </Button>
                       </>
                     )

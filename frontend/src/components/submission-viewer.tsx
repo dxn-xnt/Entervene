@@ -1,4 +1,3 @@
-import { Badge } from "@/components/retroui/Badge";
 import { useState } from "react";
 import { Trash2, AlertCircle } from "lucide-react";
 import AttachmentDisplay from "./attachment-display";
@@ -38,21 +37,6 @@ interface SubmissionViewerProps {
   hideGrade?: boolean;
 }
 
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "submitted":
-      return "bg-blue-100 text-blue-800 border-blue-300";
-    case "late":
-      return "bg-orange-100 text-orange-800 border-orange-300";
-    case "graded":
-      return "bg-green-100 text-green-800 border-green-300";
-    case "pending":
-      return "bg-gray-100 text-gray-800 border-gray-300";
-    default:
-      return "bg-gray-100 text-gray-800 border-gray-300";
-  }
-}
-
 function canResubmit(dueDate?: string, isLocked?: boolean, allowLateSubmissions?: boolean): boolean {
   if (isLocked) return false;
   if (!dueDate) return true;
@@ -75,7 +59,6 @@ export default function SubmissionViewer({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const allowResubmit = canResubmit(dueDate, isLocked, allowLateSubmissions);
-  const statusColor = getStatusColor(submission.status);
   const submittedDate = submission.submitted_at
     ? formatDateTime(submission.submitted_at)
     : "N/A";
@@ -85,16 +68,6 @@ export default function SubmissionViewer({
       {/* Status Section */}
       <div className="bg-white border border-gray-200 rounded p-4 space-y-4">
         <div className="flex items-start justify-between">
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Submission Status</h3>
-            {submission.status === "pending" ? (
-              <Badge variant="default" size="sm">Pending</Badge>
-            ) : (
-              <div className={`inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium ${statusColor}`}>
-                {submission.status.charAt(0).toUpperCase() + submission.status.slice(1)}
-              </div>
-            )}
-          </div>
           {!hideGrade && submission.grade !== undefined && submission.grade !== null && (
             <div className="text-right">
               <p className="text-sm text-gray-600 mb-1">Grade</p>

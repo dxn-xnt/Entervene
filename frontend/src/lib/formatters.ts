@@ -153,6 +153,10 @@ export const RISK_BADGE_VARIANTS: Record<string, RiskBadgeMeta> = {
   LOW_RISK: { bg: "bg-[#00e65f] text-black border-2 border-black font-bold", text: "Low Risk" },
   ON_TRACK: { bg: "bg-[#00e65f] text-black border-2 border-black font-bold", text: "On Track" },
   INSUFFICIENT_DATA: { bg: "bg-muted text-black border-2 border-black font-bold", text: "Insufficient Data" },
+  HIGH: { bg: "bg-[#00e65f] text-black border-2 border-black font-bold", text: "High" },
+  MODERATE: { bg: "bg-[#ff9233] text-black border-2 border-black font-bold", text: "Moderate" },
+  LOW: { bg: "bg-[#ff3333] text-black border-2 border-black font-bold", text: "Low" },
+  NOT_YET_RATED: { bg: "bg-muted text-black border-2 border-black font-bold", text: "Not yet rated" },
 };
 
 export function getRiskBadgeMeta(riskLevel?: string | null): RiskBadgeMeta {
