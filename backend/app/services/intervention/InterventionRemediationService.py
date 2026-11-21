@@ -37,18 +37,9 @@ from app.services.intervention.InterventionSupportMaterialService import _basis
 from app.services.intervention.TeacherInterventionService import _eligible_scope, _source
 from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
 from app.services.intervention.RemediationGenerationEligibilityService import resolve_remediation_generation_eligibility
-from app.services.intervention.RemediationPostGradingService import (
-    STATUS_AVAILABLE as ACTUAL_PREDICTION_STATUS_AVAILABLE,
-    STATUS_UNAVAILABLE as ACTUAL_PREDICTION_STATUS_UNAVAILABLE,
-    evaluate_actual_remediation_prediction,
-)
 from app.services.intervention.RemediationRubricService import serialize_classwork_rubric_levels
 from app.services.grading.ExaminationCalculator import EXAM_SUBTYPES, categorize_exam_subtype
 from app.services.grading.ComponentMapper import CanonicalGradingComponent, classify_classwork_component
-from app.services.grading.RemediationGradeCeiling import (
-    DEFAULT_PREDICTED_GRADE_CEILING,
-    validate_predicted_grade_ceiling,
-)
 from app.services.grading.RemediationScoreAdjuster import (
     DEFAULT_REMEDIATION_CAP_PERCENTAGE,
     adjust_remediation_score,
@@ -92,7 +83,6 @@ class PlanUpdate(BaseModel):
     original_exam_assignment_id: int | None = None
     target_assignment_ids: list[int] | None = None
     score_adjustment_cap: float | None = None
-    predicted_grade_ceiling: float | None = None
     selected_resources: list[ResourceRef] = Field(default_factory=list, max_length=30)
     resource_recipient_scope: ResourceRecipientScope | None = None
 
@@ -306,38 +296,9 @@ def progress(db: Session, row: Intervention) -> dict:
         source_period_id=row.academic_period_id, target_period_id=row.academic_period_id,
         model_version_id=source.model_version_id,
     ).order_by(DevelopmentCurrentTermPrediction.revision.desc()).first()
-    ready = bool(
-        latest
-        and isinstance(latest.evidence_snapshot, dict)
-        and latest.evidence_snapshot.get("readiness", {}).get("status") == "READY"
-    )
+    ready = latest and isinstance(latest.evidence_snapshot, dict) and latest.evidence_snapshot.get("readiness", {}).get("status") == "READY"
     source_grade = source.evidence_snapshot.get("projected_final_term_grade_raw") if isinstance(source.evidence_snapshot, dict) else None
-    latest_raw_grade = latest.evidence_snapshot.get("projected_final_term_grade_raw") if ready else None
-    latest_grade: float | None = None
-    latest_projection_status = ACTUAL_PREDICTION_STATUS_UNAVAILABLE
-    latest_projection_unavailable_reasons: list[str] = []
-    predicted_grade_ceiling: float | None = None
-    effective_grade_ceiling: float | None = None
-    was_ceiling_applied = False
-    if ready and latest is not None:
-        evaluation = evaluate_actual_remediation_prediction(db, row, latest)
-        if evaluation.raw_predicted_grade is not None:
-            latest_raw_grade = evaluation.raw_predicted_grade
-        predicted_grade_ceiling = evaluation.selected_grade_ceiling
-        if (
-            evaluation.status == ACTUAL_PREDICTION_STATUS_AVAILABLE
-            and evaluation.remediation_adjusted_predicted_grade is not None
-        ):
-            latest_grade = evaluation.remediation_adjusted_predicted_grade
-            latest_projection_status = ACTUAL_PREDICTION_STATUS_AVAILABLE
-            effective_grade_ceiling = evaluation.effective_grade_ceiling
-            was_ceiling_applied = evaluation.was_ceiling_applied
-        else:
-            latest_grade = None
-            latest_projection_status = ACTUAL_PREDICTION_STATUS_UNAVAILABLE
-            latest_projection_unavailable_reasons = list(evaluation.unavailable_reason_codes)
-    else:
-        latest_projection_unavailable_reasons = ["PREDICTION_NOT_READY"]
+    latest_grade = latest.evidence_snapshot.get("projected_final_term_grade_raw") if ready else None
     completed = []
     assigned = []
     assignments = db.query(ClassworkAssignment).filter_by(
@@ -466,16 +427,6 @@ def progress(db: Session, row: Intervention) -> dict:
 
     return {"triggering_projection": float(source_grade if source_grade is not None else source.predicted_period_grade),
             "latest_projection": float(latest_grade) if latest_grade is not None else None,
-            "latest_raw_projection": (
-                float(latest_raw_grade)
-                if latest_raw_grade is not None and not isinstance(latest_raw_grade, bool)
-                else None
-            ),
-            "latest_projection_status": latest_projection_status,
-            "latest_projection_unavailable_reasons": latest_projection_unavailable_reasons,
-            "predicted_grade_ceiling": predicted_grade_ceiling,
-            "effective_grade_ceiling": effective_grade_ceiling,
-            "was_ceiling_applied": was_ceiling_applied,
             "latest_revision": latest.revision if ready else None,
             "passing_threshold": threshold_val,
             "remediation_status": remediation_status,
@@ -685,10 +636,6 @@ def build_remediation_prediction_impact(
                 "possible_score_gain": round(max(0.0, effective_max - current_effective), 4),
                 "hypothetical_predicted_grade": None,
                 "predicted_gain": None,
-                "remediation_adjusted_predicted_grade": None,
-                "applied_grade_ceiling": None,
-                "was_ceiling_applied": False,
-                "capped_predicted_gain": None,
             })
             what_if_inputs.append({
                 "assignment_id": target_id,
@@ -696,42 +643,6 @@ def build_remediation_prediction_impact(
                 "applied": True,
                 "maximum_hypothetical_effective_score": effective_max,
             })
-
-        raw_predicted_ceiling = None if is_practice_only else plan.get("predicted_grade_ceiling")
-        resolved_predicted_ceiling: float | None = None
-        if raw_predicted_ceiling is not None:
-            try:
-                resolved_predicted_ceiling = float(validate_predicted_grade_ceiling(raw_predicted_ceiling))
-            except (TypeError, ValueError) as err:
-                return {
-                    "status": "UNAVAILABLE",
-                    "is_official_grade": False,
-                    "is_guaranteed": False,
-                    "is_practice_only": is_practice_only,
-                    "model_version_id": None,
-                    "model_name": None,
-                    "current_predicted_grade": None,
-                    "max_remediation_predicted_grade": None,
-                    "predicted_gain": None,
-                    "unremediated_baseline_predicted_grade": None,
-                    "predicted_grade_ceiling": None,
-                    "effective_grade_ceiling": None,
-                    "remediation_adjusted_current_predicted_grade": None,
-                    "remediation_adjusted_max_predicted_grade": None,
-                    "remediation_adjusted_predicted_gain": None,
-                    "was_ceiling_applied": False,
-                    "passing_threshold": threshold_val,
-                    "score_adjustment_cap": (
-                        target_details[0]["cap_percentage"]
-                        if target_details
-                        else (None if is_practice_only else resolved_plan_cap)
-                    ),
-                    "targets": target_details,
-                    "unavailable_reasons": [{
-                        "code": "INVALID_PREDICTED_GRADE_CEILING",
-                        "message": str(err),
-                    }],
-                }
 
         source = _source(db, row)
         version = db.get(AIModelVersion, source.model_version_id)
@@ -744,8 +655,6 @@ def build_remediation_prediction_impact(
             model_version_id=source.model_version_id if version is not None else None,
             model_name=version.model_name if version is not None else None,
             target_projections=[] if is_practice_only else what_if_inputs,
-            predicted_grade_ceiling=resolved_predicted_ceiling,
-            exclude_intervention_id=row.intervention_id if resolved_predicted_ceiling is not None else None,
         )
 
         if what_if["status"] != "AVAILABLE":
@@ -759,13 +668,6 @@ def build_remediation_prediction_impact(
                 "current_predicted_grade": None,
                 "max_remediation_predicted_grade": None,
                 "predicted_gain": None,
-                "unremediated_baseline_predicted_grade": None,
-                "predicted_grade_ceiling": what_if.get("selected_grade_ceiling"),
-                "effective_grade_ceiling": None,
-                "remediation_adjusted_current_predicted_grade": None,
-                "remediation_adjusted_max_predicted_grade": None,
-                "remediation_adjusted_predicted_gain": None,
-                "was_ceiling_applied": False,
                 "passing_threshold": threshold_val,
                 "score_adjustment_cap": (
                     target_details[0]["cap_percentage"]
@@ -785,30 +687,17 @@ def build_remediation_prediction_impact(
             if est is not None:
                 detail["hypothetical_predicted_grade"] = float(est["hypothetical_predicted_term_grade"])
                 detail["predicted_gain"] = float(est["estimated_difference_from_baseline"])
-                detail["remediation_adjusted_predicted_grade"] = est.get("remediation_adjusted_predicted_term_grade")
-                detail["applied_grade_ceiling"] = est.get("applied_grade_ceiling")
-                detail["was_ceiling_applied"] = bool(est.get("was_ceiling_applied", False))
-                detail["capped_predicted_gain"] = est.get("capped_estimated_difference_from_baseline")
 
         if is_practice_only:
             max_predicted = baseline_grade
             predicted_gain = 0.0
-            capped_max_predicted = None
-            capped_predicted_gain = None
-            was_ceiling_applied = False
         elif what_if.get("target_estimates"):
             last_est = what_if["target_estimates"][-1]
             max_predicted = float(last_est["hypothetical_predicted_term_grade"])
             predicted_gain = float(last_est["estimated_difference_from_baseline"])
-            capped_max_predicted = last_est.get("remediation_adjusted_predicted_term_grade")
-            capped_predicted_gain = last_est.get("capped_estimated_difference_from_baseline")
-            was_ceiling_applied = bool(last_est.get("was_ceiling_applied", False))
         else:
             max_predicted = None
             predicted_gain = None
-            capped_max_predicted = None
-            capped_predicted_gain = None
-            was_ceiling_applied = bool(what_if.get("baseline_was_ceiling_applied", False))
 
         return {
             "status": "AVAILABLE",
@@ -820,15 +709,6 @@ def build_remediation_prediction_impact(
             "current_predicted_grade": baseline_grade,
             "max_remediation_predicted_grade": max_predicted,
             "predicted_gain": predicted_gain,
-            "unremediated_baseline_predicted_grade": what_if.get("unremediated_baseline_predicted_term_grade"),
-            "predicted_grade_ceiling": what_if.get("selected_grade_ceiling"),
-            "effective_grade_ceiling": what_if.get("effective_grade_ceiling"),
-            "remediation_adjusted_current_predicted_grade": what_if.get(
-                "baseline_remediation_adjusted_predicted_term_grade"
-            ),
-            "remediation_adjusted_max_predicted_grade": capped_max_predicted,
-            "remediation_adjusted_predicted_gain": capped_predicted_gain,
-            "was_ceiling_applied": was_ceiling_applied,
             "passing_threshold": threshold_val,
             "score_adjustment_cap": (
                 target_details[0]["cap_percentage"]
@@ -855,7 +735,6 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     cap = stored_plan.get("score_adjustment_cap")
     if cap is None:
         cap = float(DEFAULT_REMEDIATION_CAP_PERCENTAGE)
-    predicted_ceiling = stored_plan.get("predicted_grade_ceiling")
 
     focus = build_remediation_focus(row, db=db)
     cached_suggestion = stored_plan.get("ai_suggestion")
@@ -876,7 +755,6 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
         "original_exam_assignment_id": orig_exam,
         "target_assignment_ids": target_ids,
         "score_adjustment_cap": cap,
-        "predicted_grade_ceiling": predicted_ceiling,
     }
     preview_data = preview_score_adjustment(
         db, staff_id, intervention_id, cap_percentage=cap, target_assignment_ids=target_ids
@@ -903,7 +781,6 @@ def project_subject_grade(
     intervention_id: int,
     target_assignment_ids: list[int],
     score_adjustment_cap: Decimal | float | None = None,
-    predicted_grade_ceiling: Decimal | float | None = None,
 ) -> dict:
     """Authorize and calculate a preview without selecting or persisting targets."""
     with db.no_autoflush:
@@ -914,35 +791,19 @@ def project_subject_grade(
                 "message": "Each original assignment may appear only once in a projection request.",
             })
 
-        plan = row.remediation_plan if isinstance(row.remediation_plan, dict) else {}
-        raw_predicted_ceiling = (
-            predicted_grade_ceiling
-            if predicted_grade_ceiling is not None
-            else plan.get("predicted_grade_ceiling")
-        )
-        resolved_predicted_ceiling: float | None = None
-        if raw_predicted_ceiling is not None:
-            try:
-                resolved_predicted_ceiling = float(validate_predicted_grade_ceiling(raw_predicted_ceiling))
-            except (TypeError, ValueError) as err:
-                raise HTTPException(status_code=422, detail=str(err)) from err
-
         focus = build_remediation_focus(row)
         expected_components = {
             "WRITTEN_WORK": CanonicalGradingComponent.WRITTEN_WORK,
             "PERFORMANCE_TASK": CanonicalGradingComponent.PERFORMANCE_TASK,
-            "EXAMINATION": CanonicalGradingComponent.ASSESSMENT,
         }
         expected_component = expected_components.get(focus.get("component"))
-        is_exam_focus = focus.get("component") == "EXAMINATION"
         if target_assignment_ids and expected_component is None:
             raise HTTPException(status_code=422, detail={
                 "code": "PROJECTION_COMPONENT_UNSUPPORTED",
-                "message": "Subject-grade target projection requires a verified Written Work, Performance Task, or Examination focus.",
+                "message": "Subject-grade target projection requires a verified Written Work or Performance Task focus.",
             })
 
         invalid: list[dict] = []
-        exam_what_if_targets: list[dict] = []
         for assignment_id in target_assignment_ids:
             assignment = db.get(ClassworkAssignment, assignment_id)
             work = assignment.classwork if assignment is not None else None
@@ -970,30 +831,16 @@ def project_subject_grade(
                 )
                 if component != expected_component:
                     code, message = "TARGET_COMPONENT_MISMATCH", "Target assignment does not match the intervention's diagnosed grading component."
-                elif not is_exam_focus and db.query(RemediationAssignmentLink.remediation_link_id).filter_by(
+                elif db.query(RemediationAssignmentLink.remediation_link_id).filter_by(
                     original_assignment_id=assignment_id,
                     student_id=row.student_id,
                 ).first() is not None:
                     code, message = "TARGET_ALREADY_REMEDIATED", "This original assignment already has a remediation activity for the student."
-                elif is_exam_focus and db.query(ClassworkAssignment.classwork_assignment_id).filter_by(
-                    original_exam_assignment_id=assignment_id,
-                    recipient_student_id=row.student_id,
-                ).first() is not None:
-                    code, message = "TARGET_ALREADY_REMEDIATED", "This original examination already has a remediation activity for the student."
-                else:
-                    orig_sub = db.query(StudentSubmission).filter_by(
-                        classwork_assignment_id=assignment_id,
-                        student_id=row.student_id,
-                    ).filter(StudentSubmission.grade.isnot(None)).order_by(StudentSubmission.submission_id.desc()).first()
-                    if orig_sub is None:
-                        code, message = "TARGET_ORIGINAL_UNSCORED", "Target assignment needs a recorded original score."
-                    elif is_exam_focus:
-                        exam_what_if_targets.append({
-                            "assignment_id": assignment_id,
-                            "component": "EXAMINATION",
-                            "applied": True,
-                            "maximum_hypothetical_effective_score": max(float(orig_sub.grade), float(work.total_points)),
-                        })
+                elif db.query(StudentSubmission.submission_id).filter_by(
+                    classwork_assignment_id=assignment_id,
+                    student_id=row.student_id,
+                ).filter(StudentSubmission.grade.isnot(None)).first() is None:
+                    code, message = "TARGET_ORIGINAL_UNSCORED", "Target assignment needs a recorded original score."
             if code is not None:
                 invalid.append({"assignment_id": assignment_id, "code": code, "message": message})
 
@@ -1004,6 +851,7 @@ def project_subject_grade(
                 "reasons": invalid,
             })
 
+        plan = row.remediation_plan if isinstance(row.remediation_plan, dict) else {}
         authoritative_cap = (
             score_adjustment_cap
             if score_adjustment_cap is not None
@@ -1016,13 +864,9 @@ def project_subject_grade(
             class_id=row.class_id,
             subject_id=row.subject_id,
             academic_period_id=row.academic_period_id,
-            target_assignment_ids=[] if is_exam_focus else target_assignment_ids,
+            target_assignment_ids=target_assignment_ids,
             cap_percentage=authoritative_cap,
-            eligible_components=(
-                {expected_component}
-                if expected_component is not None and not is_exam_focus
-                else set()
-            ),
+            eligible_components={expected_component} if expected_component is not None else set(),
             source_intervention_id=None,
         )
         source = _source(db, row)
@@ -1035,9 +879,7 @@ def project_subject_grade(
             academic_period_id=row.academic_period_id,
             model_version_id=source.model_version_id if version is not None else None,
             model_name=version.model_name if version is not None else None,
-            target_projections=exam_what_if_targets if is_exam_focus else authoritative["target_projections"],
-            predicted_grade_ceiling=resolved_predicted_ceiling,
-            exclude_intervention_id=row.intervention_id if resolved_predicted_ceiling is not None else None,
+            target_projections=authoritative["target_projections"],
         )
         return authoritative
 
@@ -1091,7 +933,7 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         if len(set(body.target_assignment_ids)) != len(body.target_assignment_ids):
             raise HTTPException(422, "Duplicate target classwork assignment IDs are not permitted")
 
-    # Validate and resolve per-classwork score adjustment cap (kept separate from predicted-grade ceiling)
+    # Validate and resolve score adjustment cap
     if body.score_adjustment_cap is not None:
         try:
             resolved_cap = float(validate_cap_percentage(body.score_adjustment_cap))
@@ -1099,28 +941,6 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
             raise HTTPException(422, str(err))
     else:
         resolved_cap = float(current_plan.get("score_adjustment_cap", DEFAULT_REMEDIATION_CAP_PERCENTAGE))
-
-    # Validate and resolve predicted term grade ceiling (max 85; defaults to 85 for new graded plans;
-    # preserves legacy plans without retroactively injecting a ceiling when locked/already active).
-    has_existing_predicted_ceiling = "predicted_grade_ceiling" in current_plan
-    current_predicted_ceiling = current_plan.get("predicted_grade_ceiling")
-    if body.predicted_grade_ceiling is not None:
-        try:
-            validated_predicted_ceiling = float(validate_predicted_grade_ceiling(body.predicted_grade_ceiling))
-        except (ValueError, TypeError) as err:
-            raise HTTPException(422, str(err))
-        resolved_predicted_ceiling = validated_predicted_ceiling if requested_treatment in GRADED_TREATMENTS else None
-    elif requested_treatment in GRADED_TREATMENTS:
-        if has_existing_predicted_ceiling:
-            resolved_predicted_ceiling = (
-                float(current_predicted_ceiling) if current_predicted_ceiling is not None else None
-            )
-        elif existing_activity:
-            resolved_predicted_ceiling = None
-        else:
-            resolved_predicted_ceiling = float(DEFAULT_PREDICTED_GRADE_CEILING)
-    else:
-        resolved_predicted_ceiling = None
 
     # Resolve target assignment IDs and requested exam ID
     if body.target_assignment_ids is not None:
@@ -1264,12 +1084,8 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
             or requested_exam_id != current_exam_id
             or targets_modified
             or (body.score_adjustment_cap is not None and resolved_cap != current_plan.get("score_adjustment_cap", float(DEFAULT_REMEDIATION_CAP_PERCENTAGE)))
-            or (
-                body.predicted_grade_ceiling is not None
-                and resolved_predicted_ceiling != current_predicted_ceiling
-            )
         ):
-            raise HTTPException(409, "Remediation format, grade treatment, targeted classworks, and ceilings cannot change after a targeted activity is created")
+            raise HTTPException(409, "Remediation format, grade treatment, and targeted classworks cannot change after a targeted activity is created")
         if body.target_assignment_ids is not None and requested_treatment in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
             unlinked_targets = [t for t in target_ids[len(immutable_targets):] if t not in linked_set]
             target_ids = immutable_targets + (unlinked_targets[-1:] if unlinked_targets else [])
@@ -1293,7 +1109,7 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
     if set(selected) != current_selected:
         plan.pop("ai_suggestion", None)
 
-    plan_updates = {
+    plan.update({
         "teacher_choice": body.teacher_choice,
         "grade_treatment": requested_treatment,
         "original_exam_assignment_id": requested_exam_id,
@@ -1303,12 +1119,7 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
             {"kind": ref.kind, "id": ref.id} for ref in body.selected_resources
         ],
         "evidence_basis": _basis(row, diagnosis_override=effective_diagnosis_snapshot(db, row)),
-    }
-    if resolved_predicted_ceiling is not None:
-        plan_updates["predicted_grade_ceiling"] = resolved_predicted_ceiling
-    elif has_existing_predicted_ceiling and requested_treatment in (None, "PRACTICE_ONLY"):
-        plan_updates["predicted_grade_ceiling"] = None
-    plan.update(plan_updates)
+    })
     row.remediation_plan = plan
 
     newly_shared_notifications: list[tuple[Classwork, list[int]]] = []

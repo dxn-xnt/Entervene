@@ -2,15 +2,12 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  formatPassingStatusMessage,
-  type SubjectGradeProjectionResponse,
-} from "@/lib/teacher-interventions-api";
+import type { SubjectGradeProjectionResponse } from "@/lib/teacher-interventions-api";
 import { SubjectGradeProjectionCard } from "./subject-grade-projection-card";
 
 afterEach(cleanup);
 
-const baseProjection: SubjectGradeProjectionResponse = {
+const unavailableProjection: SubjectGradeProjectionResponse = {
   status: "UNAVAILABLE",
   grade_representation: "TRANSMUTED_TERM_GRADE",
   current_initial_grade: null,
@@ -25,23 +22,35 @@ const baseProjection: SubjectGradeProjectionResponse = {
       original_score: 20,
       current_effective_score: 20,
       max_points: 50,
-      cap_percentage: 75,
-      maximum_hypothetical_effective_score: 37.5,
-      possible_score_gain: 17.5,
+      cap_percentage: 85,
+      maximum_hypothetical_effective_score: 42.5,
+      possible_score_gain: 22.5,
       applied: true,
       projected_initial_grade: null,
       projected_subject_grade: null,
       step_subject_grade_improvement: null,
       possible_grade_improvement: null,
       reaches_passing_threshold: null,
-      unavailable_reasons: [],
+      unavailable_reasons: [
+        {
+          code: "INCOMPLETE_EXAMINATION_EVIDENCE",
+          message: "Complete examination evidence is required.",
+          missing_evidence: ["Summative 1", "Summative 2", "Term Examination"],
+        },
+      ],
     },
   ],
   eligible_target_gains: [],
   additional_eligible_targets_have_positive_improvement: false,
   recommended_target_assignment_id: 7,
   assumptions: [],
-  unavailable_reasons: [],
+  unavailable_reasons: [
+    {
+      code: "INCOMPLETE_EXAMINATION_EVIDENCE",
+      message: "Complete examination evidence is required.",
+      missing_evidence: ["Summative 1", "Summative 2", "Term Examination"],
+    },
+  ],
   ai_midterm_what_if: {
     status: "AVAILABLE",
     estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
@@ -51,26 +60,15 @@ const baseProjection: SubjectGradeProjectionResponse = {
     model_name: "random_forest",
     prediction_purpose: "CURRENT_TERM_FINAL_GRADE_PROJECTION",
     evidence_basis: "LIVE_ACTUAL_EVIDENCE_WITH_EPHEMERAL_CAPPED_WW_PT_OVERRIDES",
-    baseline_predicted_term_grade: 83.0,
-    unremediated_baseline_predicted_term_grade: 83.0,
-    selected_grade_ceiling: 85,
-    effective_grade_ceiling: 85,
-    baseline_remediation_adjusted_predicted_term_grade: 83.0,
-    baseline_was_ceiling_applied: false,
+    baseline_predicted_term_grade: 82.9,
     readiness: {},
     target_estimates: [
       {
         assignment_id: 7,
-        maximum_hypothetical_effective_score: 37.5,
-        hypothetical_predicted_term_grade: 84.2,
-        raw_hypothetical_predicted_term_grade: 84.2,
-        remediation_adjusted_predicted_term_grade: 84.2,
-        applied_grade_ceiling: 85,
-        was_ceiling_applied: false,
-        step_estimated_difference: 1.2,
-        estimated_difference_from_baseline: 1.2,
-        capped_step_estimated_difference: 1.2,
-        capped_estimated_difference_from_baseline: 1.2,
+        maximum_hypothetical_effective_score: 42.5,
+        hypothetical_predicted_term_grade: 88.3,
+        step_estimated_difference: 5.4,
+        estimated_difference_from_baseline: 5.4,
       },
     ],
     unavailable_reasons: [],
@@ -79,157 +77,77 @@ const baseProjection: SubjectGradeProjectionResponse = {
 };
 
 describe("SubjectGradeProjectionCard", () => {
-  it("shows Before, After Remediation, and short still-below-passing status for valid sub-passing previews", () => {
+  it("shows only the essential score and AI values in scan order", () => {
     render(
       <SubjectGradeProjectionCard
-        projection={baseProjection}
+        projection={unavailableProjection}
         selectedTargetIds={[7]}
-        capPercentage={75}
+        capPercentage={85}
         gradeTreatment="PERFORMANCE_TASK"
       />,
     );
 
     const scoreHeading = screen.getByText("Classwork score adjustment");
-    const beforeLabel = screen.getByText("Before");
-    expect(scoreHeading.compareDocumentPosition(beforeLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const predictionHeading = screen.getByText("AI prediction");
+    expect(scoreHeading.compareDocumentPosition(predictionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Original score")).toBeDefined();
+    expect(screen.getByText("Max score after remediation")).toBeDefined();
+    expect(screen.getByText("Possible gain")).toBeDefined();
     expect(screen.getByText("20/50")).toBeDefined();
-    expect(screen.getByText("37.5/50")).toBeDefined();
-    expect(screen.getByText("+17.5 pts")).toBeDefined();
-    expect(screen.getByText("Before")).toBeDefined();
-    expect(screen.getByText("After Remediation")).toBeDefined();
-    expect(screen.getByText("83.0")).toBeDefined();
-    expect(screen.getByText("84.2")).toBeDefined();
-    expect(screen.getByText("Still below passing (85)")).toBeDefined();
+    expect(screen.getByText("42.5/50")).toBeDefined();
+    expect(screen.getByText("+22.5 pts")).toBeDefined();
+    expect(screen.getByText("Current AI prediction")).toBeDefined();
+    expect(screen.getByText("Predicted AI result at max score")).toBeDefined();
+    expect(screen.getByText("82.9%")).toBeDefined();
+    expect(screen.getByText("88.3%")).toBeDefined();
     expect(screen.getByText("Preview only. Final result still depends on the student's actual remediation score.")).toBeDefined();
   });
 
-  it("displays remediation-adjusted 85 projection without prominently showing raw uncapped RF output", () => {
-    const cappedProjection = structuredClone(baseProjection);
-    cappedProjection.ai_midterm_what_if.target_estimates[0] = {
-      ...cappedProjection.ai_midterm_what_if.target_estimates[0],
-      hypothetical_predicted_term_grade: 88.9,
-      raw_hypothetical_predicted_term_grade: 88.9,
-      remediation_adjusted_predicted_term_grade: 85.0,
-      applied_grade_ceiling: 85,
-      was_ceiling_applied: true,
-    };
-
+  it("removes technical and repetitive grade-system explanations", () => {
     render(
       <SubjectGradeProjectionCard
-        projection={cappedProjection}
+        projection={unavailableProjection}
         selectedTargetIds={[7]}
         capPercentage={85}
         gradeTreatment="PERFORMANCE_TASK"
       />,
     );
 
-    expect(screen.getByText("83.0")).toBeDefined();
-    expect(screen.getByText("85.0")).toBeDefined();
-    expect(screen.getByText("Reaches passing (85)")).toBeDefined();
-    expect(screen.queryByText(/88\.9/)).toBeNull();
+    expect(screen.queryByText(/official/i)).toBeNull();
     expect(screen.queryByText(/Random Forest/i)).toBeNull();
+    expect(screen.queryByText(/missing:/i)).toBeNull();
+    expect(screen.queryByText(/passing/i)).toBeNull();
+    expect(screen.queryByText(/predicted change/i)).toBeNull();
   });
 
-  it("uses the configured passing threshold rather than hardcoding 85", () => {
-    const customThresholdProjection = structuredClone(baseProjection);
-    customThresholdProjection.passing_threshold = 75;
+  it("does not add the deterministic subject-grade panel when complete evidence exists", () => {
+    const projection = structuredClone(unavailableProjection);
+    projection.status = "AVAILABLE";
+    projection.current_initial_grade = 80;
+    projection.current_subject_grade = 82;
+    projection.current_reaches_passing_threshold = false;
+    projection.unavailable_reasons = [];
+    projection.target_projections[0].projected_initial_grade = 84;
+    projection.target_projections[0].projected_subject_grade = 86;
+    projection.target_projections[0].step_subject_grade_improvement = 4;
+    projection.target_projections[0].possible_grade_improvement = 4;
+    projection.target_projections[0].reaches_passing_threshold = true;
+    projection.target_projections[0].unavailable_reasons = [];
 
     render(
       <SubjectGradeProjectionCard
-        projection={customThresholdProjection}
-        selectedTargetIds={[7]}
-        capPercentage={75}
-        gradeTreatment="PERFORMANCE_TASK"
-      />,
-    );
-
-    expect(screen.getByText("Reaches passing (75)")).toBeDefined();
-    expect(formatPassingStatusMessage(84.2, 85)).toBe("Still below passing (85)");
-    expect(formatPassingStatusMessage(84.2, 75)).toBe("Reaches passing (75)");
-    expect(formatPassingStatusMessage(null, 85)).toBeNull();
-  });
-
-  it("preserves legacy plans that lack remediation_adjusted fields", () => {
-    const legacyProjection = structuredClone(baseProjection);
-    delete legacyProjection.ai_midterm_what_if.baseline_remediation_adjusted_predicted_term_grade;
-    delete legacyProjection.ai_midterm_what_if.selected_grade_ceiling;
-    delete legacyProjection.ai_midterm_what_if.target_estimates[0].remediation_adjusted_predicted_term_grade;
-    legacyProjection.ai_midterm_what_if.target_estimates[0].hypothetical_predicted_term_grade = 88.3;
-
-    render(
-      <SubjectGradeProjectionCard
-        projection={legacyProjection}
+        projection={projection}
         selectedTargetIds={[7]}
         capPercentage={85}
         gradeTreatment="PERFORMANCE_TASK"
       />,
     );
 
-    expect(screen.getByText("83.0")).toBeDefined();
-    expect(screen.getByText("88.3")).toBeDefined();
-    expect(screen.getByText("Reaches passing (85)")).toBeDefined();
-  });
-
-  it("renders Before, After Remediation, and passing status for EXAMINATION treatment", () => {
-    const examProjection = structuredClone(baseProjection);
-    examProjection.target_projections = [];
-    examProjection.ai_midterm_what_if.target_estimates = [
-      {
-        assignment_id: 202,
-        maximum_hypothetical_effective_score: 50,
-        hypothetical_predicted_term_grade: 89.4,
-        raw_hypothetical_predicted_term_grade: 89.4,
-        remediation_adjusted_predicted_term_grade: 85.0,
-        applied_grade_ceiling: 85,
-        was_ceiling_applied: true,
-        step_estimated_difference: 6.4,
-        estimated_difference_from_baseline: 6.4,
-        capped_step_estimated_difference: 2.0,
-        capped_estimated_difference_from_baseline: 2.0,
-      },
-    ];
-
-    render(
-      <SubjectGradeProjectionCard
-        projection={examProjection}
-        selectedTargetIds={[202]}
-        gradeTreatment="EXAMINATION"
-      />,
-    );
-
-    expect(screen.getByText("Remedial exam")).toBeDefined();
-    expect(screen.getByText("Before")).toBeDefined();
-    expect(screen.getByText("After Remediation")).toBeDefined();
-    expect(screen.getByText("83.0")).toBeDefined();
-    expect(screen.getByText("85.0")).toBeDefined();
-    expect(screen.getByText("Reaches passing (85)")).toBeDefined();
-    expect(screen.queryByText(/89\.4/)).toBeNull();
-  });
-
-  it("shows explicit unavailable warning instead of fabricating a grade when AI what-if is unavailable", () => {
-    const unavailableAi = structuredClone(baseProjection);
-    unavailableAi.ai_midterm_what_if = {
-      ...unavailableAi.ai_midterm_what_if,
-      status: "UNAVAILABLE",
-      baseline_predicted_term_grade: null,
-      baseline_remediation_adjusted_predicted_term_grade: null,
-      target_estimates: [],
-      unavailable_reasons: [
-        { code: "UNREMEDIATED_BASELINE_UNAVAILABLE", message: "Baseline unavailable." },
-      ],
-    };
-
-    render(
-      <SubjectGradeProjectionCard
-        projection={unavailableAi}
-        selectedTargetIds={[7]}
-        capPercentage={75}
-        gradeTreatment="PERFORMANCE_TASK"
-      />,
-    );
-
-    expect(screen.getByText("Prediction preview is currently unavailable for this student.")).toBeDefined();
-    expect(screen.queryByText("Reaches passing (85)")).toBeNull();
-    expect(screen.queryByText("Still below passing (85)")).toBeNull();
+    expect(screen.queryByText("Projected Subject Grade")).toBeNull();
+    expect(screen.queryByText("Authoritative")).toBeNull();
+    expect(screen.queryByText("82.0%")).toBeNull();
+    expect(screen.queryByText("86.0%")).toBeNull();
+    expect(screen.getByText("Current AI prediction")).toBeDefined();
+    expect(screen.getByText("Predicted AI result at max score")).toBeDefined();
   });
 });

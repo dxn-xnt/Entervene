@@ -35,18 +35,6 @@ describe("InterventionPredictionHistory", () => {
     expect(screen.getByText("85.33")).toBeDefined();
     expect(screen.queryByText(/passing threshold/i)).toBeNull();
   });
-
-  it("shows Unavailable when current prediction evaluation is explicitly unavailable", () => {
-    const unavailable = {
-      ...item,
-      current_predicted_grade: null,
-      current_prediction_status: "UNAVAILABLE",
-    };
-    render(<InterventionPredictionHistory item={unavailable} />);
-
-    expect(screen.getByText("Unavailable")).toBeDefined();
-    expect(screen.queryByText("82.69")).toBeNull();
-  });
 });
 
 describe("teacher risk labels", () => {
@@ -58,17 +46,6 @@ describe("teacher risk labels", () => {
     expect(getTeacherRiskDisplay("LOW_RISK")).toEqual({
       level: "ON_TRACK",
       label: "On Track",
-    });
-  });
-
-  it("maps INTERVENTION_NOT_ASSESSED to Not Assessed and MODERATE_RISK to Moderate Risk", () => {
-    expect(getTeacherRiskDisplay("INTERVENTION_NOT_ASSESSED")).toEqual({
-      level: "NOT_ASSESSED",
-      label: "Not Assessed",
-    });
-    expect(getTeacherRiskDisplay("MODERATE_RISK")).toEqual({
-      level: "MODERATE_RISK",
-      label: "Moderate Risk",
     });
   });
 });
