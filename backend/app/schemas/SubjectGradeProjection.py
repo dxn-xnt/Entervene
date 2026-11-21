@@ -15,6 +15,7 @@ class SubjectGradeProjectionRequest(BaseModel):
 
     target_assignment_ids: list[ProjectionAssignmentId] = Field(default_factory=list, max_length=50)
     score_adjustment_cap: Decimal | None = Field(default=None, ge=0, lt=100)
+    predicted_grade_ceiling: Decimal | None = Field(default=None, ge=0, le=85)
 
 
 class ProjectionUnavailableReason(BaseModel):
@@ -79,8 +80,14 @@ class AIMidtermTargetEstimateRead(BaseModel):
     assignment_id: int
     maximum_hypothetical_effective_score: float
     hypothetical_predicted_term_grade: float
+    raw_hypothetical_predicted_term_grade: float | None = None
+    remediation_adjusted_predicted_term_grade: float | None = None
+    applied_grade_ceiling: float | None = None
+    was_ceiling_applied: bool = False
     step_estimated_difference: float
     estimated_difference_from_baseline: float
+    capped_step_estimated_difference: float | None = None
+    capped_estimated_difference_from_baseline: float | None = None
 
 
 class AIMidtermWhatIfRead(BaseModel):
@@ -95,6 +102,11 @@ class AIMidtermWhatIfRead(BaseModel):
     prediction_purpose: Literal["CURRENT_TERM_FINAL_GRADE_PROJECTION"]
     evidence_basis: Literal["LIVE_ACTUAL_EVIDENCE_WITH_EPHEMERAL_CAPPED_WW_PT_OVERRIDES"]
     baseline_predicted_term_grade: float | None = None
+    unremediated_baseline_predicted_term_grade: float | None = None
+    selected_grade_ceiling: float | None = None
+    effective_grade_ceiling: float | None = None
+    baseline_remediation_adjusted_predicted_term_grade: float | None = None
+    baseline_was_ceiling_applied: bool = False
     readiness: dict = Field(default_factory=dict)
     target_estimates: list[AIMidtermTargetEstimateRead] = Field(default_factory=list)
     unavailable_reasons: list[ProjectionUnavailableReason] = Field(default_factory=list)

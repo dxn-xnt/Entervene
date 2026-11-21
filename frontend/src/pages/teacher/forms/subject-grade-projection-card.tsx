@@ -2,7 +2,11 @@ import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
-import type { ClassworkScorePreview, SubjectGradeProjectionResponse } from "@/lib/teacher-interventions-api";
+import {
+  formatPassingStatusMessage,
+  type ClassworkScorePreview,
+  type SubjectGradeProjectionResponse,
+} from "@/lib/teacher-interventions-api";
 
 export interface SubjectGradeProjectionCardProps {
   projection: SubjectGradeProjectionResponse | null;
@@ -10,6 +14,7 @@ export interface SubjectGradeProjectionCardProps {
   error?: string | null;
   selectedTargetIds?: number[];
   capPercentage?: number | string;
+  passingThreshold?: number | null;
   onRetry?: () => void;
   rawPreviews?: ClassworkScorePreview[];
   className?: string;
@@ -17,7 +22,7 @@ export interface SubjectGradeProjectionCardProps {
   gradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
 }
 
-const gradeText = (value: number | null) => (value == null ? "—" : `${value.toFixed(1)}%`);
+const gradeText = (value: number | null) => (value == null ? "—" : value.toFixed(1));
 const scoreText = (value: number) => Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
 
 export function SubjectGradeProjectionCard({
@@ -26,12 +31,14 @@ export function SubjectGradeProjectionCard({
   error = null,
   selectedTargetIds = [],
   capPercentage = 75,
+  passingThreshold = null,
   onRetry,
   rawPreviews = [],
   className = "",
   gradeTreatment,
 }: SubjectGradeProjectionCardProps) {
   const shellClass = `flex w-full flex-col gap-3 border-2! bg-card p-4 shadow-none ${className}`;
+  const isExam = gradeTreatment === "EXAMINATION";
 
   if (loading) {
     return (
@@ -41,7 +48,9 @@ export function SubjectGradeProjectionCard({
           <Badge variant="outline" size="sm">Calculating…</Badge>
         </div>
         <p className="animate-pulse text-xs text-muted-foreground">
-          Updating the preview for the {capPercentage}% cap…
+          {isExam
+            ? "Updating the remediation preview…"
+            : `Updating the preview for the ${capPercentage}% cap…`}
         </p>
       </Card>
     );
@@ -69,16 +78,15 @@ export function SubjectGradeProjectionCard({
     );
   }
 
-  if (gradeTreatment === "EXAMINATION") {
-    return (
-      <Card className={shellClass} aria-label="Remediation preview">
-        <p className="text-sm font-bold">Remedial exam</p>
-        <p className="text-xs text-muted-foreground">A higher remedial exam score replaces the recorded exam score.</p>
-      </Card>
-    );
-  }
-
   if (!projection) {
+    if (isExam) {
+      return (
+        <Card className={shellClass} aria-label="Remediation preview">
+          <p className="text-sm font-bold">Remedial exam</p>
+          <p className="text-xs text-muted-foreground">A higher remedial exam score replaces the recorded exam score.</p>
+        </Card>
+      );
+    }
     return (
       <Card className={shellClass} aria-label="Remediation preview">
         <p className="text-sm text-muted-foreground">
@@ -128,18 +136,39 @@ export function SubjectGradeProjectionCard({
       possibleGain: preview.possible_gain,
     }));
   const scoreBounds = projectedScoreBounds.length > 0 ? projectedScoreBounds : rawScoreBounds;
-  const lastAiEstimate = projection.ai_midterm_what_if?.target_estimates.at(-1) ?? null;
-  const aiBaseline = projection.ai_midterm_what_if?.status === "AVAILABLE"
-    ? projection.ai_midterm_what_if.baseline_predicted_term_grade ?? null
+  const whatIf = projection.ai_midterm_what_if;
+  const whatIfAvailable = whatIf?.status === "AVAILABLE";
+  const whatIfUnavailable = whatIf?.status === "UNAVAILABLE";
+  const lastAiEstimate = whatIf?.target_estimates.at(-1) ?? null;
+  const aiBaseline = whatIfAvailable
+    ? (whatIf.baseline_remediation_adjusted_predicted_term_grade ?? whatIf.baseline_predicted_term_grade ?? null)
     : null;
-  const aiProjected = hasTargets ? lastAiEstimate?.hypothetical_predicted_term_grade ?? null : null;
-  const showScoreAdjustment = hasTargets && scoreBounds.length > 0;
+  const aiProjected = hasTargets && whatIfAvailable
+    ? (lastAiEstimate?.remediation_adjusted_predicted_term_grade ?? lastAiEstimate?.hypothetical_predicted_term_grade ?? null)
+    : null;
+  const resolvedPassingThreshold = projection.passing_threshold ?? passingThreshold ?? null;
+  const passingStatus = formatPassingStatusMessage(aiProjected, resolvedPassingThreshold);
+  const showScoreAdjustment = !isExam && hasTargets && scoreBounds.length > 0;
   const showPrediction = hasTargets && aiBaseline != null && aiProjected != null;
+  const showUnavailablePrediction = hasTargets && whatIfUnavailable;
 
   return (
     <Card className={shellClass} aria-label="Remediation preview">
+      {isExam && (
+        <div className="space-y-1">
+          <p className="text-sm font-bold">Remedial exam</p>
+          <p className="text-xs text-muted-foreground">
+            A higher remedial exam score replaces the recorded exam score.
+          </p>
+        </div>
+      )}
+
       {!hasTargets && (
-        <p className="text-sm text-muted-foreground">Select a classwork to see its score and AI prediction preview.</p>
+        <p className="text-sm text-muted-foreground">
+          {isExam
+            ? "Select an examination to see its remediation prediction preview."
+            : "Select a classwork to see its score and prediction preview."}
+        </p>
       )}
 
       {showScoreAdjustment && (
@@ -169,20 +198,35 @@ export function SubjectGradeProjectionCard({
 
       {showPrediction && (
         <section
-          className={`${showScoreAdjustment ? "border-t-2 border-border pt-3" : ""} space-y-2`}
-          aria-label="AI prediction comparison"
+          className={`${showScoreAdjustment || isExam ? "border-t-2 border-border pt-3" : ""} space-y-2`}
+          aria-label="Predicted grade preview"
         >
-          <h3 className="text-base font-black">AI prediction</h3>
           <div className="grid grid-cols-2 gap-2 rounded! border-2 border-border bg-background p-3 text-center text-xs">
             <div>
-              <p className="text-muted-foreground">Current AI prediction</p>
+              <p className="text-muted-foreground">Before</p>
               <strong className="text-lg">{gradeText(aiBaseline)}</strong>
             </div>
             <div>
-              <p className="text-muted-foreground">Predicted AI result at max score</p>
+              <p className="text-muted-foreground">After Remediation</p>
               <strong className="text-lg">{gradeText(aiProjected)}</strong>
             </div>
           </div>
+          {passingStatus && (
+            <p className="text-xs font-semibold text-muted-foreground">
+              {passingStatus}
+            </p>
+          )}
+        </section>
+      )}
+
+      {showUnavailablePrediction && (
+        <section
+          className={`${showScoreAdjustment || isExam ? "border-t-2 border-border pt-3" : ""}`}
+          aria-label="Predicted grade unavailable"
+        >
+          <Alert status="warning" className="rounded! py-2 text-xs">
+            Prediction preview is currently unavailable for this student.
+          </Alert>
         </section>
       )}
 

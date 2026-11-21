@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { DatePicker } from "@/components/retroui/DatePicker";
@@ -2882,8 +2883,8 @@ export default function CreateClassworkQuizModal({
                             onClick={() => toggleClass(load.class_id)}
                             disabled={isCreating || isSubjectLocked}
                             className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
-                                ? "bg-primary text-black"
-                                : "bg-white text-black hover:bg-accent"
+                              ? "bg-primary text-black"
+                              : "bg-white text-black hover:bg-accent"
                               }`}
                           >
                             <div className="min-w-0 flex-1">
@@ -2893,8 +2894,8 @@ export default function CreateClassworkQuizModal({
                                 </p>
                                 <div
                                   className={`flex size-5 shrink-0 items-center justify-center rounded-md border-2 border-black transition-colors ${isSelected
-                                      ? "bg-primary text-black"
-                                      : "bg-white text-transparent"
+                                    ? "bg-primary text-black"
+                                    : "bg-white text-transparent"
                                     }`}
                                 >
                                   <Check className="size-3.5 stroke-[3]" />
@@ -2904,8 +2905,8 @@ export default function CreateClassworkQuizModal({
                               <div className="mt-1 flex items-center justify-between w-full">
                                 <p
                                   className={`text-xs font-medium ${isSelected
-                                      ? "text-foreground"
-                                      : "text-muted-foreground"
+                                    ? "text-foreground"
+                                    : "text-muted-foreground"
                                     }`}
                                 >
                                   {load.grade_level || "Active Section"}
@@ -2913,8 +2914,8 @@ export default function CreateClassworkQuizModal({
                                 {typeof load.student_count === "number" && (
                                   <p
                                     className={`text-xs font-medium ${isSelected
-                                        ? "text-foreground"
-                                        : "text-muted-foreground"
+                                      ? "text-foreground"
+                                      : "text-muted-foreground"
                                       }`}
                                   >
                                     {load.student_count}{" "}
@@ -3005,7 +3006,7 @@ export default function CreateClassworkQuizModal({
                       buttonVariants({ variant: "outline", size: "sm" }),
                       "h-8 gap-1.5 px-3 py-1 text-xs font-semibold text-gray-700",
                       (isCreating || isLessonLocked) &&
-                        "cursor-not-allowed opacity-50",
+                      "cursor-not-allowed opacity-50",
                     );
 
                     const toggleSelectAll = () => {
@@ -3193,8 +3194,8 @@ export default function CreateClassworkQuizModal({
                               <div
                                 key={question.id}
                                 className={`rounded-lg border px-3 py-2 transition ${isChecked
-                                    ? "border-black bg-yellow-50"
-                                    : "border-gray-200 bg-white"
+                                  ? "border-black bg-yellow-50"
+                                  : "border-gray-200 bg-white"
                                   }`}
                               >
                                 <div className="mb-2 flex min-w-0 items-center gap-2">
@@ -3430,9 +3431,9 @@ export default function CreateClassworkQuizModal({
                         draft.is_published && unkeyedIdCount > 0
                           ? `Cannot publish: ${unkeyedIdCount} Identification question(s) have no answer key. Add keys or save as draft.`
                           : draft.is_published &&
-                              lessonMappingState.unmappedCount > 0
+                            lessonMappingState.unmappedCount > 0
                             ? `Cannot assign: ${lessonMappingState.unmappedCount} question(s) still need lesson mapping.`
-                          : undefined
+                            : undefined
                       }
                       className="gap-2 disabled:opacity-50"
                     >

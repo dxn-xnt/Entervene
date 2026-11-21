@@ -28,11 +28,22 @@ from app.services.intervention.InterventionDiagnosisService import effective_dia
 from app.services.intervention.InterventionHistoryService import (
     resolution_prediction,
     resolution_projection,
+    resolution_projection_evaluation,
     sent_reviewer,
     targeted_activities,
 )
+from app.services.intervention.RemediationPostGradingService import (
+    ActualRemediationPredictionEvaluation,
+    STATUS_AVAILABLE,
+    STATUS_UNAVAILABLE,
+    evaluate_actual_remediation_prediction,
+)
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
 from app.services.prediction.DevelopmentCurrentTermPredictionPersistenceService import generate_and_persist_development_current_term
+from app.services.prediction.DevelopmentCurrentTermRiskService import (
+    INTERVENTION_NOT_ASSESSED,
+    _intervention_level_for_grade,
+)
 
 
 def _eligible_scope(db: Session, staff_id: str, row: Intervention) -> bool:
@@ -69,7 +80,13 @@ def _current_candidate_status(
     row: Intervention,
     source: DevelopmentCurrentTermPrediction,
     passing_threshold: float | None,
-) -> tuple[DevelopmentCurrentTermPrediction, float | None, bool | None, str | None]:
+) -> tuple[
+    DevelopmentCurrentTermPrediction,
+    float | None,
+    bool | None,
+    str | None,
+    ActualRemediationPredictionEvaluation | None,
+]:
     if row.status == "RESOLVED":
         latest = resolution_prediction(db, row, source=source) or source
     else:
@@ -91,19 +108,46 @@ def _current_candidate_status(
         current_grade = math.nan
     current_grade_value = current_grade if math.isfinite(current_grade) else None
     if row.status != "CANDIDATE":
-        return latest, current_grade_value, None, None
+        plan = row.remediation_plan if isinstance(row.remediation_plan, dict) else {}
+        has_grade_ceiling = (
+            plan.get("grade_treatment") != "PRACTICE_ONLY"
+            and plan.get("predicted_grade_ceiling") is not None
+        )
+        evaluation = evaluate_actual_remediation_prediction(db, row, latest)
+        if evaluation.status == STATUS_AVAILABLE:
+            return latest, evaluation.remediation_adjusted_predicted_grade, None, None, evaluation
+        if not has_grade_ceiling:
+            return latest, current_grade_value, None, None, None
+        return latest, None, None, None, evaluation
     readiness = snapshot.get("readiness")
     if not isinstance(readiness, dict) or readiness.get("status") != "READY":
-        return latest, current_grade_value, False, "CURRENT_PREDICTION_NOT_READY"
+        return latest, current_grade_value, False, "CURRENT_PREDICTION_NOT_READY", None
     if current_grade_value is None or not 0 <= current_grade_value <= 100:
-        return latest, current_grade_value, False, "CURRENT_PREDICTION_GRADE_INVALID"
+        return latest, current_grade_value, False, "CURRENT_PREDICTION_GRADE_INVALID", None
     if passing_threshold is None:
-        return latest, current_grade_value, False, "PASSING_THRESHOLD_UNAVAILABLE"
+        return latest, current_grade_value, False, "PASSING_THRESHOLD_UNAVAILABLE", None
     if current_grade_value >= passing_threshold:
-        return latest, current_grade_value, False, "PASSING_THRESHOLD_REACHED"
+        return latest, current_grade_value, False, "PASSING_THRESHOLD_REACHED", None
     if latest.intervention_level != AUTOMATIC_CANDIDATE_LEVEL:
-        return latest, current_grade_value, False, "CURRENT_RISK_NOT_MODERATE"
-    return latest, current_grade_value, True, None
+        return latest, current_grade_value, False, "CURRENT_RISK_NOT_MODERATE", None
+    return latest, current_grade_value, True, None, None
+
+
+def _effective_intervention_level(
+    row: Intervention,
+    latest: DevelopmentCurrentTermPrediction,
+    evaluation: ActualRemediationPredictionEvaluation | None,
+) -> str | None:
+    if row.status == "CANDIDATE" or evaluation is None:
+        return latest.intervention_level
+    if evaluation.status != STATUS_AVAILABLE:
+        return INTERVENTION_NOT_ASSESSED
+    if evaluation.is_legacy_uncapped or not evaluation.was_ceiling_applied:
+        return latest.intervention_level
+    adjusted = evaluation.remediation_adjusted_predicted_grade
+    if adjusted is None or not math.isfinite(adjusted) or not 0 <= adjusted <= 100:
+        return INTERVENTION_NOT_ASSESSED
+    return _intervention_level_for_grade(float(adjusted))
 
 
 def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
@@ -129,8 +173,26 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
         academic_level = row.class_.academic_level
     grade_level_val = academic_level.grade_level if academic_level else None
     level_name_val = academic_level.level_name if academic_level else (f"Grade {grade_level_val}" if grade_level_val is not None else None)
-    latest, current_grade, activation_eligible, activation_reason = _current_candidate_status(
+    latest, current_grade, activation_eligible, activation_reason, evaluation = _current_candidate_status(
         db, row, source, threshold_val,
+    )
+    latest_snapshot = latest.evidence_snapshot if isinstance(latest.evidence_snapshot, dict) else {}
+    raw_fallback = latest_snapshot.get("projected_final_term_grade_raw")
+    if raw_fallback is None and row.status == "RESOLVED" and latest.predicted_period_grade is not None:
+        raw_fallback = float(latest.predicted_period_grade)
+    try:
+        raw_fallback_float = float(raw_fallback) if not isinstance(raw_fallback, bool) else math.nan
+    except (TypeError, ValueError, OverflowError):
+        raw_fallback_float = math.nan
+    raw_grade_for_audit = (
+        evaluation.raw_predicted_grade
+        if evaluation is not None and evaluation.raw_predicted_grade is not None
+        else (raw_fallback_float if math.isfinite(raw_fallback_float) else None)
+    )
+    current_prediction_status = (
+        evaluation.status
+        if evaluation is not None
+        else (STATUS_AVAILABLE if current_grade is not None else STATUS_UNAVAILABLE)
     )
 
     return TeacherInterventionSummary(
@@ -149,7 +211,11 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
         triggering_intervention_level=source.intervention_level,
         current_prediction_revision=latest.revision,
         current_predicted_grade=current_grade,
-        current_intervention_level=latest.intervention_level,
+        current_raw_predicted_grade=raw_grade_for_audit,
+        current_prediction_status=current_prediction_status,
+        predicted_grade_ceiling=evaluation.selected_grade_ceiling if evaluation is not None else None,
+        was_ceiling_applied=evaluation.was_ceiling_applied if evaluation is not None else None,
+        current_intervention_level=_effective_intervention_level(row, latest, evaluation),
         candidate_activation_eligible=activation_eligible,
         candidate_activation_reason=activation_reason,
         created_at=row.created_at,
@@ -229,9 +295,11 @@ def get_teacher_resolved(db: Session, staff_id: str, intervention_id: int) -> Te
     if row is None or row.status != "RESOLVED" or not _eligible_scope(db, staff_id, row):
         raise HTTPException(status_code=404, detail="Resolved intervention not found")
     reviewer = sent_reviewer(db, row)
+    res_eval = resolution_projection_evaluation(db, row)
     return TeacherResolvedInterventionDetail(
         **_detail(db, row).model_dump(),
-        resolution_projection=resolution_projection(db, row),
+        resolution_projection=resolution_projection(db, row, evaluation=res_eval),
+        raw_resolution_projection=res_eval.raw_predicted_grade if res_eval is not None else None,
         targeted_activities=targeted_activities(db, row, student_view=False),
         sent_reviewer=reviewer.current_content if reviewer else None,
     )

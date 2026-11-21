@@ -25,6 +25,10 @@ class TeacherInterventionSummary(BaseModel):
     triggering_intervention_level: str
     current_prediction_revision: int
     current_predicted_grade: float | None = None
+    current_raw_predicted_grade: float | None = None
+    current_prediction_status: str | None = None
+    predicted_grade_ceiling: float | None = None
+    was_ceiling_applied: bool | None = None
     current_intervention_level: str | None = None
     candidate_activation_eligible: bool | None = None
     candidate_activation_reason: str | None = None
@@ -63,6 +67,7 @@ class ResolvedSupportActivity(BaseModel):
 
 class TeacherResolvedInterventionDetail(TeacherInterventionDetail):
     resolution_projection: float | None
+    raw_resolution_projection: float | None = None
     targeted_activities: list[ResolvedSupportActivity]
     sent_reviewer: ResolvedReviewer | None
 

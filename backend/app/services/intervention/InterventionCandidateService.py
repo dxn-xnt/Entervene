@@ -15,6 +15,10 @@ from app.models.intervention.Intervention import Intervention
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.intervention.InterventionDiagnosisService import build_candidate_diagnosis
 from app.services.intervention.InterventionNotificationService import stage_intervention_notification
+from app.services.intervention.RemediationPostGradingService import (
+    STATUS_AVAILABLE,
+    evaluate_actual_remediation_prediction,
+)
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME, MODEL_NAMES
 
 
@@ -111,6 +115,41 @@ def sync_intervention_for_persisted_prediction(
         subject_id=subject_id,
         academic_period_id=academic_period_id,
     ).filter(Intervention.status.in_(OPEN_STATUSES)).with_for_update().one_or_none()
+
+    if open_intervention is not None and open_intervention.status == "ACTIVE":
+        eval_result = evaluate_actual_remediation_prediction(db, open_intervention, prediction)
+        if eval_result.status != STATUS_AVAILABLE or eval_result.remediation_adjusted_predicted_grade is None:
+            # Fail-closed: never auto-resolve when the remediation-adjusted baseline cannot be verified.
+            return open_intervention
+        effective_grade = eval_result.remediation_adjusted_predicted_grade
+        if effective_grade >= passing_threshold:
+            open_intervention.status = "RESOLVED"
+            open_intervention.resolution_reason = IMPROVED_PREDICTION
+            open_intervention.resolved_at = datetime.now(timezone.utc)
+            if not eval_result.is_legacy_uncapped:
+                plan = dict(open_intervention.remediation_plan or {})
+                if "resolution_ceiling_snapshot" not in plan:
+                    plan["resolution_ceiling_snapshot"] = eval_result.to_resolution_snapshot(
+                        prediction.prediction_id
+                    )
+                    open_intervention.remediation_plan = plan
+            db.flush()
+            if eval_result.is_legacy_uncapped:
+                stage_intervention_notification(
+                    db,
+                    open_intervention,
+                    event=IMPROVED_PREDICTION,
+                    predicted_grade=effective_grade,
+                )
+            else:
+                stage_intervention_notification(
+                    db,
+                    open_intervention,
+                    event=IMPROVED_PREDICTION,
+                    predicted_grade=effective_grade,
+                    is_remediation_adjusted=True,
+                )
+        return open_intervention
 
     if grade >= passing_threshold:
         if open_intervention is not None:

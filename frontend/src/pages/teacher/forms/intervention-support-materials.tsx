@@ -46,6 +46,7 @@ import {
   generateRemediationAdvisory,
   previewScoreAdjustment,
   projectSubjectGrade,
+  formatPassingStatusMessage,
   generateRemediationDraft,
   refreshRemediationEvidence,
   eligibleRemediationLessonIds,
@@ -1105,11 +1106,28 @@ const InterventionSupportMaterials = forwardRef<
     treatmentActivities,
   ]);
 
+  const resolvePredictedGradeCeiling = useCallback(
+    (treatment: RemediationPlan["grade_treatment"], savedPlan: RemediationPlan | null): number | undefined => {
+      if (!treatment || treatment === "PRACTICE_ONLY") {
+        return undefined;
+      }
+      if (plan.predicted_grade_ceiling != null) {
+        return plan.predicted_grade_ceiling;
+      }
+      const isLegacySavedWithoutCeiling =
+        savedPlan?.grade_treatment != null && savedPlan.predicted_grade_ceiling == null;
+      if (isLegacySavedWithoutCeiling) {
+        return undefined;
+      }
+      return 85;
+    },
+    [plan.predicted_grade_ceiling],
+  );
+
   const fetchProjection = useCallback((targetIds?: number[], force = false) => {
     if (
       !plan.grade_treatment ||
-      plan.grade_treatment === "PRACTICE_ONLY" ||
-      plan.grade_treatment === "EXAMINATION"
+      plan.grade_treatment === "PRACTICE_ONLY"
     ) {
       setProjectionResponse(null);
       setProjectionError(null);
@@ -1118,15 +1136,20 @@ const InterventionSupportMaterials = forwardRef<
       return;
     }
 
-    const currentCapError = validateCap(capInput);
+    const isExamTreatment = plan.grade_treatment === "EXAMINATION";
+    const currentCapError = isExamTreatment ? null : validateCap(capInput);
     const parsedCap = Number(capInput);
     const effectiveCap = !currentCapError && Number.isFinite(parsedCap) ? parsedCap : (plan.score_adjustment_cap ?? 75);
+    const effectivePredictedCeiling = resolvePredictedGradeCeiling(
+      plan.grade_treatment,
+      persistedPlanRef.current,
+    );
 
     const ids = (targetIds ?? selectedActivityIds).filter((id) => !linkedOriginalIds.has(id));
     const persistedKey = persistedActivities
       .map((item) => `${item.assignment_id}:${item.submission_status ?? ""}:${item.grade ?? ""}`)
       .join("|");
-    const reqKey = `${interventionId}:${plan.grade_treatment}:${effectiveCap}:${ids.slice().sort().join(",")}:${persistedKey}`;
+    const reqKey = `${interventionId}:${plan.grade_treatment}:${isExamTreatment ? "exam" : effectiveCap}:${effectivePredictedCeiling ?? "legacy"}:${ids.slice().sort().join(",")}:${persistedKey}`;
     if (!force && reqKey === lastRequestedKey.current) {
       return;
     }
@@ -1137,7 +1160,10 @@ const InterventionSupportMaterials = forwardRef<
 
     projectSubjectGrade(interventionId, {
       target_assignment_ids: ids,
-      score_adjustment_cap: effectiveCap,
+      ...(!isExamTreatment ? { score_adjustment_cap: effectiveCap } : {}),
+      ...(effectivePredictedCeiling !== undefined
+        ? { predicted_grade_ceiling: effectivePredictedCeiling }
+        : {}),
     })
       .then((res) => {
         if (reqId === projectionRequestRef.current) {
@@ -1157,13 +1183,12 @@ const InterventionSupportMaterials = forwardRef<
           setProjectionLoading(false);
         }
       });
-  }, [capInput, interventionId, linkedOriginalIds, persistedActivities, plan.grade_treatment, plan.score_adjustment_cap, selectedActivityIds]);
+  }, [capInput, interventionId, linkedOriginalIds, persistedActivities, plan.grade_treatment, plan.score_adjustment_cap, resolvePredictedGradeCeiling, selectedActivityIds]);
 
   useEffect(() => {
     if (
       !plan.grade_treatment ||
-      plan.grade_treatment === "PRACTICE_ONLY" ||
-      plan.grade_treatment === "EXAMINATION"
+      plan.grade_treatment === "PRACTICE_ONLY"
     ) {
       setProjectionResponse(null);
       setProjectionError(null);
@@ -1172,20 +1197,25 @@ const InterventionSupportMaterials = forwardRef<
       return;
     }
 
-    const currentCapError = validateCap(capInput);
+    const isExamTreatment = plan.grade_treatment === "EXAMINATION";
+    const currentCapError = isExamTreatment ? null : validateCap(capInput);
     const parsedCap = Number(capInput);
     const effectiveCap = !currentCapError && Number.isFinite(parsedCap) ? parsedCap : (plan.score_adjustment_cap ?? 75);
+    const effectivePredictedCeiling = resolvePredictedGradeCeiling(
+      plan.grade_treatment,
+      persistedPlanRef.current,
+    );
 
     const ids = selectedActivityIds.filter((id) => !linkedOriginalIds.has(id));
     const persistedKey = persistedActivities
       .map((item) => `${item.assignment_id}:${item.submission_status ?? ""}:${item.grade ?? ""}`)
       .join("|");
-    const reqKey = `${interventionId}:${plan.grade_treatment}:${effectiveCap}:${ids.slice().sort().join(",")}:${persistedKey}`;
+    const reqKey = `${interventionId}:${plan.grade_treatment}:${isExamTreatment ? "exam" : effectiveCap}:${effectivePredictedCeiling ?? "legacy"}:${ids.slice().sort().join(",")}:${persistedKey}`;
     if (reqKey === lastRequestedKey.current) {
       return;
     }
     fetchProjection();
-  }, [capInput, fetchProjection, interventionId, linkedOriginalIds, persistedActivities, plan.grade_treatment, plan.score_adjustment_cap, selectedActivityIds]);
+  }, [capInput, fetchProjection, interventionId, linkedOriginalIds, persistedActivities, plan.grade_treatment, plan.score_adjustment_cap, resolvePredictedGradeCeiling, selectedActivityIds]);
 
   useEffect(() => {
     if (
@@ -1383,19 +1413,49 @@ const InterventionSupportMaterials = forwardRef<
     projectionResponse?.ai_midterm_what_if?.status === "AVAILABLE"
       ? projectionResponse.ai_midterm_what_if
       : null;
-  const liveWhatIfAfter = liveWhatIf?.target_estimates.at(-1)?.hypothetical_predicted_term_grade ?? null;
+  const liveWhatIfLastEstimate = liveWhatIf?.target_estimates.at(-1) ?? null;
+  const liveWhatIfBefore =
+    liveWhatIf?.baseline_remediation_adjusted_predicted_term_grade ??
+    liveWhatIf?.baseline_predicted_term_grade ??
+    null;
+  const liveWhatIfAfter =
+    liveWhatIfLastEstimate?.remediation_adjusted_predicted_term_grade ??
+    liveWhatIfLastEstimate?.hypothetical_predicted_term_grade ??
+    null;
+  const impactCurrentPrediction =
+    predictionImpact?.status === "AVAILABLE"
+      ? (predictionImpact.remediation_adjusted_current_predicted_grade ??
+        predictionImpact.current_predicted_grade ??
+        null)
+      : null;
+  const impactMaxScorePrediction =
+    predictionImpact?.status === "AVAILABLE"
+      ? (predictionImpact.remediation_adjusted_max_predicted_grade ??
+        predictionImpact.max_remediation_predicted_grade ??
+        null)
+      : null;
   const displayedCurrentPrediction =
     hasSavedAssessment
-      ? (predictionImpact?.current_predicted_grade ?? progress?.latest_projection ?? null)
-      : (liveWhatIf?.baseline_predicted_term_grade ?? predictionImpact?.current_predicted_grade ?? progress?.latest_projection ?? null);
+      ? (impactCurrentPrediction ?? progress?.latest_projection ?? null)
+      : (liveWhatIfBefore ?? impactCurrentPrediction ?? progress?.latest_projection ?? null);
   const displayedMaxScorePrediction =
     hasSavedAssessment
-      ? (predictionImpact?.status === "AVAILABLE" ? predictionImpact.max_remediation_predicted_grade : null)
-      : (liveWhatIfAfter ?? (predictionImpact?.status === "AVAILABLE" ? predictionImpact.max_remediation_predicted_grade : null));
+      ? impactMaxScorePrediction
+      : (liveWhatIfAfter ?? impactMaxScorePrediction);
   const displayedPredictionDelta =
     displayedCurrentPrediction != null && displayedMaxScorePrediction != null
       ? displayedMaxScorePrediction - displayedCurrentPrediction
       : null;
+  const configuredPassingThreshold =
+    projectionResponse?.passing_threshold ??
+    predictionImpact?.passing_threshold ??
+    progress?.passing_threshold ??
+    detail.passing_threshold ??
+    null;
+  const displayedPassingStatus = formatPassingStatusMessage(
+    displayedMaxScorePrediction,
+    configuredPassingThreshold,
+  );
   const primaryImpactTarget = predictionImpact?.targets[0] ?? null;
 
   const primaryAssignedAssessment = assigned[0] ?? null;
@@ -1754,8 +1814,9 @@ const InterventionSupportMaterials = forwardRef<
     }
 
     const treatmentToUse = plan.grade_treatment ?? (hasSavedAssessment ? activeGradeTreatment : null);
+    const isWwOrPt = treatmentToUse === "WRITTEN_WORK" || treatmentToUse === "PERFORMANCE_TASK";
     let parsedCap: number | undefined = undefined;
-    if (treatmentToUse && treatmentToUse !== "PRACTICE_ONLY") {
+    if (isWwOrPt) {
       const err = validateCap(capInput);
       if (err) {
         setCapError(err);
@@ -1764,6 +1825,10 @@ const InterventionSupportMaterials = forwardRef<
       }
       parsedCap = parseFloat(capInput);
     }
+    const predictedCeilingToSave = resolvePredictedGradeCeiling(
+      treatmentToUse,
+      persistedPlanRef.current,
+    );
 
     setWorking(true);
     try {
@@ -1793,8 +1858,11 @@ const InterventionSupportMaterials = forwardRef<
           ? {
             target_assignment_ids: nextTargetAssignmentIds,
             score_adjustment_cap:
-              parsedCap !== undefined && Number.isFinite(parsedCap) ? parsedCap : 75,
+              parsedCap !== undefined && Number.isFinite(parsedCap) ? parsedCap : (plan.score_adjustment_cap ?? 75),
           }
+          : {}),
+        ...(predictedCeilingToSave !== undefined
+          ? { predicted_grade_ceiling: predictedCeilingToSave }
           : {}),
       });
       if (!result.plan.ai_suggestion) {
@@ -2688,11 +2756,11 @@ const InterventionSupportMaterials = forwardRef<
                               );
                             })}
                           <p className="text-foreground">
-                            Current AI-predicted grade:{" "}
+                            Before:{" "}
                             <strong>{formatPredictedValue(displayedCurrentPrediction)}</strong>
                           </p>
                           <p className="text-foreground">
-                            AI-predicted grade at max score:{" "}
+                            After Remediation:{" "}
                             <strong>
                               {formatPredictedValue(displayedMaxScorePrediction)}
                               {displayedPredictionDelta != null && (
@@ -2703,6 +2771,11 @@ const InterventionSupportMaterials = forwardRef<
                               )}
                             </strong>
                           </p>
+                          {displayedPassingStatus && (
+                            <p className="text-xs font-semibold text-muted-foreground col-span-full">
+                              {displayedPassingStatus}
+                            </p>
+                          )}
                           <p className="text-sm text-foreground col-span-full">
                             {outcomeStatusMessage}
                           </p>
@@ -3341,17 +3414,20 @@ const InterventionSupportMaterials = forwardRef<
                       error={projectionError}
                       selectedTargetIds={selectedActivityIds}
                       capPercentage={
-                        projectionResponse?.target_projections?.[0]?.cap_percentage ??
-                        projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
-                        plan.score_adjustment_cap ??
-                        75
+                        !capError && Number.isFinite(parseFloat(capInput))
+                          ? parseFloat(capInput)
+                          : (projectionResponse?.target_projections?.[0]?.cap_percentage ??
+                            projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
+                            plan.score_adjustment_cap ??
+                            75)
                       }
+                      passingThreshold={configuredPassingThreshold}
                       rawPreviews={selectedScorePreviews}
                       gradeTreatment={plan.grade_treatment}
                       onRetry={() => fetchProjection(undefined, true)}
                     />
 
-                    {plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY" && (
+                    {(plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") && (
                       <Card className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
                         <div className="flex items-center justify-between">
                           <Label htmlFor="score-adjustment-cap" className="text-base font-bold">
@@ -3409,25 +3485,9 @@ const InterventionSupportMaterials = forwardRef<
                         </div>
                       </Card>
                     )}
-                    {capError ? (
+                    {capError && (plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") ? (
                       <p className="text-xs text-destructive font-medium" role="alert">
                         {capError}
-                      </p>
-                    ) : Number.isFinite(parseFloat(capInput)) &&
-                      parseFloat(capInput) !==
-                      Number(
-                        projectionResponse?.target_projections?.[0]?.cap_percentage ??
-                        projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
-                        plan.score_adjustment_cap ??
-                        75
-                      ) ? (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Save the {capInput}% cap to update the preview. Current preview: {" "}
-                        {projectionResponse?.target_projections?.[0]?.cap_percentage ??
-                          projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
-                          plan.score_adjustment_cap ??
-                          75}
-                        % ceiling until adjustments are saved.
                       </p>
                     ) : null}
 
@@ -3815,9 +3875,11 @@ const InterventionSupportMaterials = forwardRef<
                                 <Label className="text-base font-bold">
                                   Current Targeted {componentLabel(activeGradeTreatment)} Classwork
                                 </Label>
-                                <Badge variant={!hasSavedAssessment && capError ? "destructive" : "surface"} size="sm">
-                                  {!hasSavedAssessment && capError ? "Invalid Ceiling" : `${capInput ? capInput : (plan.score_adjustment_cap ?? 75)}% Target-Score Ceiling`}
-                                </Badge>
+                                {activeGradeTreatment !== "EXAMINATION" && (
+                                  <Badge variant={!hasSavedAssessment && capError ? "destructive" : "surface"} size="sm">
+                                    {!hasSavedAssessment && capError ? "Invalid Ceiling" : `${capInput ? capInput : (plan.score_adjustment_cap ?? 75)}% Target-Score Ceiling`}
+                                  </Badge>
+                                )}
                               </div>
                               {(!hasSavedAssessment || canAddAnother) && chosenActivities.length > 0 && (
                                 <Button
@@ -3881,13 +3943,13 @@ const InterventionSupportMaterials = forwardRef<
                                       </div>
                                       <div className="grid grid-cols-1 gap-3 rounded! border-2 border-border bg-background p-3 sm:grid-cols-2">
                                         <div className="flex flex-col gap-0.5">
-                                          <p className="text-xs text-muted-foreground font-medium">Current AI-Predicted Grade</p>
+                                          <p className="text-xs text-muted-foreground font-medium">Before</p>
                                           <p className="text-base font-bold">
                                             {formatPredictedValue(displayedCurrentPrediction)}
                                           </p>
                                         </div>
                                         <div className="flex flex-col gap-0.5">
-                                          <p className="text-xs text-muted-foreground font-medium">AI-Predicted Grade at Max Remediation Score</p>
+                                          <p className="text-xs text-muted-foreground font-medium">After Remediation</p>
                                           <p className="text-base font-bold">
                                             {projectionLoading && !hasSavedAssessment
                                               ? "Calculating..."
@@ -3900,6 +3962,11 @@ const InterventionSupportMaterials = forwardRef<
                                             )}
                                           </p>
                                         </div>
+                                        {displayedPassingStatus && !(projectionLoading && !hasSavedAssessment) && (
+                                          <p className="text-xs font-semibold text-muted-foreground sm:col-span-2">
+                                            {displayedPassingStatus}
+                                          </p>
+                                        )}
                                       </div>
                                       <p className="text-sm text-muted-foreground">
                                         {hasSavedAssessment
@@ -3953,13 +4020,13 @@ const InterventionSupportMaterials = forwardRef<
                                 </div>
                                 <div className="grid grid-cols-1 gap-3 rounded! border-2 border-border bg-background p-3 sm:grid-cols-2">
                                   <div className="flex flex-col gap-0.5">
-                                    <p className="text-xs text-muted-foreground font-medium">Current AI-Predicted Grade</p>
+                                    <p className="text-xs text-muted-foreground font-medium">Before</p>
                                     <p className="text-base font-bold">
                                       {formatPredictedValue(displayedCurrentPrediction)}
                                     </p>
                                   </div>
                                   <div className="flex flex-col gap-0.5">
-                                    <p className="text-xs text-muted-foreground font-medium">AI-Predicted Grade at Max Remediation Score</p>
+                                    <p className="text-xs text-muted-foreground font-medium">After Remediation</p>
                                     <p className="text-base font-bold">
                                       {formatPredictedValue(displayedMaxScorePrediction)}
                                       {displayedPredictionDelta != null && (
@@ -3970,6 +4037,11 @@ const InterventionSupportMaterials = forwardRef<
                                       )}
                                     </p>
                                   </div>
+                                  {displayedPassingStatus && (
+                                    <p className="text-xs font-semibold text-muted-foreground sm:col-span-2">
+                                      {displayedPassingStatus}
+                                    </p>
+                                  )}
                                 </div>
                                 <p className="text-sm text-muted-foreground">
                                   Original target maximum points: {primaryImpactTarget ? `${formatScoreValue(primaryImpactTarget.max_points)} points` : (primaryAssignedAssessment?.total_points != null ? `${primaryAssignedAssessment.total_points} points` : "Preserved")}
