@@ -53,6 +53,12 @@ from app.schemas.ContentCloning import (
     RequesterVisiblePackageSummary,
 )
 from app.services.cloning.ContentCloningErrors import ContentCloningError
+from app.services.cloning.ContentCloningEligibilityService import (
+    is_classwork_repost_eligible,
+    require_classwork_repost_eligible,
+    resolve_standard_classwork_period_id,
+    standard_classwork_assignments,
+)
 from app.services.cloning.ContentCloningAuthorizationService import ContentCloningAuthorizationService
 from app.services.cloning.ContentCloningLifecycleService import (
     effective_request_status,
@@ -189,6 +195,8 @@ def compute_classwork_revision_token(cw: Classwork) -> str:
         "is_graded": cw.is_graded,
         "total_points": float(cw.total_points) if cw.total_points is not None else None,
         "show_scores": cw.show_scores,
+        "intervention_resource_origin_id": cw.intervention_resource_origin_id,
+        "intervention_resource_recipient_scope": cw.intervention_resource_recipient_scope,
         "is_archived": cw.is_archived,
         "rubrics": rubrics,
         "attachments": attachments,
@@ -312,13 +320,9 @@ def build_classwork_snapshot(cw: Classwork) -> dict[str, Any]:
         "total_points": float(cw.total_points) if cw.total_points is not None else None,
         "show_scores": cw.show_scores,
         "academic_period_ids": sorted({
-            a.academic_period_id for a in cw.assignments
+            a.academic_period_id
+            for a in standard_classwork_assignments(cw)
             if a.academic_period_id is not None
-            and a.recipient_student_id is None
-            and not (getattr(a, "recipients", None) or [])
-            and a.source_intervention_id is None
-            and a.remediation_request_id is None
-            and a.original_exam_assignment_id is None
         }),
         "rubric_levels": rubrics,
         "quiz": quiz_payload,
@@ -493,6 +497,7 @@ class ContentCloningPackageService:
                 )
                 .options(
                     joinedload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+                    joinedload(Classwork.assignments).joinedload(ClassworkAssignment.recipients),
                     joinedload(Classwork.rubric_levels),
                     joinedload(Classwork.attachments),
                     joinedload(Classwork.lessons),
@@ -505,30 +510,11 @@ class ContentCloningPackageService:
                 )
             )
             for cw in cw_query.all():
-                # Check for remedial / learner-targeted exclusions
-                # If ALL assignments are targeted, or cw is remedial, exclude
-                if not cw.assignments:
-                    continue  # Unassigned/ambiguous period
-
-                standard_assignments = [
-                    a for a in cw.assignments
-                    if getattr(a, "recipient_student_id", None) is None
-                    and getattr(a, "source_intervention_id", None) is None
-                    and getattr(a, "remediation_request_id", None) is None
-                    and getattr(a, "original_exam_assignment_id", None) is None
-                ]
-                if not standard_assignments:
-                    continue  # Exclude learner-targeted/remedial-only content
-
-                classwork_periods = set()
-                for asgn in standard_assignments:
-                    if asgn.academic_period_id:
-                        classwork_periods.add(asgn.academic_period_id)
-                    elif asgn.class_ and asgn.class_.academic_period_id:
-                        classwork_periods.add(asgn.class_.academic_period_id)
-                if len(classwork_periods) != 1:
+                if not is_classwork_repost_eligible(cw):
                     continue
-                resolved_period_id = next(iter(classwork_periods))
+                resolved_period_id = resolve_standard_classwork_period_id(cw)
+                if resolved_period_id is None:
+                    continue
                 period = periods.get(resolved_period_id)
                 if not period or resolved_period_id not in verified_periods:
                     continue
@@ -794,6 +780,7 @@ class ContentCloningPackageService:
                             joinedload(Classwork.rubric_levels),
                             joinedload(Classwork.lessons),
                             joinedload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+                            joinedload(Classwork.assignments).joinedload(ClassworkAssignment.recipients),
                             joinedload(Classwork.coverage_history),
                             joinedload(Classwork.quiz_setting),
                             joinedload(Classwork.quiz)
@@ -810,6 +797,15 @@ class ContentCloningPackageService:
                             message=f"Classwork #{item_sel.source_entity_id} was not found or is not owned by you.",
                             field="items",
                         )
+                    require_classwork_repost_eligible(cw)
+                    resolved_period_id = resolve_standard_classwork_period_id(cw)
+                    if resolved_period_id is None or resolved_period_id != selected_period_id:
+                        raise ContentCloningError(
+                            status_code=409,
+                            code="SOURCE_CONTENT_NOT_REPOST_ELIGIBLE",
+                            message="The selected material has no verifiable class-wide source term.",
+                            field="items",
+                        )
                     live_token = compute_classwork_revision_token(cw)
                     if live_token != item_sel.source_revision_token:
                         raise ContentCloningError(
@@ -820,7 +816,7 @@ class ContentCloningPackageService:
                             retryable=True,
                         )
                     snapshot = build_classwork_snapshot(cw)
-                    snapshot["academic_period_id"] = selected_period_id
+                    snapshot["academic_period_id"] = resolved_period_id
                     snap_hash = hashlib.sha256(_canonical_json(snapshot).encode("utf-8")).hexdigest()
                     counts["classwork_count"] += 1
 

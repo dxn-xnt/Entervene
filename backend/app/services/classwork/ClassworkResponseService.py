@@ -211,6 +211,9 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         intervention_resource_origin_id=getattr(
             cw, "intervention_resource_origin_id", None
         ),
+        intervention_resource_recipient_scope=getattr(
+            cw, "intervention_resource_recipient_scope", None
+        ),
         teacher_name=f"{getattr(staff, 'first_name', '')} {getattr(staff, 'last_name', '')}".strip() or None if staff else None,
         attachments=[build_attachment_response(attachment) for attachment in cw.attachments],
         reference_links=[

@@ -45,10 +45,13 @@ from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
+from app.models.academic.LessonDelivery import LessonDelivery
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+from app.models.academic.SubjectPeriodGradingTemplate import SubjectPeriodGradingTemplate
+from app.models.academic.SubjectYearGradingTemplate import SubjectYearGradingTemplate
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.auth.Role import Role
@@ -57,6 +60,7 @@ from app.models.auth.UserRoles import UserRoles
 from app.models.classwork.ActivityRubricLevel import ActivityRubricLevel
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkAssignmentRecipient import ClassworkAssignmentRecipient
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkCoverage import ClassworkCoverage
 from app.models.classwork.ClassworkLesson import ClassworkLesson
@@ -154,12 +158,16 @@ TABLES = [
     SubjectLoad.__table__,
     SubjectOffering.__table__,
     SubjectOfferingPathway.__table__,
+    SubjectPeriodGradingTemplate.__table__,
+    SubjectYearGradingTemplate.__table__,
     TeacherSubstitution.__table__,
     Competency.__table__,
     Lesson.__table__,
     LessonAssignment.__table__,
+    LessonDelivery.__table__,
     Classwork.__table__,
     ClassworkAssignment.__table__,
+    ClassworkAssignmentRecipient.__table__,
     ClassworkAttachment.__table__,
     ClassworkCoverage.__table__,
     ClassworkLesson.__table__,
@@ -1146,6 +1154,266 @@ def _create_pr_b_fixture(db: Session, scenario: dict, include_remedial: bool = T
     )
     db.commit()
     return req
+
+
+def _add_repost_source_classwork(
+    db: Session,
+    *,
+    classwork_id: int,
+    staff_id: str,
+    class_id: int,
+    scope: str | None,
+    intervention_origin_id: int | None = 999,
+    classwork_type: str = "READING",
+    is_graded: bool = False,
+) -> Classwork:
+    classwork = Classwork(
+        classwork_id=classwork_id,
+        title=f"Repost source {classwork_id}",
+        description="Reusable reading content",
+        instructions="Read and reflect.",
+        classwork_type=classwork_type,
+        is_graded=is_graded,
+        subject_id=5,
+        created_by_staff_id=staff_id,
+        is_published=True,
+        intervention_resource_origin_id=intervention_origin_id,
+        intervention_resource_recipient_scope=scope,
+    )
+    db.add(classwork)
+    db.flush()
+    db.add(ClassworkAssignment(
+        classwork_id=classwork.classwork_id,
+        class_id=class_id,
+        academic_period_id=11,
+        assigned_by_staff_id=staff_id,
+        is_published=True,
+    ))
+    db.commit()
+    return classwork
+
+
+def test_intervention_reading_repost_discovery_uses_explicit_saved_scope(db, scenario):
+    request = _create_pr_b_fixture(db, scenario, include_remedial=False)
+    sources = {
+        "student": _add_repost_source_classwork(
+            db, classwork_id=61, staff_id="OWNER", class_id=11, scope="THIS_STUDENT",
+        ),
+        "class": _add_repost_source_classwork(
+            db, classwork_id=62, staff_id="OWNER", class_id=11, scope="ENTIRE_CLASS",
+        ),
+        "subject": _add_repost_source_classwork(
+            db, classwork_id=63, staff_id="OWNER", class_id=11, scope="ALL_SUBJECT_STUDENTS",
+        ),
+        "legacy": _add_repost_source_classwork(
+            db, classwork_id=64, staff_id="OWNER", class_id=11, scope=None,
+        ),
+        "assessment": _add_repost_source_classwork(
+            db, classwork_id=65, staff_id="OWNER", class_id=11,
+            scope="ENTIRE_CLASS", classwork_type="QUIZ", is_graded=True,
+        ),
+        "ordinary": _add_repost_source_classwork(
+            db, classwork_id=66, staff_id="OWNER", class_id=11,
+            scope=None, intervention_origin_id=None,
+        ),
+    }
+
+    def discovered_ids() -> set[int]:
+        items, _ = ContentCloningPackageService.get_eligible_materials(
+            db, request_id=request.request_id, staff_id="OWNER",
+            page=1, page_size=200,
+        )
+        return {item.source_entity_id for item in items if item.item_type == "CLASSWORK"}
+
+    assert {62, 63, 66}.issubset(discovered_ids())
+    assert {61, 64, 65}.isdisjoint(discovered_ids())
+
+    sources["student"].intervention_resource_recipient_scope = "ENTIRE_CLASS"
+    db.commit()
+    assert 61 in discovered_ids()
+    sources["student"].intervention_resource_recipient_scope = "ALL_SUBJECT_STUDENTS"
+    db.commit()
+    assert 61 in discovered_ids()
+    sources["student"].intervention_resource_recipient_scope = "THIS_STUDENT"
+    db.commit()
+    assert 61 not in discovered_ids()
+
+
+def test_direct_self_clone_enforces_scope_and_sanitizes_broad_readings(db, scenario):
+    private = _add_repost_source_classwork(
+        db, classwork_id=71, staff_id="REQ", class_id=10, scope="THIS_STUDENT",
+    )
+    broad = _add_repost_source_classwork(
+        db, classwork_id=72, staff_id="REQ", class_id=10, scope="ENTIRE_CLASS",
+    )
+    ordinary = _add_repost_source_classwork(
+        db, classwork_id=73, staff_id="REQ", class_id=10,
+        scope=None, intervention_origin_id=None,
+    )
+    assessment = _add_repost_source_classwork(
+        db, classwork_id=74, staff_id="REQ", class_id=10,
+        scope="ALL_SUBJECT_STUDENTS", classwork_type="QUIZ", is_graded=True,
+    )
+    client = _client(db, staff_id="REQ")
+    endpoint = "/api/v1/content-cloning/clone-operations/self"
+
+    def payload_for(*classworks: Classwork) -> dict:
+        return {
+            "destination_class_id": 20,
+            "destination_subject_id": 5,
+            "destination_academic_period_id": 22,
+            "items": [{
+                "item_type": "CLASSWORK",
+                "source_entity_id": item.classwork_id,
+                "source_revision_token": compute_classwork_revision_token(item),
+            } for item in classworks],
+        }
+
+    denied = client.post(
+        endpoint, json=payload_for(private), headers={"Idempotency-Key": "private-reading"},
+    )
+    assert denied.status_code == 409
+    assert denied.json()["detail"]["code"] == "SOURCE_CONTENT_NOT_REPOST_ELIGIBLE"
+    assessment_denied = client.post(
+        endpoint, json=payload_for(assessment), headers={"Idempotency-Key": "private-assessment"},
+    )
+    assert assessment_denied.status_code == 409
+    assert assessment_denied.json()["detail"]["code"] == "SOURCE_CONTENT_NOT_REPOST_ELIGIBLE"
+
+    cloned = client.post(
+        endpoint,
+        json=payload_for(broad, ordinary),
+        headers={"Idempotency-Key": "broad-and-ordinary-readings"},
+    )
+    assert cloned.status_code == 201, cloned.text
+    operation_id = uuid.UUID(cloned.json()["operation_id"])
+    maps = db.query(ContentCloneItemMap).filter(
+        ContentCloneItemMap.operation_id == operation_id,
+        ContentCloneItemMap.entity_type == "CLASSWORK",
+    ).all()
+    copies = [db.get(Classwork, int(item.destination_entity_ref)) for item in maps]
+    assert len(copies) == 2
+    for copied in copies:
+        assert copied.intervention_resource_origin_id is None
+        assert copied.intervention_resource_recipient_scope is None
+        assert copied.is_locked is True
+        assert copied.is_published is False
+        assert len(copied.assignments) == 1
+        assert copied.assignments[0].recipient_student_id is None
+        assert copied.assignments[0].recipients == []
+
+
+def test_prepared_package_revalidates_revoked_intervention_scope(db, scenario):
+    request = _create_pr_b_fixture(db, scenario, include_remedial=False)
+    source = _add_repost_source_classwork(
+        db, classwork_id=81, staff_id="OWNER", class_id=11, scope="ENTIRE_CLASS",
+    )
+    owner = _client(db, staff_id="OWNER")
+    requester = _client(db, staff_id="REQ")
+    package = owner.post(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package",
+        json={
+            "expected_version": 1,
+            "items": [{
+                "item_type": "CLASSWORK",
+                "source_entity_id": source.classwork_id,
+                "source_revision_token": compute_classwork_revision_token(source),
+            }],
+        },
+        headers={"Idempotency-Key": "broad-reading-package"},
+    )
+    assert package.status_code == 201, package.text
+
+    source.intervention_resource_recipient_scope = "THIS_STUDENT"
+    db.commit()
+    denied = requester.post(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package-decision",
+        json={"decision": "ACCEPT", "expected_version": 2},
+        headers={"Idempotency-Key": "accept-revoked-reading"},
+    )
+    assert denied.status_code == 409
+    assert denied.json()["detail"]["code"] == "SOURCE_CONTENT_NOT_REPOST_ELIGIBLE"
+    db.refresh(request)
+    assert request.status == "PACKAGE_SENT"
+
+
+def test_student_restricted_assignments_and_private_only_teachers_are_excluded(db, scenario):
+    request = _create_pr_b_fixture(db, scenario, include_remedial=False)
+    student_id = uuid.uuid4()
+
+    # 1. Inconsistent broad scope with a ClassworkAssignmentRecipient row
+    inconsistent = _add_repost_source_classwork(
+        db, classwork_id=85, staff_id="OWNER", class_id=11, scope="ENTIRE_CLASS",
+    )
+    db.add(ClassworkAssignmentRecipient(
+        classwork_assignment_id=inconsistent.assignments[0].classwork_assignment_id,
+        student_id=student_id,
+        assigned_by_staff_id="OWNER",
+    ))
+
+    # 2. Ordinary reading attached solely via a student-specific recipient row
+    attached_student_only = _add_repost_source_classwork(
+        db, classwork_id=86, staff_id="OWNER", class_id=11,
+        scope=None, intervention_origin_id=None,
+    )
+    db.add(ClassworkAssignmentRecipient(
+        classwork_assignment_id=attached_student_only.assignments[0].classwork_assignment_id,
+        student_id=student_id,
+        assigned_by_staff_id="OWNER",
+    ))
+
+    # 3. Private-only teacher with ONLY a THIS_STUDENT intervention reading in Year 1
+    _add_teacher(db, "PRIVONLY", "Private", "Teacher")
+    db.add(Class(
+        class_id=19, section_name="Private Section",
+        academic_year_id=1, academic_level_id=1, academic_period_id=11,
+        class_status="active",
+    ))
+    db.add(SubjectLoad(
+        subject_load_id=88, staff_id="PRIVONLY", subject_id=5,
+        class_id=19, academic_period_id=11, status="published", is_active_version=True,
+    ))
+    db.flush()
+    _add_repost_source_classwork(
+        db, classwork_id=87, staff_id="PRIVONLY", class_id=19, scope="THIS_STUDENT",
+    )
+    db.commit()
+
+    # Neither restricted classwork appears in discovery
+    items, _ = ContentCloningPackageService.get_eligible_materials(
+        db, request_id=request.request_id, staff_id="OWNER", page=1, page_size=200,
+    )
+    discovered_ids = {item.source_entity_id for item in items if item.item_type == "CLASSWORK"}
+    assert 85 not in discovered_ids
+    assert 86 not in discovered_ids
+
+    # Neither can be packaged via direct API bypass
+    owner = _client(db, staff_id="OWNER")
+    for cw in (inconsistent, attached_student_only):
+        resp = owner.post(
+            f"/api/v1/content-cloning/requests/{request.request_id}/package",
+            json={
+                "expected_version": 1,
+                "items": [{
+                    "item_type": "CLASSWORK",
+                    "source_entity_id": cw.classwork_id,
+                    "source_revision_token": compute_classwork_revision_token(cw),
+                }],
+            },
+            headers={"Idempotency-Key": f"deny-restricted-{cw.classwork_id}"},
+        )
+        assert resp.status_code in {404, 409}
+
+    # Private-only teacher is excluded from source-teacher discovery
+    scope = ContentCloningAuthorizationService.resolve_source_scope(
+        db, mode="ALL_TERMS", academic_year_id=1, academic_period_id=None,
+    )
+    teachers = ContentCloningAuthorizationService.list_source_teachers(
+        db, requester_staff_id="REQ", subject_id=5,
+        destination_period_id=22, scope=scope,
+    )
+    assert "PRIVONLY" not in {t.staff_id for t in teachers}
+    assert "OWNER" in {t.staff_id for t in teachers}
 
 
 def test_owner_material_selection_authorization_and_scoping(db, scenario):

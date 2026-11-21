@@ -806,6 +806,7 @@ def test_editing_intervention_created_reading_replaces_scope_and_preserves_origi
     )
     assert created_response.status_code == 200, created_response.text
     classwork_id = created_response.json()["classwork_id"]
+    assert ctx["db"].get(Classwork, classwork_id).intervention_resource_recipient_scope == "THIS_STUDENT"
 
     entire_class = client.put(
         f"/api/v1/classwork-assignments/classwork/{classwork_id}",
@@ -813,6 +814,8 @@ def test_editing_intervention_created_reading_replaces_scope_and_preserves_origi
         json={"recipient_scope": "ENTIRE_CLASS"},
     )
     assert entire_class.status_code == 200, entire_class.text
+    ctx["db"].expire_all()
+    assert ctx["db"].get(Classwork, classwork_id).intervention_resource_recipient_scope == "ENTIRE_CLASS"
     assert len(entire_class.json()["assignments"]) == 1
     assert entire_class.json()["assignments"][0]["recipient_student_ids"] == []
     entire_assignment_id = entire_class.json()["assignments"][0][
@@ -852,6 +855,8 @@ def test_editing_intervention_created_reading_replaces_scope_and_preserves_origi
         json={"recipient_scope": "ALL_SUBJECT_STUDENTS"},
     )
     assert all_subject.status_code == 200, all_subject.text
+    ctx["db"].expire_all()
+    assert ctx["db"].get(Classwork, classwork_id).intervention_resource_recipient_scope == "ALL_SUBJECT_STUDENTS"
     assert {row["class_id"] for row in all_subject.json()["assignments"]} == {
         ctx["class_a"].class_id,
         ctx["class_b"].class_id,
@@ -873,6 +878,8 @@ def test_editing_intervention_created_reading_replaces_scope_and_preserves_origi
         json={"recipient_scope": "THIS_STUDENT"},
     )
     assert this_student.status_code == 200, this_student.text
+    ctx["db"].expire_all()
+    assert ctx["db"].get(Classwork, classwork_id).intervention_resource_recipient_scope == "THIS_STUDENT"
     assignments = this_student.json()["assignments"]
     assert len(assignments) == 1
     assert assignments[0]["class_id"] == ctx["class_a"].class_id

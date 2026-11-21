@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Column, String, Integer, Text, Boolean, DateTime, ForeignKey, Numeric
+from sqlalchemy import Column, String, Integer, Text, Boolean, DateTime, ForeignKey, Numeric, CheckConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.Base import Base
@@ -11,6 +11,14 @@ from app.db.Base import Base
 
 class Classwork(Base):
     __tablename__ = "classwork"
+    __table_args__ = (
+        CheckConstraint(
+            "intervention_resource_recipient_scope IS NULL OR "
+            "intervention_resource_recipient_scope IN "
+            "('THIS_STUDENT', 'ENTIRE_CLASS', 'ALL_SUBJECT_STUDENTS')",
+            name="ck_classwork_intervention_resource_recipient_scope",
+        ),
+    )
 
     classwork_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -34,6 +42,10 @@ class Classwork(Base):
         ForeignKey("intervention.intervention_id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
+    )
+    intervention_resource_recipient_scope: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
     )
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -31,6 +31,10 @@ from app.services.cloning.ContentCloningAuthorizationService import (
     ContentCloningAuthorizationService, DestinationScope,
 )
 from app.services.cloning.ContentCloningErrors import ContentCloningError
+from app.services.cloning.ContentCloningEligibilityService import (
+    require_classwork_repost_eligible,
+    resolve_standard_classwork_period_id,
+)
 from app.services.cloning.ContentCloningLifecycleService import (
     effective_request_status, expire_request, utc_now,
 )
@@ -65,19 +69,7 @@ def _period_for_lesson(lesson: Lesson) -> int | None:
 
 
 def _period_for_classwork(classwork: Classwork) -> int | None:
-    periods = {
-        assignment.academic_period_id or (
-            assignment.class_.academic_period_id if assignment.class_ else None
-        )
-        for assignment in classwork.assignments
-        if assignment.recipient_student_id is None
-        and not (getattr(assignment, "recipients", None) or [])
-        and assignment.source_intervention_id is None
-        and assignment.remediation_request_id is None
-        and assignment.original_exam_assignment_id is None
-    }
-    periods.discard(None)
-    return next(iter(periods)) if len(periods) == 1 else None
+    return resolve_standard_classwork_period_id(classwork)
 
 
 def _self_items(
@@ -127,7 +119,8 @@ def _self_items(
             Classwork.created_by_staff_id == actor_staff_id,
             Classwork.subject_id == destination.subject_id,
         ).options(
-            joinedload(Classwork.assignments),
+            joinedload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+            joinedload(Classwork.assignments).joinedload(ClassworkAssignment.recipients),
             joinedload(Classwork.attachments),
             joinedload(Classwork.lessons),
             joinedload(Classwork.rubric_levels),
@@ -162,6 +155,8 @@ def _self_items(
                 message="A selected material was not found or is not owned by you.",
                 field="items",
             )
+        if kind == "CLASSWORK":
+            require_classwork_repost_eligible(source)
         source_period_id = (
             source.academic_period_id if kind == "COMPETENCY"
             else _period_for_lesson(source) if kind == "LESSON"
