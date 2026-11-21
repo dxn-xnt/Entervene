@@ -19,8 +19,11 @@ const STUDENT_DEADLINE_TYPES = new Set<NotificationItem["notification_type"]>([
 
 const STUDENT_CLASSWORK_TYPES = new Set<NotificationItem["notification_type"]>([
   "assignment_due",
+  "classwork_updated",
+  "deadline_changed",
   "submission_graded",
   "grade_released",
+  "quiz_results_available",
 ]);
 
 export function isExcludedNotification(item: Pick<NotificationItem, "notification_type">): boolean {
@@ -64,6 +67,12 @@ export function getStudentNotificationBadgeLabel(
 ): string {
   const category = getStudentNotificationCategory(notificationType);
   if (category === "study_support") return "Study Support";
+  if (notificationType === "quiz_results_available") return "Quiz Results Available";
+  if (notificationType === "assignment_due") return "New Classwork";
+  if (notificationType === "classwork_updated") return "Classwork Updated";
+  if (notificationType === "deadline_changed") return "Deadline Changed";
+  if (notificationType === "classwork_due_soon" || notificationType === "classwork_due_today") return "Deadline Reminder";
+  if (notificationType === "classwork_overdue") return "Overdue";
   return "Classwork";
 }
 

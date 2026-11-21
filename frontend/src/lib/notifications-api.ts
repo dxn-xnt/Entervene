@@ -4,12 +4,15 @@ export type NotificationItem = {
   notification_id: string;
   notification_type:
     | "assignment_due"
+    | "classwork_updated"
+    | "deadline_changed"
     | "classwork_due_soon"
     | "classwork_due_today"
     | "classwork_overdue"
     | "risk_alert"
     | "announcement"
     | "grade_released"
+    | "quiz_results_available"
     | "submission_graded"
     | "grade_submission_window_opened"
     | "grade_submission_closing_soon"

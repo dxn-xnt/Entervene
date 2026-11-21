@@ -91,7 +91,7 @@ def test_historical_announcements_excluded_from_feed_and_unread_without_deletion
     assert refreshed.unread_count == 0
 
 
-def test_student_deadline_notifications_are_hidden_without_deletion_or_affecting_teachers():
+def test_student_deadline_notifications_are_visible_and_keep_unread_counts_consistent():
     db = _make_db()
     student_id = uuid.uuid4()
     teacher_id = uuid.uuid4()
@@ -115,16 +115,16 @@ def test_student_deadline_notifications_are_hidden_without_deletion_or_affecting
     db.commit()
 
     student_feed = get_notifications_for_user(db, student_id, user_role="student")
-    assert student_feed.unread_count == 1
-    assert [item.notification_id for item in student_feed.notifications] == [student_classwork.notification_id]
+    assert student_feed.unread_count == 2
+    assert {item.notification_id for item in student_feed.notifications} == {
+        student_deadline.notification_id, student_classwork.notification_id,
+    }
 
-    with pytest.raises(HTTPException) as exc:
-        mark_notification_read(
-            db, str(student_deadline.notification_id), student_id, user_role="student",
-        )
-    assert exc.value.status_code == 404
+    marked = mark_notification_read(
+        db, str(student_deadline.notification_id), student_id, user_role="student",
+    )
+    assert marked.is_read is True
     assert mark_all_notifications_read(db, student_id, user_role="student") == {"marked_read": 1}
-    assert db.get(Notification, student_deadline.notification_id).is_read is False
 
     teacher_feed = get_notifications_for_user(db, teacher_id, user_role="teacher")
     assert teacher_feed.unread_count == 1

@@ -10,12 +10,15 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 NotificationType = Literal[
     "assignment_due",
+    "classwork_updated",
+    "deadline_changed",
     "classwork_due_soon",
     "classwork_due_today",
     "classwork_overdue",
     "risk_alert",
     "announcement",
     "grade_released",
+    "quiz_results_available",
     "submission_graded",
     "grade_submission_window_opened",
     "grade_submission_closing_soon",
@@ -65,6 +68,7 @@ class NotificationListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class NotificationCreate(BaseModel):
+    notification_id: UUID | None = None
     user_id: UUID
     notification_type: NotificationType
     title: str

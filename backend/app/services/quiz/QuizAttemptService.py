@@ -195,22 +195,15 @@ def submit_student_quiz_attempt(
         db.flush()
 
     max_attempts = _max_attempts(db, assignment, classwork)
-    if submission.status != "pending" and submission.attempt_count >= max_attempts:
-        raise HTTPException(status_code=403, detail="Maximum attempts reached")
+    if submission.status != "pending":
+        if submission.attempt_count >= max_attempts:
+            raise HTTPException(status_code=403, detail="Maximum attempts reached")
+        raise HTTPException(
+            status_code=409,
+            detail="This attempt is already finalized. Start a new attempt before submitting again.",
+        )
     if submission.status == "pending" and submission.attempt_count >= max_attempts:
         raise HTTPException(status_code=403, detail="Maximum attempts reached")
-
-    if assignment.source_intervention_id is not None and submission.status != "pending":
-        # A client may submit a permitted retake without calling /start first.
-        # Never overwrite the completed Intervention attempt in that path.
-        submission = StudentSubmission(
-            student_id=student.student_id,
-            classwork_assignment_id=assignment_id,
-            status="pending",
-            attempt_count=submission.attempt_count,
-        )
-        db.add(submission)
-        db.flush()
 
     now = datetime.now(timezone.utc)
     due_date = aware_utc(assignment.due_date)

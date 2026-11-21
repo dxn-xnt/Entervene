@@ -1327,7 +1327,7 @@ def update_classwork_record(
                     class_ids=assigned_class_ids,
                     title=notif_title,
                     body_text=notif_body,
-                    notification_type="assignment_due",
+                    notification_type="classwork_updated",
                     classwork_id=classwork.classwork_id,
                     subject_id=classwork.subject_id,
                 )
@@ -1570,6 +1570,7 @@ def assign_classwork_to_classes(
     new_assignments = []
     was_targeted_published = bool(targeted and targeted.is_published)
     newly_published_assignment = False
+    deadline_changed = False
     try:
         for class_id in class_ids:
             existing = db.query(ClassworkAssignment).filter(
@@ -1577,6 +1578,8 @@ def assign_classwork_to_classes(
                 ClassworkAssignment.class_id == class_id,
             ).first()
             if existing:
+                if existing.due_date != body.due_date:
+                    deadline_changed = True
                 if body.is_published and not existing.is_published:
                     newly_published_assignment = True
                 existing.academic_period_id = academic_period_id
@@ -1653,6 +1656,16 @@ def assign_classwork_to_classes(
         if class_ids and not targeted and body.is_published:
             cw_lessons = db.query(ClassworkLesson.lesson_id).filter(ClassworkLesson.classwork_id == classwork_id).all()
             lesson_ids_list = [l[0] for l in cw_lessons] if cw_lessons else None
+            event_type: NotificationType = (
+                "assignment_due" if created
+                else "deadline_changed" if deadline_changed
+                else "classwork_updated"
+            )
+            action_type = (
+                "Assigned" if event_type == "assignment_due"
+                else "Deadline changed" if event_type == "deadline_changed"
+                else "Updated"
+            )
             notif_title, notif_body = build_classwork_notification_details(
                 db=db,
                 classwork_title=classwork.title,
@@ -1660,14 +1673,14 @@ def assign_classwork_to_classes(
                 subject_id=classwork.subject_id,
                 lesson_ids=lesson_ids_list,
                 due_date=body.due_date,
-                action_type="Assigned",
+                action_type=action_type,
             )
             notify_students_for_classwork(
                 db=db,
                 class_ids=class_ids,
                 title=notif_title,
                 body_text=notif_body,
-                notification_type="assignment_due",
+                notification_type=event_type,
                 classwork_id=classwork.classwork_id,
                 subject_id=classwork.subject_id,
             )
