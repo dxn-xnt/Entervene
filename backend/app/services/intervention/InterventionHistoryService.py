@@ -10,11 +10,6 @@ from app.models.intervention.InterventionSupportMaterial import InterventionSupp
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.grading.RemedialExamination import effective_exam_score_for_change
-from app.services.intervention.RemediationPostGradingService import (
-    ActualRemediationPredictionEvaluation,
-    STATUS_AVAILABLE,
-    evaluate_actual_remediation_prediction,
-)
 
 
 def resolution_prediction(
@@ -31,30 +26,6 @@ def resolution_prediction(
     )
     if resolved_source is None:
         return None
-    plan = row.remediation_plan if isinstance(row.remediation_plan, dict) else {}
-    frozen = plan.get("resolution_ceiling_snapshot")
-    if isinstance(frozen, dict) and isinstance(frozen.get("prediction_id"), int):
-        snap_pred = db.get(DevelopmentCurrentTermPrediction, frozen["prediction_id"])
-        if (
-            snap_pred is not None
-            and (
-                snap_pred.student_id,
-                snap_pred.class_id,
-                snap_pred.subject_id,
-                snap_pred.source_period_id,
-                snap_pred.target_period_id,
-                snap_pred.model_version_id,
-            )
-            == (
-                row.student_id,
-                row.class_id,
-                row.subject_id,
-                row.academic_period_id,
-                row.academic_period_id,
-                resolved_source.model_version_id,
-            )
-        ):
-            return snap_pred
     query = db.query(DevelopmentCurrentTermPrediction).filter_by(
         student_id=row.student_id, class_id=row.class_id, subject_id=row.subject_id,
         source_period_id=row.academic_period_id, target_period_id=row.academic_period_id,
@@ -87,33 +58,14 @@ def resolution_prediction(
     return query.order_by(DevelopmentCurrentTermPrediction.revision.desc()).first()
 
 
-def resolution_projection_evaluation(
-    db: Session,
-    row: Intervention,
-) -> ActualRemediationPredictionEvaluation | None:
+def resolution_projection(db: Session, row: Intervention) -> float | None:
     prediction = resolution_prediction(db, row)
     if prediction is None or not isinstance(prediction.evidence_snapshot, dict):
         return None
     readiness = prediction.evidence_snapshot.get("readiness")
-    if not isinstance(readiness, dict) or readiness.get("status") != "READY":
+    value = prediction.evidence_snapshot.get("projected_final_term_grade_raw")
+    if not isinstance(readiness, dict) or readiness.get("status") != "READY" or not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
-    return evaluate_actual_remediation_prediction(db, row, prediction)
-
-
-def resolution_projection(
-    db: Session,
-    row: Intervention,
-    *,
-    evaluation: ActualRemediationPredictionEvaluation | None = None,
-) -> float | None:
-    resolved_eval = evaluation if evaluation is not None else resolution_projection_evaluation(db, row)
-    if (
-        resolved_eval is None
-        or resolved_eval.status != STATUS_AVAILABLE
-        or resolved_eval.remediation_adjusted_predicted_grade is None
-    ):
-        return None
-    value = float(resolved_eval.remediation_adjusted_predicted_grade)
     if row.resolution_reason == "IMPROVED_PREDICTION":
         threshold_val = 85.0
         try:
@@ -127,9 +79,9 @@ def resolution_projection(
                 threshold_val = float(res.threshold)
         except Exception:
             pass
-        if value < threshold_val:
+        if float(value) < threshold_val:
             return None
-    return value
+    return float(value)
 
 
 def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -> list[dict]:

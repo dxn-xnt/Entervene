@@ -130,17 +130,6 @@ def preflight_remediation_draft(
             detail=f"Invalid intervention plan score adjustment cap: {err}",
         )
 
-    plan_predicted_ceiling_raw = plan.get("predicted_grade_ceiling")
-    if plan_predicted_ceiling_raw is not None:
-        from app.services.grading.RemediationGradeCeiling import validate_predicted_grade_ceiling
-        try:
-            validate_predicted_grade_ceiling(plan_predicted_ceiling_raw)
-        except (ValueError, TypeError) as err:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Invalid intervention plan predicted grade ceiling: {err}",
-            )
-
     # 6. Verify original target assignments & point matching
     resolved_target_ids: list[int] = []
     treatment = validated_draft.grade_treatment
