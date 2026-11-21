@@ -179,6 +179,9 @@ def test_student_role_denied_all_attendance_and_leave_endpoints():
 
 def test_teacher_marks_excused_with_remarks_and_views_logs():
     db, teacher_user_id, _, student_id = setup_test_environment()
+    cls = db.get(Class, 1)
+    cls.adviser_staff_id = "STF-001"
+    db.commit()
     client = create_client(db, user_payload={"sub": str(teacher_user_id), "role": "teacher"})
 
     # Teacher manually marks student as 'excused' with physical letter verification remark
@@ -496,6 +499,8 @@ def test_teacher_without_staff_profile_cannot_bypass_attendance_authorization():
 
 def test_batch_attendance_rejects_student_not_enrolled_in_target_class():
     db, teacher_user_id, _, _ = setup_test_environment()
+    cls = db.get(Class, 1)
+    cls.adviser_staff_id = "STF-001"
     nonmember_id = uuid.uuid4()
     db.add(Student(
         student_id=nonmember_id,

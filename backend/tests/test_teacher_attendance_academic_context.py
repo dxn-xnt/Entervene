@@ -382,3 +382,160 @@ def test_batch_mark_attendance_unauthorized_teacher_fails(client, attendance_wor
     assert res.status_code == 403
     assert "not authorized" in res.json()["detail"].lower()
 
+
+def test_batch_mark_attendance_out_of_period_date_rejected_without_persisting(
+    client, attendance_world, attendance_db
+):
+    """Saving attendance for a date outside the selected term (e.g., 2026-11-21 in 2025-2026 Q1) fails with 400 and persists nothing."""
+    headers = {"Authorization": f"Bearer {attendance_world['teacher1_token']}"}
+    student = attendance_db.query(Student).filter(Student.student_lrn == "100000000001").first()
+    before_count = attendance_db.query(AttendanceRecord).count()
+
+    payload = {
+        "class_id": 10,
+        "academic_period_id": 2,
+        "date": "2026-11-21",
+        "records": [
+            {
+                "student_id": str(student.student_id),
+                "status": "present",
+                "remarks": "Out of term",
+            }
+        ],
+    }
+    res = client.post("/api/v1/attendance", json=payload, headers=headers)
+    assert res.status_code == 400, res.text
+    detail = res.json()["detail"]
+    assert "Attendance date must fall within the selected academic period" in detail
+    assert "2025-08-01 to 2025-10-31" in detail
+    assert attendance_db.query(AttendanceRecord).count() == before_count
+
+
+def test_batch_mark_attendance_repeated_saves_upsert_without_duplicates_and_persist(
+    client, attendance_world, attendance_db
+):
+    """Repeated saves for the same class/date update in-place without duplicates and persist across reload."""
+    headers = {"Authorization": f"Bearer {attendance_world['teacher1_token']}"}
+    student = attendance_db.query(Student).filter(Student.student_lrn == "100000000001").first()
+
+    first_payload = {
+        "class_id": 10,
+        "academic_period_id": 2,
+        "date": "2025-09-20",
+        "records": [
+            {
+                "student_id": str(student.student_id),
+                "status": "late",
+                "remarks": "Arrived 10m late",
+            },
+            {
+                "student_id": str(student.student_id),
+                "status": "absent",
+                "remarks": "Marked absent after verification",
+            },
+        ],
+    }
+    res1 = client.post("/api/v1/attendance", json=first_payload, headers=headers)
+    assert res1.status_code == 200, res1.text
+    assert len(res1.json()) == 1
+    assert res1.json()[0]["status"] == "absent"
+
+    second_payload = {
+        "class_id": 10,
+        "academic_period_id": 2,
+        "date": "2025-09-20",
+        "records": [
+            {
+                "student_id": str(student.student_id),
+                "status": "excused",
+                "remarks": "Medical note submitted",
+            }
+        ],
+    }
+    res2 = client.post("/api/v1/attendance", json=second_payload, headers=headers)
+    assert res2.status_code == 200, res2.text
+    assert len(res2.json()) == 1
+    assert res2.json()[0]["status"] == "excused"
+    assert res2.json()[0]["remarks"] == "Medical note submitted"
+
+    # Verify DB has exactly one row for this date/student/class
+    rows = (
+        attendance_db.query(AttendanceRecord)
+        .filter(
+            AttendanceRecord.class_id == 10,
+            AttendanceRecord.student_id == student.student_id,
+            AttendanceRecord.date == date(2025, 9, 20),
+        )
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].status == "excused"
+
+    # Verify reload endpoint returns persisted status
+    logs_res = client.get(
+        "/api/v1/attendance/class/10?date=2025-09-20&academic_period_id=2&academic_year_id=2",
+        headers=headers,
+    )
+    assert logs_res.status_code == 200, logs_res.text
+    logs = logs_res.json()
+    assert len(logs) == 1
+    assert logs[0]["status"] == "excused"
+    assert logs[0]["remarks"] == "Medical note submitted"
+
+
+def test_homeroom_partial_unique_index_blocks_duplicate_null_subject_but_allows_subject_records(
+    attendance_world, attendance_db
+):
+    """DB-level partial unique index prevents duplicate homeroom (subject_id IS NULL) rows while allowing per-subject rows on the same date."""
+    from sqlalchemy.exc import IntegrityError
+
+    student = attendance_db.query(Student).filter(Student.student_lrn == "100000000001").first()
+    subj1 = Subject(subject_id=101, subject_name="Math", subject_codename="MTH101", academic_level_id=1)
+    subj2 = Subject(subject_id=102, subject_name="Science", subject_codename="SCI102", academic_level_id=1)
+    attendance_db.add_all([subj1, subj2])
+    attendance_db.commit()
+
+    # Existing homeroom record on 2025-09-10 already exists in fixture; inserting a second NULL subject_id row must fail.
+    dup_homeroom = AttendanceRecord(
+        student_id=student.student_id,
+        class_id=10,
+        subject_id=None,
+        date=date(2025, 9, 10),
+        status="absent",
+    )
+    attendance_db.add(dup_homeroom)
+    with pytest.raises(IntegrityError):
+        attendance_db.flush()
+    attendance_db.rollback()
+
+    # Subject-specific records on the same date remain unaffected and independent.
+    attendance_db.add_all([
+        AttendanceRecord(
+            student_id=student.student_id,
+            class_id=10,
+            subject_id=101,
+            date=date(2025, 9, 10),
+            status="present",
+        ),
+        AttendanceRecord(
+            student_id=student.student_id,
+            class_id=10,
+            subject_id=102,
+            date=date(2025, 9, 10),
+            status="late",
+        ),
+    ])
+    attendance_db.commit()
+
+    all_on_date = (
+        attendance_db.query(AttendanceRecord)
+        .filter(
+            AttendanceRecord.student_id == student.student_id,
+            AttendanceRecord.class_id == 10,
+            AttendanceRecord.date == date(2025, 9, 10),
+        )
+        .all()
+    )
+    assert len(all_on_date) == 3
+    assert {r.subject_id for r in all_on_date} == {None, 101, 102}
+

@@ -6,6 +6,7 @@ from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 
@@ -83,15 +84,24 @@ def _resolve_attendance_period_id(
                 detail="Academic class and period must belong to the same academic year.",
             )
         if target_date is not None:
-            if requested_period.start_date and target_date < requested_period.start_date:
+            out_of_range = (
+                (requested_period.start_date and target_date < requested_period.start_date)
+                or (requested_period.end_date and target_date > requested_period.end_date)
+            )
+            if out_of_range:
+                period_label = requested_period.period_name or "selected academic period"
+                if requested_period.start_date and requested_period.end_date:
+                    bounds = f"{requested_period.start_date.isoformat()} to {requested_period.end_date.isoformat()}"
+                elif requested_period.start_date:
+                    bounds = f"on or after {requested_period.start_date.isoformat()}"
+                else:
+                    bounds = f"on or before {requested_period.end_date.isoformat()}"
                 raise HTTPException(
                     status_code=400,
-                    detail="Attendance date must fall within the selected academic period.",
-                )
-            if requested_period.end_date and target_date > requested_period.end_date:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Attendance date must fall within the selected academic period.",
+                    detail=(
+                        f"Attendance date must fall within the selected academic period "
+                        f"({period_label}: {bounds})."
+                    ),
                 )
 
     if subject_id is not None:
@@ -384,10 +394,11 @@ def batch_mark_attendance(
                 status_code=400,
                 detail="Attendance can only be recorded for students actively enrolled in this class.",
             )
+    # Coalesce duplicate student entries in the same batch (last entry wins)
+    deduped_records = list({item.student_id: item for item in payload.records}.values())
     results: list[AttendanceRecordResponse] = []
 
-
-    for item in payload.records:
+    for item in deduped_records:
         existing_q = (
             db.query(AttendanceRecord)
             .filter(
@@ -409,19 +420,32 @@ def batch_mark_attendance(
             existing.recorded_by_staff_id = recorded_by_staff_id
             existing.subject_id = payload.subject_id
             record = existing
+            db.flush()
         else:
-            record = AttendanceRecord(
-                student_id=item.student_id,
-                class_id=payload.class_id,
-                subject_id=payload.subject_id,
-                date=payload.date,
-                status=item.status,
-                remarks=item.remarks,
-                recorded_by_staff_id=recorded_by_staff_id,
-            )
-            db.add(record)
-
-        db.flush()
+            try:
+                with db.begin_nested():
+                    record = AttendanceRecord(
+                        student_id=item.student_id,
+                        class_id=payload.class_id,
+                        subject_id=payload.subject_id,
+                        date=payload.date,
+                        status=item.status,
+                        remarks=item.remarks,
+                        recorded_by_staff_id=recorded_by_staff_id,
+                    )
+                    db.add(record)
+                    db.flush()
+            except IntegrityError:
+                # Concurrent insert won the race; re-fetch and update in-place.
+                existing = existing_q.first()
+                if not existing:
+                    raise
+                existing.status = item.status
+                existing.remarks = item.remarks
+                existing.recorded_by_staff_id = recorded_by_staff_id
+                existing.subject_id = payload.subject_id
+                record = existing
+                db.flush()
 
         student = db.query(Student).filter(Student.student_id == item.student_id).first()
         student_name = f"{student.first_name} {student.last_name}" if student else None
