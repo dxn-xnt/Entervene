@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import type { QuizQuestionDraft } from "./quiz-builder-types";
 import {
+  areQuestionMappingControlsDisabled,
   applyBulkQuestionLessonAssignment,
   assignSelectedQuestionsToLesson,
   clearQuestionMappingsForLesson,
   getQuizLessonMappingState,
   mapQuestionsToSingleLinkedLesson,
   mapUnmappedQuestionsToLesson,
+  reconcileQuestionLessonMappings,
   sanitizeQuestionLessonId,
   selectUnmappedQuestionIds,
 } from "./quiz-question-rules";
@@ -69,6 +71,45 @@ describe("quiz lesson mapping helpers", () => {
     expect(mapQuestionsToSingleLinkedLesson(questions, [10, 20])).toBe(
       questions,
     );
+  });
+
+  it.each(["manual", "imported", "AI-generated"])(
+    "maps every %s question when exactly one lesson is selected",
+    () => {
+      const result = reconcileQuestionLessonMappings(
+        [question("1", null), question("2", 99)],
+        [10],
+      );
+
+      expect(result.map((item) => item.lesson_id)).toEqual([10, 10]);
+      expect(getQuizLessonMappingState(result, [10]).unmappedCount).toBe(0);
+    },
+  );
+
+  it("preserves valid multi-lesson mappings and clears stale mappings", () => {
+    const result = reconcileQuestionLessonMappings(
+      [question("1", 10), question("2", 20), question("3", 99)],
+      [10, 20],
+    );
+
+    expect(result.map((item) => item.lesson_id)).toEqual([10, 20, null]);
+    expect(selectUnmappedQuestionIds(result, [10, 20])).toEqual(new Set(["3"]));
+  });
+
+  it("clears all mappings when no lesson remains selected", () => {
+    const result = reconcileQuestionLessonMappings(
+      [question("1", 10), question("2", 20)],
+      [],
+    );
+
+    expect(result.map((item) => item.lesson_id)).toEqual([null, null]);
+  });
+
+  it("keeps select-all and individual mapping controls usable whenever mapping is unresolved", () => {
+    expect(areQuestionMappingControlsDisabled(false, false, 2)).toBe(false);
+    expect(areQuestionMappingControlsDisabled(false, true, 2)).toBe(false);
+    expect(areQuestionMappingControlsDisabled(false, true, 0)).toBe(true);
+    expect(areQuestionMappingControlsDisabled(true, false, 2)).toBe(true);
   });
 
   it("bulk assigns only the selected subset to one primary lesson", () => {

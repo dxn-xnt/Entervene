@@ -102,14 +102,20 @@ class QuizSettingOut(BaseModel):
 class QuizResultsSettingsUpdate(BaseModel):
     """Settings-only quiz results update used after quiz attempts exist."""
 
+    release_policy: Optional[
+        Literal["HIDDEN", "IMMEDIATE", "AFTER_DUE_DATE", "SCHEDULED"]
+    ] = None
     show_quiz_results: Optional[bool] = None
-    summary_release_mode: Literal["IMMEDIATE", "SCHEDULED", "AFTER_DUE_DATE", "NEVER"]
+    summary_release_mode: Optional[
+        Literal["IMMEDIATE", "SCHEDULED", "AFTER_DUE_DATE", "NEVER"]
+    ] = None
     summary_release_at: Optional[datetime] = None
     confirm_answer_reveal: bool = False
 
 
 class QuizResultsSettingsResponse(BaseModel):
     classwork_id: int
+    release_policy: Literal["HIDDEN", "IMMEDIATE", "AFTER_DUE_DATE", "SCHEDULED"]
     show_scores: bool
     show_correct_answers: bool
     summary_release_mode: str

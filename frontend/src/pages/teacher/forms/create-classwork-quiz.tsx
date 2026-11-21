@@ -70,12 +70,13 @@ import {
 } from "../classworks/quiz-builder-utils";
 import {
   applyBulkQuestionLessonAssignment,
+  areQuestionMappingControlsDisabled,
   clearQuestionMappingsForLesson,
   getQuizLessonMappingState,
   hasLinkedLessonMapping,
   isUnkeyed,
-  mapQuestionsToSingleLinkedLesson,
   normalizeIncomingQuestions,
+  reconcileQuestionLessonMappings,
   sanitizeQuestionLessonId,
   selectUnmappedQuestionIds,
   switchQuestionType,
@@ -98,6 +99,11 @@ import {
   type ReferenceLinkDraft,
 } from "@/lib/classwork-reference-links";
 import { cn } from "@/lib/utils";
+import {
+  legacyQuizReleaseSettings,
+  quizResultsReleasePolicyFromLegacy,
+  type QuizResultsReleasePolicy,
+} from "../classworks/quiz-results-release";
 
 interface CreateClassworkQuizModalProps {
   draftOnly?: boolean;
@@ -602,15 +608,36 @@ export default function CreateClassworkQuizModal({
       ),
     [quizQuestions, selectedLessonIds, selectedQuestionIds],
   );
+  const quizResultsReleasePolicy = quizResultsReleasePolicyFromLegacy(
+    draft.show_scores,
+    quizSettings.show_correct_answers,
+    quizSettings.summary_release_mode,
+    quizSettings.summary_release_at,
+  );
+  const setQuizResultsReleasePolicy = (policy: QuizResultsReleasePolicy) => {
+    const next = legacyQuizReleaseSettings(
+      policy,
+      quizSettings.summary_release_at,
+    );
+    setDraft((current) => ({
+      ...current,
+      show_scores: next.showResults,
+    }));
+    setQuizSettings((current) => ({
+      ...current,
+      show_correct_answers: next.showResults,
+      summary_release_mode: next.mode,
+      summary_release_at: next.scheduledAt,
+    }));
+  };
   const actionableImportNotices = useMemo(
     () => quizImportNotices.filter((notice) => notice.severity !== "info"),
     [quizImportNotices],
   );
 
   useEffect(() => {
-    if (selectedLessonIds.length !== 1) return;
     setQuizQuestions((questions) => {
-      return mapQuestionsToSingleLinkedLesson(questions, selectedLessonIds);
+      return reconcileQuestionLessonMappings(questions, selectedLessonIds);
     });
     setSelectedQuestionIds(new Set());
     setBulkLessonId("");
@@ -692,14 +719,12 @@ export default function CreateClassworkQuizModal({
         };
       });
 
-      setQuizQuestions(
-        mapQuestionsToSingleLinkedLesson(
-          importedQuestions.length > 0
-            ? importedQuestions
-            : [createEmptyQuizQuestion(1)],
-          selectedLessonIds,
-        ),
-      );
+      setQuizQuestions(reconcileQuestionLessonMappings(
+        importedQuestions.length > 0
+          ? importedQuestions
+          : [createEmptyQuizQuestion(1)],
+        selectedLessonIds,
+      ));
       setQuizImportWarnings(preview.warnings);
       setQuizImportNotices(preview.notices || []);
       setQuizImportSummary(preview.summary || null);
@@ -981,12 +1006,6 @@ export default function CreateClassworkQuizModal({
     if (!Number.isInteger(attempts) || attempts <= 0) {
       return "Allowed quiz attempts must be a positive whole number.";
     }
-    if (
-      quizSettings.summary_release_mode === "SCHEDULED" &&
-      !quizSettings.summary_release_at
-    ) {
-      return "Choose when the quiz summary should be released.";
-    }
 
     for (const [index, question] of quizQuestions.entries()) {
       const questionNumber = index + 1;
@@ -1219,56 +1238,61 @@ export default function CreateClassworkQuizModal({
     remediationFocus,
   ]);
 
-  const buildQuizPayload = () => ({
-    duration_minutes: quizSettings.duration_minutes
-      ? Number(quizSettings.duration_minutes)
-      : null,
-    status: draft.is_published ? "PUBLISHED" : "DRAFT",
-    settings: {
-      is_shuffle_questions: quizSettings.is_shuffle_questions,
-      is_shuffle_options: quizSettings.is_shuffle_options,
-      enable_per_question_scoring: quizSettings.enable_per_question_scoring,
-      enable_per_question_time_limits:
-        quizSettings.enable_per_question_time_limits,
-      max_attempts: Number(quizSettings.max_attempts || draft.max_attempts),
-      show_correct_answers: draft.show_scores,
-      summary_release_mode: quizSettings.summary_release_mode,
-      summary_release_at:
-        quizSettings.summary_release_mode === "SCHEDULED" &&
-          quizSettings.summary_release_at
-          ? new Date(quizSettings.summary_release_at).toISOString()
-          : null,
-    },
-    questions: quizQuestions.map((question, index) => ({
-      question_text: question.question_text.trim(),
-      question_type: question.question_type,
-      points: Number(question.points),
-      display_order: index + 1,
-      difficulty_level: question.difficulty_level,
-      explanation: question.explanation.trim() || null,
-      lesson_id: sanitizeQuestionLessonId(
-        question.lesson_id,
-        selectedLessonIds,
-      ),
-      is_ai_generated: Boolean(question.is_ai_generated),
-      options:
-        question.question_type === "MULTIPLE_CHOICE"
-          ? question.options.map((option, optionIndex) => ({
-            option_text: option.option_text.trim(),
-            is_correct: option.is_correct,
-            option_order: optionIndex + 1,
-          }))
-          : question.question_type === "IDENTIFICATION"
-            ? question.options
-              .filter((opt) => opt.option_text.trim().length > 0)
-              .map((option, optionIndex) => ({
-                option_text: option.option_text.trim(),
-                is_correct: true,
-                option_order: optionIndex + 1,
-              }))
-            : [],
-    })),
-  });
+  const buildQuizPayload = () => {
+    const releaseSettings = legacyQuizReleaseSettings(
+      quizResultsReleasePolicy,
+      quizSettings.summary_release_at,
+    );
+    return {
+      duration_minutes: quizSettings.duration_minutes
+        ? Number(quizSettings.duration_minutes)
+        : null,
+      status: draft.is_published ? "PUBLISHED" : "DRAFT",
+      settings: {
+        is_shuffle_questions: quizSettings.is_shuffle_questions,
+        enable_per_question_scoring: quizSettings.enable_per_question_scoring,
+        enable_per_question_time_limits:
+          quizSettings.enable_per_question_time_limits,
+        max_attempts: Number(quizSettings.max_attempts || draft.max_attempts),
+        show_correct_answers: releaseSettings.showResults,
+        summary_release_mode: releaseSettings.mode,
+        summary_release_at:
+          quizResultsReleasePolicy === "SCHEDULED" &&
+            releaseSettings.scheduledAt
+            ? new Date(releaseSettings.scheduledAt).toISOString()
+            : null,
+      },
+      questions: quizQuestions.map((question, index) => ({
+        question_text: question.question_text.trim(),
+        question_type: question.question_type,
+        points: Number(question.points),
+        display_order: index + 1,
+        difficulty_level: question.difficulty_level,
+        explanation: question.explanation.trim() || null,
+        lesson_id: sanitizeQuestionLessonId(
+          question.lesson_id,
+          selectedLessonIds,
+        ),
+        is_ai_generated: Boolean(question.is_ai_generated),
+        options:
+          question.question_type === "MULTIPLE_CHOICE"
+            ? question.options.map((option, optionIndex) => ({
+              option_text: option.option_text.trim(),
+              is_correct: option.is_correct,
+              option_order: optionIndex + 1,
+            }))
+            : question.question_type === "IDENTIFICATION"
+              ? question.options
+                .filter((opt) => opt.option_text.trim().length > 0)
+                .map((option, optionIndex) => ({
+                  option_text: option.option_text.trim(),
+                  is_correct: true,
+                  option_order: optionIndex + 1,
+                }))
+              : [],
+      })),
+    };
+  };
 
   const handleCreateQuiz = async () => {
     const detailsValError = validateDetails();
@@ -1320,11 +1344,19 @@ export default function CreateClassworkQuizModal({
       return;
     }
     if (
-      quizSettings.summary_release_mode === "AFTER_DUE_DATE" &&
+      quizResultsReleasePolicy === "SCHEDULED" &&
+      !quizSettings.summary_release_at
+    ) {
+      const msg = "Select a quiz results release date and time.";
+      setCreateError(msg);
+      return;
+    }
+    if (
+      quizResultsReleasePolicy === "AFTER_DUE_DATE" &&
       !draft.due_date
     ) {
       const msg =
-        "A due date is required when Quiz Summary Availability is set to 'After the quiz due date'. Please specify a due date below.";
+        "A due date is required when Quiz Results Release is set to 'After the due date'. Please specify a due date below.";
       setCreateError(msg);
       toast.error({ title: msg });
       return;
@@ -1333,6 +1365,10 @@ export default function CreateClassworkQuizModal({
     setIsCreating(true);
     setCreateError("");
     try {
+      const releaseSettings = legacyQuizReleaseSettings(
+        quizResultsReleasePolicy,
+        quizSettings.summary_release_at,
+      );
       const formData = new FormData();
       formData.append("title", draft.title.trim());
       formData.append("description", draft.description.trim());
@@ -1350,7 +1386,7 @@ export default function CreateClassworkQuizModal({
         String(draftOnly ? false : draft.is_published),
       );
       formData.append("subject_id", String(draft.subject_id));
-      formData.append("show_scores", String(draft.show_scores));
+      formData.append("show_scores", String(releaseSettings.showResults));
       formData.append(
         "auto_ai_feedback_enabled",
         String(!remediationTarget && draft.auto_ai_feedback_enabled),
@@ -2846,40 +2882,39 @@ export default function CreateClassworkQuizModal({
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <Field label="Quiz Summary Availability">
+                  <Field label="Quiz Results Release">
                     <Select
-                      value={quizSettings.summary_release_mode}
+                      value={quizResultsReleasePolicy}
                       onValueChange={(val) =>
-                        setQuizSettings((current) => ({
-                          ...current,
-                          summary_release_mode:
-                            val as QuizSettingsDraft["summary_release_mode"],
-                          summary_release_at:
-                            val === "SCHEDULED"
-                              ? current.summary_release_at
-                              : "",
-                        }))
+                        setQuizResultsReleasePolicy(
+                          val as QuizResultsReleasePolicy,
+                        )
                       }
                       disabled={isCreating}
                     >
                       <Select.Trigger className="w-full shadow-none">
-                        <Select.Value placeholder="Select Release Mode" />
+                        <Select.Value placeholder="Choose result release" />
                       </Select.Trigger>
                       <Select.Content className="border-2 border-black rounded bg-white">
                         <Select.Group>
+                          <Select.Item value="HIDDEN">
+                            Keep results hidden
+                          </Select.Item>
                           <Select.Item value="IMMEDIATE">
                             Immediately after submission
                           </Select.Item>
-                          <Select.Item value="SCHEDULED">
-                            At a specific date & time
-                          </Select.Item>
                           <Select.Item value="AFTER_DUE_DATE">
-                            After the quiz due date
+                            After the due date
                           </Select.Item>
-                          <Select.Item value="NEVER">Never</Select.Item>
+                          <Select.Item value="SCHEDULED">
+                            On a specific date and time
+                          </Select.Item>
                         </Select.Group>
                       </Select.Content>
                     </Select>
+                    <p className="mt-1 text-xs text-gray-600">
+                      Choose when students can view their quiz scores and answer feedback.
+                    </p>
                   </Field>
 
                   <Field label="Locked Until">
@@ -2897,7 +2932,7 @@ export default function CreateClassworkQuizModal({
                     />
                   </Field>
 
-                  {quizSettings.summary_release_mode === "SCHEDULED" && (
+                  {quizResultsReleasePolicy === "SCHEDULED" && (
                     <Field label="Release Date & Time" isRequired className="sm:col-span-2">
                       <DatePicker
                         includeTime
@@ -2913,11 +2948,10 @@ export default function CreateClassworkQuizModal({
                       />
                     </Field>
                   )}
-                  {quizSettings.summary_release_mode === "AFTER_DUE_DATE" &&
+                  {quizResultsReleasePolicy === "AFTER_DUE_DATE" &&
                     !draft.due_date && (
                       <p className="text-xs text-amber-600 font-medium sm:col-span-2">
-                        ⚠ Remember to set a due date in the next step so this
-                        release mode takes effect.
+                        Set a due date below to use this release option.
                       </p>
                     )}
                 </div>
@@ -3052,27 +3086,10 @@ export default function CreateClassworkQuizModal({
                     }
                     disabled={isCreating}
                   />
-                  <ClassworkSettingRow
-                    label="Show quiz results to students"
-                    tooltip="Controls student access to quiz scores and correct answers. When enabled, results unlock according to the configured release schedule (immediately, after due date, or scheduled time) and max attempt policies. Enabling this does not necessarily release correct answers immediately. When disabled, quiz results remain hidden."
-                    checked={draft.show_scores}
-                    onCheckedChange={(checked) => {
-                      setDraft((current) => ({
-                        ...current,
-                        show_scores: checked,
-                      }));
-                      setQuizSettings((current) => ({
-                        ...current,
-                        show_correct_answers: checked,
-                      }));
-                    }}
-                    disabled={isCreating}
-                  />
-
                   {!remediationDraft && !remediationTarget && (
                     <ClassworkSettingRow
                       label="Automatic AI Feedback"
-                      tooltip="Automatically prepares an AI feedback draft after grading when quiz result-release and attempt restrictions permit. Teachers review and approve feedback before it is posted. Correct-answer visibility remains subject to the quiz release settings."
+                      tooltip="Automatically prepares a private AI feedback draft after grading. Teachers review and approve feedback before it is posted; student visibility still waits for Quiz Results Release and retake protections."
                       checked={draft.auto_ai_feedback_enabled}
                       onCheckedChange={(checked) =>
                         setDraft((current) => ({
@@ -3304,10 +3321,16 @@ export default function CreateClassworkQuizModal({
                       selectedUnmappedCount === unmappedCount;
                     const someUnmappedSelected =
                       selectedUnmappedCount > 0 && !allUnmappedSelected;
+                    const mappingControlsDisabled =
+                      areQuestionMappingControlsDisabled(
+                        isCreating,
+                        isLessonLocked,
+                        unmappedCount,
+                      );
                     const selectionControlClass = cn(
                       buttonVariants({ variant: "outline", size: "sm" }),
                       "h-8 gap-1.5 px-3 py-1 text-xs font-semibold text-gray-700",
-                      (isCreating || isLessonLocked) &&
+                      mappingControlsDisabled &&
                       "cursor-not-allowed opacity-50",
                     );
 
@@ -3393,7 +3416,7 @@ export default function CreateClassworkQuizModal({
                                 someSelected ? "indeterminate" : allSelected
                               }
                               onCheckedChange={toggleSelectAll}
-                              disabled={isCreating || isLessonLocked}
+                              disabled={mappingControlsDisabled}
                               className="cursor-pointer"
                             />
                             Select all
@@ -3409,7 +3432,7 @@ export default function CreateClassworkQuizModal({
                                     : allUnmappedSelected
                                 }
                                 onCheckedChange={toggleSelectUnmapped}
-                                disabled={isCreating || isLessonLocked}
+                                disabled={mappingControlsDisabled}
                                 className="cursor-pointer"
                               />
                               Select unmapped ({unmappedCount})
@@ -3426,7 +3449,7 @@ export default function CreateClassworkQuizModal({
                                 <Select
                                   value={bulkLessonId}
                                   onValueChange={(val) => setBulkLessonId(val)}
-                                  disabled={isCreating || isLessonLocked}
+                                  disabled={mappingControlsDisabled}
                                 >
                                   <Select.Trigger className="w-full bg-white border-2 border-black rounded px-2 py-1 h-8">
                                     <Select.Value placeholder="Assign lesson…" />
@@ -3514,7 +3537,7 @@ export default function CreateClassworkQuizModal({
                                         return next;
                                       });
                                     }}
-                                    disabled={isCreating || isLessonLocked}
+                                    disabled={mappingControlsDisabled}
                                     className="shrink-0 cursor-pointer"
                                   />
                                   <span className="truncate text-sm font-bold">
@@ -3787,14 +3810,13 @@ export default function CreateClassworkQuizModal({
             additionalCoverageScope,
             associatedLessonTitles,
           ) => {
-            setQuizQuestions(
-              mapQuestionsToSingleLinkedLesson(
-                questions.length > 0
-                  ? questions
-                  : [createEmptyQuizQuestion(1)],
-                selectedLessonIds,
-              ),
-            );
+            const nextLessonIds = associatedLessonIds?.length
+              ? associatedLessonIds
+              : selectedLessonIds;
+            setQuizQuestions(reconcileQuestionLessonMappings(
+              questions.length > 0 ? questions : [createEmptyQuizQuestion(1)],
+              nextLessonIds,
+            ));
             setQuizImportWarnings(warnings || []);
             setQuizImportNotices([]);
             setQuizImportSummary(null);
@@ -3824,7 +3846,7 @@ export default function CreateClassworkQuizModal({
                   ),
             }));
             if (associatedLessonIds && associatedLessonIds.length > 0) {
-              setSelectedLessonIds(associatedLessonIds);
+              setSelectedLessonIds(nextLessonIds);
             }
             // Transition to Step 1 (Details) for inspection before question editor
             setCreateStep("details");

@@ -188,7 +188,7 @@ def quiz_attempt_context():
     setting = QuizSetting(
         classwork_id=classwork.classwork_id,
         max_attempts=1,
-        show_correct_answers=False,
+        show_correct_answers=True,
     )
     db.add_all([assignment, quiz, setting])
     db.flush()
@@ -525,7 +525,7 @@ def test_after_due_date_summary_releases_only_after_due_without_writes(quiz_atte
     assert c["db"].query(StudentPeriodGrade).count() == period_grade_count
 
 
-def test_never_release_keeps_score_but_hides_all_question_feedback(quiz_attempt_context):
+def test_never_release_hides_score_and_all_question_feedback(quiz_attempt_context):
     c = quiz_attempt_context
     c["setting"].show_correct_answers = True
     c["setting"].summary_release_mode = "NEVER"
@@ -536,7 +536,7 @@ def test_never_release_keeps_score_but_hides_all_question_feedback(quiz_attempt_
 
     assert response.status_code == 200
     body = response.json()
-    assert body["grade"] == 6.0
+    assert body["grade"] is None
     assert body["summary_available"] is False
     assert "not available" in body["summary_message"]
     for question in body["questions"]:
@@ -561,7 +561,7 @@ def test_release_mode_missing_required_date_fails_closed(quiz_attempt_context, r
 
     assert response.status_code == 200
     body = response.json()
-    assert body["grade"] == 6.0
+    assert body["grade"] is None
     assert body["summary_available"] is False
     assert body["summary_release_at"] is None
     assert "currently unavailable" in body["summary_message"]
@@ -587,7 +587,7 @@ def test_unsupported_release_mode_fails_closed():
     assert "currently unavailable" in message
 
 
-def test_released_summary_includes_student_answers_without_revealing_correct_key(quiz_attempt_context):
+def test_legacy_mixed_visibility_fails_closed_even_when_summary_is_released(quiz_attempt_context):
     c = quiz_attempt_context
     c["setting"].show_correct_answers = False
     c["setting"].summary_release_mode = "IMMEDIATE"
@@ -613,11 +613,69 @@ def test_released_summary_includes_student_answers_without_revealing_correct_key
     assert response.status_code == 200
     body = response.json()
     assert body["summary_available"] is True
-    assert body["questions"][0]["selected_option_id"] == c["wrong"].option_id
-    assert body["questions"][0]["points_awarded"] == 0.0
+    assert body["show_scores"] is False
+    assert body["grade"] is None
+    assert body["questions"][0]["selected_option_id"] is None
+    assert body["questions"][0]["points_awarded"] is None
     assert body["questions"][0]["options"][0]["is_correct"] is None
     assert body["questions"][0]["explanation"] is None
-    assert body["questions"][1]["answer_text"] == "Variables store values."
+    assert body["questions"][1]["answer_text"] is None
+
+
+def test_hidden_results_redact_released_summary_and_follow_current_setting(quiz_attempt_context):
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+    c["classwork"].show_scores = False
+    c["setting"].enable_per_question_scoring = True
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["db"].commit()
+
+    submitted = _submit_fixture_quiz(c, selected_option_id=c["wrong"].option_id)
+
+    assert submitted.status_code == 200
+    hidden = submitted.json()
+    assert hidden["summary_available"] is True
+    assert hidden["show_scores"] is False
+    assert hidden["grade"] is None
+    assert hidden["passing_threshold"] is None
+    for question in hidden["questions"]:
+        assert question["answer_text"] is None
+        assert question["selected_option_id"] is None
+        assert question["points_awarded"] is None
+        assert question["is_correct"] is None
+        assert question["explanation"] is None
+        assert all(option["is_correct"] is None for option in question["options"])
+
+    c["classwork"].show_scores = True
+    c["db"].commit()
+    visible = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert visible.status_code == 200
+    assert visible.json()["grade"] == 0.0
+    assert visible.json()["questions"][0]["selected_option_id"] == c["wrong"].option_id
+    assert visible.json()["questions"][0]["points_awarded"] == 0.0
+    assert visible.json()["questions"][0]["is_correct"] is False
+    assert visible.json()["questions"][0]["options"][0]["is_correct"] is True
+
+    c["classwork"].show_scores = False
+    c["db"].commit()
+    hidden_again = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert hidden_again.status_code == 200
+    assert hidden_again.json()["grade"] is None
+    assert hidden_again.json()["questions"][0]["selected_option_id"] is None
+    assert hidden_again.json()["questions"][0]["points_awarded"] is None
+    assert hidden_again.json()["questions"][0]["is_correct"] is None
+    assert hidden_again.json()["questions"][0]["options"][0]["is_correct"] is None
+
+    c["classwork"].show_scores = True
+    c["setting"].show_correct_answers = False
+    c["db"].commit()
+    mixed_legacy = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert mixed_legacy.status_code == 200
+    assert mixed_legacy.json()["show_scores"] is False
+    assert mixed_legacy.json()["grade"] is None
+    assert mixed_legacy.json()["questions"][0]["points_awarded"] is None
 
 
 def test_immediate_release_returns_nonblank_explanation_only_with_correct_answers_enabled(
@@ -697,7 +755,7 @@ def test_partially_graded_response_releases_explanation_and_exact_teacher_feedba
     assert body["questions"][1]["explanation"] == "A variable stores a reusable value."
 
 
-def test_teacher_feedback_preserves_owner_visibility_without_releasing_never_summary(
+def test_teacher_feedback_is_withheld_from_student_without_releasing_never_summary(
     quiz_attempt_context,
 ):
     c = quiz_attempt_context
@@ -719,7 +777,7 @@ def test_teacher_feedback_preserves_owner_visibility_without_releasing_never_sum
     assert result.status_code == 200
     body = result.json()
     assert body["summary_available"] is False
-    assert body["feedback"] == "Review variables before the next lesson."
+    assert body["feedback"] is None
     assert all(question["explanation"] is None for question in body["questions"])
 
     _act_as(c, "other_student", "student")

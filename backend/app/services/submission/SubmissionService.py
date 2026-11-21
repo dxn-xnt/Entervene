@@ -253,6 +253,26 @@ def build_submission_response(submission, db: Session, *, for_student: bool = Fa
         and (classwork.activity_mode or "").strip().upper() == "ONLINE"
         and not classwork.show_scores
     )
+    hide_quiz_results = False
+    if (
+        for_student
+        and classwork
+        and assignment
+        and (classwork.classwork_type or "").strip().upper() == "QUIZ"
+    ):
+        from app.models.quiz.QuizSetting import QuizSetting
+        from app.services.quiz.QuizResultsReleasePolicy import quiz_results_are_visible
+
+        setting = db.query(QuizSetting).filter_by(
+            classwork_id=classwork.classwork_id,
+        ).first()
+        hide_quiz_results = not quiz_results_are_visible(
+            classwork,
+            setting,
+            assignment,
+            submission_status=submission.status,
+        )
+    hide_student_results = hide_non_quiz_results or hide_quiz_results
     return SubmissionResponse(
         submission_id=submission.submission_id,
         student_id=str(submission.student_id),
@@ -261,9 +281,9 @@ def build_submission_response(submission, db: Session, *, for_student: bool = Fa
         classwork_title=classwork.title if classwork else None,
         submitted_at=submission.submitted_at,
         status=submission.status,
-        grade=float(submission.grade) if submission.grade is not None and not hide_non_quiz_results else None,
-        feedback=None if hide_non_quiz_results else submission.feedback,
-        feedback_fingerprint=feedback_fingerprint(None if hide_non_quiz_results else submission.feedback),
+        grade=float(submission.grade) if submission.grade is not None and not hide_student_results else None,
+        feedback=None if hide_student_results else submission.feedback,
+        feedback_fingerprint=feedback_fingerprint(None if hide_student_results else submission.feedback),
         attempt_count=submission.attempt_count,
         graded_at=submission.graded_at,
         graded_by_staff_id=submission.graded_by_staff_id,
@@ -1057,9 +1077,31 @@ def grade_student_submission(
             period_id=assignment.academic_period_id,
         )
 
-    # Notify student that their grade was released
+    # Notify student that their grade was released only when results are visible.
     try:
-        student = db.query(Student).filter(Student.student_id == submission.student_id).first()
+        score_visible = bool(classwork.show_scores) if classwork else True
+        if (
+            classwork
+            and assignment
+            and (classwork.classwork_type or "").strip().upper() == "QUIZ"
+        ):
+            from app.models.quiz.QuizSetting import QuizSetting
+            from app.services.quiz.QuizResultsReleasePolicy import quiz_results_are_visible
+
+            setting = db.query(QuizSetting).filter_by(
+                classwork_id=classwork.classwork_id,
+            ).first()
+            score_visible = quiz_results_are_visible(
+                classwork,
+                setting,
+                assignment,
+                submission_status=submission.status,
+            )
+        student = (
+            db.query(Student).filter(Student.student_id == submission.student_id).first()
+            if score_visible
+            else None
+        )
         if student and student.user_id:
             from app.services.NotificationService import create_notification
             from app.schemas.Notification import NotificationCreate

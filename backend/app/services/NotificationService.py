@@ -26,6 +26,11 @@ INTERVENTION_NOTIFICATION_TYPES = (
     "intervention_assessment_not_passed",
 )
 EXCLUDED_FEED_NOTIFICATION_TYPES = ("announcement",)
+STUDENT_DEADLINE_NOTIFICATION_TYPES = (
+    "classwork_due_soon",
+    "classwork_due_today",
+    "classwork_overdue",
+)
 
 
 def _admin_account(db: Session, user_id: uuid.UUID) -> bool:
@@ -84,6 +89,7 @@ def get_notifications_for_user(
     user_id: uuid.UUID | str,
     limit: int = 50,
     unread_only: bool = False,
+    user_role: str | None = None,
 ) -> NotificationListResponse:
     """Return notifications for a user, newest first."""
     uid = _to_uuid(user_id)
@@ -95,6 +101,9 @@ def get_notifications_for_user(
         Notification.user_id == uid,
         Notification.notification_type.notin_(EXCLUDED_FEED_NOTIFICATION_TYPES),
     )
+    if (user_role or "").strip().lower() == "student":
+        query = query.filter(Notification.notification_type.notin_(STUDENT_DEADLINE_NOTIFICATION_TYPES))
+        unread_query = unread_query.filter(Notification.notification_type.notin_(STUDENT_DEADLINE_NOTIFICATION_TYPES))
     if _has_intervention_notifications(db, uid) and _admin_account(db, uid):
         query = query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
         unread_query = unread_query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
@@ -117,7 +126,12 @@ def get_notifications_for_user(
 # Mark as read
 # ---------------------------------------------------------------------------
 
-def mark_notification_read(db: Session, notification_id: str, user_id: uuid.UUID | str) -> NotificationResponse:
+def mark_notification_read(
+    db: Session,
+    notification_id: str,
+    user_id: uuid.UUID | str,
+    user_role: str | None = None,
+) -> NotificationResponse:
     """Mark a single notification as read. Raises 404 if not found or not owned."""
     nid = _to_uuid(notification_id)
     uid = _to_uuid(user_id)
@@ -129,6 +143,10 @@ def mark_notification_read(db: Session, notification_id: str, user_id: uuid.UUID
     if (
         not record
         or record.notification_type in EXCLUDED_FEED_NOTIFICATION_TYPES
+        or (
+            (user_role or "").strip().lower() == "student"
+            and record.notification_type in STUDENT_DEADLINE_NOTIFICATION_TYPES
+        )
         or (record.notification_type in INTERVENTION_NOTIFICATION_TYPES and _admin_account(db, uid))
     ):
         raise HTTPException(status_code=404, detail="Notification not found")
@@ -140,7 +158,11 @@ def mark_notification_read(db: Session, notification_id: str, user_id: uuid.UUID
     return NotificationResponse.model_validate(record)
 
 
-def mark_all_notifications_read(db: Session, user_id: uuid.UUID | str) -> dict:
+def mark_all_notifications_read(
+    db: Session,
+    user_id: uuid.UUID | str,
+    user_role: str | None = None,
+) -> dict:
     """Mark every unread notification for a user as read."""
     uid = _to_uuid(user_id)
     query = db.query(Notification).filter(
@@ -148,6 +170,8 @@ def mark_all_notifications_read(db: Session, user_id: uuid.UUID | str) -> dict:
         Notification.is_read == False,  # noqa: E712
         Notification.notification_type.notin_(EXCLUDED_FEED_NOTIFICATION_TYPES),
     )
+    if (user_role or "").strip().lower() == "student":
+        query = query.filter(Notification.notification_type.notin_(STUDENT_DEADLINE_NOTIFICATION_TYPES))
     if _has_intervention_notifications(db, uid) and _admin_account(db, uid):
         query = query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
     updated = query.all()

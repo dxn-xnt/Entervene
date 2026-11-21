@@ -5,7 +5,7 @@ import { Button } from "@/components/student/button";
 import { NotificationCard } from "@/components/notification-card";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Bell, ClipboardList, Clock, Shield, Loader2 } from "lucide-react";
+import { Bell, ClipboardList, Shield, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { Alert } from "@/components/retroui/Alert";
@@ -22,6 +22,7 @@ import {
   formatNotificationTitle,
   getStudentNotificationBadgeLabel,
   isExcludedNotification,
+  isStudentDeadlineNotification,
   isStudentStudySupportType,
   matchesStudentNotificationTab,
   type StudentNotificationTab,
@@ -30,7 +31,6 @@ import {
 const studentNotificationTabs: Array<TabItem<StudentNotificationTab>> = [
   { id: "all", label: "All", icon: Bell },
   { id: "classwork", label: "Classwork", icon: ClipboardList },
-  { id: "deadlines", label: "Deadlines", icon: Clock },
   { id: "study_support", label: "Study Support", icon: Shield },
 ];
 
@@ -47,11 +47,6 @@ const emptyStateByTab: Record<
     icon: <ClipboardList />,
     title: "No classwork notifications",
     description: "New or updated classwork and grade releases will appear here.",
-  },
-  deadlines: {
-    icon: <Clock />,
-    title: "No deadline notifications",
-    description: "Upcoming and overdue classwork deadline reminders will appear here.",
   },
   study_support: {
     icon: <Shield />,
@@ -73,7 +68,9 @@ const Notifications = () => {
       setLoading(true);
       setLoadError(false);
       const data = await getNotifications(false, 50);
-      setNotifications(data.notifications.filter((item) => !isExcludedNotification(item)));
+      setNotifications(data.notifications.filter(
+        (item) => !isExcludedNotification(item) && !isStudentDeadlineNotification(item.notification_type),
+      ));
     } catch (err) {
       console.error("Failed to load notifications:", err);
       setLoadError(true);
@@ -149,7 +146,6 @@ const Notifications = () => {
     const counts: Record<StudentNotificationTab, number> = {
       all: 0,
       classwork: 0,
-      deadlines: 0,
       study_support: 0,
     };
     for (const item of notifications) {
@@ -157,8 +153,6 @@ const Notifications = () => {
       counts.all += 1;
       if (matchesStudentNotificationTab(item.notification_type, "classwork")) {
         counts.classwork += 1;
-      } else if (matchesStudentNotificationTab(item.notification_type, "deadlines")) {
-        counts.deadlines += 1;
       } else if (matchesStudentNotificationTab(item.notification_type, "study_support")) {
         counts.study_support += 1;
       }

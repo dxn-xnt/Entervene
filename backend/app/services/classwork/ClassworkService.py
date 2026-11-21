@@ -70,10 +70,12 @@ from app.services.classwork.ClassworkShared import (
     validate_schedule,
 )
 from app.services.quiz.QuizBuilderService import (
+    classwork_has_quiz_attempts,
     get_quiz_for_classwork,
     quiz_readiness,
     upsert_quiz_builder,
 )
+from app.services.quiz.QuizResultsReleasePolicy import quiz_results_are_visible
 from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 
 
@@ -1229,6 +1231,9 @@ def update_classwork_record(
             class_ids=target_class_ids or None,
             academic_period_id=next(iter(target_period_ids)) if len(target_period_ids) == 1 else None,
         )
+    was_published = bool(classwork.is_published)
+    previous_total_points = classwork.total_points
+    previous_lesson_ids = {lesson.lesson_id for lesson in (classwork.lessons or [])}
     try:
         for field, value in values.items():
             setattr(classwork, field, value)
@@ -1261,7 +1266,16 @@ def update_classwork_record(
                 staff_id=staff_id,
                 scope=recipient_scope,
             )
-        ensure_published_quiz_student_ready(db, classwork)
+        skip_started_quiz_readiness = (
+            is_quiz_type(classwork.classwork_type)
+            and was_published
+            and bool(classwork.is_published)
+            and classwork.total_points == previous_total_points
+            and (lesson_ids is None or set(lesson_ids) == previous_lesson_ids)
+            and classwork_has_quiz_attempts(db, classwork.classwork_id)
+        )
+        if not skip_started_quiz_readiness:
+            ensure_published_quiz_student_ready(db, classwork)
         db.commit()
         db.refresh(classwork)
 
@@ -1555,6 +1569,7 @@ def assign_classwork_to_classes(
     updated = []
     new_assignments = []
     was_targeted_published = bool(targeted and targeted.is_published)
+    newly_published_assignment = False
     try:
         for class_id in class_ids:
             existing = db.query(ClassworkAssignment).filter(
@@ -1562,6 +1577,8 @@ def assign_classwork_to_classes(
                 ClassworkAssignment.class_id == class_id,
             ).first()
             if existing:
+                if body.is_published and not existing.is_published:
+                    newly_published_assignment = True
                 existing.academic_period_id = academic_period_id
                 existing.publish_date = None
                 existing.due_date = body.due_date
@@ -1572,6 +1589,8 @@ def assign_classwork_to_classes(
                 existing.is_locked = False
                 updated.append(class_id)
                 continue
+            if body.is_published:
+                newly_published_assignment = True
             assignment = ClassworkAssignment(
                 classwork_id=classwork_id,
                 class_id=class_id,
@@ -1621,7 +1640,14 @@ def assign_classwork_to_classes(
             db.flush()
             _stage_targeted_assignment_notification(db, targeted, classwork, classwork.subject_id)
         if body.is_published:
-            ensure_published_quiz_student_ready(db, classwork)
+            skip_started_quiz_readiness = (
+                is_quiz_type(classwork.classwork_type)
+                and bool(classwork.is_published)
+                and not newly_published_assignment
+                and classwork_has_quiz_attempts(db, classwork.classwork_id)
+            )
+            if not skip_started_quiz_readiness:
+                ensure_published_quiz_student_ready(db, classwork)
         db.commit()
 
         if class_ids and not targeted and body.is_published:
@@ -2028,6 +2054,24 @@ def student_assignments(student, db: Session) -> dict:
         .all()
     )
 
+    from app.models.quiz.QuizSetting import QuizSetting
+
+    quiz_classwork_ids = [
+        classwork.classwork_id
+        for _, classwork, _, _ in assignments
+        if is_quiz_type(classwork.classwork_type)
+    ]
+    quiz_settings = {
+        setting.classwork_id: setting
+        for setting in (
+            db.query(QuizSetting)
+            .filter(QuizSetting.classwork_id.in_(quiz_classwork_ids))
+            .all()
+            if quiz_classwork_ids
+            else []
+        )
+    }
+
     pending, submitted, graded = [], [], []
     for assignment, classwork, subject, staff in assignments:
         if not assignment_allows_student(assignment, student.student_id) or not assignment_is_available(assignment):
@@ -2036,6 +2080,14 @@ def student_assignments(student, db: Session) -> dict:
             StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id,
             StudentSubmission.student_id == student.student_id,
         ).first()
+        score_visible = bool(classwork.show_scores)
+        if is_quiz_type(classwork.classwork_type):
+            score_visible = quiz_results_are_visible(
+                classwork,
+                quiz_settings.get(classwork.classwork_id),
+                assignment,
+                submission_status=submission.status if submission else None,
+            )
         item = {
             "classwork_assignment_id": assignment.classwork_assignment_id,
             "classwork_id": classwork.classwork_id,
@@ -2054,7 +2106,8 @@ def student_assignments(student, db: Session) -> dict:
             "is_locked": assignment_is_locked(assignment),
             "max_attempts": assignment.max_attempts,
             "submission_status": submission.status if submission else None,
-            "grade": float(submission.grade) if submission and submission.grade is not None else None,
+            "show_scores": score_visible,
+            "grade": float(submission.grade) if submission and submission.grade is not None and score_visible else None,
             "submitted_at": submission.submitted_at.isoformat() if submission and submission.submitted_at else None,
             "attempt_count": submission.attempt_count if submission else 0,
         }

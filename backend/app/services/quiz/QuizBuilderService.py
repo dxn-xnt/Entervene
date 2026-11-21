@@ -32,6 +32,10 @@ from app.schemas.Quiz import (
 )
 from app.services.classwork.ClassworkShared import is_quiz_type
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+from app.services.quiz.QuizResultsReleasePolicy import (
+    apply_quiz_results_release_policy,
+    effective_quiz_results_release_policy,
+)
 
 
 QUESTION_MULTIPLE_CHOICE = "MULTIPLE_CHOICE"
@@ -278,7 +282,24 @@ def update_quiz_results_settings(
         db.add(setting)
         db.flush()
 
-    release_mode = payload.summary_release_mode.strip().upper()
+    if payload.release_policy is not None:
+        if payload.show_quiz_results is not None or payload.summary_release_mode is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Use release_policy without legacy quiz visibility fields",
+            )
+        release_mode = (
+            "NEVER" if payload.release_policy == "HIDDEN" else payload.release_policy
+        )
+        desired_visibility = payload.release_policy != "HIDDEN"
+    else:
+        if payload.summary_release_mode is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Quiz Results Release is required",
+            )
+        release_mode = payload.summary_release_mode.strip().upper()
+        desired_visibility = payload.show_quiz_results
     if release_mode == "SCHEDULED" and payload.summary_release_at is None:
         raise HTTPException(status_code=422, detail="Quiz results release date and time is required")
     if release_mode != "SCHEDULED" and payload.summary_release_at is not None:
@@ -286,21 +307,21 @@ def update_quiz_results_settings(
     if release_mode == "AFTER_DUE_DATE" and not _classwork_has_due_date(db, classwork.classwork_id):
         raise HTTPException(status_code=422, detail="Set a quiz due date before releasing results after the due date")
 
-    visibility_changed = payload.show_quiz_results is not None and (
-        locked_classwork.show_scores != payload.show_quiz_results
-        or setting.show_correct_answers != payload.show_quiz_results
+    visibility_changed = desired_visibility is not None and (
+        locked_classwork.show_scores != desired_visibility
+        or setting.show_correct_answers != desired_visibility
     )
     release_changed = (
         setting.summary_release_mode != release_mode
         or setting.summary_release_at != payload.summary_release_at
     )
     answers_will_be_enabled = (
-        payload.show_quiz_results is True
-        if payload.show_quiz_results is not None
+        desired_visibility is True
+        if desired_visibility is not None
         else bool(setting.show_correct_answers)
     )
     could_reveal_answers = (
-        (payload.show_quiz_results is True and visibility_changed)
+        (desired_visibility is True and visibility_changed)
         or (release_changed and release_mode != "NEVER" and answers_will_be_enabled)
     )
     if could_reveal_answers and not payload.confirm_answer_reveal:
@@ -312,14 +333,27 @@ def update_quiz_results_settings(
             },
         )
 
-    if payload.show_quiz_results is not None:
-        locked_classwork.show_scores = payload.show_quiz_results
-        setting.show_correct_answers = payload.show_quiz_results
-    setting.summary_release_mode = release_mode
-    setting.summary_release_at = payload.summary_release_at
+    if payload.release_policy is not None:
+        apply_quiz_results_release_policy(
+            locked_classwork,
+            setting,
+            payload.release_policy,
+        )
+    else:
+        if desired_visibility is not None:
+            locked_classwork.show_scores = desired_visibility
+            setting.show_correct_answers = desired_visibility
+        setting.summary_release_mode = release_mode
+    setting.summary_release_at = (
+        payload.summary_release_at if release_mode == "SCHEDULED" else None
+    )
     db.flush()
     return QuizResultsSettingsResponse(
         classwork_id=locked_classwork.classwork_id,
+        release_policy=effective_quiz_results_release_policy(
+            locked_classwork,
+            setting,
+        ),
         show_scores=locked_classwork.show_scores,
         show_correct_answers=setting.show_correct_answers,
         summary_release_mode=setting.summary_release_mode,

@@ -188,7 +188,7 @@ describe("student Study Support notifications", () => {
     });
   });
 
-  it("filters across All, Classwork, Deadlines, and Study Support tabs using structured types, hides announcements, and cleans phrasing", async () => {
+  it("filters across All, Classwork, and Study Support, hides deadlines and announcements, and cleans phrasing", async () => {
     apiMocks.getNotifications.mockResolvedValue({
       unread_count: 3,
       notifications: [
@@ -256,17 +256,17 @@ describe("student Study Support notifications", () => {
 
     await screen.findByText("Enhanced Mathematics 9: Parallel Lines Quiz");
 
-    // Four exact tabs with accessible tablist
+    // Student deadline notifications and their tab are removed.
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.textContent?.replace(/\d+$/, "").trim())).toEqual([
       "All",
       "Classwork",
-      "Deadlines",
       "Study Support",
     ]);
 
     // Historical announcements excluded; duplicated subject name & redundant phrasing cleaned
     expect(screen.queryByText("Legacy Announcement")).toBeNull();
+    expect(screen.queryByText("Reminder: Worksheet 1 due tomorrow")).toBeNull();
     expect(screen.queryByText(/Intervention/i)).toBeNull();
     expect(screen.getByText("Classwork assigned by Angel Alcantara • Due: Nov 25, 2026.")).toBeTruthy();
     expect(screen.getByText("Science 9: Lab Report")).toBeTruthy();
@@ -279,14 +279,8 @@ describe("student Study Support notifications", () => {
     expect(within(panel).queryByText("Reminder: Worksheet 1 due tomorrow")).toBeNull();
     expect(within(panel).queryByText("Study Support Reminder")).toBeNull();
 
-    // Deadlines tab includes structured deadline notification only
-    fireEvent.click(tabs[2]);
-    panel = screen.getByRole("tabpanel");
-    expect(within(panel).getByText("Reminder: Worksheet 1 due tomorrow")).toBeTruthy();
-    expect(within(panel).queryByText("Enhanced Mathematics 9: Parallel Lines Quiz")).toBeNull();
-
     // Study Support tab uses structured type even when body contains "quiz" and "lesson"
-    fireEvent.click(tabs[3]);
+    fireEvent.click(tabs[2]);
     panel = screen.getByRole("tabpanel");
     expect(within(panel).getByText("Study Support Reminder")).toBeTruthy();
     expect(within(panel).getByText("Study Support")).toBeTruthy();
@@ -314,9 +308,6 @@ describe("student Study Support notifications", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Classwork" }));
     expect(screen.getByText("No classwork notifications")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("tab", { name: "Deadlines" }));
-    expect(screen.getByText("No deadline notifications")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "Study Support" }));
     expect(screen.getByText("No Study Support notifications")).toBeTruthy();

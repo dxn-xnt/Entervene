@@ -44,6 +44,9 @@ from app.services.grading.PassingThresholdResolver import (
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 from app.services.intervention.RemediationPrerequisiteService import require_remediation_prerequisite
 from app.services.quiz.quiz_normalization import is_identification_correct
+from app.services.quiz.QuizResultsReleasePolicy import (
+    quiz_results_are_visible,
+)
 
 
 COMPLETED_ATTEMPT_STATUSES = frozenset({"submitted", "late", "graded"})
@@ -609,11 +612,20 @@ def _attempt_response(
     can_submit = _can_submit(
         db, assignment, classwork, submission, is_passed=is_passed,
     )
-    show_scores = bool(classwork.show_scores)
+    # A visible policy grants access only once its configured release condition
+    # has actually been reached. This keeps grades out of early scheduled and
+    # after-due-date responses while preserving submission status information.
+    show_scores = quiz_results_are_visible(
+        classwork,
+        setting,
+        assignment,
+        submission_status=submission.status if submission else None,
+    )
     visibility = _attempt_feedback_visibility(
         setting,
         submission,
         summary_available=summary_available,
+        show_scores=show_scores,
         reveal_answers=reveal_answers,
         retake_available=can_submit,
     )
@@ -699,18 +711,24 @@ def _attempt_feedback_visibility(
     submission: StudentSubmission | None,
     *,
     summary_available: bool,
+    show_scores: bool,
     reveal_answers: bool = False,
     retake_available: bool = False,
 ) -> _AttemptFeedbackVisibility:
     status = submission.status if submission else None
     is_completed = status in COMPLETED_ATTEMPT_STATUSES
-    student_response = bool(
-        submission
-        and (status == "pending" or (is_completed and summary_available))
-    )
+    student_response = bool(submission and (
+        status == "pending"
+        or (is_completed and summary_available and show_scores)
+    ))
     # While an eligible retake remains permitted, withhold evaluation,
     # correctness markers, correct answers, and explanations from student views.
-    evaluation = bool(is_completed and summary_available and not retake_available)
+    evaluation = bool(
+        is_completed
+        and summary_available
+        and show_scores
+        and not retake_available
+    )
     correct_answers = bool(
         evaluation
         and (reveal_answers or (setting and setting.show_correct_answers))
@@ -724,7 +742,7 @@ def _attempt_feedback_visibility(
         # comment to the submission owner independently of answer-summary
         # timing. Preserve that behavior for completed quiz submissions while
         # keeping comments out of active and pending-retake responses.
-        teacher_comment=bool(submission and is_completed),
+        teacher_comment=evaluation,
     )
 
 

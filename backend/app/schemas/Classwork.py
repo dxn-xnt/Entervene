@@ -162,6 +162,9 @@ class ClassworkResponse(BaseModel):
     subject_name: Optional[str] = None
     created_by_staff_id: str
     intervention_resource_origin_id: Optional[int] = None
+    intervention_resource_recipient_scope: Optional[
+        Literal["THIS_STUDENT", "ENTIRE_CLASS", "ALL_SUBJECT_STUDENTS"]
+    ] = None
     teacher_name: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
     reference_links: list[ClassworkReferenceLinkResponse] = Field(default_factory=list)
