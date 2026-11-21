@@ -14,7 +14,6 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/accept-invitation",
         "/api/v1/auth/forgot-password",
         "/api/v1/auth/reset-password",
-        "/api/v1/auth/reset-password/validate",
     }
 
     async def dispatch(self, request: Request, call_next) -> Response:
