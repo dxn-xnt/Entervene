@@ -77,6 +77,7 @@ async def create_classwork_with_assignments(
     reference_links: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
     intervention_id: Optional[int] = Form(None),
+    recipient_scope: Optional[str] = Form(None),
     remediation_request_id: Optional[UUID] = Form(None),
     original_exam_assignment_id: Optional[int] = Form(None),
     original_classwork_assignment_id: Optional[int] = Form(None),
@@ -108,6 +109,7 @@ async def create_classwork_with_assignments(
         reference_links=reference_links,
         files=files,
         intervention_id=intervention_id,
+        recipient_scope=recipient_scope,
         remediation_request_id=remediation_request_id,
         original_exam_assignment_id=original_exam_assignment_id,
         original_classwork_assignment_id=original_classwork_assignment_id,
@@ -162,6 +164,23 @@ def get_classwork(
     db: Session = Depends(get_db),
 ):
     return classwork_detail(classwork_id, class_id, current_user, db)
+
+
+@router.get("/classwork/{classwork_id}/intervention-resource-recipient-context")
+def get_intervention_resource_recipient_settings(
+    classwork_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    from app.services.intervention.InterventionResourceRecipientService import (
+        get_intervention_resource_recipient_context,
+    )
+
+    return get_intervention_resource_recipient_context(
+        db,
+        classwork_id=classwork_id,
+        staff_id=staff_id,
+    )
 
 
 @router.put("/classwork/{classwork_id}", response_model=ClassworkResponse)

@@ -6,7 +6,13 @@ from xml.etree import ElementTree
 
 from fastapi import HTTPException, UploadFile
 
-from app.schemas.Quiz import QuizImportPreviewResponse, QuizOptionIn, QuizQuestionIn
+from app.schemas.Quiz import (
+    QuizImportNotice,
+    QuizImportPreviewResponse,
+    QuizImportSummary,
+    QuizOptionIn,
+    QuizQuestionIn,
+)
 
 
 QUESTION_START_RE = re.compile(r"^\s*[_~–—\-\.\s]*\s*(\d+)[\)\.]\s*(.+)$")
@@ -44,7 +50,10 @@ PAGE_FOOTER_RE = re.compile(
     r"^\s*(?:page\s+\d+(?:\s*(?:of|/)\s*\d+)?|[-–—~*\[\(]+\s*page\s+\d+\s*[-–—~*\]\)]+|[-–—~*]+\s*\d+\s*[-–—~*]+|\d+\s*(?:of|/)\s*\d+)\s*$",
     re.IGNORECASE,
 )
-EXPLANATION_RE = re.compile(r"^\s*(?:explanation|rationale|reason|notes?)\s*[:\-].*$", re.IGNORECASE)
+EXPLANATION_VALUE_RE = re.compile(
+    r"^\s*(?:explanation|rationale|reason|notes?)\s*[:\-]\s*(.*)$",
+    re.IGNORECASE,
+)
 BLANK_ANSWER_RE = re.compile(r"^\s*(?:answer|ans)\s*[:\-]\s*[_.\s-]*$", re.IGNORECASE)
 ANSWER_LINE_RE = re.compile(r"^\s*(?:answer|ans)\s*[:\-]\s*(.+)$", re.IGNORECASE)
 INLINE_KEY_RE = re.compile(r"^\(([A-Da-d])\)\s*(.+)$")
@@ -100,6 +109,59 @@ def _parse_trailing_keys(text: str) -> dict[int, str]:
     return keys
 
 
+def _normalized_key_text(value: str | None) -> str:
+    """Normalize presentation-only differences without fuzzy answer matching."""
+    if not value:
+        return ""
+    return re.sub(r"\s+", " ", value).strip().casefold()
+
+
+def _resolve_key_option_label(key: str | None, options: list[dict]) -> str | None:
+    """Resolve an explicit answer key to one concrete option.
+
+    Accepted forms are deliberately narrow: an exact option label, an explicit
+    label followed by punctuation and descriptive text, or exact option text.
+    Substring and similarity matching are intentionally excluded.
+    """
+    if not key or not options:
+        return None
+    value = re.sub(r"\s+", " ", key).strip()
+    explicit_label = re.match(
+        r"^([A-Da-d])(?:\s*[\).]|\s*[-:\u2013\u2014])(?:\s*(.*))?$",
+        value,
+    )
+    if not explicit_label:
+        explicit_label = re.match(r"^([A-Da-d])()$", value)
+    if explicit_label:
+        label = explicit_label.group(1).upper()
+        if any(option["label"].upper() == label for option in options):
+            descriptor = (explicit_label.group(2) or "").strip()
+            if descriptor:
+                descriptor_matches = {
+                    option["label"].upper()
+                    for option in options
+                    if _normalized_key_text(option["text"])
+                    == _normalized_key_text(descriptor)
+                }
+                if descriptor_matches and descriptor_matches != {label}:
+                    return None
+            return label
+
+    normalized = _normalized_key_text(value)
+    exact_matches = [
+        option["label"].upper()
+        for option in options
+        if _normalized_key_text(option["text"]) == normalized
+    ]
+    return exact_matches[0] if len(exact_matches) == 1 else None
+
+
+def _parse_questions_detailed(
+    text: str,
+) -> tuple[list[QuizQuestionIn], list[QuizImportNotice], QuizImportSummary]:
+    return _parse_questions_impl(text)
+
+
 async def preview_quiz_import(file: UploadFile) -> QuizImportPreviewResponse:
     """Parse a structured text quiz into editable manual-builder questions."""
     filename = file.filename or "quiz"
@@ -107,7 +169,7 @@ async def preview_quiz_import(file: UploadFile) -> QuizImportPreviewResponse:
     content = await file.read()
     text = _extract_text(content, suffix)
     title = _title_from_text(text, filename)
-    questions, warnings = _parse_questions(text)
+    questions, notices, summary = _parse_questions_detailed(text)
     if not questions:
         raise HTTPException(
             status_code=400,
@@ -120,7 +182,9 @@ async def preview_quiz_import(file: UploadFile) -> QuizImportPreviewResponse:
         title=title,
         instructions=None,
         questions=questions,
-        warnings=warnings,
+        notices=notices,
+        summary=summary,
+        warnings=[notice.message for notice in notices if notice.severity != "info"],
     )
 
 
@@ -252,6 +316,14 @@ def _title_from_text(text: str, filename: str) -> str:
 
 
 def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
+    """Backward-compatible parser contract used by existing services and tests."""
+    questions, notices, _summary = _parse_questions_impl(text)
+    return questions, [notice.message for notice in notices if notice.severity != "info"]
+
+
+def _parse_questions_impl(
+    text: str,
+) -> tuple[list[QuizQuestionIn], list[QuizImportNotice], QuizImportSummary]:
     """Two-pass quiz parser: parse structure first, then resolve answer keys."""
     clean_text = text.replace("\x00", "")
     clean_text = re.sub(r"[ \t]*\x11[ \t]*", "-", clean_text)
@@ -323,6 +395,7 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                 "inline_key": inline_key,
                 "has_answer_line": False,
                 "has_explanation_line": False,
+                "explanation_parts": [],
                 "has_essay_rules": False,
                 "section_type": current_section_type,
             }
@@ -331,7 +404,7 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
         if in_directions:
             continue
 
-        if current and not current.get("has_answer_line") and not current.get("has_explanation_line"):
+        if current and not current.get("has_explicit_answer_line") and not current.get("has_explanation_line"):
             opt_list = _extract_options_from_line(line)
             if opt_list:
                 for lbl, txt in opt_list:
@@ -361,12 +434,19 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
             current["has_explicit_answer_line"] = True
             continue
 
-        if current and EXPLANATION_RE.match(line):
+        explanation_match = EXPLANATION_VALUE_RE.match(line) if current else None
+        if current and explanation_match:
             current["has_explanation_line"] = True
+            explanation_text = explanation_match.group(1).strip()
+            if explanation_text:
+                current["explanation_parts"].append(explanation_text)
             continue
 
         if current:
-            if current.get("has_answer_line") or current.get("has_explanation_line"):
+            if current.get("has_explanation_line"):
+                current["explanation_parts"].append(line)
+                continue
+            if current.get("has_explicit_answer_line"):
                 continue
             if current["options"]:
                 current["options"][-1]["text"] = f"{current['options'][-1]['text']} {line}".strip()
@@ -378,7 +458,10 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
 
     # Pass 2: Resolve keys with precedence: inline > trailing > none
     questions: list[QuizQuestionIn] = []
-    warnings: list[str] = []
+    notices: list[QuizImportNotice] = []
+    normalized_key_count = 0
+    keyed_question_count = 0
+    preserved_explanation_count = 0
 
     for index, item in enumerate(parsed, start=1):
         num = item["number"]
@@ -388,7 +471,8 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
         section_type = item.get("section_type")
         raw_q_text = item["question_text"]
 
-        extracted_explanation: str | None = None
+        explanation_parts = [part for part in item.get("explanation_parts", []) if part]
+        extracted_explanation: str | None = "\n".join(explanation_parts).strip() or None
         has_scoring_criteria = False
 
         # Extract [Scoring Criteria: ...], [Rubric: ...], [Key/Rubric]: ..., etc. blocks (multiline)
@@ -399,7 +483,10 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
         )
         if sc_match:
             has_scoring_criteria = True
-            extracted_explanation = sc_match.group(1).strip()
+            scoring_explanation = sc_match.group(1).strip()
+            extracted_explanation = "\n\n".join(
+                part for part in (extracted_explanation, scoring_explanation) if part
+            ) or None
             raw_q_text = raw_q_text[: sc_match.start()] + " " + raw_q_text[sc_match.end() :]
 
         # Check for essay rule lines inside the text before stripping
@@ -414,41 +501,40 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
 
         resolved_key = None
         if inline_key and trailing_key:
-            if inline_key.strip().upper() == trailing_key.strip().upper():
+            inline_option = _resolve_key_option_label(inline_key, options)
+            trailing_option = _resolve_key_option_label(trailing_key, options)
+            raw_keys_agree = _normalized_key_text(inline_key) == _normalized_key_text(trailing_key)
+            if raw_keys_agree or (
+                inline_option is not None
+                and trailing_option is not None
+                and inline_option == trailing_option
+            ):
                 resolved_key = inline_key
+                if not raw_keys_agree:
+                    normalized_key_count += 1
+                    notices.append(QuizImportNotice(
+                        severity="info",
+                        code="answer_key_format_normalized",
+                        message=f"Question {num}: matching inline and trailing answer keys were confirmed.",
+                        question_number=num,
+                    ))
             else:
-                matching_inline_opt = next(
-                    (o for o in options if o["label"].upper() == inline_key.upper()),
-                    None,
-                )
-                matching_trailing_opt = next(
-                    (
-                        o
-                        for o in options
-                        if o["label"].upper() == trailing_key.upper()
-                        or o["text"].strip().lower() == trailing_key.strip().lower()
-                    ),
-                    None,
-                )
-                if (
-                    matching_inline_opt
-                    and matching_trailing_opt
-                    and matching_inline_opt == matching_trailing_opt
-                ):
-                    resolved_key = inline_key
-                else:
-                    resolved_key = inline_key
-                    warnings.append(
-                        f"Question {num}: inline answer key ({inline_key}) took precedence over trailing key ({trailing_key})."
-                    )
+                resolved_key = inline_key
+                notices.append(QuizImportNotice(
+                    severity="warning",
+                    code="conflicting_answer_keys",
+                    message=f"Question {num}: inline answer key ({inline_key}) took precedence over trailing key ({trailing_key}).",
+                    question_number=num,
+                ))
         elif inline_key:
             resolved_key = inline_key
         elif trailing_key:
             resolved_key = trailing_key
-        else:
-            warnings.append(
-                f"Question {num} has no answer key. Please select the correct answer in the builder."
-            )
+
+        if resolved_key:
+            keyed_question_count += 1
+        if extracted_explanation:
+            preserved_explanation_count += 1
 
         # Decide question type in required order:
         # (a) Section heading:
@@ -484,9 +570,13 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                 ]
             correct_label = None
             if resolved_key:
+                resolved_option = _resolve_key_option_label(resolved_key, tf_options)
                 rk_upper = resolved_key.strip().upper()
                 rk_lower = resolved_key.strip().lower()
                 for opt in tf_options:
+                    if resolved_option and opt["label"].upper() == resolved_option:
+                        correct_label = opt["label"]
+                        break
                     if opt["label"].upper() == rk_upper:
                         correct_label = opt["label"]
                         break
@@ -499,6 +589,13 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                     if rk_upper in ("F", "FALSE") and opt["text"].strip().lower() in ("false", "f"):
                         correct_label = opt["label"]
                         break
+            if correct_label is None:
+                notices.append(QuizImportNotice(
+                    severity="error",
+                    code="missing_answer_key",
+                    message=f"Question {num} has no answer key that matches an option. Please select the correct answer in the builder.",
+                    question_number=num,
+                ))
             questions.append(
                 QuizQuestionIn(
                     question_text=cleaned_q_text,
@@ -520,9 +617,13 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
         elif section_type == "MULTIPLE_CHOICE" or len(options) >= 2:
             correct_label = None
             if resolved_key:
+                resolved_option = _resolve_key_option_label(resolved_key, options)
                 rk_upper = resolved_key.strip().upper()
                 rk_lower = resolved_key.strip().lower()
                 for opt in options:
+                    if resolved_option and opt["label"].upper() == resolved_option:
+                        correct_label = opt["label"]
+                        break
                     if opt["label"].upper() == rk_upper:
                         correct_label = opt["label"]
                         break
@@ -538,6 +639,13 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                         if rk_upper in ("F", "FALSE") and opt_text_lower in ("false", "f"):
                             correct_label = opt["label"]
                             break
+            if correct_label is None:
+                notices.append(QuizImportNotice(
+                    severity="error",
+                    code="missing_answer_key",
+                    message=f"Question {num} has no answer key that matches an option. Please select the correct answer in the builder.",
+                    question_number=num,
+                ))
 
             questions.append(
                 QuizQuestionIn(
@@ -567,6 +675,13 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                         option_order=1,
                     )
                 )
+            else:
+                notices.append(QuizImportNotice(
+                    severity="error",
+                    code="missing_answer_key",
+                    message=f"Question {num} has no answer key. Please add an accepted answer in the builder.",
+                    question_number=num,
+                ))
             questions.append(
                 QuizQuestionIn(
                     question_text=cleaned_q_text,
@@ -610,5 +725,12 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                     )
                 )
 
-    return questions, warnings
+    summary = QuizImportSummary(
+        question_count=len(questions),
+        keyed_question_count=keyed_question_count,
+        normalized_key_count=normalized_key_count,
+        preserved_explanation_count=preserved_explanation_count,
+        needs_attention_count=sum(1 for notice in notices if notice.severity != "info"),
+    )
+    return questions, notices, summary
 

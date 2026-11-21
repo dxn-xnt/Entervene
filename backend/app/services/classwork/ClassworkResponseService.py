@@ -141,6 +141,10 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
                 if recipient is not None
                 else None
             ),
+            "recipient_student_ids": [
+                item.student_id
+                for item in (getattr(assignment, "recipients", None) or [])
+            ],
             "source_intervention_id": assignment.source_intervention_id,
         })
 
@@ -204,6 +208,9 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         subject_id=cw.subject_id,
         subject_name=getattr(subject, "subject_name", None) if subject else None,
         created_by_staff_id=cw.created_by_staff_id,
+        intervention_resource_origin_id=getattr(
+            cw, "intervention_resource_origin_id", None
+        ),
         teacher_name=f"{getattr(staff, 'first_name', '')} {getattr(staff, 'last_name', '')}".strip() or None if staff else None,
         attachments=[build_attachment_response(attachment) for attachment in cw.attachments],
         reference_links=[

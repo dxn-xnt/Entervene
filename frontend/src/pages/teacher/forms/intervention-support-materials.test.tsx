@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   RemediationQuizDraft,
+  RemediationResource,
   RemediationWorkspace,
   SubjectGradeProjectionResponse,
   TeacherInterventionDetail,
@@ -46,10 +47,34 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("./create-classwork", () => ({
-  default: ({ onSuccess }: { onSuccess: (created: unknown) => void }) => (
-    <button onClick={() => onSuccess({ classwork_id: 303, title: "Newly Created Reading" })}>
-      Finish creating reading
-    </button>
+  default: ({
+    onSuccess,
+    interventionResourceContext,
+    initialLessonId,
+  }: {
+    onSuccess: (created: unknown) => void;
+    interventionResourceContext?: Record<string, unknown> | null;
+    initialLessonId?: number;
+  }) => (
+    <div>
+      <span data-testid="nested-initial-lesson">
+        {initialLessonId == null ? "unset" : String(initialLessonId)}
+      </span>
+      {interventionResourceContext && (
+        <span data-testid="nested-intervention-context">
+          {JSON.stringify({
+            interventionId: interventionResourceContext.interventionId,
+            studentId: interventionResourceContext.studentId,
+            classId: interventionResourceContext.classId,
+            subjectId: interventionResourceContext.subjectId,
+            academicPeriodId: interventionResourceContext.academicPeriodId,
+          })}
+        </span>
+      )}
+      <button onClick={() => onSuccess({ classwork_id: 303, title: "Newly Created Reading" })}>
+        Finish creating reading
+      </button>
+    </div>
   ),
 }));
 
@@ -808,6 +833,122 @@ describe("InterventionSupportMaterials supporting resources", () => {
       7,
       expect.objectContaining({
         selected_resources: [{ kind: "CLASSWORK", id: 303 }],
+        resource_recipient_scope: "THIS_STUDENT",
+      }),
+    );
+  });
+
+  it("passes full intervention context into nested Create Reading modal and submits explicit Entire Class scope for existing resources", async () => {
+    const existingReading: RemediationResource = {
+      kind: "CLASSWORK",
+      id: 305,
+      title: "Factoring Cheat Sheet",
+      description: "Quick review",
+      lesson: "Quadratics",
+      topic: "Factoring Cheat Sheet",
+      attachments: [],
+      classwork_type: "READING",
+      access: "ALREADY_ACCESSIBLE",
+      ai_read: "METADATA_ONLY",
+      recommended: true,
+      match_reason: "Matched lesson: Quadratics",
+      match_level: "LESSON",
+      match_rank: 80,
+      is_graded: false,
+      current_recipient_scope: "THIS_STUDENT",
+    };
+    const workspaceWithScopes: RemediationWorkspace = {
+      ...makeWorkspace([]),
+      plan: {
+        ...makeWorkspace([]).plan,
+        teacher_choice: null,
+        grade_treatment: null,
+        selected_resources: [],
+      },
+      resources: [existingReading],
+      recipient_scopes: {
+        default_scope: "THIS_STUDENT",
+        this_student: {
+          scope: "THIS_STUDENT",
+          student_id: "student-1",
+          student_name: "Morgan Striving",
+          class_id: 1,
+          class_name: "Grade 9 - Newton",
+          student_count: 1,
+        },
+        entire_class: {
+          scope: "ENTIRE_CLASS",
+          class_id: 1,
+          class_name: "Grade 9 - Newton",
+          student_count: 17,
+        },
+        all_subject_students: {
+          scope: "ALL_SUBJECT_STUDENTS",
+          subject_id: 1,
+          subject_name: "Mathematics",
+          class_ids: [1, 2],
+          class_names: ["Grade 9 - Newton", "Grade 9 - Einstein"],
+          section_count: 2,
+          student_count: 35,
+        },
+      },
+      progress: {
+        ...makeWorkspace([]).progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    };
+    apiMocks.getRemediationWorkspace.mockResolvedValue(workspaceWithScopes);
+    apiMocks.saveRemediationPlan.mockImplementation(async (_id, payload) => ({
+      ...workspaceWithScopes,
+      plan: { ...workspaceWithScopes.plan, selected_resources: payload.selected_resources },
+    }));
+
+    const ref = createRef<InterventionSupportMaterialsHandle>();
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          ref={ref}
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+        />
+      </MemoryRouter>,
+    );
+
+    // Defaults to THIS_STUDENT
+    const thisStudentRadio = await screen.findByRole("radio", {
+      name: /This student — Morgan Striving \(Default\)/i,
+    });
+    expect(thisStudentRadio.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Assigned to: 1 student (Morgan Striving in Grade 9 - Newton)")).toBeDefined();
+
+    // Open nested Create Reading modal and verify full intervention context is passed
+    fireEvent.click(screen.getByRole("button", { name: "Add Additional Resources" }));
+    const contextProbe = await screen.findByTestId("nested-intervention-context");
+    expect(JSON.parse(contextProbe.textContent || "{}")).toEqual({
+      interventionId: 7,
+      studentId: "student-1",
+      classId: 1,
+      subjectId: 1,
+      academicPeriodId: 1,
+    });
+    expect(screen.getByTestId("nested-initial-lesson").textContent).toBe(
+      "unset",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Finish creating reading" }));
+
+    // Select existing reading and explicitly switch scope to Entire Class
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Factoring Cheat Sheet" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Entire class — Grade 9 - Newton/i }));
+    expect(screen.getByText("Assigned to: 17 students in Grade 9 - Newton")).toBeDefined();
+
+    await expect(ref.current?.saveAdjustments({ readingsOnly: true })).resolves.toBe(true);
+    expect(apiMocks.saveRemediationPlan).toHaveBeenLastCalledWith(
+      7,
+      expect.objectContaining({
+        selected_resources: [{ kind: "CLASSWORK", id: 305 }],
+        resource_recipient_scope: "ENTIRE_CLASS",
       }),
     );
   });
@@ -868,6 +1009,41 @@ describe("InterventionSupportMaterials supporting resources", () => {
 
     fireEvent.change(searchInput, { target: { value: "" } });
     expect(screen.getByRole("button", { name: "Open classwork: Number Sense Review" })).toBeDefined();
+  });
+
+  it("labels an intervention-created diagnostic match as teacher-added without losing recommendation metadata", async () => {
+    const baseWorkspace = makeWorkspace([]);
+    apiMocks.getRemediationWorkspace.mockResolvedValue({
+      ...baseWorkspace,
+      resources: [
+        {
+          ...recommendedReading,
+          id: 333,
+          title: "Teacher-created Algebra Guide",
+          added_by_teacher: true,
+          recommended: true,
+          match_reason: "Matched lesson: Linear Equations",
+          match_level: "LESSON",
+          match_rank: 80,
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={1}
+        />
+      </MemoryRouter>,
+    );
+
+    const row = await screen.findByRole("button", {
+      name: "Open classwork: Teacher-created Algebra Guide",
+    });
+    expect(within(row).getByText("Added by teacher")).toBeDefined();
+    expect(within(row).queryByText("Recommended")).toBeNull();
   });
 
   it("keeps Browse Other Resources expanded without fabricating Recommended badges when backend returns no recommended matches", async () => {
@@ -1012,6 +1188,55 @@ describe("InterventionSupportMaterials supporting resources", () => {
     expect(
       screen.getByText(/No specific lesson or competency weakness can be identified from the available scored evidence\./i),
     ).toBeDefined();
+  });
+
+  it("omits individual question ID/score entries under Academic Diagnosis while preserving summary focus for QUESTION_SCORE evidence", async () => {
+    const questionEvidenceWorkspace: RemediationWorkspace = {
+      ...makeWorkspace([]),
+      focus: {
+        ...makeWorkspace([]).focus,
+        evidence_level: "QUESTION_SCORE",
+        component: "EXAMINATION",
+        exam_subtype: "TERM_EXAM",
+        competency_ids: [11, 12],
+        competencies: [
+          { id: 11, label: "Illustrate quadratic equations" },
+          { id: 12, label: "Solve quadratic equations by factoring" },
+        ],
+        question_evidence: [
+          { quiz_question_id: 21, score: 0, possible_score: 1 },
+          { quiz_question_id: 23, score: 0, possible_score: 1 },
+          { quiz_question_id: 24, score: 0, possible_score: 1 },
+        ],
+      },
+      progress: {
+        ...makeWorkspace([]).progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    };
+    apiMocks.getRemediationWorkspace.mockResolvedValueOnce(questionEvidenceWorkspace);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={baseDetail} page="overview" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Academic Diagnosis")).toBeDefined();
+    expect(screen.getByText("Scored question-level competency evidence")).toBeDefined();
+    expect(screen.getByText(/Support focus:/)).toBeDefined();
+    expect(screen.getByText("Examination")).toBeDefined();
+    expect(screen.getByText("(Quarterly examination)")).toBeDefined();
+    expect(
+      screen.getByText(
+        "Scored competency focus: Illustrate quadratic equations; Solve quadratic equations by factoring",
+      ),
+    ).toBeDefined();
+    expect(screen.queryByText(/Question #21/i)).toBeNull();
+    expect(screen.queryByText(/Question #23/i)).toBeNull();
+    expect(screen.queryByText(/Question #24/i)).toBeNull();
+    expect(screen.queryByText(/Question #/i)).toBeNull();
   });
 });
 

@@ -1,4 +1,5 @@
 import { AcademicSelectItem } from "@/components/academic-option-label";
+import { isChronologicallyEarlierYear } from "@/lib/academic-year-chronology";
 import { activeFirst } from "@/lib/active-first";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/retroui/Button";
@@ -54,24 +55,31 @@ export function CopyPreviousYearSetupModal({
       return y.academic_year_id > active.academic_year_id;
     });
   }, [options?.academic_years]);
-  const targetYears = configurableYears;
+  const targetYears = useMemo(() => {
+    const allYears = options?.academic_years ?? [];
+    return configurableYears.filter((target) =>
+      allYears.some((candidate) => isChronologicallyEarlierYear(candidate, target))
+    );
+  }, [configurableYears, options?.academic_years]);
   const selectedTargetYearId = Number(targetAcademicYearId);
+  const selectedTargetYear = useMemo(
+    () => targetYears.find((year) => year.academic_year_id === selectedTargetYearId) ?? null,
+    [selectedTargetYearId, targetYears]
+  );
   const sourceYears = useMemo(() => {
     const years = options?.academic_years ?? [];
-    return years.filter((year) => year.academic_year_id !== selectedTargetYearId);
-
-
-
-  }, [options?.academic_years, selectedTargetYearId]);
+    if (!selectedTargetYear) return [];
+    return years.filter((year) => isChronologicallyEarlierYear(year, selectedTargetYear));
+  }, [options?.academic_years, selectedTargetYear]);
 
   useEffect(() => {
     if (!open) return;
     const defaultTarget = (defaultTargetAcademicYearId
       ? targetYears.find((year) => year.academic_year_id === defaultTargetAcademicYearId)
-      : null) ?? activeYears[0] ?? targetYears[0];
-    const sourceCandidates = options?.academic_years.filter((year) =>
-      year.academic_year_id !== defaultTarget?.academic_year_id
-    ) ?? [];
+      : null) ?? activeYears.find((year) => targetYears.some((t) => t.academic_year_id === year.academic_year_id)) ?? targetYears[0];
+    const sourceCandidates = defaultTarget
+      ? (options?.academic_years ?? []).filter((year) => isChronologicallyEarlierYear(year, defaultTarget))
+      : [];
     const defaultSource = sourceCandidates.find((year) => year.academic_year_id === defaultSourceAcademicYearId)
       ?? sourceCandidates.find((year) => year.is_active)
       ?? sourceCandidates[0];
@@ -82,6 +90,19 @@ export function CopyPreviousYearSetupModal({
     setPreview(null);
     setError(null);
   }, [activeYears, defaultSourceAcademicYearId, defaultTargetAcademicYearId, open, options?.academic_years, targetYears]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!sourceYears.length) {
+      if (sourceAcademicYearId) setSourceAcademicYearId("");
+      return;
+    }
+    const isStillValid = sourceYears.some((year) => String(year.academic_year_id) === sourceAcademicYearId);
+    if (!isStillValid) {
+      const nextSource = sourceYears.find((year) => year.is_active) ?? sourceYears[0];
+      setSourceAcademicYearId(nextSource ? String(nextSource.academic_year_id) : "");
+    }
+  }, [open, sourceAcademicYearId, sourceYears]);
 
   const handleCopy = async () => {
     setError(null);

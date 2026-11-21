@@ -512,6 +512,8 @@ def get_my_todos(
 
     now = datetime.now(timezone.utc)
 
+    from app.services.classwork.ClassworkAccessService import student_assignment_visibility_filter
+
     results = (
         db.query(
             ClassworkAssignment.classwork_assignment_id,
@@ -541,7 +543,7 @@ def get_my_todos(
         )
         .filter(
             ClassworkAssignment.class_id.in_(class_ids),
-            or_(ClassworkAssignment.recipient_student_id.is_(None), ClassworkAssignment.recipient_student_id == student.student_id),
+            student_assignment_visibility_filter(student.student_id),
             ClassworkAssignment.is_published == True,
             Classwork.is_archived == False,
         )

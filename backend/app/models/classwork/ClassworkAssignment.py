@@ -57,3 +57,8 @@ class ClassworkAssignment(Base):
     academic_period: Mapped[object] = relationship("AcademicPeriod", backref="classwork_assignments")
     staff: Mapped[object] = relationship("AcademicStaff", backref="classwork_assignments")
     submissions: Mapped[list[object]] = relationship("StudentSubmission", back_populates="classwork_assignment", cascade="all, delete-orphan")
+    recipients: Mapped[list["ClassworkAssignmentRecipient"]] = relationship(
+        "ClassworkAssignmentRecipient",
+        back_populates="classwork_assignment",
+        cascade="all, delete-orphan",
+    )

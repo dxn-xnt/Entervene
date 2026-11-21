@@ -33,6 +33,9 @@ from app.models.classwork.ActivityRubricLevel import ActivityRubricLevel
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkAssignmentRecipient import (
+    ClassworkAssignmentRecipient,
+)
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.classwork.ClassworkReferenceLink import ClassworkReferenceLink
 from app.models.people.AcademicStaff import AcademicStaff
@@ -67,6 +70,7 @@ TABLES = [
     ClassworkAttachment.__table__,
     ActivityRubricLevel.__table__,
     ClassworkAssignment.__table__,
+    ClassworkAssignmentRecipient.__table__,
     ClassworkLesson.__table__,
     ClassworkReferenceLink.__table__,
     Notification.__table__,
@@ -446,6 +450,7 @@ def test_quiz_creation_rejects_reference_links_but_edit_accepts_them(client, tes
                 "question_type": "MULTIPLE_CHOICE",
                 "points": 10,
                 "display_order": 1,
+                "lesson_id": 1,
                 "options": [
                     {"option_text": "4", "is_correct": True, "option_order": 1},
                     {"option_text": "5", "is_correct": False, "option_order": 2},
@@ -495,6 +500,43 @@ def test_quiz_creation_rejects_reference_links_but_edit_accepts_them(client, tes
     assert len(created_asgn["reference_links"]) == 1
     assert created_asgn["reference_links"][0]["url"] == "https://poetry.org"
 
+
+def test_published_quiz_creation_rejects_unmapped_questions(client, test_db):
+    data = seed_basic_data(test_db)
+    response = client.post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data={
+            "title": "Unmapped quiz",
+            "classwork_type": "QUIZ",
+            "classwork_category": "WRITTEN_WORK",
+            "total_points": "10",
+            "subject_id": "10",
+            "is_published": "true",
+            "class_ids": json.dumps([100]),
+            "lesson_ids": json.dumps([1]),
+            "quiz_payload": json.dumps({
+                "status": "DRAFT",
+                "questions": [{
+                    "question_text": "What is 2+2?",
+                    "question_type": "MULTIPLE_CHOICE",
+                    "points": 10,
+                    "display_order": 1,
+                    "options": [
+                        {"option_text": "4", "is_correct": True, "option_order": 1},
+                        {"option_text": "5", "is_correct": False, "option_order": 2},
+                    ],
+                }],
+            }),
+        },
+        headers=auth_headers(data["teacher_account"], role="teacher"),
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "QUIZ_NOT_PUBLISH_READY"
+    assert detail["readiness_errors"] == [
+        "Question 1 needs a lesson mapping to one of the quiz's linked lessons"
+    ]
 
 def test_get_my_todos_respects_grading_and_score_visibility(client, test_db):
     data = seed_basic_data(test_db)

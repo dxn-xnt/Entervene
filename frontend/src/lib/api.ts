@@ -278,6 +278,22 @@ export type SubjectImportResult = {
   errors: Array<{ row: number | null; message: string }>;
   warnings?: string[];
 };
+export type SubjectImportPreviewRow = {
+  row: number;
+  subject_code: string | null;
+  subject_name: string;
+  grade_level: string;
+  grading_template: string;
+  description: string;
+  errors: string[];
+};
+export type SubjectImportPreviewResult = {
+  total_rows: number;
+  valid_count: number;
+  error_count: number;
+  errors: Array<{ row: number | null; message: string }>;
+  rows: SubjectImportPreviewRow[];
+};
 export type SubjectCreatePayload = {
   subject_name: string;
   subject_codename?: string | null;
@@ -341,11 +357,19 @@ export type AcademicPathwayItem = {
   deped_cluster_id: number | null;
 };
 
+export type SubjectOfferingFormPathwayScope = {
+  academic_year_id: number;
+  academic_level_id: number;
+  grade_level: number;
+  requires_pathway: boolean;
+};
+
 export type SubjectOfferingFormOptions = {
   academic_years: Array<SubjectOfferingAcademicYear & { start_date: string; end_date: string }>;
   academic_levels: SubjectAcademicLevel[];
   academic_periods: SubjectOfferingAcademicPeriod[];
   pathways: AcademicPathwayItem[];
+  pathway_scopes?: SubjectOfferingFormPathwayScope[];
   statuses: SubjectStatus[];
   default_status: SubjectStatus;
   active_subjects: Array<{
@@ -1305,6 +1329,24 @@ export async function getSubjectFormOptions(): Promise<SubjectFormOptions> {
   return (await response.json()) as SubjectFormOptions;
 }
 
+export async function previewSubjectCode(params: {
+  subject_name: string;
+  academic_level_id: number;
+  subject_id?: number;
+}): Promise<{ subject_codename: string }> {
+  const query = new URLSearchParams({
+    subject_name: params.subject_name,
+    academic_level_id: String(params.academic_level_id),
+  });
+  if (params.subject_id !== undefined) query.set("subject_id", String(params.subject_id));
+  const response = await apiFetch(`/api/v1/subjects/code-preview?${query.toString()}`);
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(apiErrorMessage(data, "Unable to generate a subject code."), response.status, data);
+  }
+  return (await response.json()) as { subject_codename: string };
+}
+
 export async function getSubjects(params: {
   status?: SubjectStatus;
   academic_level_id?: number;
@@ -1402,6 +1444,20 @@ export async function uploadSubjectImportCsv(file: File): Promise<SubjectImportR
     throw new ApiRequestError(apiErrorMessage(data, "Unable to import subjects."), response.status, data);
   }
   return (await response.json()) as SubjectImportResult;
+}
+
+export async function previewSubjectImportCsv(file: File): Promise<SubjectImportPreviewResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await apiFetch("/api/v1/subjects/import-preview", {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(apiErrorMessage(data, "Unable to preview subject import."), response.status, data);
+  }
+  return (await response.json()) as SubjectImportPreviewResult;
 }
 
 export async function getSubjectOfferingFormOptions(): Promise<SubjectOfferingFormOptions> {
@@ -2439,6 +2495,82 @@ export async function validateSubjectLoads(periodId: number, loads: SubjectLoadI
     throw new ApiRequestError("Failed to validate subject loads", response.status, null);
   }
   return (await response.json()) as ValidationResultResponse;
+}
+
+export type AutoScheduleDecisionItem = {
+  class_id: number;
+  section_name: string;
+  subject_id: number;
+  subject_name: string;
+  staff_id?: string | null;
+  staff_name?: string | null;
+  outcome: "generated" | "skipped" | "unscheduled";
+  reason_code: string;
+  reason: string;
+  replaced_existing: boolean;
+  slot_id?: number | null;
+  slot_name?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  days_of_week: string[];
+};
+
+export type AutoScheduleSummary = {
+  target_sections_count: number;
+  locked_sections_count: number;
+  generated_count: number;
+  skipped_count: number;
+  unscheduled_count: number;
+  replaced_count: number;
+  existing_error_conflicts_count: number;
+  resulting_error_conflicts_count: number;
+  empty_curriculum_sections?: string[];
+};
+
+export type AutoScheduleResponse = {
+  is_valid: boolean;
+  conflicts: ConflictItem[];
+  existing_conflicts: ConflictItem[];
+  teacher_workloads: TeacherWorkloadItem[];
+  scheduled_loads: SubjectLoadItem[];
+  items: AutoScheduleDecisionItem[];
+  summary: AutoScheduleSummary;
+  unscheduled_loads: Array<{
+    class_id: number;
+    section_name: string;
+    subject_id: number;
+    subject_name: string;
+    reason_code: string;
+    reason: string;
+  }>;
+};
+
+export async function autoScheduleSubjectLoads(
+  periodId: number,
+  loads: SubjectLoadItem[],
+  options?: {
+    targetClassIds?: number[] | null;
+    overwriteExistingDrafts?: boolean;
+  },
+): Promise<AutoScheduleResponse> {
+  const response = await apiFetch("/api/v1/subject-loads/auto-schedule", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      academic_period_id: periodId,
+      loads,
+      target_class_ids: options?.targetClassIds ?? null,
+      overwrite_existing_drafts: Boolean(options?.overwriteExistingDrafts),
+    }),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to generate draft schedule preview";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as AutoScheduleResponse;
 }
 
 export async function batchSaveSubjectLoads(

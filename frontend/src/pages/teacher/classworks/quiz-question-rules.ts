@@ -304,3 +304,123 @@ export function mapGeneratedQuizQuestions(
   }));
 }
 
+export function hasLinkedLessonMapping(
+  question: Pick<QuizQuestionDraft, "lesson_id">,
+  linkedLessonIds: readonly number[],
+): boolean {
+  return (
+    question.lesson_id !== null && linkedLessonIds.includes(question.lesson_id)
+  );
+}
+
+export function mapUnmappedQuestionsToLesson(
+  questions: QuizQuestionDraft[],
+  lessonId: number,
+): QuizQuestionDraft[] {
+  return questions.map((question) =>
+    question.lesson_id === lessonId
+      ? question
+      : { ...question, lesson_id: lessonId },
+  );
+}
+
+export function assignSelectedQuestionsToLesson(
+  questions: QuizQuestionDraft[],
+  selectedQuestionIds: ReadonlySet<string>,
+  lessonId: number | null,
+): QuizQuestionDraft[] {
+  return questions.map((question) =>
+    selectedQuestionIds.has(question.id)
+      ? { ...question, lesson_id: lessonId }
+      : question,
+  );
+}
+
+export function applyBulkQuestionLessonAssignment(
+  questions: QuizQuestionDraft[],
+  selectedQuestionIds: ReadonlySet<string>,
+  lessonId: number | null,
+): {
+  questions: QuizQuestionDraft[];
+  selectedQuestionIds: Set<string>;
+} {
+  return {
+    questions: assignSelectedQuestionsToLesson(
+      questions,
+      selectedQuestionIds,
+      lessonId,
+    ),
+    selectedQuestionIds: new Set<string>(),
+  };
+}
+
+export function clearQuestionMappingsForLesson(
+  questions: QuizQuestionDraft[],
+  lessonId: number,
+): QuizQuestionDraft[] {
+  return questions.map((question) =>
+    question.lesson_id === lessonId
+      ? { ...question, lesson_id: null }
+      : question,
+  );
+}
+
+export function selectUnmappedQuestionIds(
+  questions: QuizQuestionDraft[],
+  linkedLessonIds: readonly number[],
+): Set<string> {
+  return new Set(
+    questions
+      .filter((question) => !hasLinkedLessonMapping(question, linkedLessonIds))
+      .map((question) => question.id),
+  );
+}
+
+export function sanitizeQuestionLessonId(
+  lessonId: number | null,
+  linkedLessonIds: readonly number[],
+): number | null {
+  return lessonId !== null && linkedLessonIds.includes(lessonId)
+    ? lessonId
+    : null;
+}
+
+export function getQuizLessonMappingState(
+  questions: QuizQuestionDraft[],
+  linkedLessonIds: readonly number[],
+  selectedQuestionIds: ReadonlySet<string> = new Set<string>(),
+): {
+  totalCount: number;
+  mappedCount: number;
+  unmappedCount: number;
+  selectedCount: number;
+  allSelected: boolean;
+  someSelected: boolean;
+  showSelectUnmapped: boolean;
+} {
+  let mappedCount = 0;
+  let selectedCount = 0;
+
+  for (const question of questions) {
+    if (selectedQuestionIds.has(question.id)) selectedCount += 1;
+    if (hasLinkedLessonMapping(question, linkedLessonIds)) {
+      mappedCount += 1;
+    }
+  }
+
+  const totalCount = questions.length;
+  const unmappedCount = totalCount - mappedCount;
+  const allSelected = totalCount > 0 && selectedCount === totalCount;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  return {
+    totalCount,
+    mappedCount,
+    unmappedCount,
+    selectedCount,
+    allSelected,
+    someSelected,
+    showSelectUnmapped: mappedCount > 0 && unmappedCount > 0,
+  };
+}
+

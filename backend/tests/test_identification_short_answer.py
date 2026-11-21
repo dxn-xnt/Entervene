@@ -31,9 +31,11 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
+from app.models.academic.Lesson import Lesson
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.quiz.Question import Question
@@ -77,9 +79,11 @@ TABLES = [
     AcademicStaff.__table__,
     Student.__table__,
     Subject.__table__,
+    Lesson.__table__,
     Class.__table__,
     StudentClass.__table__,
     Classwork.__table__,
+    ClassworkLesson.__table__,
     ClassworkAssignment.__table__,
     StudentSubmission.__table__,
     Quiz.__table__,
@@ -440,6 +444,18 @@ def db_session():
     db.add(cw)
     db.flush()
 
+    lesson = Lesson(
+        title="Quiz coverage",
+        subject_id=subject.subject_id,
+        created_by_staff_id=teacher.staff_id,
+        is_published=True,
+        is_draft=False,
+    )
+    db.add(lesson)
+    db.flush()
+    db.add(ClassworkLesson(classwork_id=cw.classwork_id, lesson_id=lesson.lesson_id))
+    db.flush()
+
     assignment = ClassworkAssignment(
         classwork_id=cw.classwork_id,
         class_id=class_.class_id,
@@ -457,6 +473,7 @@ def db_session():
         "assignment": assignment,
         "student": student,
         "teacher": teacher,
+        "lesson": lesson,
     }
     db.close()
     Base.metadata.drop_all(bind=engine)
@@ -508,6 +525,69 @@ def test_builder_publish_blocked_when_unkeyed(db_session):
     assert any("Identification question with no answer key" in err for err in exc_info.value.detail)
 
 
+def test_builder_publish_blocked_when_question_is_unmapped(db_session):
+    payload = QuizBuilderUpsert(
+        status="PUBLISHED",
+        questions=[
+            QuizQuestionIn(
+                question_text="Explain the water cycle.",
+                question_type="SHORT_ANSWER",
+                points=10.0,
+                display_order=1,
+                options=[],
+            )
+        ],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        upsert_quiz_builder(db_session["db"], db_session["classwork"], payload)
+
+    assert exc_info.value.status_code == 400
+    assert "Question 1 needs a lesson mapping before publishing" in exc_info.value.detail
+
+
+def test_builder_publish_allows_one_of_two_linked_lessons_to_receive_all_questions(db_session):
+    db = db_session["db"]
+    primary_lesson = db_session["lesson"]
+    second_lesson = Lesson(
+        title="Additional coverage",
+        subject_id=primary_lesson.subject_id,
+        created_by_staff_id=db_session["teacher"].staff_id,
+        is_published=True,
+        is_draft=False,
+    )
+    db.add(second_lesson)
+    db.flush()
+    db.add(
+        ClassworkLesson(
+            classwork_id=db_session["classwork"].classwork_id,
+            lesson_id=second_lesson.lesson_id,
+        )
+    )
+    db.flush()
+    payload = QuizBuilderUpsert(
+        status="PUBLISHED",
+        questions=[
+            QuizQuestionIn(
+                question_text=f"Question {index}",
+                question_type="SHORT_ANSWER",
+                points=5.0,
+                display_order=index,
+                lesson_id=primary_lesson.lesson_id,
+                options=[],
+            )
+            for index in (1, 2)
+        ],
+    )
+
+    response = upsert_quiz_builder(db, db_session["classwork"], payload)
+
+    assert response.is_publish_ready is True
+    assert {question.lesson_id for question in response.questions} == {
+        primary_lesson.lesson_id
+    }
+
+
 def test_builder_blank_options_treated_as_missing(db_session):
     db = db_session["db"]
     cw = db_session["classwork"]
@@ -543,6 +623,7 @@ def test_builder_short_answer_with_keys_coerced_save_draft(db_session):
                 question_type="SHORT_ANSWER",
                 points=10.0,
                 display_order=1,
+                lesson_id=db_session["lesson"].lesson_id,
                 options=[
                     QuizOptionIn(option_text="Mitochondria", is_correct=True, option_order=1)
                 ],
@@ -572,6 +653,7 @@ def test_builder_short_answer_with_keys_coerced_publish(db_session):
                 question_type="SHORT_ANSWER",
                 points=10.0,
                 display_order=1,
+                lesson_id=db_session["lesson"].lesson_id,
                 options=[
                     QuizOptionIn(option_text="Mitochondria", is_correct=True, option_order=1)
                 ],
@@ -598,6 +680,7 @@ def test_builder_unkeyed_short_answer_remains_short_answer(db_session):
                 question_type="SHORT_ANSWER",
                 points=10.0,
                 display_order=1,
+                lesson_id=db_session["lesson"].lesson_id,
                 explanation="Mitosis and meiosis comparison rubric.",
                 options=[],
             )
@@ -633,6 +716,7 @@ def test_attempt_identification_auto_graded(db_session):
                 question_type="IDENTIFICATION",
                 points=10.0,
                 display_order=1,
+                lesson_id=db_session["lesson"].lesson_id,
                 options=[
                     QuizOptionIn(option_text="Au", is_correct=True, option_order=1),
                     QuizOptionIn(option_text="Gold", is_correct=True, option_order=2),
@@ -673,6 +757,7 @@ def test_attempt_short_answer_manual_graded(db_session):
                 question_type="SHORT_ANSWER",
                 points=10.0,
                 display_order=1,
+                lesson_id=db_session["lesson"].lesson_id,
                 explanation="Rubric: explains attraction between masses.",
                 options=[],
             )

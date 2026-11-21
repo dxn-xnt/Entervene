@@ -42,6 +42,7 @@ export type ClassworkAssignment = {
   recipient_student_id?: string | null;
   recipient_student_name?: string | null;
   source_intervention_id?: number | null;
+  recipient_student_ids?: string[];
 };
 
 export type LinkedLesson = {
@@ -78,6 +79,7 @@ export type TeacherClasswork = {
   is_graded?: boolean;
   due_date?: string | null;
   auto_ai_feedback_enabled?: boolean;
+  intervention_resource_origin_id?: number | null;
 };
 
 export type TeacherClassLoad = {

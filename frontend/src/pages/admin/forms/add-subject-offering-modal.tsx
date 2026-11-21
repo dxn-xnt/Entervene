@@ -33,7 +33,7 @@ import { SubjectPicker } from "../subjects/components/subject-picker";
 import {
   FALLBACK_PERIODS,
   isJuniorHighGrade,
-  isSeniorHighGrade,
+  levelRequiresPathway,
   pathwayLabel,
   targetLevels,
   type OfferingFormState,
@@ -140,6 +140,10 @@ export function OfferingModal({
   const [existingSubjectOfferings, setExistingSubjectOfferings] = useState<
     SubjectOfferingListItem[]
   >([]);
+  const [archivedSubjectOfferings, setArchivedSubjectOfferings] = useState<
+    SubjectOfferingListItem[]
+  >([]);
+  const [isLoadingEditOfferings, setIsLoadingEditOfferings] = useState(false);
   const [isLoadingEligibility, setIsLoadingEligibility] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const eligibilityRequestIdRef = useRef(0);
@@ -173,10 +177,15 @@ export function OfferingModal({
     (year) => year.academic_year_id === selectedYearId,
   );
   const isJhsSelection = isJuniorHighGrade(selectedLevel?.grade_level);
-  const isShsSelection = isSeniorHighGrade(selectedLevel?.grade_level);
+  const levelUsesPathway = levelRequiresPathway(
+    options?.pathway_scopes,
+    selectedYearId,
+    selectedLevelId,
+    selectedLevel?.grade_level,
+  );
 
   const availablePathways = useMemo<SubjectOfferingPathway[]>(() => {
-    if (!isShsSelection) return [];
+    if (!levelUsesPathway) return [];
     const activePathways = options?.pathways ?? [];
     const list: SubjectOfferingPathway[] = [];
 
@@ -196,7 +205,7 @@ export function OfferingModal({
       list.push(offering.pathway as SubjectOfferingPathway);
     }
     return list;
-  }, [isShsSelection, options?.pathways, offering?.pathway]);
+  }, [levelUsesPathway, options?.pathways, offering?.pathway]);
 
   const requiresPathway = availablePathways.length > 0;
   const periods = useMemo(
@@ -372,6 +381,8 @@ export function OfferingModal({
   useEffect(() => {
     if (!open) {
       setExistingSubjectOfferings([]);
+      setArchivedSubjectOfferings([]);
+      setIsLoadingEditOfferings(false);
       setEligibilityError(null);
       return;
     }
@@ -379,20 +390,42 @@ export function OfferingModal({
     setShowAdvancedYear(false);
     if (offering) {
       let isMounted = true;
+      setIsLoadingEditOfferings(true);
+      setExistingSubjectOfferings(offering.status === "active" ? [offering] : []);
+      setArchivedSubjectOfferings(offering.status === "archived" ? [offering] : []);
+      setForm({
+        subject_id: String(offering.subject.subject_id),
+        subject_ids: [String(offering.subject.subject_id)],
+        academic_year_id: String(offering.academic_year.academic_year_id),
+        academic_level_id: String(offering.academic_level.academic_level_id),
+        academic_period_id: String(offering.academic_period.academic_period_id),
+        academic_period_ids: [String(offering.academic_period.academic_period_id)],
+        pathway: offering.pathway,
+        minutes: offering.minutes != null ? String(offering.minutes) : "",
+        status: offering.status,
+        grading_template_id: String(offering.subject.grading_template_id),
+      });
+
       getSubjectOfferings({
         academic_year_id: offering.academic_year.academic_year_id,
         academic_level_id: offering.academic_level.academic_level_id,
       })
         .then((res) => {
           if (!isMounted) return;
-          const subjectOfferings = res.subject_offerings.filter(
+          const matchingSubjectOfferings = res.subject_offerings.filter(
             (o) =>
               o.subject.subject_id === offering.subject.subject_id &&
-              o.status === "active" &&
               o.pathway === offering.pathway,
           );
-          setExistingSubjectOfferings(subjectOfferings);
-          const periodIds = subjectOfferings.map((o) =>
+          const activeOfferings = matchingSubjectOfferings.filter(
+            (o) => o.status === "active",
+          );
+          const archivedOfferings = matchingSubjectOfferings.filter(
+            (o) => o.status === "archived",
+          );
+          setExistingSubjectOfferings(activeOfferings);
+          setArchivedSubjectOfferings(archivedOfferings);
+          const periodIds = activeOfferings.map((o) =>
             String(o.academic_period.academic_period_id),
           );
           setForm({
@@ -414,27 +447,16 @@ export function OfferingModal({
             grading_template_id: String(offering.subject.grading_template_id),
           });
         })
-        .catch(() => {
+        .catch((err) => {
           if (!isMounted) return;
-          setExistingSubjectOfferings([offering]);
-          setForm({
-            subject_id: String(offering.subject.subject_id),
-            subject_ids: [String(offering.subject.subject_id)],
-            academic_year_id: String(offering.academic_year.academic_year_id),
-            academic_level_id: String(
-              offering.academic_level.academic_level_id,
-            ),
-            academic_period_id: String(
-              offering.academic_period.academic_period_id,
-            ),
-            academic_period_ids: [
-              String(offering.academic_period.academic_period_id),
-            ],
-            pathway: offering.pathway,
-            minutes: offering.minutes != null ? String(offering.minutes) : "",
-            status: offering.status,
-            grading_template_id: String(offering.subject.grading_template_id),
-          });
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load all term offerings for this subject.",
+          );
+        })
+        .finally(() => {
+          if (isMounted) setIsLoadingEditOfferings(false);
         });
 
       return () => {
@@ -453,8 +475,14 @@ export function OfferingModal({
       (period) => period.academic_year_id === activeYear?.academic_year_id,
     );
     const isLevelJhs = isJuniorHighGrade(level?.grade_level);
+    const initialRequiresPathway = levelRequiresPathway(
+      options?.pathway_scopes,
+      activeYear?.academic_year_id,
+      level?.academic_level_id,
+      level?.grade_level,
+    );
     const activePathwayCount = (options?.pathways ?? []).length;
-    const initialPathway: SubjectOfferingPathway = isLevelJhs
+    const initialPathway: SubjectOfferingPathway = !initialRequiresPathway
       ? "general"
       : activePathwayCount > 1
         ? "both"
@@ -549,9 +577,24 @@ export function OfferingModal({
   };
 
   const handleYearChange = (value: string) => {
+    const nextYearId = Number(value);
     const nextPeriods = (options?.academic_periods ?? []).filter(
-      (period) => period.academic_year_id === Number(value),
+      (period) => period.academic_year_id === nextYearId,
     );
+    const nextRequiresPathway = levelRequiresPathway(
+      options?.pathway_scopes,
+      nextYearId,
+      selectedLevel?.academic_level_id,
+      selectedLevel?.grade_level,
+    );
+    const activePathwayCount = (options?.pathways ?? []).length;
+    const nextDefaultPathway: SubjectOfferingPathway = !nextRequiresPathway
+      ? "general"
+      : activePathwayCount > 1
+        ? "both"
+        : activePathwayCount === 1
+          ? ((options?.pathways[0].code as SubjectOfferingPathway) ?? "general")
+          : "general";
     setForm((current) => ({
       ...current,
       academic_year_id: value,
@@ -561,6 +604,10 @@ export function OfferingModal({
       academic_period_ids: isJhsSelection
         ? nextPeriods.map((period) => String(period.academic_period_id))
         : [],
+      pathway:
+        nextRequiresPathway && current.pathway !== "general"
+          ? current.pathway
+          : nextDefaultPathway,
     }));
   };
 
@@ -569,8 +616,14 @@ export function OfferingModal({
       (level) => String(level.academic_level_id) === value,
     );
     const isNextJhs = isJuniorHighGrade(nextLevel?.grade_level);
+    const nextRequiresPathway = levelRequiresPathway(
+      options?.pathway_scopes,
+      Number(form.academic_year_id),
+      nextLevel?.academic_level_id,
+      nextLevel?.grade_level,
+    );
     const activePathwayCount = (options?.pathways ?? []).length;
-    const nextDefaultPathway: SubjectOfferingPathway = isNextJhs
+    const nextDefaultPathway: SubjectOfferingPathway = !nextRequiresPathway
       ? "general"
       : activePathwayCount > 1
         ? "both"
@@ -712,6 +765,7 @@ export function OfferingModal({
     setIsSaving(true);
     try {
       if (offering) {
+        if (isLoadingEditOfferings) return;
         const targetPeriodIds = new Set(form.academic_period_ids);
         const existingMap = new Map<string, SubjectOfferingListItem>();
         for (const item of existingSubjectOfferings) {
@@ -721,6 +775,7 @@ export function OfferingModal({
           );
         }
         if (
+          offering.status === "active" &&
           !existingMap.has(String(offering.academic_period.academic_period_id))
         ) {
           existingMap.set(
@@ -729,42 +784,90 @@ export function OfferingModal({
           );
         }
 
-        for (const periodId of form.academic_period_ids) {
-          if (!existingMap.has(periodId)) {
-            try {
-              await createSubjectOffering({
-                subject_id: Number(form.subject_id),
-                academic_year_id: Number(form.academic_year_id),
-                academic_level_id: Number(form.academic_level_id),
-                academic_period_id: Number(periodId),
-                pathway: requiresPathway ? form.pathway : "general",
-                minutes: parsedMinutes,
-                status: form.status,
-              });
-            } catch {
-              // Ignore duplicates if already existing
-            }
-          }
+        const archivedMap = new Map<string, SubjectOfferingListItem>();
+        for (const item of archivedSubjectOfferings) {
+          archivedMap.set(
+            String(item.academic_period.academic_period_id),
+            item,
+          );
+        }
+        if (
+          offering.status === "archived" &&
+          !archivedMap.has(String(offering.academic_period.academic_period_id))
+        ) {
+          archivedMap.set(
+            String(offering.academic_period.academic_period_id),
+            offering,
+          );
         }
 
-        for (const [periodId, existingItem] of existingMap.entries()) {
-          if (targetPeriodIds.has(periodId)) {
+        const effectivePathway = requiresPathway ? form.pathway : "general";
+        const parsedTemplateId = form.grading_template_id
+          ? Number(form.grading_template_id)
+          : undefined;
+        let templateApplied = false;
+
+        for (const periodId of form.academic_period_ids) {
+          const existingItem = existingMap.get(periodId);
+          const archivedItem = archivedMap.get(periodId);
+
+          if (existingItem) {
             await updateSubjectOffering(existingItem.subject_offering_id, {
               subject_id: Number(form.subject_id),
               academic_year_id: Number(form.academic_year_id),
               academic_level_id: Number(form.academic_level_id),
               academic_period_id: Number(periodId),
-              pathway: requiresPathway ? form.pathway : "general",
+              pathway: effectivePathway,
               minutes: parsedMinutes,
               status: form.status,
-              grading_template_id: Number(form.grading_template_id),
+              ...(parsedTemplateId != null
+                ? { grading_template_id: parsedTemplateId }
+                : {}),
             });
+            templateApplied = true;
+          } else if (archivedItem) {
+            await updateSubjectOffering(archivedItem.subject_offering_id, {
+              subject_id: Number(form.subject_id),
+              academic_year_id: Number(form.academic_year_id),
+              academic_level_id: Number(form.academic_level_id),
+              academic_period_id: Number(periodId),
+              pathway: effectivePathway,
+              minutes: parsedMinutes,
+              status: form.status,
+              ...(parsedTemplateId != null
+                ? { grading_template_id: parsedTemplateId }
+                : {}),
+            });
+            templateApplied = true;
           } else {
+            const created = await createSubjectOffering({
+              subject_id: Number(form.subject_id),
+              academic_year_id: Number(form.academic_year_id),
+              academic_level_id: Number(form.academic_level_id),
+              academic_period_id: Number(periodId),
+              pathway: effectivePathway,
+              minutes: parsedMinutes,
+              status: form.status,
+            });
+            if (
+              !templateApplied &&
+              parsedTemplateId != null &&
+              parsedTemplateId !== created.subject.grading_template_id
+            ) {
+              await updateSubjectOffering(created.subject_offering_id, {
+                grading_template_id: parsedTemplateId,
+              });
+              templateApplied = true;
+            }
+          }
+        }
+
+        for (const [periodId, existingItem] of existingMap.entries()) {
+          if (!targetPeriodIds.has(periodId)) {
             await archiveSubjectOffering(existingItem.subject_offering_id);
           }
         }
 
-        const effectivePathway = requiresPathway ? form.pathway : "general";
         const savedMeta = {
           gradeValue: String(selectedLevel?.grade_level ?? ""),
           pathway: effectivePathway,
@@ -1380,7 +1483,7 @@ export function OfferingModal({
                   Boolean(eligibilityError) ||
                   !periods.length ||
                   !missingOfferingItems.length)) ||
-              (!!offering && !changes.hasChanges)
+              (!!offering && (isLoadingEditOfferings || !changes.hasChanges))
             }
             title={readOnly ? readOnlyReason : undefined}
           >

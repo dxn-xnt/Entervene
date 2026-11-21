@@ -22,7 +22,7 @@ import {
   getGradingTemplates,
   getSubjectOfferingFormOptions,
   getSubjectFormOptions,
-  getSubjects,
+  previewSubjectCode,
   type GradingTemplateListItem,
   type SubjectListItem,
   type SubjectOfferingFormOptions,
@@ -31,7 +31,7 @@ import {
   type SubjectStatus,
 } from "@/lib/api";
 
-import { isSeniorHighGrade } from "../subjects/components/subject-utils";
+import { levelRequiresPathway } from "../subjects/components/subject-utils";
 
 type AddSubjectModalProps = {
   open?: boolean;
@@ -81,19 +81,6 @@ function pathwayLabel(pathway: SubjectOfferingPathway) {
   return "STEM Engineering";
 }
 
-function suggestedSubjectCode(name: string, grade: number | undefined, existingCodes: string[]) {
-  const firstWord = name.trim().match(/[\p{L}\p{N}]+/u)?.[0];
-  if (!firstWord || grade === undefined) return "";
-  const base = `${Array.from(firstWord).slice(0, 2).join("").toUpperCase()}${grade}`;
-  const used = new Set(existingCodes.map((code) => code.toUpperCase()));
-  if (!used.has(base)) return base;
-  let suffix = 2;
-  while (used.has(`${base}${suffix}`)) suffix += 1;
-  return `${base}${suffix}`;
-}
-
-
-
 function formWithDefaults(
   options: SubjectFormOptions | null,
 ): SubjectFormState {
@@ -121,13 +108,14 @@ export default function AddSubjectModal({
     GradingTemplateListItem[]
   >([]);
   const [form, setForm] = React.useState<SubjectFormState>(emptyForm);
-  const [existingSubjects, setExistingSubjects] = React.useState<SubjectListItem[]>([]);
   const [offerNow, setOfferNow] = React.useState(false);
   const [useCustomDuration, setUseCustomDuration] = React.useState(false);
   const [offeringForm, setOfferingForm] =
     React.useState<OfferingFormState>(emptyOfferingForm);
   const [isLoadingOptions, setIsLoadingOptions] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isGeneratingCode, setIsGeneratingCode] = React.useState(false);
+  const [codeError, setCodeError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [validationAttempt, setValidationAttempt] = React.useState(0);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(
@@ -141,6 +129,7 @@ export default function AddSubjectModal({
     // a brand-new "Add Subject" flow (where subjectToEdit stays null).
     setSuccessMessage(null);
     setError(null);
+    setCodeError(null);
     if (open && !subjectToEdit) setUseCustomDuration(false);
     if (subjectToEdit) {
       setForm({
@@ -156,17 +145,6 @@ export default function AddSubjectModal({
       setOfferNow(false);
       setUseCustomDuration(false);
     }
-  }, [open, subjectToEdit]);
-
-  React.useEffect(() => {
-    if (open === false || subjectToEdit) return;
-    let active = true;
-    void getSubjects().then((result) => {
-      if (active) setExistingSubjects(result.subjects);
-    }).catch(() => {
-      // The server still validates duplicate codes if this suggestion cannot be checked.
-    });
-    return () => { active = false; };
   }, [open, subjectToEdit]);
 
   React.useEffect(() => {
@@ -269,18 +247,49 @@ export default function AddSubjectModal({
     (level) => String(level.academic_level_id) === form.academic_level_id,
   );
   React.useEffect(() => {
-    if (subjectToEdit) return;
-    const grade = options?.academic_levels.find(
-      (level) => String(level.academic_level_id) === form.academic_level_id,
-    )?.grade_level;
-    const codes = existingSubjects
-      .filter((subject) => subject.academic_level.academic_level_id === Number(form.academic_level_id))
-      .map((subject) => subject.subject_codename || "");
-    const suggestion = suggestedSubjectCode(form.subject_name, grade, codes);
-    setForm((current) => current.subject_codename === suggestion
-      ? current
-      : { ...current, subject_codename: suggestion });
-  }, [form.subject_name, form.academic_level_id, options, existingSubjects, subjectToEdit]);
+    if (open === false) return;
+    const name = form.subject_name.trim();
+    const academicLevelId = Number(form.academic_level_id);
+    if (!name || !Number.isInteger(academicLevelId) || academicLevelId <= 0) {
+      setCodeError(null);
+      setIsGeneratingCode(false);
+      if (!subjectToEdit) {
+        setForm((current) => current.subject_codename
+          ? { ...current, subject_codename: "" }
+          : current);
+      }
+      return;
+    }
+
+    let active = true;
+    setCodeError(null);
+    setIsGeneratingCode(true);
+    const timer = window.setTimeout(() => {
+      void previewSubjectCode({
+        subject_name: name,
+        academic_level_id: academicLevelId,
+        subject_id: subjectToEdit?.subject_id,
+      }).then((result) => {
+        if (!active) return;
+        setForm((current) => current.subject_codename === result.subject_codename
+          ? current
+          : { ...current, subject_codename: result.subject_codename });
+      }).catch((err) => {
+        if (!active) return;
+        setForm((current) => current.subject_codename
+          ? { ...current, subject_codename: "" }
+          : current);
+        setCodeError(err instanceof Error ? err.message : "Unable to generate a subject code.");
+      }).finally(() => {
+        if (active) setIsGeneratingCode(false);
+      });
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [open, form.subject_name, form.academic_level_id, subjectToEdit]);
   const selectedYearId = Number(offeringForm.academic_year_id);
   const availablePeriods = React.useMemo(
     () =>
@@ -289,9 +298,14 @@ export default function AddSubjectModal({
       ),
     [offeringOptions, selectedYearId],
   );
-  const isShsSelection = isSeniorHighGrade(selectedLevel?.grade_level);
+  const levelUsesPathway = levelRequiresPathway(
+    offeringOptions?.pathway_scopes,
+    selectedYearId,
+    selectedLevel?.academic_level_id,
+    selectedLevel?.grade_level,
+  );
   const availablePathways = React.useMemo<SubjectOfferingPathway[]>(() => {
-    if (!isShsSelection) return [];
+    if (!levelUsesPathway) return [];
     const activePathways = offeringOptions?.pathways ?? [];
     const list: SubjectOfferingPathway[] = [];
 
@@ -304,7 +318,7 @@ export default function AddSubjectModal({
       }
     }
     return list;
-  }, [isShsSelection, offeringOptions?.pathways]);
+  }, [levelUsesPathway, offeringOptions?.pathways]);
 
   const requiresPathway = availablePathways.length > 0;
 
@@ -382,6 +396,14 @@ export default function AddSubjectModal({
       failValidation("Subject name is required.");
       return;
     }
+    if (isGeneratingCode) {
+      failValidation("Wait for the subject code to finish generating.");
+      return;
+    }
+    if (codeError || !form.subject_codename) {
+      failValidation(codeError || "Unable to generate a subject code.");
+      return;
+    }
     if (offerNow) {
       if (!offeringForm.academic_year_id) {
         failValidation("Select an academic year for the offering.");
@@ -413,7 +435,6 @@ export default function AddSubjectModal({
       if (subjectToEdit) {
         await updateSubject(subjectToEdit.subject_id, {
           subject_name: form.subject_name.trim(),
-          subject_codename: form.subject_codename.trim() || null,
           grading_template_id: gradingTemplateId,
           description: form.description.trim() || null,
           status: form.status,
@@ -427,14 +448,12 @@ export default function AddSubjectModal({
 
       const created = await createSubject({
         subject_name: form.subject_name.trim(),
-        subject_codename: form.subject_codename.trim() || null,
         grading_template_id: gradingTemplateId,
         academic_level_id: Number(form.academic_level_id),
         description: form.description.trim() || null,
         status: form.status,
       });
       if (!offerNow) {
-        setExistingSubjects((current) => [...current, created]);
         setSuccessMessage(
           `${created.subject_name} has been added to the subject catalog.`,
         );
@@ -462,7 +481,6 @@ export default function AddSubjectModal({
           `Subject created and ${offeringForm.academic_period_ids.length} offering(s) added.`,
         );
         toast.success({ title: "Subject and offerings created" });
-        setExistingSubjects((current) => [...current, created]);
         setForm(formWithDefaults(options));
         setOfferNow(false);
         setUseCustomDuration(false);
@@ -477,13 +495,12 @@ export default function AddSubjectModal({
         setSuccessMessage(
           `${created.subject_name} has been added to the subject catalog.`,
         );
-        setExistingSubjects((current) => [...current, created]);
         setForm(formWithDefaults(options));
         await onCreated?.();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to save subject.";
-      if (err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) {
+      if (err instanceof ApiRequestError && (err.status === 400 || err.status === 409 || err.status === 422)) {
         setError(message);
         setValidationAttempt((attempt) => attempt + 1);
       } else toast.error({ title: "Unable to save subject", description: message });
@@ -612,8 +629,11 @@ export default function AddSubjectModal({
               value={form.subject_codename}
               readOnly
               type="text"
-              placeholder="Generated from subject name and grade level"
+              aria-invalid={Boolean(codeError)}
+              aria-describedby={codeError ? "subject-code-error" : undefined}
+              placeholder={isGeneratingCode ? "Generating..." : "Generated from subject name and grade level"}
             />
+            {codeError ? <FormMessage id="subject-code-error">{codeError}</FormMessage> : null}
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="grading-template" className="text-sm font-medium">Grading Template <span className="text-red-500">*</span></label>
@@ -855,7 +875,7 @@ export default function AddSubjectModal({
           </Button>
         </Dialog.Close>
         <NoChangesMessage message={changes.noChangesMessage} />
-        <Button onClick={handleSubmit} disabled={isSaving || isLoadingOptions || (!!subjectToEdit && !changes.hasChanges)}>
+        <Button onClick={handleSubmit} disabled={isSaving || isLoadingOptions || isGeneratingCode || Boolean(codeError) || (!!subjectToEdit && !changes.hasChanges)}>
           {subjectToEdit ? "Save Changes" : "Add Subject"}
         </Button>
       </Dialog.Footer>

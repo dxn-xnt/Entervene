@@ -363,6 +363,7 @@ async def create_classwork_wizard_record(
     reference_links: Optional[str] = None,
     files: Optional[list[UploadFile]],
     intervention_id: int | None = None,
+    recipient_scope: str | None = None,
     remediation_request_id: UUID | None = None,
     original_exam_assignment_id: int | None = None,
     original_classwork_assignment_id: int | None = None,
@@ -382,6 +383,13 @@ async def create_classwork_wizard_record(
         requested=max_attempts,
         intervention_id=intervention_id,
     )
+    is_intervention_resource = intervention_id is not None and is_reading_type(normalized_type)
+    if recipient_scope is not None and not is_intervention_resource:
+        raise HTTPException(
+            status_code=400,
+            detail="Recipient scope is only supported when creating a reading resource from an intervention",
+        )
+
     selected_class_ids = parse_id_list(class_ids, "class_ids")
     selected_lesson_ids = parse_id_list(lesson_ids, "lesson_ids")
     validate_classwork_values(total_points=total_points, max_attempts=max_attempts)
@@ -391,7 +399,77 @@ async def create_classwork_wizard_record(
     if is_quiz_type(normalized_type) and selected_reference_links:
         raise HTTPException(status_code=400, detail="Reference links are not supported for quizzes")
 
-    if academic_period_id is None:
+    resource_intervention = None
+    resolved_recipient_scope = None
+    if is_intervention_resource:
+        from app.models.auth.Role import Role
+        from app.models.auth.UserRoles import UserRoles
+        from app.models.intervention.Intervention import Intervention
+        from app.services.intervention.InterventionResourceRecipientService import (
+            normalize_recipient_scope,
+            resolve_authorized_subject_class_ids,
+        )
+        from app.services.intervention.TeacherInterventionService import _require_scope
+        from sqlalchemy import func
+
+        if (
+            remediation_request_id is not None
+            or original_exam_assignment_id is not None
+            or original_classwork_assignment_id is not None
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Reading resources cannot carry remediation activity linkage fields",
+            )
+        if current_user is None or current_user.get("role") != "teacher":
+            raise HTTPException(status_code=403, detail="Teacher identity is required for intervention resources")
+        try:
+            user_uuid = UUID(str(current_user.get("sub")))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=403, detail="Teacher identity is invalid") from None
+        if db.query(UserRoles.user_id).join(Role, UserRoles.role_id == Role.role_id).filter(
+            UserRoles.user_id == user_uuid, func.lower(Role.role_name) == "admin",
+        ).first():
+            raise HTTPException(status_code=403, detail="Admin accounts cannot manage interventions")
+
+        resource_intervention = (
+            db.query(Intervention)
+            .filter_by(intervention_id=intervention_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        if resource_intervention is None or resource_intervention.status != "ACTIVE":
+            raise HTTPException(status_code=404, detail="Active intervention not found")
+        _require_scope(db, staff_id, resource_intervention)
+
+        if subject_id != resource_intervention.subject_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Support resource subject must match the intervention subject",
+            )
+        if academic_period_id is None:
+            academic_period_id = resource_intervention.academic_period_id
+        elif academic_period_id != resource_intervention.academic_period_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Support resource academic period must match the intervention period",
+            )
+
+        resolved_recipient_scope = normalize_recipient_scope(
+            recipient_scope, default="THIS_STUDENT"
+        )
+        if resolved_recipient_scope == "ALL_SUBJECT_STUDENTS":
+            selected_class_ids = resolve_authorized_subject_class_ids(
+                db,
+                staff_id,
+                resource_intervention.subject_id,
+                resource_intervention.academic_period_id,
+            )
+            if resource_intervention.class_id not in selected_class_ids:
+                selected_class_ids.append(resource_intervention.class_id)
+        else:
+            selected_class_ids = [resource_intervention.class_id]
+    elif academic_period_id is None:
         academic_period_id = resolve_active_academic_period(db).academic_period_id
 
     ensure_class_targets(db, staff_id, subject_id, selected_class_ids, academic_period_id)
@@ -400,7 +478,11 @@ async def create_classwork_wizard_record(
         staff_id,
         subject_id,
         selected_lesson_ids,
-        class_ids=selected_class_ids,
+        class_ids=(
+            [resource_intervention.class_id]
+            if is_intervention_resource and resource_intervention is not None
+            else selected_class_ids
+        ),
         academic_period_id=academic_period_id,
     )
     if is_published:
@@ -426,7 +508,7 @@ async def create_classwork_wizard_record(
             raise HTTPException(status_code=400, detail="Study Support quizzes allow up to 3 attempts")
 
     intervention = None
-    if intervention_id is not None:
+    if intervention_id is not None and not is_intervention_resource:
         from app.models.intervention.Intervention import Intervention
         from app.models.auth.Role import Role
         from app.models.auth.UserRoles import UserRoles
@@ -589,6 +671,11 @@ async def create_classwork_wizard_record(
             show_scores=show_scores,
             auto_ai_feedback_enabled=auto_ai_feedback_enabled,
             created_by_staff_id=staff_id,
+            intervention_resource_origin_id=(
+                resource_intervention.intervention_id
+                if is_intervention_resource and resource_intervention is not None
+                else None
+            ),
         )
         db.add(classwork)
         db.flush()
@@ -600,25 +687,46 @@ async def create_classwork_wizard_record(
             db.add(ClassworkLesson(classwork_id=classwork.classwork_id, lesson_id=lesson_id))
 
         created_assignments = []
-        for class_id in selected_class_ids:
-            assignment = ClassworkAssignment(
-                classwork_id=classwork.classwork_id,
-                class_id=class_id,
-                academic_period_id=academic_period_id,
-                assigned_by_staff_id=staff_id,
-                publish_date=None,
-                due_date=due_date,
-                lock_date=lock_date,
-                allow_late_submissions=allow_late_submissions,
-                max_attempts=max_attempts,
-                is_published=is_published,
-                recipient_student_id=intervention.student_id if intervention else None,
-                source_intervention_id=intervention.intervention_id if intervention else None,
-                remediation_request_id=remediation_request_id if intervention else None,
-                original_exam_assignment_id=original_exam_assignment_id if intervention else None,
+        resource_scope_result = None
+        if is_intervention_resource and resource_intervention is not None:
+            from app.services.intervention.InterventionResourceRecipientService import (
+                apply_resource_recipient_scope,
             )
-            db.add(assignment)
-            created_assignments.append(assignment)
+
+            resource_scope_result = apply_resource_recipient_scope(
+                db,
+                classwork=classwork,
+                intervention=resource_intervention,
+                staff_id=staff_id,
+                scope=resolved_recipient_scope,
+                publish_override=is_published,
+                lock_date=lock_date,
+            )
+            created_assignments = (
+                db.query(ClassworkAssignment)
+                .filter(ClassworkAssignment.classwork_id == classwork.classwork_id)
+                .all()
+            )
+        else:
+            for class_id in selected_class_ids:
+                assignment = ClassworkAssignment(
+                    classwork_id=classwork.classwork_id,
+                    class_id=class_id,
+                    academic_period_id=academic_period_id,
+                    assigned_by_staff_id=staff_id,
+                    publish_date=None,
+                    due_date=due_date,
+                    lock_date=lock_date,
+                    allow_late_submissions=allow_late_submissions,
+                    max_attempts=max_attempts,
+                    is_published=is_published,
+                    recipient_student_id=intervention.student_id if intervention else None,
+                    source_intervention_id=intervention.intervention_id if intervention else None,
+                    remediation_request_id=remediation_request_id if intervention else None,
+                    original_exam_assignment_id=original_exam_assignment_id if intervention else None,
+                )
+                db.add(assignment)
+                created_assignments.append(assignment)
 
         for upload in files or []:
             info = normalize_uploaded_path(await save_file_func(upload, "classworks"))
@@ -648,6 +756,8 @@ async def create_classwork_wizard_record(
                 quiz_builder.settings.max_attempts = max_attempts
             # Save quiz builder rows before committing so classwork+quiz creation is atomic.
             upsert_quiz_builder(db, classwork, quiz_builder)
+            if is_published:
+                ensure_published_quiz_student_ready(db, classwork)
 
         if intervention and is_published:
             from app.services.intervention.RemediationReadingPrerequisiteService import (
@@ -669,7 +779,12 @@ async def create_classwork_wizard_record(
         db.commit()
         db.refresh(classwork)
 
-        if is_published and selected_class_ids and not intervention:
+        notify_class_ids = (
+            resource_scope_result["newly_classwide_published_class_ids"]
+            if resource_scope_result is not None
+            else (selected_class_ids if is_published and not intervention else [])
+        )
+        if is_published and notify_class_ids and not intervention:
             notif_title, notif_body = build_classwork_notification_details(
                 db=db,
                 classwork_title=title.strip(),
@@ -681,7 +796,7 @@ async def create_classwork_wizard_record(
             )
             notify_students_for_classwork(
                 db=db,
-                class_ids=selected_class_ids,
+                class_ids=notify_class_ids,
                 title=notif_title,
                 body_text=notif_body,
                 notification_type="assignment_due",
@@ -994,10 +1109,16 @@ def update_classwork_record(
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     values = body.model_dump(exclude_unset=True)
+    recipient_scope = values.pop("recipient_scope", None)
     raw_reference_links = values.pop("reference_links", ...)
     if raw_reference_links is None:
         raise HTTPException(status_code=422, detail="Reference links must be a list; omit the field to keep existing links.")
     replacement_links = _normalized_reference_links(raw_reference_links) if raw_reference_links is not ... else None
+    if recipient_scope is not None and classwork.intervention_resource_origin_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Recipient scope is only editable for readings created through Study Support",
+        )
     is_live_update = bool(
         values.get("is_published")
         or classwork.is_published
@@ -1119,6 +1240,27 @@ def update_classwork_record(
                 db.add(ClassworkLesson(classwork_id=classwork_id, lesson_id=lesson_id))
         if replacement_links is not None:
             _replace_reference_links(db, classwork, replacement_links)
+        if recipient_scope is not None:
+            from app.models.intervention.Intervention import Intervention
+            from app.services.intervention.InterventionResourceRecipientService import (
+                replace_intervention_resource_recipient_scope,
+            )
+
+            origin = db.get(
+                Intervention, classwork.intervention_resource_origin_id
+            )
+            if origin is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="The Study Support origin for this reading is no longer available",
+                )
+            replace_intervention_resource_recipient_scope(
+                db,
+                classwork=classwork,
+                intervention=origin,
+                staff_id=staff_id,
+                scope=recipient_scope,
+            )
         ensure_published_quiz_student_ready(db, classwork)
         db.commit()
         db.refresh(classwork)
@@ -1132,7 +1274,13 @@ def update_classwork_record(
         )
 
         targeted = [a for a in classwork.assignments if a.is_published and a.recipient_student_id]
-        assigned_class_ids = [a.class_id for a in classwork.assignments if a.is_published and not a.recipient_student_id]
+        assigned_class_ids = [
+            a.class_id
+            for a in classwork.assignments
+            if a.is_published
+            and not a.recipient_student_id
+            and not (getattr(a, "recipients", None) or [])
+        ]
         for assignment in targeted:
             _stage_targeted_assignment_notification(db, assignment, classwork, classwork.subject_id)
 
