@@ -22,6 +22,7 @@ export type QuizQuestionDraft = {
 
 export type QuizSettingsDraft = {
   is_shuffle_questions: boolean;
+  is_shuffle_options: boolean;
   enable_per_question_scoring: boolean;
   enable_per_question_time_limits: boolean;
   max_attempts: string;

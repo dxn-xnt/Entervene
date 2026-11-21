@@ -66,7 +66,7 @@ const StudentSubjectDetail = lazy(() => import("./pages/student/subject-detail")
 const StudentClassworkView = lazy(() => import("./pages/student/classwork-view"));
 const StudentInterventions = lazy(() => import("./pages/student/interventions"));
 const StudentInterventionView = lazy(() => import("./pages/student/intervention-view"));
-const StudentGrades = lazy(() => import("./pages/student/grades/grades"));
+const StudentGrades = lazy(() => import("./pages/student/grades"));
 const StudentTodo = lazy(() => import("./pages/student/todo"));
 const StudentTodoView = lazy(() => import("./pages/student/todo-view"));
 const StudentNotifications = lazy(() => import("./pages/student/notifications"));

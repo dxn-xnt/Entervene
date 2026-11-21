@@ -10,7 +10,7 @@ const badgeVariants = cva("inline-flex items-center rounded! h-fit font-semibold
       outline: "outline-2 outline-border text-foreground bg-background",
       solid: "bg-foreground text-background",
       surface: "outline-2 bg-primary text-primary-foreground",
-      success: "outline-2 outline-border bg-success/70 text-black",
+      success: "outline-2 outline-border bg-success text-black",
       destructive: "outline-2 outline-border bg-destructive/70 text-foreground",
       ghost: "bg-transparent text-muted-foreground border border-transparent",
     },
