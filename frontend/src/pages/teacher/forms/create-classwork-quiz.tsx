@@ -74,7 +74,7 @@ import {
   getQuizLessonMappingState,
   hasLinkedLessonMapping,
   isUnkeyed,
-  mapUnmappedQuestionsToLesson,
+  mapQuestionsToSingleLinkedLesson,
   normalizeIncomingQuestions,
   sanitizeQuestionLessonId,
   selectUnmappedQuestionIds,
@@ -363,12 +363,8 @@ export default function CreateClassworkQuizModal({
 
   useEffect(() => {
     if (selectedLessonIds.length !== 1) return;
-    const onlyLessonId = selectedLessonIds[0];
     setQuizQuestions((questions) => {
-      if (questions.every((question) => question.lesson_id === onlyLessonId)) {
-        return questions;
-      }
-      return mapUnmappedQuestionsToLesson(questions, onlyLessonId);
+      return mapQuestionsToSingleLinkedLesson(questions, selectedLessonIds);
     });
     setSelectedQuestionIds(new Set());
     setBulkLessonId("");
@@ -451,9 +447,12 @@ export default function CreateClassworkQuizModal({
       });
 
       setQuizQuestions(
-        importedQuestions.length > 0
-          ? importedQuestions
-          : [createEmptyQuizQuestion(1)],
+        mapQuestionsToSingleLinkedLesson(
+          importedQuestions.length > 0
+            ? importedQuestions
+            : [createEmptyQuizQuestion(1)],
+          selectedLessonIds,
+        ),
       );
       setQuizImportWarnings(preview.warnings);
       setQuizImportNotices(preview.notices || []);
@@ -3478,7 +3477,12 @@ export default function CreateClassworkQuizModal({
             associatedLessonTitles,
           ) => {
             setQuizQuestions(
-              questions.length > 0 ? questions : [createEmptyQuizQuestion(1)],
+              mapQuestionsToSingleLinkedLesson(
+                questions.length > 0
+                  ? questions
+                  : [createEmptyQuizQuestion(1)],
+                selectedLessonIds,
+              ),
             );
             setQuizImportWarnings(warnings || []);
             setQuizImportNotices([]);
