@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
+import random
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
@@ -80,7 +81,14 @@ def get_student_quiz_attempt(
         db, assignment, student, allow_completed_resolved_review=True,
     )
     submission = _submission_for(db, student, assignment_id)
-    return _attempt_response(db, assignment, classwork, quiz, submission)
+    return _attempt_response(
+        db,
+        assignment,
+        classwork,
+        quiz,
+        submission,
+        student_id=student.student_id,
+    )
 
 
 def start_student_quiz_attempt(
@@ -144,7 +152,14 @@ def start_student_quiz_attempt(
             subject_id=classwork.subject_id,
             period_id=assignment.academic_period_id,
         )
-    return _attempt_response(db, assignment, classwork, quiz, submission)
+    return _attempt_response(
+        db,
+        assignment,
+        classwork,
+        quiz,
+        submission,
+        student_id=student.student_id,
+    )
 
 
 def submit_student_quiz_attempt(
@@ -341,7 +356,14 @@ def submit_student_quiz_attempt(
             subject_id=classwork.subject_id,
             period_id=assignment.academic_period_id,
         )
-    return _attempt_response(db, assignment, classwork, quiz, submission)
+    return _attempt_response(
+        db,
+        assignment,
+        classwork,
+        quiz,
+        submission,
+        student_id=student.student_id,
+    )
 
 
 def _student_quiz_scope(
@@ -534,6 +556,18 @@ def _ordered_quiz_questions(quiz: Quiz) -> list[QuizQuestion]:
     return sorted(quiz.questions, key=lambda link: link.display_order)
 
 
+def _deterministic_shuffle(items: list, seed_key: str) -> list:
+    if len(items) <= 1:
+        return list(items)
+    shuffled = list(items)
+    rng = random.Random(seed_key)
+    rng.shuffle(shuffled)
+    if shuffled == list(items):
+        offset = 1 if len(items) == 2 else rng.randint(1, len(items) - 1)
+        shuffled = shuffled[offset:] + shuffled[:offset]
+    return shuffled
+
+
 def _option_for_answer(question: Question, option_id: int | None) -> QuestionOption | None:
     if option_id is None:
         return None
@@ -561,6 +595,8 @@ def _attempt_response(
     quiz: Quiz,
     submission: StudentSubmission | None,
     reveal_answers: bool = False,
+    *,
+    student_id: str | None = None,
 ) -> QuizAttemptResponse:
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
     summary_available, release_at, summary_message = _summary_release_state(setting, assignment, submission)
@@ -585,6 +621,25 @@ def _attempt_response(
         answer.quiz_question_id: answer
         for answer in (getattr(submission, "quiz_answers", []) if submission else [])
     }
+    resolved_student_id = (
+        student_id
+        or (submission.student_id if submission else None)
+        or assignment.recipient_student_id
+        or "student"
+    )
+    if submission is None:
+        active_attempt_number = 1
+    elif submission.status == "pending":
+        active_attempt_number = (submission.attempt_count or 0) + 1
+    else:
+        active_attempt_number = max(1, submission.attempt_count or 1)
+    attempt_seed_prefix = (
+        f"{quiz.quiz_id}:{assignment.classwork_assignment_id}:{resolved_student_id}:{active_attempt_number}"
+    )
+    ordered_links = _ordered_quiz_questions(quiz)
+    if setting and setting.is_shuffle_questions:
+        ordered_links = _deterministic_shuffle(ordered_links, f"{attempt_seed_prefix}:questions")
+    shuffle_options = bool(setting and getattr(setting, "is_shuffle_options", False))
     return QuizAttemptResponse(
         quiz_id=quiz.quiz_id,
         submission_id=submission.submission_id if submission else None,
@@ -626,8 +681,15 @@ def _attempt_response(
             else None
         ),
         questions=[
-            _attempt_question_out(link, answers.get(link.quiz_question_id), visibility)
-            for link in _ordered_quiz_questions(quiz)
+            _attempt_question_out(
+                link,
+                answers.get(link.quiz_question_id),
+                visibility,
+                display_order=idx,
+                shuffle_options=shuffle_options,
+                option_seed_key=f"{attempt_seed_prefix}:options:{link.quiz_question_id}",
+            )
+            for idx, link in enumerate(ordered_links, start=1)
         ],
     )
 
@@ -736,6 +798,10 @@ def _attempt_question_out(
     link: QuizQuestion,
     answer: QuizAnswer | None,
     visibility: _AttemptFeedbackVisibility,
+    *,
+    display_order: int | None = None,
+    shuffle_options: bool = False,
+    option_seed_key: str | None = None,
 ) -> QuizAttemptQuestionOut:
     question = link.question
     selected_option_id = None
@@ -765,21 +831,30 @@ def _attempt_question_out(
         and question.explanation.strip()
     ):
         explanation = question.explanation
+    ordered_options = (
+        sorted(question.options, key=lambda item: item.option_order)
+        if question.question_type == "MULTIPLE_CHOICE"
+        else []
+    )
+    if shuffle_options and ordered_options:
+        ordered_options = _deterministic_shuffle(
+            ordered_options,
+            option_seed_key or f"options:{link.quiz_question_id}",
+        )
     return QuizAttemptQuestionOut(
         quiz_question_id=link.quiz_question_id,
         question_text=question.question_text,
         question_type=effective_question_type,
         points=float(question.points),
-        display_order=link.display_order,
+        display_order=display_order if display_order is not None else link.display_order,
         options=[
             QuizAttemptOptionOut(
                 option_id=option.option_id,
                 option_text=option.option_text,
-                option_order=option.option_order,
+                option_order=idx if shuffle_options else option.option_order,
                 is_correct=option.is_correct if visibility.correct_answers else None,
             )
-            for option in sorted(question.options, key=lambda item: item.option_order)
-            if question.question_type == "MULTIPLE_CHOICE"
+            for idx, option in enumerate(ordered_options, start=1)
         ],
         answer_text=answer.answer_text if answer and visibility.student_response else None,
         selected_option_id=selected_option_id,

@@ -88,6 +88,7 @@ import type {
   RemediationResource,
   OriginalExamination,
   RemediationClassworkTarget,
+  RemediationQuizDraft,
 } from "@/lib/teacher-interventions-api";
 import { Badge } from "@/components/retroui/Badge";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
@@ -108,6 +109,9 @@ interface CreateClassworkQuizModalProps {
   initialLessonId?: number;
   initialTitle?: string;
   initialInstructions?: string;
+  initialQuizMode?: "manual" | "reuse" | "ai";
+  initialOriginalClassworkId?: number | null;
+  initialAiRemediationDraft?: RemediationQuizDraft | null;
   remediationDraft?: boolean;
   remediationTarget?: TeacherInterventionDetail | null;
   remediationFocus?: RemediationFocus | null;
@@ -126,6 +130,72 @@ interface CreateClassworkQuizModalProps {
   onBack: () => void;
 }
 
+const convertAiRemediationQuestions = (
+  aiDraft: RemediationQuizDraft,
+  fallbackLessonId?: number | null,
+): QuizQuestionDraft[] =>
+  [...aiDraft.questions]
+    .sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+    .map((q, index) => {
+      const effectiveType: QuizQuestionType =
+        q.question_type === "TRUE_FALSE" ? "MULTIPLE_CHOICE" : q.question_type;
+      const qDraft = createEmptyQuizQuestion(index + 1, effectiveType);
+      const correctText = (q.teacher_answer_key?.correct_answer || "").trim();
+      const sortedOptions = [...(q.options || [])].sort(
+        (a, b) => (a.option_order || 0) - (b.option_order || 0),
+      );
+      let options =
+        q.question_type === "IDENTIFICATION"
+          ? [
+              {
+                option_text: correctText,
+                is_correct: true,
+                option_order: 1,
+              },
+            ]
+          : q.question_type === "SHORT_ANSWER"
+            ? []
+            : sortedOptions.map((opt, optIdx) => ({
+                option_text: opt.option_text,
+                is_correct:
+                  opt.option_text.trim().toLowerCase() ===
+                  correctText.toLowerCase(),
+                option_order: opt.option_order || optIdx + 1,
+              }));
+      if (
+        effectiveType === "MULTIPLE_CHOICE" &&
+        options.length > 0 &&
+        !options.some((opt) => opt.is_correct) &&
+        correctText
+      ) {
+        const letterMatch = correctText.match(
+          /^(?:option\s+)?([A-Z])(?:\s*[.):-]\s*(.*))?$/i,
+        );
+        if (letterMatch) {
+          const letterIdx = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
+          if (letterIdx >= 0 && letterIdx < options.length) {
+            options = options.map((opt, idx) => ({
+              ...opt,
+              is_correct: idx === letterIdx,
+            }));
+          }
+        }
+      }
+      return {
+        ...qDraft,
+        question_text: q.question_text,
+        question_type: effectiveType,
+        points:
+          q.points !== undefined && q.points !== null ? String(q.points) : "1",
+        display_order: index + 1,
+        difficulty_level: q.difficulty_level || "MEDIUM",
+        explanation: q.teacher_answer_key?.explanation || "",
+        lesson_id: q.targeted_lesson_id ?? fallbackLessonId ?? null,
+        is_ai_generated: true,
+        options,
+      };
+    });
+
 export default function CreateClassworkQuizModal({
   draftOnly = false,
   selectedType,
@@ -136,6 +206,9 @@ export default function CreateClassworkQuizModal({
   initialLessonId,
   initialTitle,
   initialInstructions,
+  initialQuizMode,
+  initialOriginalClassworkId = null,
+  initialAiRemediationDraft = null,
   remediationDraft = false,
   remediationTarget,
   remediationFocus = null,
@@ -156,7 +229,7 @@ export default function CreateClassworkQuizModal({
   const quizFileInputRef = useRef<HTMLInputElement>(null);
   const [createStep, setCreateStep] = useState<
     "quiz-source" | "details" | "quiz" | "assign"
-  >("quiz-source");
+  >(() => (initialQuizMode || remediationDraft ? "details" : "quiz-source"));
   const [referenceLinks] = useState<ReferenceLinkDraft[]>([]);
 
   const isSubjectLocked =
@@ -219,13 +292,16 @@ export default function CreateClassworkQuizModal({
       ? String(remediationOriginalExam.total_points)
       : isGradedWWPT && selectedOriginalTarget
         ? String(selectedOriginalTarget.max_points)
-        : emptyClassworkDraft.total_points;
+        : initialQuizMode === "ai" && initialAiRemediationDraft?.total_points
+          ? String(initialAiRemediationDraft.total_points)
+          : emptyClassworkDraft.total_points;
     const defaultAttempts = creationDefaults.maxAttempts;
 
     return {
       ...emptyClassworkDraft,
-      title: initialTitle || "",
-      instructions: initialInstructions || "",
+      title: initialTitle || initialAiRemediationDraft?.title || "",
+      instructions:
+        initialInstructions || initialAiRemediationDraft?.instructions || "",
       is_published:
         remediationDraft || draftOnly
           ? false
@@ -266,15 +342,33 @@ export default function CreateClassworkQuizModal({
   }, [draftOnly]);
 
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>(
-    () => [
-      {
-        ...createEmptyQuizQuestion(1),
-        lesson_id: initialLessonId || null,
-      },
-    ],
+    () => {
+      if (
+        initialQuizMode === "ai" &&
+        initialAiRemediationDraft &&
+        initialAiRemediationDraft.questions.length > 0
+      ) {
+        return convertAiRemediationQuestions(
+          initialAiRemediationDraft,
+          initialLessonId || null,
+        );
+      }
+      return [
+        {
+          ...createEmptyQuizQuestion(1),
+          lesson_id: initialLessonId || null,
+        },
+      ];
+    },
   );
+  const [isLoadingReusedQuiz, setIsLoadingReusedQuiz] = useState(false);
+  const [reuseQuizError, setReuseQuizError] = useState("");
   const [quizSettings, setQuizSettings] = useState<QuizSettingsDraft>(() => ({
     ...defaultQuizSettings,
+    duration_minutes:
+      initialQuizMode === "ai" && initialAiRemediationDraft?.duration_minutes
+        ? String(initialAiRemediationDraft.duration_minutes)
+        : defaultQuizSettings.duration_minutes,
     max_attempts: creationDefaults.maxAttempts,
     show_correct_answers: creationDefaults.showScores,
   }));
@@ -307,9 +401,161 @@ export default function CreateClassworkQuizModal({
   });
   const [remediationRequestId] = useState(() => crypto.randomUUID());
   const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
-  const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>(() =>
-    initialLessonId ? [initialLessonId] : [],
+  const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>(() => {
+    if (
+      initialQuizMode === "ai" &&
+      initialAiRemediationDraft &&
+      initialAiRemediationDraft.questions.length > 0
+    ) {
+      const lessonIds = Array.from(
+        new Set(
+          initialAiRemediationDraft.questions
+            .map((q) => q.targeted_lesson_id)
+            .filter((id): id is number => typeof id === "number" && id > 0),
+        ),
+      );
+      if (lessonIds.length > 0) return lessonIds;
+    }
+    return initialLessonId ? [initialLessonId] : [];
+  });
+
+  const reuseSourceClassworkId = useMemo(
+    () =>
+      selectedOriginalTarget?.classwork_id ??
+      remediationOriginalExam?.classwork_id ??
+      initialOriginalClassworkId ??
+      null,
+    [
+      selectedOriginalTarget?.classwork_id,
+      remediationOriginalExam?.classwork_id,
+      initialOriginalClassworkId,
+    ],
   );
+  const loadedReuseClassworkIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (initialQuizMode !== "reuse") {
+      loadedReuseClassworkIdRef.current = null;
+      setIsLoadingReusedQuiz(false);
+      setReuseQuizError("");
+      return;
+    }
+    if (!reuseSourceClassworkId) {
+      loadedReuseClassworkIdRef.current = null;
+      setIsLoadingReusedQuiz(false);
+      setReuseQuizError(
+        "Unable to identify the original target quiz classwork to reuse questions from.",
+      );
+      return;
+    }
+    if (loadedReuseClassworkIdRef.current === reuseSourceClassworkId) {
+      return;
+    }
+
+    let active = true;
+    setIsLoadingReusedQuiz(true);
+    setReuseQuizError("");
+
+    apiFetch(`/api/v1/quizzes/classwork/${reuseSourceClassworkId}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          const detail =
+            typeof body?.detail === "string"
+              ? body.detail
+              : "Original target classwork does not have reusable quiz questions.";
+          throw new Error(detail);
+        }
+        return (await res.json()) as {
+          questions?: Array<{
+            question_text: string;
+            question_type: QuizQuestionType;
+            points: number;
+            display_order: number;
+            difficulty_level?: "EASY" | "MEDIUM" | "HARD" | null;
+            explanation?: string | null;
+            lesson_id?: number | null;
+            options?: Array<{
+              option_text: string;
+              is_correct: boolean;
+              option_order: number;
+            }>;
+          }>;
+        };
+      })
+      .then((quizData) => {
+        if (!active) return;
+        const rawQuestions = [...(quizData.questions || [])].sort(
+          (a, b) => (a.display_order || 0) - (b.display_order || 0),
+        );
+        if (rawQuestions.length === 0) {
+          setReuseQuizError(
+            "The original target quiz has no questions to reuse.",
+          );
+          return;
+        }
+        const normalized = normalizeIncomingQuestions(rawQuestions);
+        const mappedQuestions: QuizQuestionDraft[] = normalized.map(
+          (question, index) => {
+            const qDraft = createEmptyQuizQuestion(
+              index + 1,
+              question.question_type,
+            );
+            const sortedOptions = [...(question.options || [])].sort(
+              (a, b) => (a.option_order || 0) - (b.option_order || 0),
+            );
+            return {
+              ...qDraft,
+              question_text: question.question_text,
+              question_type: question.question_type,
+              points:
+                question.points !== undefined && question.points !== null
+                  ? String(question.points)
+                  : "1",
+              display_order: index + 1,
+              difficulty_level: question.difficulty_level || "MEDIUM",
+              explanation: question.explanation || "",
+              lesson_id: question.lesson_id ?? qDraft.lesson_id,
+              is_ai_generated: false,
+              options: sortedOptions.map((option, optionIndex) => ({
+                option_text: option.option_text,
+                is_correct: Boolean(option.is_correct),
+                option_order: option.option_order || optionIndex + 1,
+              })),
+            };
+          },
+        );
+        const questionLessonIds = Array.from(
+          new Set(
+            mappedQuestions
+              .map((q) => q.lesson_id)
+              .filter((id): id is number => typeof id === "number" && id > 0),
+          ),
+        );
+        if (questionLessonIds.length > 0) {
+          setSelectedLessonIds((current) =>
+            Array.from(new Set([...current, ...questionLessonIds])),
+          );
+        }
+        loadedReuseClassworkIdRef.current = reuseSourceClassworkId;
+        setQuizQuestions(mappedQuestions);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setReuseQuizError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load questions from the original target quiz.",
+        );
+      })
+      .finally(() => {
+        if (active) setIsLoadingReusedQuiz(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [initialQuizMode, reuseSourceClassworkId]);
 
   useEffect(() => {
     if (initialLessonId) {
@@ -914,7 +1160,9 @@ export default function CreateClassworkQuizModal({
         setAvailableLessons(lessons);
         setSelectedLessonIds((current) => {
           let next = remediationFocus
-            ? remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id))
+            ? Array.from(
+                new Set([...current, ...remediationFocus.lesson_ids]),
+              ).filter((id) => uniqueLessons.has(id))
             : current.filter((id) => uniqueLessons.has(id));
           if (
             next.length === 0 &&
@@ -978,6 +1226,7 @@ export default function CreateClassworkQuizModal({
     status: draft.is_published ? "PUBLISHED" : "DRAFT",
     settings: {
       is_shuffle_questions: quizSettings.is_shuffle_questions,
+      is_shuffle_options: quizSettings.is_shuffle_options,
       enable_per_question_scoring: quizSettings.enable_per_question_scoring,
       enable_per_question_time_limits:
         quizSettings.enable_per_question_time_limits,
@@ -1280,6 +1529,22 @@ export default function CreateClassworkQuizModal({
 
             {createStep === "details" && (
               <div className="space-y-4">
+                {isLoadingReusedQuiz && (
+                  <div className="flex items-center gap-2 rounded border-2 border-border bg-muted/30 p-3 text-sm text-muted-foreground" role="status">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading original target quiz questions...
+                  </div>
+                )}
+                {!isLoadingReusedQuiz && reuseQuizError && (
+                  <Alert status="error" className="p-3 text-xs">
+                    <Alert.Title className="font-bold">
+                      Unable to reuse original quiz questions
+                    </Alert.Title>
+                    <Alert.Description className="mt-1 text-inherit">
+                      {reuseQuizError}
+                    </Alert.Description>
+                  </Alert>
+                )}
                 {(aiLinkedSubjectName ||
                   (aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0) ||
                   aiPromptScope) && (
@@ -2001,7 +2266,7 @@ export default function CreateClassworkQuizModal({
                     </div>
                   )}
 
-                <Card className="block w-full rounded! p-4 shadow-none hover:shadow-none">
+                <Card className="block w-full rounded! p-4 shadow-none hover:shadow-none space-y-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-bold">
@@ -2015,6 +2280,32 @@ export default function CreateClassworkQuizModal({
                     <Badge size="sm" variant="outline">
                       {quizPointTotal}/{draft.total_points || 0} pts
                     </Badge>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-1 border-t border-border pt-3">
+                    <ClassworkSettingRow
+                      label="Shuffle questions"
+                      tooltip="Randomizes question order for each student during the quiz attempt."
+                      checked={quizSettings.is_shuffle_questions}
+                      onCheckedChange={(checked) =>
+                        setQuizSettings((current) => ({
+                          ...current,
+                          is_shuffle_questions: checked,
+                        }))
+                      }
+                      disabled={isCreating}
+                    />
+                    <ClassworkSettingRow
+                      label="Shuffle answer choices"
+                      tooltip="Randomizes multiple-choice answer options for each student during the quiz attempt."
+                      checked={quizSettings.is_shuffle_options}
+                      onCheckedChange={(checked) =>
+                        setQuizSettings((current) => ({
+                          ...current,
+                          is_shuffle_options: checked,
+                        }))
+                      }
+                      disabled={isCreating}
+                    />
                   </div>
                 </Card>
 
@@ -2726,6 +3017,18 @@ export default function CreateClassworkQuizModal({
                     disabled={isCreating}
                   />
                   <ClassworkSettingRow
+                    label="Shuffle answer choices"
+                    tooltip="Randomizes multiple-choice answer options for each student during the quiz attempt."
+                    checked={quizSettings.is_shuffle_options}
+                    onCheckedChange={(checked) =>
+                      setQuizSettings((current) => ({
+                        ...current,
+                        is_shuffle_options: checked,
+                      }))
+                    }
+                    disabled={isCreating}
+                  />
+                  <ClassworkSettingRow
                     label="Enable per-question scoring"
                     tooltip="Allows setting custom point values individually for each question."
                     checked={quizSettings.enable_per_question_scoring}
@@ -3367,7 +3670,11 @@ export default function CreateClassworkQuizModal({
                     onClick={() => {
                       setCreateError("");
                       if (createStep === "details") {
-                        setCreateStep("quiz-source");
+                        if (remediationDraft || initialQuizMode) {
+                          onBack();
+                        } else {
+                          setCreateStep("quiz-source");
+                        }
                       } else if (createStep === "quiz") {
                         setCreateStep("details");
                       } else {
@@ -3396,7 +3703,11 @@ export default function CreateClassworkQuizModal({
                           setCreateStep("quiz");
                         }
                       }}
-                      disabled={isCreating}
+                      disabled={
+                        isCreating ||
+                        isLoadingReusedQuiz ||
+                        (initialQuizMode === "reuse" && Boolean(reuseQuizError))
+                      }
                       className="gap-2"
                     >
                       Next

@@ -905,7 +905,10 @@ def original_exams(db: Session, row: Intervention) -> list[dict]:
             classwork_assignment_id=assignment.classwork_assignment_id, student_id=row.student_id,
         ).filter(StudentSubmission.grade.isnot(None)).order_by(StudentSubmission.submission_id.desc()).first()
         if submission:
-            results.append({"assignment_id": assignment.classwork_assignment_id, "title": work.title,
+            results.append({"assignment_id": assignment.classwork_assignment_id,
+                            "classwork_id": work.classwork_id,
+                            "classwork_type": work.classwork_type,
+                            "title": work.title,
                             "subtype": subtype, "score": float(submission.grade),
                             "total_points": float(work.total_points)})
     return results

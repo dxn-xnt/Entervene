@@ -25,6 +25,7 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.quiz.Question import Question
@@ -255,10 +256,14 @@ def _valid_payload(lesson_id: int):
 def test_teacher_can_upsert_read_and_validate_quiz_builder(quiz_api_context):
     c = quiz_api_context
     classwork_id = c["quiz_classwork"].classwork_id
+    c["db"].add(ClassworkLesson(classwork_id=classwork_id, lesson_id=c["lesson"].lesson_id))
+    c["db"].commit()
+    payload = _valid_payload(c["lesson"].lesson_id)
+    payload["questions"][1]["lesson_id"] = c["lesson"].lesson_id
 
     response = c["client"].put(
         f"/api/v1/quizzes/classwork/{classwork_id}",
-        json=_valid_payload(c["lesson"].lesson_id),
+        json=payload,
     )
 
     assert response.status_code == 200
@@ -397,6 +402,7 @@ def test_teacher_can_update_quiz_configuration_before_attempts(quiz_api_context)
         "classwork_id": classwork_id,
         "duration_minutes": 45,
         "is_shuffle_questions": False,
+        "is_shuffle_options": False,
         "enable_per_question_scoring": True,
         "enable_per_question_time_limits": True,
         "max_attempts": 3,
@@ -697,3 +703,44 @@ def test_draft_quiz_without_prior_records_can_save_configuration_and_results(qui
     )
     assert results_resp.status_code == 200
     assert results_resp.json()["summary_release_mode"] == "IMMEDIATE"
+
+
+def test_quiz_builder_persists_shuffle_questions_and_shuffle_options_settings(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    payload = _valid_payload(c["lesson"].lesson_id)
+    payload["settings"]["is_shuffle_questions"] = True
+    payload["settings"]["is_shuffle_options"] = True
+
+    upsert_resp = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}",
+        json=payload,
+    )
+    assert upsert_resp.status_code == 200
+    upsert_body = upsert_resp.json()
+    assert upsert_body["settings"]["is_shuffle_questions"] is True
+    assert upsert_body["settings"]["is_shuffle_options"] is True
+
+    get_resp = c["client"].get(f"/api/v1/quizzes/classwork/{classwork_id}")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["settings"]["is_shuffle_questions"] is True
+    assert get_resp.json()["settings"]["is_shuffle_options"] is True
+
+    config_resp = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/configuration",
+        json={
+            "duration_minutes": 30,
+            "is_shuffle_questions": False,
+            "is_shuffle_options": True,
+            "enable_per_question_scoring": True,
+            "enable_per_question_time_limits": False,
+            "max_attempts": 2,
+        },
+    )
+    assert config_resp.status_code == 200
+    assert config_resp.json()["is_shuffle_questions"] is False
+    assert config_resp.json()["is_shuffle_options"] is True
+    setting = c["db"].query(QuizSetting).filter_by(classwork_id=classwork_id).one()
+    assert setting.is_shuffle_questions is False
+    assert setting.is_shuffle_options is True
+

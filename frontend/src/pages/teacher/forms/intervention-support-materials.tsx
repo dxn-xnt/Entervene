@@ -552,7 +552,6 @@ const InterventionSupportMaterials = forwardRef<
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generatedDraft, setGeneratedDraft] = useState<RemediationGeneratedDraft | null>(null);
   const [showDraftPreview, setShowDraftPreview] = useState(false);
-  const [quizQuestionMode, setQuizQuestionMode] = useState<"NEW_TARGETED" | "REUSE_ORIGINAL">("NEW_TARGETED");
   const [isEditingDraft, setIsEditingDraft] = useState(false);
   const [draftSaveState, setDraftSaveState] = useState<"idle" | "validating" | "saving" | "saved" | "error">("idle");
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
@@ -922,7 +921,7 @@ const InterventionSupportMaterials = forwardRef<
       ),
     [persistedActivities]
   );
-  const treatmentActivities = useMemo(() => {
+  const treatmentActivities = useMemo<DiagnosisActivity[]>(() => {
     if (!plan.grade_treatment) return [];
     const all = detail.diagnosis_snapshot.supporting_activities ?? [];
     if (plan.grade_treatment === "PRACTICE_ONLY") {
@@ -2220,7 +2219,37 @@ const InterventionSupportMaterials = forwardRef<
     });
   };
 
-  const openTool = async () => {
+  const activeTargetAssignmentId = useMemo(() => {
+    if (plan.grade_treatment === "EXAMINATION") {
+      return plan.original_exam_assignment_id ?? selectedActivityIds[0] ?? null;
+    }
+    if (plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") {
+      return activeUnlinkedTargetId ?? selectedActivityIds[0] ?? null;
+    }
+    return null;
+  }, [activeUnlinkedTargetId, plan.grade_treatment, plan.original_exam_assignment_id, selectedActivityIds]);
+
+  const selectedTargetSupportingActivity = useMemo(() => {
+    if (activeTargetAssignmentId == null) return null;
+    return (
+      (detail.diagnosis_snapshot.supporting_activities ?? []).find(
+        (a) =>
+          (a.classwork_assignment_id != null
+            ? a.classwork_assignment_id === activeTargetAssignmentId
+            : a.classwork_id === activeTargetAssignmentId) ||
+          a.classwork_id === activeTargetAssignmentId
+      ) ?? null
+    );
+  }, [activeTargetAssignmentId, detail.diagnosis_snapshot.supporting_activities]);
+
+  const openTool = async (
+    modeOrEvent?: "manual" | "reuse" | "ai" | unknown,
+    aiDraft?: RemediationQuizDraft,
+  ) => {
+    const quizMode =
+      modeOrEvent === "manual" || modeOrEvent === "reuse" || modeOrEvent === "ai"
+        ? modeOrEvent
+        : undefined;
     if (!plan.teacher_choice || plan.teacher_choice === "EXISTING_MATERIAL_ONLY") return;
     if (
       isGraded(plan.teacher_choice) &&
@@ -2239,6 +2268,13 @@ const InterventionSupportMaterials = forwardRef<
       });
       return;
     }
+    if (quizMode === "reuse" && (!plan.grade_treatment || plan.grade_treatment === "PRACTICE_ONLY" || activeTargetAssignmentId == null)) {
+      toast.error({
+        title: "No original target quiz selected",
+        description: "Choose a graded original target quiz before reusing quiz questions.",
+      });
+      return;
+    }
     const saved = await saveAdjustments({ silentIfUnchanged: true });
     if (!saved) return;
     const params = new URLSearchParams({
@@ -2246,6 +2282,9 @@ const InterventionSupportMaterials = forwardRef<
       subject_id: String(subjectId),
       intervention_id: String(interventionId),
     });
+    if (plan.teacher_choice === "QUIZ" && (quizMode === "reuse" || quizMode === "ai")) {
+      params.set("quiz_mode", quizMode);
+    }
     if (plan.grade_treatment === "EXAMINATION" && plan.original_exam_assignment_id) {
       params.set(
         "original_exam_assignment_id",
@@ -2258,24 +2297,35 @@ const InterventionSupportMaterials = forwardRef<
       const initialTarget = activeUnlinkedTargetId ?? selectedActivityIds[0];
       params.set("original_classwork_assignment_id", String(initialTarget));
     }
+    if (quizMode === "reuse" && selectedTargetSupportingActivity?.classwork_id != null) {
+      params.set(
+        "original_classwork_id",
+        String(selectedTargetSupportingActivity.classwork_id)
+      );
+    }
     params.set(
       "title",
-      plan.teacher_choice === "TOS"
-        ? `${subjectName} remediation blueprint`
-        : plan.teacher_choice === "QUIZ"
-          ? `${subjectName} focused practice`
-          : `${subjectName} remediation task`
+      aiDraft?.title?.trim()
+        ? aiDraft.title.trim()
+        : plan.teacher_choice === "TOS"
+          ? `${subjectName} remediation blueprint`
+          : plan.teacher_choice === "QUIZ"
+            ? `${subjectName} focused practice`
+            : `${subjectName} remediation task`
     );
     if (isGraded(plan.teacher_choice)) {
       params.set(
         "instructions",
-        plan.teacher_choice === "QUIZ"
-          ? "Please review the referenced study materials and complete this practice quiz to reinforce your understanding and recover points."
-          : "Please review the referenced reading materials and complete the tasks described in this activity to demonstrate your understanding."
+        aiDraft?.instructions?.trim()
+          ? aiDraft.instructions.trim()
+          : plan.teacher_choice === "QUIZ"
+            ? "Please review the referenced study materials and complete this practice quiz to reinforce your understanding and recover points."
+            : "Please review the referenced reading materials and complete the tasks described in this activity to demonstrate your understanding."
       );
     }
     navigate(
-      `${plan.teacher_choice === "TOS" ? "/teacher/tos" : "/teacher/classworks"}?${params.toString()}`
+      `${plan.teacher_choice === "TOS" ? "/teacher/tos" : "/teacher/classworks"}?${params.toString()}`,
+      aiDraft ? { state: { aiRemediationDraft: aiDraft } } : undefined,
     );
   };
 
@@ -2342,6 +2392,16 @@ const InterventionSupportMaterials = forwardRef<
         (requiresCurrentTarget &&
           (plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") &&
           selectedActivityIds.length !== 1)));
+
+  const reuseQuizDisabled =
+    continueDisabled ||
+    working ||
+    generatingDraft ||
+    !plan.grade_treatment ||
+    plan.grade_treatment === "PRACTICE_ONLY" ||
+    activeTargetAssignmentId == null ||
+    (selectedTargetSupportingActivity?.classwork_type != null &&
+      selectedTargetSupportingActivity.classwork_type.toUpperCase() !== "QUIZ");
 
 
   const resourceOption = (item: RemediationResource) => {
@@ -3455,8 +3515,6 @@ const InterventionSupportMaterials = forwardRef<
                 savedAssessment={savedAssessment}
                 isEditingDraft={isEditingDraft}
                 setIsEditingDraft={setIsEditingDraft}
-                quizQuestionMode={quizQuestionMode}
-                setQuizQuestionMode={setQuizQuestionMode}
                 draftValidation={draftValidation}
                 capInput={capInput}
                 plan={plan}
@@ -3465,6 +3523,10 @@ const InterventionSupportMaterials = forwardRef<
                 onGenerateWithAI={handleGenerateWithAI}
                 retryDisabled={!generationEligibility?.eligible_taught_lessons.length}
                 onSaveAssessmentDraft={handleSaveAssessmentDraft}
+                onContinueToQuizBuilder={(draft) => {
+                  setShowDraftPreview(false);
+                  void openTool("ai", draft);
+                }}
                 onUpdateQuizQuestion={handleUpdateQuizQuestion}
                 onUpdateQuizOption={handleUpdateQuizOption}
                 onUpdateQuizAnswerKey={handleUpdateQuizAnswerKey}
@@ -4127,6 +4189,18 @@ const InterventionSupportMaterials = forwardRef<
 
                     {assigned.length === 0 && plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
                       <div className="flex flex-row flex-wrap w-full justify-end items-center gap-2 mt-2">
+                        {plan.teacher_choice === "QUIZ" && (
+                          <Button
+                            disabled={reuseQuizDisabled}
+                            onClick={() => void openTool("reuse")}
+                            size="sm"
+                            variant="outline"
+                            className="gap-2"
+                          >
+                            <RefreshCw className="size-4" />
+                            Reuse Quiz Questions
+                          </Button>
+                        )}
                         {(plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") && (
                           <Button
                             disabled={continueDisabled || working || generatingDraft || !generationEligibility?.eligible_taught_lessons.length}
@@ -4139,7 +4213,7 @@ const InterventionSupportMaterials = forwardRef<
                             Generate with AI
                           </Button>
                         )}
-                        <Button disabled={continueDisabled || working || generatingDraft} onClick={openTool} size="sm" className="gap-2">
+                        <Button disabled={continueDisabled || working || generatingDraft} onClick={() => void openTool("manual")} size="sm" className="gap-2">
                           Continue to{" "}
                           {plan.teacher_choice === "QUIZ"
                             ? "Quiz Builder"
@@ -4195,6 +4269,18 @@ const InterventionSupportMaterials = forwardRef<
 
                         {plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
                           <div className="flex flex-row flex-wrap w-full justify-end items-center gap-2">
+                            {plan.teacher_choice === "QUIZ" && (
+                              <Button
+                                disabled={reuseQuizDisabled}
+                                onClick={() => void openTool("reuse")}
+                                size="sm"
+                                variant="outline"
+                                className="gap-2"
+                              >
+                                <RefreshCw className="size-4" />
+                                Reuse Quiz Questions
+                              </Button>
+                            )}
                             {(plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") && (
                               <Button
                                 disabled={continueDisabled || working || generatingDraft || !generationEligibility?.eligible_taught_lessons.length}
@@ -4209,7 +4295,7 @@ const InterventionSupportMaterials = forwardRef<
                             )}
                             <Button
                               disabled={continueDisabled || working || generatingDraft}
-                              onClick={openTool}
+                              onClick={() => void openTool("manual")}
                               size="sm"
                               className="gap-2"
                             >

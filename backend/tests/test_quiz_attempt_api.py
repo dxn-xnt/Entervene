@@ -1166,3 +1166,83 @@ def test_editing_intervention_quiz_attempt_limit_after_submission_updates_remain
     assert body["attempts_remaining"] == 4
     assert body["grade"] == saved_grade
     assert len(body["questions"]) == 2
+
+
+def test_student_attempt_shuffles_questions_and_answer_choices_while_preserving_grading_and_original_quiz(
+    quiz_attempt_context,
+):
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+    c["setting"].is_shuffle_questions = True
+    c["setting"].is_shuffle_options = True
+    c["setting"].show_correct_answers = True
+    c["setting"].max_attempts = 1
+    c["assignment"].max_attempts = 1
+    c["db"].commit()
+
+    canonical_question_ids = [
+        c["mc_link"].quiz_question_id,
+        c["short_link"].quiz_question_id,
+    ]
+    canonical_option_ids = [
+        c["correct"].option_id,
+        c["wrong"].option_id,
+    ]
+
+    started = c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start")
+    assert started.status_code == 200, started.json()
+    started_body = started.json()
+
+    # Reloading the attempt returns the exact same shuffled order for the active attempt
+    reloaded = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert reloaded.status_code == 200, reloaded.json()
+    reloaded_body = reloaded.json()
+
+    started_question_ids = [q["quiz_question_id"] for q in started_body["questions"]]
+    reloaded_question_ids = [q["quiz_question_id"] for q in reloaded_body["questions"]]
+    assert started_question_ids == reloaded_question_ids
+    assert started_question_ids != canonical_question_ids
+    assert [q["display_order"] for q in started_body["questions"]] == [1, 2]
+
+    mc_question = next(
+        q for q in started_body["questions"] if q["question_type"] == "MULTIPLE_CHOICE"
+    )
+    shuffled_option_ids = [opt["option_id"] for opt in mc_question["options"]]
+    assert shuffled_option_ids != canonical_option_ids
+    assert [opt["option_order"] for opt in mc_question["options"]] == [1, 2]
+
+    # Submit using the correct option_id even though its option_order was shuffled
+    submit_resp = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={
+            "answers": [
+                {
+                    "quiz_question_id": c["mc_link"].quiz_question_id,
+                    "selected_option_id": c["correct"].option_id,
+                },
+                {
+                    "quiz_question_id": c["short_link"].quiz_question_id,
+                    "answer_text": "Variables store values for reuse.",
+                },
+            ]
+        },
+    )
+    assert submit_resp.status_code == 200, submit_resp.json()
+    submit_body = submit_resp.json()
+    graded_mc = next(
+        q for q in submit_body["questions"] if q["quiz_question_id"] == c["mc_link"].quiz_question_id
+    )
+    assert graded_mc["selected_option_id"] == c["correct"].option_id
+
+    # Verify original database records for question order and option order were not mutated
+    c["db"].refresh(c["mc_link"])
+    c["db"].refresh(c["short_link"])
+    c["db"].refresh(c["correct"])
+    c["db"].refresh(c["wrong"])
+    assert c["mc_link"].display_order == 1
+    assert c["short_link"].display_order == 2
+    assert c["correct"].option_order == 1
+    assert c["correct"].is_correct is True
+    assert c["wrong"].option_order == 2
+    assert c["wrong"].is_correct is False
+

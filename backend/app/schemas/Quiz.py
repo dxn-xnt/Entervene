@@ -24,6 +24,7 @@ class QuizQuestionIn(BaseModel):
 
 class QuizSettingIn(BaseModel):
     is_shuffle_questions: bool = False
+    is_shuffle_options: bool = False
     enable_per_question_scoring: bool = True
     enable_per_question_time_limits: bool = False
     max_attempts: Optional[int] = None
@@ -89,6 +90,7 @@ class QuizQuestionOut(BaseModel):
 class QuizSettingOut(BaseModel):
     quiz_setting_id: int
     is_shuffle_questions: bool
+    is_shuffle_options: bool = False
     enable_per_question_scoring: bool
     enable_per_question_time_limits: bool
     max_attempts: Optional[int] = None
@@ -120,12 +122,14 @@ class QuizConfigurationUpdate(BaseModel):
 
     duration_minutes: Optional[int] = Field(default=None, gt=0)
     is_shuffle_questions: bool
+    is_shuffle_options: Optional[bool] = None
     enable_per_question_scoring: bool
     enable_per_question_time_limits: bool
     max_attempts: int = Field(ge=1)
 
 
 class QuizConfigurationResponse(QuizConfigurationUpdate):
+    is_shuffle_options: bool = False
     classwork_id: int
     has_attempts: bool
 
