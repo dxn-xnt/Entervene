@@ -49,7 +49,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { apiFetch } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { emptyClassworkDraft } from "@/lib/classwork-utils";
 import type {
   ClassworkKind,
@@ -914,15 +913,15 @@ export default function CreateClassworkQuizModal({
 
         setAvailableLessons(lessons);
         setSelectedLessonIds((current) => {
-          if (remediationFocus) {
-            return remediationFocus.lesson_ids.filter((id) =>
-              uniqueLessons.has(id),
-            );
-          }
-          const filtered = current.filter((id) => uniqueLessons.has(id));
-          if (filtered.length > 0) return filtered;
-          if (initialLessonId && uniqueLessons.has(initialLessonId)) {
-            return [initialLessonId];
+          let next = remediationFocus
+            ? remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id))
+            : current.filter((id) => uniqueLessons.has(id));
+          if (
+            next.length === 0 &&
+            initialLessonId &&
+            uniqueLessons.has(initialLessonId)
+          ) {
+            next = [initialLessonId];
           }
           const nextSet = new Set(next);
           setQuizQuestions((questions) => {
