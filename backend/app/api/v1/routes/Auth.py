@@ -20,6 +20,7 @@ from app.core.Security import (
     decode_token,
     hash_password,
     is_password_hash,
+    password_validation_error,
     verify_password,
 )
 from app.db.Session import get_db
@@ -29,7 +30,14 @@ from app.models.auth.UserLoginLog import UserLoginLog
 from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.schemas.Auth import AvatarUpdate, ForgotPasswordRequest, LoginRequest, LoginResponse, ResetPasswordRequest
+from app.schemas.Auth import (
+    AvatarUpdate,
+    ForgotPasswordRequest,
+    LoginRequest,
+    LoginResponse,
+    ResetPasswordRequest,
+    ResetPasswordTokenRequest,
+)
 from app.services.MailService import send_password_reset_email
 
 router = APIRouter()
@@ -143,17 +151,41 @@ def forgot_password(body: ForgotPasswordRequest, background_tasks: BackgroundTas
     return {"message": "If this email has an active account, a reset link has been sent."}
 
 
-@router.post("/reset-password")
-def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
-    if body.password != body.confirm_password:
-        raise HTTPException(400, "Passwords do not match")
-    signed_token, separator, fingerprint = body.token.rpartition(".")
+def _reset_token_account(token: str, db: Session) -> UserAccount:
+    signed_token, separator, fingerprint = token.rpartition(".")
     payload = decode_token(signed_token, expected_type="password_reset") if separator else None
     if not payload or not fingerprint:
         raise HTTPException(400, "Invalid or expired reset link")
     account = db.query(UserAccount).filter(UserAccount.user_id == payload.get("sub")).first()
-    if not account or (account.account_status or "").strip().lower() != "active" or not secrets.compare_digest(fingerprint, _password_fingerprint(account.password_hash)):
+    if (
+        not account
+        or (account.account_status or "").strip().lower() != "active"
+        or not secrets.compare_digest(
+            fingerprint,
+            _password_fingerprint(account.password_hash),
+        )
+    ):
         raise HTTPException(400, "Invalid or expired reset link")
+    return account
+
+
+@router.post("/reset-password/validate")
+def validate_reset_password_token(
+    body: ResetPasswordTokenRequest,
+    db: Session = Depends(get_db),
+):
+    _reset_token_account(body.token, db)
+    return {"valid": True}
+
+
+@router.post("/reset-password")
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    if body.password != body.confirm_password:
+        raise HTTPException(400, "Passwords do not match")
+    password_error = password_validation_error(body.password)
+    if password_error:
+        raise HTTPException(400, password_error)
+    account = _reset_token_account(body.token, db)
     account.password_hash = hash_password(body.password)
     db.commit()
     return {"message": "Password updated. You can now sign in."}
