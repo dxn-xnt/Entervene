@@ -172,6 +172,7 @@ export interface InterventionModalProps {
   previousResolved?: TeacherInterventionSummary;
   newerActive?: TeacherInterventionSummary;
   startSetup?: boolean;
+  initialStep?: number;
 }
 
 export default function InterventionModal({
@@ -188,6 +189,7 @@ export default function InterventionModal({
   previousResolved,
   newerActive,
   startSetup = false,
+  initialStep,
 }: InterventionModalProps) {
   const [supportPage, setSupportPage] = useState<"overview" | "plan">("overview");
   const [supportMode, setSupportMode] = useState<"configure" | "edit">("edit");
@@ -206,8 +208,12 @@ export default function InterventionModal({
       setSupportPage("overview");
       setSupportMode("edit");
     }
-    setWizardStep(1);
-  }, [isOpen, interventionId, startSetup, selectedKind]);
+    const resolvedStep =
+      initialStep && initialStep >= 1 && initialStep <= LAST_SUPPORT_STEP
+        ? initialStep
+        : 1;
+    setWizardStep(resolvedStep);
+  }, [isOpen, interventionId, startSetup, selectedKind, initialStep]);
 
   const isActive = selectedKind === "active" && detail?.status === "ACTIVE";
   const activationExplanation = detail ? candidateActivationExplanation(detail) : null;

@@ -1,6 +1,7 @@
 """Persistence tests for AI remediation assessment creation (no live AI calls)."""
 
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -291,6 +292,7 @@ def test_publishing_targeted_quiz_promotes_quiz_and_student_can_fetch_attempt(ca
         ClassworkAssignRequest(
             class_ids=[ctx["class"].class_id],
             academic_period_id=ctx["period"].academic_period_id,
+            due_date=datetime.now(timezone.utc) + timedelta(days=7),
             is_published=True,
             max_attempts=1,
         ),

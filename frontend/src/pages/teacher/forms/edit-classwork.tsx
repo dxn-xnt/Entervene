@@ -95,6 +95,7 @@ type QuizConfigurationDraft = {
   has_attempts: boolean;
   duration_minutes: string;
   is_shuffle_questions: boolean;
+  is_shuffle_options: boolean;
   enable_per_question_scoring: boolean;
   enable_per_question_time_limits: boolean;
   max_attempts: string;
@@ -107,6 +108,7 @@ const defaultQuizConfigurationDraft = (
   has_attempts: false,
   duration_minutes: "",
   is_shuffle_questions: false,
+  is_shuffle_options: false,
   enable_per_question_scoring: true,
   enable_per_question_time_limits: false,
   max_attempts: maxAttempts,
@@ -115,6 +117,7 @@ const defaultQuizConfigurationDraft = (
 const quizConfigurationComparable = (draft: QuizConfigurationDraft) => ({
   duration_minutes: draft.duration_minutes,
   is_shuffle_questions: draft.is_shuffle_questions,
+  is_shuffle_options: draft.is_shuffle_options,
   enable_per_question_scoring: draft.enable_per_question_scoring,
   enable_per_question_time_limits: draft.enable_per_question_time_limits,
   max_attempts: draft.max_attempts,
@@ -405,6 +408,7 @@ export default function EditClassworkModal({
             has_attempts: false,
             duration_minutes: "",
             is_shuffle_questions: false,
+            is_shuffle_options: false,
             enable_per_question_scoring: true,
             enable_per_question_time_limits: false,
             max_attempts: classworkToEditDraft(classwork).max_attempts,
@@ -418,6 +422,7 @@ export default function EditClassworkModal({
           has_attempts?: boolean;
           settings?: {
             is_shuffle_questions?: boolean;
+            is_shuffle_options?: boolean;
             enable_per_question_scoring?: boolean;
             enable_per_question_time_limits?: boolean;
             max_attempts?: number | null;
@@ -453,6 +458,7 @@ export default function EditClassworkModal({
           duration_minutes:
             body.duration_minutes == null ? "" : String(body.duration_minutes),
           is_shuffle_questions: Boolean(settings?.is_shuffle_questions),
+          is_shuffle_options: Boolean(settings?.is_shuffle_options),
           enable_per_question_scoring:
             settings?.enable_per_question_scoring !== false,
           enable_per_question_time_limits: Boolean(
@@ -1105,6 +1111,7 @@ export default function EditClassworkModal({
             body: JSON.stringify({
               duration_minutes: duration,
               is_shuffle_questions: quizConfigurationDraft.is_shuffle_questions,
+              is_shuffle_options: quizConfigurationDraft.is_shuffle_options,
               enable_per_question_scoring:
                 quizConfigurationDraft.enable_per_question_scoring,
               enable_per_question_time_limits:
@@ -1819,6 +1826,22 @@ export default function EditClassworkModal({
                             setQuizConfigurationDraft((current) => ({
                               ...current,
                               is_shuffle_questions: checked,
+                            }))
+                          }
+                          disabled={
+                            isSavingEdit ||
+                            !quizConfigurationDraft.loaded ||
+                            quizConfigurationDraft.has_attempts
+                          }
+                        />
+                        <ClassworkSettingRow
+                          label="Shuffle answer choices"
+                          tooltip="Randomizes multiple-choice answer options for each student during the quiz attempt."
+                          checked={quizConfigurationDraft.is_shuffle_options}
+                          onCheckedChange={(checked) =>
+                            setQuizConfigurationDraft((current) => ({
+                              ...current,
+                              is_shuffle_options: checked,
                             }))
                           }
                           disabled={

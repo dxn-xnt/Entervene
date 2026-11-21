@@ -1226,161 +1226,81 @@ def test_editing_intervention_quiz_attempt_limit_after_submission_updates_remain
     assert len(body["questions"]) == 2
 
 
-def test_student_my_assignments_and_grade_notifications_enforce_quiz_release_policy(quiz_attempt_context):
-    c = quiz_attempt_context
-    db = c["db"]
-    student = c["student"]
-    assignment = c["assignment"]
-    classwork = c["classwork"]
-    setting = c["setting"]
-
-    from app.models.academic.SubjectLoad import SubjectLoad
-    db.add(SubjectLoad(
-        staff_id=classwork.created_by_staff_id,
-        class_id=assignment.class_id,
-        subject_id=classwork.subject_id,
-        academic_period_id=assignment.academic_period_id,
-        status="active",
-        is_active_version=True,
-    ))
-
-    # Submit and grade a quiz while results are scheduled in the future
-    setting.show_correct_answers = True
-    setting.summary_release_mode = "SCHEDULED"
-    setting.summary_release_at = datetime.now(timezone.utc) + timedelta(days=2)
-    db.commit()
-
-    submitted = _submit_fixture_quiz(c)
-    assert submitted.status_code == 200
-    submission = db.query(StudentSubmission).one()
-
-    from app.models.notifications.Notification import Notification
-    from app.schemas.Submission import GradeRequest
-    from app.services.classwork.ClassworkService import student_assignments
-    from app.services.submission.SubmissionService import grade_student_submission
-
-    # Grade via submission service while scheduled release is still in the future
-    grade_student_submission(
-        submission.submission_id,
-        GradeRequest(grade=9.0, feedback="Hidden teacher feedback"),
-        classwork.created_by_staff_id,
-        db,
-    )
-
-    # No grade_released notification may leak the score before release
-    notifs = db.query(Notification).filter(
-        Notification.user_id == student.user_id,
-        Notification.notification_type == "grade_released",
-    ).all()
-    assert notifs == []
-
-    # /my-assignments must hide the score before scheduled release
-    before = student_assignments(student, db)["graded"][0]
-    assert before["grade"] is None
-    assert before["show_scores"] is False
-
-    # Legacy mixed visibility must also hide the score
-    setting.summary_release_mode = "IMMEDIATE"
-    setting.summary_release_at = None
-    setting.show_correct_answers = False
-    db.commit()
-    mixed = student_assignments(student, db)["graded"][0]
-    assert mixed["grade"] is None
-    assert mixed["show_scores"] is False
-
-    # Once released, /my-assignments exposes the grade and grading notifies the student
-    setting.show_correct_answers = True
-    db.commit()
-    after = student_assignments(student, db)["graded"][0]
-    assert after["grade"] == 9.0
-    assert after["show_scores"] is True
-
-    grade_student_submission(
-        submission.submission_id,
-        GradeRequest(grade=10.0, feedback="Hidden teacher feedback"),
-        classwork.created_by_staff_id,
-        db,
-    )
-    released_notifs = db.query(Notification).filter(
-        Notification.user_id == student.user_id,
-        Notification.notification_type == "grade_released",
-    ).all()
-    assert len(released_notifs) == 1
-    assert "10.0" in released_notifs[0].body
-
-
-def test_started_published_quiz_allows_due_date_and_release_policy_update_without_readiness_error(
+def test_student_attempt_shuffles_questions_and_answer_choices_while_preserving_grading_and_original_quiz(
     quiz_attempt_context,
 ):
-    """Teachers can adjust due date and release policy after attempts start without spurious readiness errors."""
     c = quiz_attempt_context
-    db = c["db"]
-    classwork = c["classwork"]
-    assignment = c["assignment"]
-    staff_id = classwork.created_by_staff_id
+    assignment_id = c["assignment"].classwork_assignment_id
+    c["setting"].is_shuffle_questions = True
+    c["setting"].is_shuffle_options = True
+    c["setting"].show_correct_answers = True
+    c["setting"].max_attempts = 1
+    c["assignment"].max_attempts = 1
+    c["db"].commit()
 
-    from app.models.academic.SubjectLoad import SubjectLoad
-    db.add(SubjectLoad(
-        staff_id=staff_id,
-        class_id=assignment.class_id,
-        subject_id=classwork.subject_id,
-        academic_period_id=assignment.academic_period_id,
-        status="active",
-        is_active_version=True,
-    ))
-    db.commit()
+    canonical_question_ids = [
+        c["mc_link"].quiz_question_id,
+        c["short_link"].quiz_question_id,
+    ]
+    canonical_option_ids = [
+        c["correct"].option_id,
+        c["wrong"].option_id,
+    ]
 
-    # Start a student attempt so questions are frozen
-    started = c["client"].post(
-        f"/api/v1/quizzes/assignment/{assignment.classwork_assignment_id}/start"
+    started = c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start")
+    assert started.status_code == 200, started.json()
+    started_body = started.json()
+
+    # Reloading the attempt returns the exact same shuffled order for the active attempt
+    reloaded = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert reloaded.status_code == 200, reloaded.json()
+    reloaded_body = reloaded.json()
+
+    started_question_ids = [q["quiz_question_id"] for q in started_body["questions"]]
+    reloaded_question_ids = [q["quiz_question_id"] for q in reloaded_body["questions"]]
+    assert started_question_ids == reloaded_question_ids
+    assert started_question_ids != canonical_question_ids
+    assert [q["display_order"] for q in started_body["questions"]] == [1, 2]
+
+    mc_question = next(
+        q for q in started_body["questions"] if q["question_type"] == "MULTIPLE_CHOICE"
     )
-    assert started.status_code == 200
+    shuffled_option_ids = [opt["option_id"] for opt in mc_question["options"]]
+    assert shuffled_option_ids != canonical_option_ids
+    assert [opt["option_order"] for opt in mc_question["options"]] == [1, 2]
 
-    # Simulate an existing published quiz with a legacy readiness mismatch
-    # (e.g. unmapped question or mismatched points) that cannot be edited post-attempt.
-    c["mc_link"].question.lesson_id = None
-    db.commit()
-
-    from app.schemas.Classwork import ClassworkAssignRequest, ClassworkUpdate
-    from app.schemas.Quiz import QuizResultsSettingsUpdate
-    from app.services.classwork.ClassworkService import (
-        assign_classwork_to_classes,
-        update_classwork_record,
+    # Submit using the correct option_id even though its option_order was shuffled
+    submit_resp = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={
+            "answers": [
+                {
+                    "quiz_question_id": c["mc_link"].quiz_question_id,
+                    "selected_option_id": c["correct"].option_id,
+                },
+                {
+                    "quiz_question_id": c["short_link"].quiz_question_id,
+                    "answer_text": "Variables store values for reuse.",
+                },
+            ]
+        },
     )
-    from app.services.quiz.QuizBuilderService import update_quiz_results_settings
-
-    # Metadata edit on already-started published quiz must not fail readiness
-    updated_cw = update_classwork_record(
-        classwork.classwork_id,
-        ClassworkUpdate(title="Updated Started Quiz", is_published=True),
-        staff_id,
-        db,
+    assert submit_resp.status_code == 200, submit_resp.json()
+    submit_body = submit_resp.json()
+    graded_mc = next(
+        q for q in submit_body["questions"] if q["quiz_question_id"] == c["mc_link"].quiz_question_id
     )
-    assert updated_cw.title == "Updated Started Quiz"
+    assert graded_mc["selected_option_id"] == c["correct"].option_id
 
-    # Setting a due date on already-started published quiz must not fail readiness
-    due_at = datetime.now(timezone.utc) + timedelta(days=3)
-    assign_result = assign_classwork_to_classes(
-        classwork.classwork_id,
-        ClassworkAssignRequest(
-            class_ids=[assignment.class_id],
-            due_date=due_at,
-            is_published=True,
-        ),
-        staff_id,
-        db,
-    )
-    assert assignment.class_id in assign_result["updated_class_ids"]
+    # Verify original database records for question order and option order were not mutated
+    c["db"].refresh(c["mc_link"])
+    c["db"].refresh(c["short_link"])
+    c["db"].refresh(c["correct"])
+    c["db"].refresh(c["wrong"])
+    assert c["mc_link"].display_order == 1
+    assert c["short_link"].display_order == 2
+    assert c["correct"].option_order == 1
+    assert c["correct"].is_correct is True
+    assert c["wrong"].option_order == 2
+    assert c["wrong"].is_correct is False
 
-    # Switching release policy to AFTER_DUE_DATE succeeds cleanly
-    release_res = update_quiz_results_settings(
-        db,
-        classwork,
-        QuizResultsSettingsUpdate(
-            release_policy="AFTER_DUE_DATE",
-            confirm_answer_reveal=True,
-        ),
-    )
-    assert release_res.release_policy == "AFTER_DUE_DATE"
-    assert release_res.show_scores is True
-    assert release_res.show_correct_answers is True

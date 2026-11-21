@@ -105,7 +105,12 @@ vi.mock("@/lib/teacher-interventions-api", async (importOriginal) => {
 
 function LocationProbe() {
   const location = useLocation();
-  return <span data-testid="current-location">{`${location.pathname}${location.search}`}</span>;
+  return (
+    <>
+      <span data-testid="current-location">{`${location.pathname}${location.search}`}</span>
+      <span data-testid="current-location-state">{JSON.stringify(location.state ?? null)}</span>
+    </>
+  );
 }
 
 const baseDetail: TeacherInterventionDetail = {
@@ -538,6 +543,144 @@ describe("InterventionSupportMaterials progressive target selection and creation
       expect(loc).toContain("original_classwork_assignment_id=103");
       expect(loc).not.toContain("original_classwork_assignment_id=101");
     });
+  });
+
+  it("renders Reuse Quiz Questions alongside Generate with AI and Continue to Quiz Builder, and propagates quiz_mode=reuse and original_classwork_id", async () => {
+    render(
+      <MemoryRouter initialEntries={["/teacher/interventions"]}>
+        <LocationProbe />
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={3}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add Another Remediation Activity" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select WW 3 - Linear Equations as the remediation target",
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    const newSection = await screen.findByLabelText("New Remediation Activity");
+    const reuseBtn = within(newSection).getByRole("button", { name: /Reuse Quiz Questions/i });
+    expect(reuseBtn).toBeDefined();
+    expect(within(newSection).getByRole("button", { name: /Generate with AI/i })).toBeDefined();
+    expect(within(newSection).getByRole("button", { name: /Continue to Quiz Builder/i })).toBeDefined();
+
+    fireEvent.click(reuseBtn);
+
+    await waitFor(() => {
+      const loc = screen.getByTestId("current-location").textContent ?? "";
+      expect(loc).toContain("/teacher/classworks?");
+      expect(loc).toContain("remediation=QUIZ");
+      expect(loc).toContain("quiz_mode=reuse");
+      expect(loc).toContain("original_classwork_assignment_id=103");
+      expect(loc).toContain("original_classwork_id=3");
+    });
+    expect(apiMocks.generateRemediationDraft).not.toHaveBeenCalled();
+    expect(screen.queryByText("AI Remediation Draft Preview")).toBeNull();
+  });
+
+  it("omits Question Selection Mode from AI Remediation Draft Preview, preserves review details, and transfers edited AI questions via Open in Quiz Builder", async () => {
+    render(
+      <MemoryRouter initialEntries={["/teacher/interventions"]}>
+        <LocationProbe />
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={3}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add Another Remediation Activity" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select WW 3 - Linear Equations as the remediation target",
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    const newSection = await screen.findByLabelText("New Remediation Activity");
+    fireEvent.click(within(newSection).getByRole("button", { name: /Generate with AI/i }));
+
+    expect(await screen.findByText("AI Remediation Draft Preview")).toBeDefined();
+
+    // Redundant Question Selection Mode section is removed
+    expect(screen.queryByText("Question Selection Mode")).toBeNull();
+    expect(screen.queryByText("Generate New Targeted Questions")).toBeNull();
+    expect(screen.queryByText("Reuse Original Questions")).toBeNull();
+    expect(screen.queryByText("Unsupported")).toBeNull();
+
+    // Academic context, ceiling, instructions, AI questions, and teacher-only review are preserved
+    expect(screen.getByText("Academic Treatment & Score Adjustment Context")).toBeDefined();
+    expect(screen.getByText(/Up to 75% of the selected classwork's original maximum points/i)).toBeDefined();
+    expect(screen.getByText("Complete all items carefully.")).toBeDefined();
+    expect(screen.getByText("Solve 2x + 4 = 10.")).toBeDefined();
+    expect(screen.getByText("Teacher-Only Answer Key & Explanations")).toBeDefined();
+
+    // Inline editing remains functional and edited AI draft transfers to Quiz Builder
+    fireEvent.click(screen.getByRole("button", { name: /Edit Draft/i }));
+    fireEvent.change(screen.getByLabelText("Student Instructions"), {
+      target: { value: "Review Lesson 1 notes, then answer all items." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Done Editing \(Preview\)/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /Open in Quiz Builder/i }));
+
+    await waitFor(() => {
+      const loc = screen.getByTestId("current-location").textContent ?? "";
+      expect(loc).toContain("/teacher/classworks?");
+      expect(loc).toContain("remediation=QUIZ");
+      expect(loc).toContain("quiz_mode=ai");
+      expect(loc).toContain("original_classwork_assignment_id=103");
+    });
+
+    const stateJson = JSON.parse(screen.getByTestId("current-location-state").textContent ?? "null");
+    expect(stateJson?.aiRemediationDraft?.instructions).toBe(
+      "Review Lesson 1 notes, then answer all items."
+    );
+    expect(stateJson?.aiRemediationDraft?.questions).toHaveLength(1);
+    expect(stateJson?.aiRemediationDraft?.questions[0].question_text).toBe("Solve 2x + 4 = 10.");
+    expect(screen.queryByText("AI Remediation Draft Preview")).toBeNull();
+  });
+
+  it("bypasses AI Remediation Draft Preview when Continue to Quiz Builder is selected", async () => {
+    render(
+      <MemoryRouter initialEntries={["/teacher/interventions"]}>
+        <LocationProbe />
+        <InterventionSupportMaterials
+          detail={baseDetail}
+          page="plan"
+          wizardStep={3}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add Another Remediation Activity" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select WW 3 - Linear Equations as the remediation target",
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    const newSection = await screen.findByLabelText("New Remediation Activity");
+    fireEvent.click(within(newSection).getByRole("button", { name: /Continue to Quiz Builder/i }));
+
+    await waitFor(() => {
+      const loc = screen.getByTestId("current-location").textContent ?? "";
+      expect(loc).toContain("/teacher/classworks?");
+      expect(loc).toContain("remediation=QUIZ");
+      expect(loc).not.toContain("quiz_mode=ai");
+      expect(loc).not.toContain("quiz_mode=reuse");
+    });
+    expect(apiMocks.generateRemediationDraft).not.toHaveBeenCalled();
+    expect(screen.queryByText("AI Remediation Draft Preview")).toBeNull();
   });
 
   it("blocks additional activity creation when progression conditions are not satisfied", async () => {

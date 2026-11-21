@@ -242,6 +242,7 @@ def upsert_quiz_builder(
         setting = QuizSetting(classwork_id=classwork.classwork_id)
         db.add(setting)
     setting.is_shuffle_questions = payload.settings.is_shuffle_questions
+    setting.is_shuffle_options = bool(payload.settings.is_shuffle_options)
     setting.enable_per_question_scoring = payload.settings.enable_per_question_scoring
     setting.enable_per_question_time_limits = payload.settings.enable_per_question_time_limits
     setting.max_attempts = payload.settings.max_attempts
@@ -417,6 +418,11 @@ def update_quiz_configuration(
     if has_attempts and (
         (quiz is not None and quiz.duration_minutes != payload.duration_minutes)
         or (setting is not None and setting.is_shuffle_questions != payload.is_shuffle_questions)
+        or (
+            setting is not None
+            and payload.is_shuffle_options is not None
+            and setting.is_shuffle_options != payload.is_shuffle_options
+        )
         or (setting is not None and setting.enable_per_question_scoring != payload.enable_per_question_scoring)
         or (setting is not None and setting.enable_per_question_time_limits != payload.enable_per_question_time_limits)
     ):
@@ -441,6 +447,8 @@ def update_quiz_configuration(
 
     quiz.duration_minutes = payload.duration_minutes
     setting.is_shuffle_questions = payload.is_shuffle_questions
+    if payload.is_shuffle_options is not None:
+        setting.is_shuffle_options = payload.is_shuffle_options
     setting.enable_per_question_scoring = payload.enable_per_question_scoring
     setting.enable_per_question_time_limits = payload.enable_per_question_time_limits
     setting.max_attempts = payload.max_attempts
@@ -452,6 +460,7 @@ def update_quiz_configuration(
         classwork_id=locked_classwork.classwork_id,
         duration_minutes=quiz.duration_minutes,
         is_shuffle_questions=setting.is_shuffle_questions,
+        is_shuffle_options=bool(setting.is_shuffle_options),
         enable_per_question_scoring=setting.enable_per_question_scoring,
         enable_per_question_time_limits=setting.enable_per_question_time_limits,
         max_attempts=setting.max_attempts or payload.max_attempts,
@@ -718,6 +727,7 @@ def _setting_out(setting: QuizSetting) -> QuizSettingOut:
     return QuizSettingOut(
         quiz_setting_id=setting.quiz_setting_id,
         is_shuffle_questions=setting.is_shuffle_questions,
+        is_shuffle_options=bool(getattr(setting, "is_shuffle_options", False)),
         enable_per_question_scoring=setting.enable_per_question_scoring,
         enable_per_question_time_limits=setting.enable_per_question_time_limits,
         max_attempts=setting.max_attempts,
