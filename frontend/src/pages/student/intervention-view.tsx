@@ -304,6 +304,7 @@ export default function StudentInterventionView() {
       badgeClass: "bg-[#00e65f] text-black border-2 border-black font-bold",
       colorClass: "text-[#00e65f] dark:text-[#00e65f]",
       bgClass: "bg-retro bg-[#00e65f]/20 border-border",
+      fillColor: "#00e65f",
       icon: FaceSlightlySmiling,
       description: "Difficulty overcome! You've strengthened your understanding in this target lesson.",
     }
@@ -315,6 +316,7 @@ export default function StudentInterventionView() {
         badgeClass: "bg-[#ff9233] text-black border-2 border-black font-bold",
         colorClass: "text-[#ff9233] dark:text-[#ff9233]",
         bgClass: "bg-retro bg-[#ff9233]/15 border-border",
+        fillColor: "#ff9233",
         icon: FaceNeutral,
         description: "Making steady progress! You're actively addressing the difficulty in this target lesson.",
       }
@@ -325,6 +327,7 @@ export default function StudentInterventionView() {
         badgeClass: "bg-[#ff3333] text-black border-2 border-black font-bold",
         colorClass: "text-[#ff3333] dark:text-[#ff3333]",
         bgClass: "bg-retro bg-[#ff3333]/15 border-border",
+        fillColor: "#ff3333",
         icon: FaceSlightlyFrowning,
         description: "Identified difficulty in this target lesson. Complete review readings and activities to build mastery.",
       };
@@ -695,6 +698,13 @@ export default function StudentInterventionView() {
                                     title: act.title,
                                     classwork_type: act.classwork_type,
                                   }}
+                                  subtitle={
+                                    act.classwork_type === "QUIZ"
+                                      ? "Quiz"
+                                      : act.classwork_type === "ASSIGNMENT"
+                                        ? "Assignment"
+                                        : act.classwork_type
+                                  }
                                   onClick={
                                     canOpenActivity
                                       ? () =>
@@ -825,7 +835,11 @@ export default function StudentInterventionView() {
                             currentMastery.bgClass,
                           )}
                         >
-                          <currentMastery.icon className={cn("size-8 transition-colors", currentMastery.colorClass)} />
+                          <currentMastery.icon
+                            aria-hidden="true"
+                            fill={currentMastery.fillColor}
+                            className="size-8 stroke-black stroke-[2] [&_path]:fill-none"
+                          />
                           <p className={cn("text-base font-bold text-center mt-1", currentMastery.colorClass)}>
                             {currentMastery.label} Mastery
                           </p>

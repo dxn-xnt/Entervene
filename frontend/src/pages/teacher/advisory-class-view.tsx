@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, Check, ChevronDown, Download, FileSpreadsheet, FileText, History, Lightbulb, Loader2, Search, Users } from "lucide-react";
+import { Award, BookOpen, Check, ChevronDown, Download, FileSpreadsheet, FileText, History, Loader2, Search, Users } from "lucide-react";
 import { TeacherEmptyAvatarGroup, TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -52,6 +52,88 @@ export default function AdvisoryClassDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [isBatchExportingXlsx, setIsBatchExportingXlsx] = useState(false);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [previewStudent, setPreviewStudent] = useState<TeacherAdvisoryStudentItem | null>(null);
+  const [batchPdfModal, setBatchPdfModal] = useState<{ isOpen: boolean; mode: "selected" | "all" }>({
+    isOpen: false,
+    mode: "selected",
+  });
+  const [isExportingSF9, setIsExportingSF9] = useState(false);
+
+  const selectedStudents = useMemo(() => {
+    if (!detail) return [];
+    return detail.students.filter((s) => selectedStudentIds.has(s.student_id));
+  }, [detail, selectedStudentIds]);
+
+  const singleSelectedStudent = selectedStudents.length === 1 ? selectedStudents[0] : null;
+
+  const handleExportSF9All = async () => {
+    if (!detail) return;
+    try {
+      setIsExportingSF9(true);
+      toast.info(`Generating official SF9 report card workbooks for all ${detail.students.length} students...`);
+      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(
+        detail.class_id,
+        undefined,
+        "zip",
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("SF9 report cards exported successfully.");
+    } catch (err) {
+      console.error("SF9 export failed:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to export advisory SF9 report cards.",
+      );
+    } finally {
+      setIsExportingSF9(false);
+    }
+  };
+
+  const handleExportSF9Selected = async () => {
+    if (!detail) return;
+    if (selectedStudentIds.size === 0) {
+      toast.error("Please select at least one student to export.");
+      return;
+    }
+    try {
+      setIsExportingSF9(true);
+      const targetIds = Array.from(selectedStudentIds);
+      const label = `${targetIds.length} selected student${targetIds.length > 1 ? "s" : ""}`;
+      toast.info(`Generating official SF9 report card workbooks for ${label}...`);
+      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(
+        detail.class_id,
+        targetIds,
+        "zip",
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("SF9 report cards exported successfully.");
+    } catch (err) {
+      console.error("SF9 export failed:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to export advisory SF9 report cards.",
+      );
+    } finally {
+      setIsExportingSF9(false);
+    }
+  };
 
   const handleExportBatchSF9Xlsx = async () => {
     if (!detail) return;
@@ -148,7 +230,7 @@ export default function AdvisoryClassDetail() {
         <div className="@container/main flex flex-1 flex-col min-w-0 w-full max-w-full">
           <div className="flex flex-1 flex-col min-w-0 w-full max-w-full">
             <div data-page-tabs-sticky-region>
-              <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
+              <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6">
                 <div className="flex min-w-0 items-center gap-3">
                   <SidebarTrigger className="md:hidden" />
                   <Breadcrumb>
@@ -171,21 +253,156 @@ export default function AdvisoryClassDetail() {
                   </Breadcrumb>
                 </div>
 
-                {tab === "grades" && (
-                  <Button
-                    variant="default"
-                    disabled={isBatchExportingXlsx || !detail.students.length}
-                    onClick={handleExportBatchSF9Xlsx}
-                    className="flex items-center gap-1.5 border-2 border-black bg-primary text-primary-foreground"
-                  >
-                    {isBatchExportingXlsx ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <FileSpreadsheet className="size-3.5" />
-                    )}
-                    <span>{isBatchExportingXlsx ? "Exporting..." : "Export Excel"}</span>
-                  </Button>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {tab === "students" && (
+                    <>
+                      {/* SF9 (PDF) Dropdown Action */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="default"
+                            size="header"
+                            disabled={detail.students.length === 0}
+                            title="Official printable SF9 report cards (PDF)"
+                          >
+                            <FileText className="size-4" />
+                            <span>SF9 (PDF)</span>
+                            <ChevronDown className="size-3.5 opacity-70" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-64 border-2 border-black bg-white shadow-md p-1">
+                          {/* 1. Preview Individual */}
+                          <DropdownMenuItem
+                            disabled={!singleSelectedStudent}
+                            onClick={() => {
+                              if (singleSelectedStudent) {
+                                setPreviewStudent(singleSelectedStudent);
+                              }
+                            }}
+                            className="cursor-pointer gap-2 py-2"
+                          >
+                            <FileText className="size-4 text-muted-foreground shrink-0" />
+                            <div className="flex flex-col text-left">
+                              <span className="font-bold text-xs">Preview Individual</span>
+                              <span className="text-[11px] text-muted-foreground font-normal">
+                                {singleSelectedStudent
+                                  ? singleSelectedStudent.full_name
+                                  : selectedStudentIds.size === 0
+                                    ? "Select exactly 1 student"
+                                    : `Select exactly 1 student (${selectedStudentIds.size} selected)`}
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+
+                          {/* 2. Download Selected */}
+                          <DropdownMenuItem
+                            disabled={selectedStudentIds.size === 0}
+                            onClick={() => {
+                              if (selectedStudentIds.size > 0) {
+                                setBatchPdfModal({ isOpen: true, mode: "selected" });
+                              }
+                            }}
+                            className="cursor-pointer gap-2 py-2"
+                          >
+                            <Download className="size-4 text-muted-foreground shrink-0" />
+                            <div className="flex flex-col text-left">
+                              <span className="font-bold text-xs">Download Selected</span>
+                              <span className="text-[11px] text-muted-foreground font-normal">
+                                {selectedStudentIds.size === 0
+                                  ? "Select at least 1 student"
+                                  : `${selectedStudentIds.size} student${selectedStudentIds.size === 1 ? "" : "s"} (one combined PDF)`}
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+
+                          {/* 3. Download All */}
+                          <DropdownMenuItem
+                            disabled={detail.students.length === 0}
+                            onClick={() => {
+                              setBatchPdfModal({ isOpen: true, mode: "all" });
+                            }}
+                            className="cursor-pointer gap-2 py-2"
+                          >
+                            <Users className="size-4 text-muted-foreground shrink-0" />
+                            <div className="flex flex-col text-left">
+                              <span className="font-bold text-xs">Download All</span>
+                              <span className="text-[11px] text-muted-foreground font-normal">
+                                All {detail.students.length} enrolled students (one combined PDF)
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      {/* SF9 (Excel) Dropdown Action */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="default"
+                            size="header"
+                            disabled={isExportingSF9 || detail.students.length === 0}
+                            title="Export official SF9 Excel workbooks (ZIP)"
+                          >
+                            {isExportingSF9 ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <FileSpreadsheet className="size-4" />
+                            )}
+                            <span>SF9 (Excel)</span>
+                            <ChevronDown className="size-3.5 opacity-70" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-60 border-2 border-black bg-white shadow-md p-1">
+                          <DropdownMenuItem
+                            disabled={isExportingSF9 || detail.students.length === 0}
+                            onClick={() => void handleExportSF9All()}
+                            className="cursor-pointer gap-2 py-2"
+                          >
+                            <Users className="size-4 text-muted-foreground shrink-0" />
+                            <div className="flex flex-col text-left">
+                              <span className="font-bold text-xs">Export All Students</span>
+                              <span className="text-[11px] text-muted-foreground font-normal">
+                                All {detail.students.length} enrolled students (ZIP)
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            disabled={isExportingSF9 || selectedStudentIds.size === 0}
+                            onClick={() => void handleExportSF9Selected()}
+                            className="cursor-pointer gap-2 py-2"
+                          >
+                            <FileSpreadsheet className="size-4 text-muted-foreground shrink-0" />
+                            <div className="flex flex-col text-left">
+                              <span className="font-bold text-xs">Export Selected Students</span>
+                              <span className="text-[11px] text-muted-foreground font-normal">
+                                {selectedStudentIds.size === 0
+                                  ? "Select at least 1 student"
+                                  : `${selectedStudentIds.size} student${selectedStudentIds.size === 1 ? "" : "s"} selected (ZIP)`}
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </>
+                  )}
+
+                  {tab === "grades" && (
+                    <Button
+                      variant="default"
+                      size="header"
+                      disabled={isBatchExportingXlsx || !detail.students.length}
+                      onClick={handleExportBatchSF9Xlsx}
+                    >
+                      {isBatchExportingXlsx ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <FileSpreadsheet className="size-4" />
+                      )}
+                      <span>{isBatchExportingXlsx ? "Exporting..." : "Export Excel"}</span>
+                    </Button>
+                  )}
+                </div>
               </header>
               <div className="px-4 md:px-6 bg-background -mt-[1px]">
                 <Tabs<DetailTab>
@@ -244,13 +461,47 @@ export default function AdvisoryClassDetail() {
               </Card>
 
               {tab === "classes" && <OverviewTab detail={detail} />}
-              {tab === "students" && <StudentsTab detail={detail} />}
+              {tab === "students" && (
+                <StudentsTab
+                  detail={detail}
+                  selectedStudentIds={selectedStudentIds}
+                  setSelectedStudentIds={setSelectedStudentIds}
+                />
+              )}
               {tab === "subjects" && <SubjectLoadTab detail={detail} />}
               {tab === "grades" && <GradesTab classId={detail.class_id} />}
             </div>
           </div>
         </div>
       </div>
+
+      {/* SF9 Individual Preview Modal */}
+      {previewStudent && (
+        <SF9PreviewModal
+          key={previewStudent.student_id}
+          isOpen={Boolean(previewStudent)}
+          onClose={() => setPreviewStudent(null)}
+          classId={detail.class_id}
+          studentId={previewStudent.student_id}
+          studentName={previewStudent.full_name}
+        />
+      )}
+
+      {/* SF9 Combined Batch PDF Download Modal */}
+      {batchPdfModal.isOpen && (
+        <SF9BatchPdfModal
+          isOpen={batchPdfModal.isOpen}
+          onClose={() => setBatchPdfModal({ isOpen: false, mode: "selected" })}
+          classId={detail.class_id}
+          studentIds={
+            batchPdfModal.mode === "selected"
+              ? Array.from(selectedStudentIds)
+              : undefined
+          }
+          mode={batchPdfModal.mode}
+          academicYear={detail.academic_year}
+        />
+      )}
     </AppLayout>
   );
 }
@@ -312,19 +563,16 @@ function OverviewTab({
 
 function StudentsTab({
   detail,
+  selectedStudentIds,
+  setSelectedStudentIds,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
+  selectedStudentIds: Set<string>;
+  setSelectedStudentIds: React.Dispatch<React.SetStateAction<Set<string>>>;
 }) {
   const [search, setSearch] = useState("");
-  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
   const [historyStudent, setHistoryStudent] = useState<TeacherAdvisoryStudentItem | null>(null);
-  const [previewStudent, setPreviewStudent] = useState<TeacherAdvisoryStudentItem | null>(null);
-  const [batchPdfModal, setBatchPdfModal] = useState<{ isOpen: boolean; mode: "selected" | "all" }>({
-    isOpen: false,
-    mode: "selected",
-  });
-  const [isExportingSF9, setIsExportingSF9] = useState(false);
 
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -350,87 +598,19 @@ function StudentsTab({
       }
       return next;
     });
-  }, []);
+  }, [setSelectedStudentIds]);
 
   const handleSelectAll = useCallback(() => {
     setSelectedStudentIds(new Set(allStudentIds));
-  }, [allStudentIds]);
+  }, [allStudentIds, setSelectedStudentIds]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedStudentIds(new Set());
-  }, []);
+  }, [setSelectedStudentIds]);
 
   const selectedStudents = useMemo(() => {
     return detail.students.filter((s) => selectedStudentIds.has(s.student_id));
   }, [detail.students, selectedStudentIds]);
-
-  const singleSelectedStudent = selectedStudents.length === 1 ? selectedStudents[0] : null;
-
-  const handleExportSF9All = async () => {
-    try {
-      setIsExportingSF9(true);
-      toast.info(`Generating official SF9 report card workbooks for all ${detail.students.length} students...`);
-      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(
-        detail.class_id,
-        undefined,
-        "zip",
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.setAttribute("download", filename);
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success("SF9 report cards exported successfully.");
-    } catch (err) {
-      console.error("SF9 export failed:", err);
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Failed to export advisory SF9 report cards.",
-      );
-    } finally {
-      setIsExportingSF9(false);
-    }
-  };
-
-  const handleExportSF9Selected = async () => {
-    if (selectedStudentIds.size === 0) {
-      toast.error("Please select at least one student to export.");
-      return;
-    }
-    try {
-      setIsExportingSF9(true);
-      const targetIds = Array.from(selectedStudentIds);
-      const label = `${targetIds.length} selected student${targetIds.length > 1 ? "s" : ""}`;
-      toast.info(`Generating official SF9 report card workbooks for ${label}...`);
-      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(
-        detail.class_id,
-        targetIds,
-        "zip",
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.setAttribute("download", filename);
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success("SF9 report cards exported successfully.");
-    } catch (err) {
-      console.error("SF9 export failed:", err);
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Failed to export advisory SF9 report cards.",
-      );
-    } finally {
-      setIsExportingSF9(false);
-    }
-  };
 
   return (
     <div className="grid gap-4">
@@ -450,184 +630,20 @@ function StudentsTab({
         />
       </div>
       <section className="space-y-3">
-        {/* Header with Title and Primary Actions */}
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h3 className="text-xl font-bold">Students</h3>
-            <p className="text-xs text-muted-foreground">
-              Select students to suggest material or export official SF9 report cards in batch.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* SF9 (PDF) Dropdown Action */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={detail.students.length === 0}
-                  className="gap-2"
-                  title="Official printable SF9 report cards (PDF)"
-                >
-                  <FileText className="size-4" />
-                  <span>SF9 (PDF)</span>
-                  <ChevronDown className="size-3.5 opacity-70" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 border-2 border-black bg-white shadow-md p-1">
-                {/* 1. Preview Individual */}
-                <DropdownMenuItem
-                  disabled={!singleSelectedStudent}
-                  onClick={() => {
-                    if (singleSelectedStudent) {
-                      setPreviewStudent(singleSelectedStudent);
-                    }
-                  }}
-                  className="cursor-pointer gap-2 py-2"
-                >
-                  <FileText className="size-4 text-muted-foreground shrink-0" />
-                  <div className="flex flex-col text-left">
-                    <span className="font-bold text-xs">Preview Individual</span>
-                    <span className="text-[11px] text-muted-foreground font-normal">
-                      {singleSelectedStudent
-                        ? singleSelectedStudent.full_name
-                        : selectedStudentIds.size === 0
-                        ? "Select exactly 1 student"
-                        : `Select exactly 1 student (${selectedStudentIds.size} selected)`}
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-
-                {/* 2. Download Selected */}
-                <DropdownMenuItem
-                  disabled={selectedStudentIds.size === 0}
-                  onClick={() => {
-                    if (selectedStudentIds.size > 0) {
-                      setBatchPdfModal({ isOpen: true, mode: "selected" });
-                    }
-                  }}
-                  className="cursor-pointer gap-2 py-2"
-                >
-                  <Download className="size-4 text-muted-foreground shrink-0" />
-                  <div className="flex flex-col text-left">
-                    <span className="font-bold text-xs">Download Selected</span>
-                    <span className="text-[11px] text-muted-foreground font-normal">
-                      {selectedStudentIds.size === 0
-                        ? "Select at least 1 student"
-                        : `${selectedStudentIds.size} student${selectedStudentIds.size === 1 ? "" : "s"} (one combined PDF)`}
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-
-                {/* 3. Download All */}
-                <DropdownMenuItem
-                  disabled={detail.students.length === 0}
-                  onClick={() => {
-                    setBatchPdfModal({ isOpen: true, mode: "all" });
-                  }}
-                  className="cursor-pointer gap-2 py-2"
-                >
-                  <Users className="size-4 text-muted-foreground shrink-0" />
-                  <div className="flex flex-col text-left">
-                    <span className="font-bold text-xs">Download All</span>
-                    <span className="text-[11px] text-muted-foreground font-normal">
-                      All {detail.students.length} enrolled students (one combined PDF)
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* SF9 (Excel) Dropdown Action */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isExportingSF9 || detail.students.length === 0}
-                  className="gap-2"
-                  title="Export official SF9 Excel workbooks (ZIP)"
-                >
-                  {isExportingSF9 ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <FileSpreadsheet className="size-4" />
-                  )}
-                  <span>SF9 (Excel)</span>
-                  <ChevronDown className="size-3.5 opacity-70" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60 border-2 border-black bg-white shadow-md p-1">
-                <DropdownMenuItem
-                  disabled={isExportingSF9 || detail.students.length === 0}
-                  onClick={() => void handleExportSF9All()}
-                  className="cursor-pointer gap-2 py-2"
-                >
-                  <Users className="size-4 text-muted-foreground shrink-0" />
-                  <div className="flex flex-col text-left">
-                    <span className="font-bold text-xs">Export All Students</span>
-                    <span className="text-[11px] text-muted-foreground font-normal">
-                      All {detail.students.length} enrolled students (ZIP)
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-
-                <DropdownMenuItem
-                  disabled={isExportingSF9 || selectedStudentIds.size === 0}
-                  onClick={() => void handleExportSF9Selected()}
-                  className="cursor-pointer gap-2 py-2"
-                >
-                  <FileSpreadsheet className="size-4 text-muted-foreground shrink-0" />
-                  <div className="flex flex-col text-left">
-                    <span className="font-bold text-xs">Export Selected Students</span>
-                    <span className="text-[11px] text-muted-foreground font-normal">
-                      {selectedStudentIds.size === 0
-                        ? "Select at least 1 student"
-                        : `${selectedStudentIds.size} student${selectedStudentIds.size === 1 ? "" : "s"} selected (ZIP)`}
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Header Bulk Suggest Material Action */}
-            <Button
-              variant="default"
-              size="sm"
-              disabled={selectedStudentIds.size === 0}
-              onClick={() => setIsSuggestModalOpen(true)}
-              className="gap-2"
-              title={
-                selectedStudentIds.size === 0
-                  ? "Select one or more students below to suggest study material"
-                  : `Suggest material to ${selectedStudentIds.size} selected student${selectedStudentIds.size > 1 ? "s" : ""}`
-              }
-            >
-              <Lightbulb className="size-4" />
-              <span>Suggest Material</span>
-              {selectedStudentIds.size > 0 && (
-                <span className="rounded bg-primary-foreground/20 px-1.5 py-0.5 text-[11px] font-bold">
-                  {selectedStudentIds.size}
-                </span>
-              )}
-            </Button>
-          </div>
-        </div>
-
         {/* Toolbar with Selection and Search Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-card p-2 text-sm shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-2">
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
+              autoIcon={false}
               onClick={isAllSelected ? handleClearSelection : handleSelectAll}
-              className="h-8 text-xs font-bold gap-1.5"
+              className="h-8 gap-1.5"
             >
               <span
                 aria-hidden="true"
-                className={`size-3.5 rounded-xs border border-black flex items-center justify-center shrink-0 ${
-                  isAllSelected ? "bg-primary text-primary-foreground" : "bg-background"
-                }`}
+                className={`size-3.5 rounded-xs border border-black flex items-center justify-center shrink-0 ${isAllSelected ? "bg-primary text-primary-foreground" : "bg-background"
+                  }`}
               >
                 {isAllSelected && <Check className="size-2.5 stroke-[3]" />}
               </span>
@@ -651,13 +667,13 @@ function StudentsTab({
             )}
           </div>
 
-          <label className="relative w-full sm:w-64">
+          <label className="relative w-full sm:w-84">
             <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search students..."
-              className="h-8 w-full border-border pl-8 pr-3 text-xs"
+              className="h-10 w-full border-border pl-8 pr-3 text-sm"
             />
           </label>
         </div>
@@ -731,34 +747,6 @@ function StudentsTab({
           onClose={() => setHistoryStudent(null)}
           classId={detail.class_id}
           student={historyStudent}
-        />
-      )}
-
-      {/* SF9 Individual Preview Modal */}
-      {previewStudent && (
-        <SF9PreviewModal
-          key={previewStudent.student_id}
-          isOpen={Boolean(previewStudent)}
-          onClose={() => setPreviewStudent(null)}
-          classId={detail.class_id}
-          studentId={previewStudent.student_id}
-          studentName={previewStudent.full_name}
-        />
-      )}
-
-      {/* SF9 Combined Batch PDF Download Modal */}
-      {batchPdfModal.isOpen && (
-        <SF9BatchPdfModal
-          isOpen={batchPdfModal.isOpen}
-          onClose={() => setBatchPdfModal({ isOpen: false, mode: "selected" })}
-          classId={detail.class_id}
-          studentIds={
-            batchPdfModal.mode === "selected"
-              ? Array.from(selectedStudentIds)
-              : undefined
-          }
-          mode={batchPdfModal.mode}
-          academicYear={detail.academic_year}
         />
       )}
     </div>
@@ -1162,9 +1150,8 @@ function StudentRow({
 }) {
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-sm transition-colors last:border-b-0 ${
-        isSelected ? "bg-primary/5" : "bg-background hover:bg-muted/40"
-      }`}
+      className={`flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-sm transition-colors last:border-b-0 ${isSelected ? "bg-primary/5" : "bg-background hover:bg-muted/40"
+        }`}
     >
       <div className="flex min-w-0 items-center gap-3">
         <Checkbox

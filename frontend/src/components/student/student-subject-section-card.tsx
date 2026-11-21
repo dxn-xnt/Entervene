@@ -1,110 +1,21 @@
-import { Link } from "react-router-dom";
-import { Avatar } from "@/components/retroui/Avatar";
-import { Badge } from "@/components/retroui/Badge";
-import { Card } from "@/components/retroui/Card";
-import { Progress } from "@/components/retroui/Progress";
-import { StudentEmptyState } from "@/components/student/student-empty-state";
-import { BookOpen, CheckCircle2, UserRound } from "lucide-react";
+import { SubjectCard, type SubjectCardProps } from "@/components/subject-card";
 import type { TodoItem } from "@/lib/api";
 
-type StudentSubjectSectionCardProps = {
-  to: string;
-  subjectName: string;
-  sectionName: string;
-  teacherName: string;
+export type StudentSubjectSectionCardProps = {
+  to?: string;
+  subjectName?: string;
+  sectionName?: string;
+  teacherName?: string;
   teacherAvatar?: string | null;
-  classworks: TodoItem[] | null;
-};
+  classworks?: TodoItem[] | null;
+  pendingCount?: number;
+  completionRate?: number;
+  latestActivityTitle?: string;
+  latestActivityDue?: string;
+  onClick?: () => void;
+  className?: string;
+} & Omit<SubjectCardProps, "variant">;
 
-export function StudentSubjectSectionCard({
-  to,
-  subjectName,
-  sectionName,
-  teacherName,
-  teacherAvatar,
-  classworks,
-}: StudentSubjectSectionCardProps) {
-  const completedCount = classworks?.filter((item) => item.status === "completed").length ?? 0;
-  const completionRate = classworks?.length
-    ? Math.round((completedCount / classworks.length) * 100)
-    : 0;
-  const pendingCount = classworks?.filter(
-    (item) => !item.is_submitted && item.status !== "completed",
-  ).length ?? 0;
-  const nextClasswork = classworks
-    ?.filter((item) => item.status !== "completed")
-    .sort((a, b) => {
-      const dueA = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-      const dueB = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-      return dueA - dueB;
-    })[0];
-
-  return (
-    <Link
-      to={to}
-      aria-label={`Open ${sectionName}, taught by ${teacherName}`}
-      className="group block min-w-[240px] flex-1 text-foreground no-underline outline-offset-4 focus-visible:outline-3 focus-visible:outline-ring"
-    >
-      <Card
-        variant="retro"
-        className="relative flex h-full min-w-0 cursor-pointer flex-col gap-3 border-black p-3.5 pt-4 shadow-md shadow-black transition-all hover:bg-retro hover:shadow-none group-focus-visible:bg-retro"
-      >
-        <div className="flex min-w-0 items-start gap-3">
-          <Avatar variant="teacher" className="size-14 shrink-0 rounded-full border-2 border-black">
-            <Avatar.Image src={teacherAvatar || "/avatars/teacher-avatars/12.svg"} alt="" />
-            <Avatar.Fallback className="rounded-full bg-primary text-base font-bold text-primary-foreground">
-              <UserRound className="size-7" />
-            </Avatar.Fallback>
-          </Avatar>
-          <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-            <div className="flex w-full flex-row gap-2 items-center justify-between">
-              <Card.Title className="min-w-0 break-words text-2xl font-bold leading-tight">
-                {subjectName}
-              </Card.Title>
-              {pendingCount > 0 && (
-                <Badge size="sm" variant="default" className="shrink-0">
-                  {pendingCount} Pending
-                </Badge>
-              )}
-            </div>
-            <span className="min-w-0 break-words text-sm text-muted-foreground">{teacherName}</span>
-          </div>
-        </div>
-
-        <div className="flex w-full flex-col gap-1">
-          <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="text-muted-foreground">Classwork Completion</span>
-            <span className="font-bold">{completionRate}%</span>
-          </div>
-          <Progress className="w-full" value={completionRate} />
-        </div>
-
-        {nextClasswork ? (
-          <Card className="flex min-h-[72px] w-full min-w-0 flex-col justify-center gap-2 border-black bg-primary px-3 py-2 shadow-none hover:shadow-none transition-opacity hover:opacity-95">
-            <p className="break-words text-base font-semibold">
-              {nextClasswork.title}
-            </p>
-            {nextClasswork.deadline && (
-              <Badge size="sm" variant="solid" className="self-start">
-                {nextClasswork.deadline}
-              </Badge>
-            )}
-          </Card>
-        ) : (
-          <StudentEmptyState
-            icon={classworks && classworks.length > 0 ? <CheckCircle2 /> : <BookOpen />}
-            title={classworks && classworks.length > 0 ? "All caught up" : "No classwork yet"}
-            description={
-              classworks && classworks.length > 0
-                ? "No pending classwork right now."
-                : "Assigned classwork will appear here."
-            }
-            embedded
-            compact
-            className="min-h-[72px] py-2 shadow-none hover:shadow-none"
-          />
-        )}
-      </Card>
-    </Link>
-  );
+export function StudentSubjectSectionCard(props: StudentSubjectSectionCardProps) {
+  return <SubjectCard variant="student" {...props} />;
 }

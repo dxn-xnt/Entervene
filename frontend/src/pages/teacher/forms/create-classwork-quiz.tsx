@@ -1250,6 +1250,7 @@ export default function CreateClassworkQuizModal({
       status: draft.is_published ? "PUBLISHED" : "DRAFT",
       settings: {
         is_shuffle_questions: quizSettings.is_shuffle_questions,
+        is_shuffle_options: quizSettings.is_shuffle_options,
         enable_per_question_scoring: quizSettings.enable_per_question_scoring,
         enable_per_question_time_limits:
           quizSettings.enable_per_question_time_limits,

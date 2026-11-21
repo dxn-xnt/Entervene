@@ -47,7 +47,7 @@ export function formatResourceScopeBadgeLabel(
     case "THIS_STUDENT":
       return "This student";
     case "ENTIRE_CLASS":
-      return "Entire class";
+      return null;
     case "ALL_SUBJECT_STUDENTS":
       return "All subject sections";
     case "UNASSIGNED":

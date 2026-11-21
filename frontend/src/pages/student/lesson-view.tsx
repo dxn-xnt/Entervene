@@ -211,7 +211,8 @@ export function LessonView({
                 >
                   <MasteryIcon
                     aria-hidden="true"
-                    className={cn("size-8 transition-colors", mastery.colorClass)}
+                    fill={mastery.fillColor}
+                    className="size-8 stroke-black stroke-[2] [&_path]:fill-none"
                   />
                   <p className={cn("text-base font-bold text-center", mastery.colorClass)}>
                     {mastery.percentage !== null
