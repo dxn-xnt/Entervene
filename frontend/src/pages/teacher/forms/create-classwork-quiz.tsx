@@ -2555,8 +2555,23 @@ export default function CreateClassworkQuizModal({
                     </Select>
                   </Field>
 
-                  {quizSettings.summary_release_mode === "SCHEDULED" ? (
-                    <Field label="Release Date & Time" isRequired>
+                  <Field label="Locked Until">
+                    <DatePicker
+                      includeTime
+                      value={draft.lock_date}
+                      onValueChange={(value) =>
+                        setDraft((current) => ({
+                          ...current,
+                          lock_date: value,
+                        }))
+                      }
+                      disabled={isCreating || !draft.is_published}
+                      className="w-full rounded shadow-none disabled:bg-gray-100 disabled:opacity-55"
+                    />
+                  </Field>
+
+                  {quizSettings.summary_release_mode === "SCHEDULED" && (
+                    <Field label="Release Date & Time" isRequired className="sm:col-span-2">
                       <DatePicker
                         includeTime
                         value={quizSettings.summary_release_at}
@@ -2570,16 +2585,6 @@ export default function CreateClassworkQuizModal({
                         className="w-full bg-white border-2 border-black rounded shadow-none"
                       />
                     </Field>
-                  ) : (
-                    <div className="flex flex-col justify-end">
-                      <div className="rounded! border-2 border-dashed border-gray-300 px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
-                        {quizSettings.summary_release_mode === "AFTER_DUE_DATE"
-                          ? "Summary unlocks automatically after the due date."
-                          : quizSettings.summary_release_mode === "NEVER"
-                            ? "Students can see their score, but not the answer summary."
-                            : "Students can view the summary right after submitting."}
-                      </div>
-                    </div>
                   )}
                   {quizSettings.summary_release_mode === "AFTER_DUE_DATE" &&
                     !draft.due_date && (
@@ -2588,53 +2593,6 @@ export default function CreateClassworkQuizModal({
                         release mode takes effect.
                       </p>
                     )}
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  {[
-                    {
-                      key: "is_shuffle_questions",
-                      label: "Shuffle questions",
-                    },
-                    {
-                      key: "enable_per_question_scoring",
-                      label: "Enable per-question scoring",
-                    },
-                    {
-                      key: "enable_per_question_time_limits",
-                      label: "Enable individual question time limits",
-                    },
-                  ].map((setting) => {
-                    const key = setting.key as keyof Pick<
-                      QuizSettingsDraft,
-                      | "is_shuffle_questions"
-                      | "enable_per_question_scoring"
-                      | "enable_per_question_time_limits"
-                    >;
-                    const enabled = quizSettings[key];
-                    return (
-                      <button
-                        key={setting.key}
-                        type="button"
-                        onClick={() =>
-                          setQuizSettings((current) => ({
-                            ...current,
-                            [key]: !current[key],
-                          }))
-                        }
-                        disabled={isCreating}
-                        className="flex items-center justify-between rounded! border-2 border-black bg-white px-3 py-2 text-left text-xs font-bold shadow-none! cursor-pointer transition active:translate-y-0.5"
-                      >
-                        <span>{setting.label}</span>
-                        <span
-                          className={`rounded border border-black px-2 py-0.5 text-[10px] ${enabled ? "bg-[#7ABA78]" : "bg-gray-100"
-                            }`}
-                        >
-                          {enabled ? "On" : "Off"}
-                        </span>
-                      </button>
-                    );
-                  })}
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -2788,47 +2746,30 @@ export default function CreateClassworkQuizModal({
                   )}
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 mt-4">
-                  <Field label="Locked Until">
-                    <DatePicker
-                      includeTime
-                      value={draft.lock_date}
-                      onValueChange={(value) =>
-                        setDraft((current) => ({
-                          ...current,
-                          lock_date: value,
-                        }))
-                      }
-                      disabled={isCreating || !draft.is_published}
-                      className="w-full rounded shadow-none disabled:bg-gray-100 disabled:opacity-55"
-                    />
-                  </Field>
-
-                  {draft.due_date && (
-                    <div className="flex items-center pt-5">
-                      <label className="flex items-start gap-3 rounded border-2 border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold shadow-md cursor-pointer select-none">
-                        <Checkbox
-                          size="sm"
-                          checked={draft.allow_late_submissions}
-                          onCheckedChange={(checked) =>
-                            setDraft((current) => ({
-                              ...current,
-                              allow_late_submissions: Boolean(checked),
-                            }))
-                          }
-                          disabled={isCreating}
-                          className="mt-0.5"
-                        />
-                        <span>
-                          Allow late submissions
-                          <span className="block font-medium text-gray-700 text-[10px]">
-                            Accepted work after due date is marked late.
-                          </span>
+                {draft.due_date && (
+                  <div className="mt-4">
+                    <label className="inline-flex items-start gap-3 rounded border-2 border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold shadow-md cursor-pointer select-none">
+                      <Checkbox
+                        size="sm"
+                        checked={draft.allow_late_submissions}
+                        onCheckedChange={(checked) =>
+                          setDraft((current) => ({
+                            ...current,
+                            allow_late_submissions: Boolean(checked),
+                          }))
+                        }
+                        disabled={isCreating}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Allow late submissions
+                        <span className="block font-medium text-gray-700 text-[10px]">
+                          Accepted work after due date is marked late.
                         </span>
-                      </label>
-                    </div>
-                  )}
-                </div>
+                      </span>
+                    </label>
+                  </div>
+                )}
 
                 <Field label="Assign to sections" isRequired>
                   {selectedSubjectLoads.length > 0 && (
