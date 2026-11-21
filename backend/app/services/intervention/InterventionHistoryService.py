@@ -7,9 +7,11 @@ from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTer
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.intervention.InterventionSupportMaterial import InterventionSupportMaterial
+from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.grading.RemedialExamination import effective_exam_score_for_change
+from app.services.quiz.QuizResultsReleasePolicy import quiz_results_are_visible
 from app.services.intervention.RemediationPostGradingService import (
     ActualRemediationPredictionEvaluation,
     STATUS_AVAILABLE,
@@ -132,6 +134,29 @@ def resolution_projection(
     return value
 
 
+def _activity_score_visible(
+    db: Session,
+    assignment: ClassworkAssignment,
+    work,
+    submission: StudentSubmission | None,
+    *,
+    student_view: bool,
+) -> bool:
+    if not student_view:
+        return True
+    if work is None:
+        return False
+    if (work.classwork_type or "").strip().upper() == "QUIZ":
+        setting = db.query(QuizSetting).filter_by(classwork_id=work.classwork_id).first()
+        return quiz_results_are_visible(
+            work,
+            setting,
+            assignment,
+            submission_status=submission.status if submission else None,
+        )
+    return bool(work.show_scores)
+
+
 def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -> list[dict]:
     assignments = db.query(ClassworkAssignment).filter_by(
         source_intervention_id=row.intervention_id, recipient_student_id=row.student_id,
@@ -144,21 +169,30 @@ def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -
         work = assignment.classwork
         if not submission and (not assignment.is_published or not work.is_published or work.is_archived):
             continue
-        visible_score = not student_view or work.show_scores
+        visible_score = _activity_score_visible(
+            db, assignment, work, submission, student_view=student_view,
+        )
         original_assignment_id = assignment.original_exam_assignment_id
         original = db.get(ClassworkAssignment, original_assignment_id) if original_assignment_id else None
         original_submission = db.query(StudentSubmission).filter_by(
             classwork_assignment_id=original.classwork_assignment_id, student_id=row.student_id,
         ).order_by(StudentSubmission.submission_id.desc()).first() if original else None
+        original_visible_score = (
+            _activity_score_visible(
+                db, original, original.classwork, original_submission, student_view=student_view,
+            )
+            if original
+            else visible_score
+        )
         original_grade = (
             float(original_submission.grade)
-            if original_submission and original_submission.grade is not None and visible_score
+            if original_submission and original_submission.grade is not None and visible_score and original_visible_score
             else None
         )
         rem_grade = float(submission.grade) if submission and submission.grade is not None else None
         effective_grade = (
             effective_exam_score_for_change(db, assignment, row.student_id, rem_grade)
-            if original and visible_score
+            if original and visible_score and original_visible_score
             else None
         )
         exam_subtype = work.exam_subtype if original else None
@@ -173,13 +207,20 @@ def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -
                 original_submission = db.query(StudentSubmission).filter_by(
                     classwork_assignment_id=link.original_assignment_id, student_id=row.student_id,
                 ).order_by(StudentSubmission.submission_id.desc()).first() if original else None
+                original_visible_score = (
+                    _activity_score_visible(
+                        db, original, original.classwork, original_submission, student_view=student_view,
+                    )
+                    if original
+                    else visible_score
+                )
                 raw_orig = (
                     float(original_submission.grade)
                     if original_submission and original_submission.grade is not None
                     else None
                 )
-                original_grade = raw_orig if visible_score else None
-                if visible_score and raw_orig is not None:
+                original_grade = raw_orig if (visible_score and original_visible_score) else None
+                if visible_score and original_visible_score and raw_orig is not None:
                     if rem_grade is not None and original and original.classwork and original.classwork.total_points:
                         from app.services.grading.RemediationScoreAdjuster import adjust_remediation_score
                         adj = adjust_remediation_score(

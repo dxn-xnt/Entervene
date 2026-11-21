@@ -23,9 +23,12 @@ vi.mock("@/components/ui/sidebar", () => ({
   SidebarTrigger: () => <button type="button" aria-label="Toggle sidebar" />,
 }));
 
-function renderQuizResult() {
+function renderQuizResult(submittedAttempt?: Record<string, unknown>) {
   return render(
-    <MemoryRouter initialEntries={["/student/quiz/42/result"]}>
+    <MemoryRouter initialEntries={[{
+      pathname: "/student/quiz/42/result",
+      state: submittedAttempt ? { submittedAttempt } : undefined,
+    }]}>
       <Routes>
         <Route path="/student/quiz/:assignmentId/result" element={<QuizResult />} />
       </Routes>
@@ -192,5 +195,60 @@ describe("QuizResult Study Support stop-after-pass behavior", () => {
     expect(screen.getByText("Answer Recorded (1 pts)")).toBeTruthy();
     expect(screen.queryByText("Grading in Progress")).toBeNull();
     expect(screen.queryByText(/Pending Teacher Review/i)).toBeNull();
+  });
+
+  it("hides all grading outcomes and answer breakdowns when quiz results are disabled", async () => {
+    getQuizAttemptMock.mockResolvedValue({
+      quiz_id: 9,
+      classwork_assignment_id: 42,
+      classwork_id: 100,
+      title: "Hidden Results Quiz",
+      total_points: 1,
+      max_attempts: 1,
+      attempt_count: 1,
+      attempts_used: 1,
+      attempts_remaining: 0,
+      status: "graded",
+      grade: null,
+      can_submit: false,
+      show_scores: false,
+      summary_available: true,
+      summary_release_mode: "IMMEDIATE",
+      questions: [
+        {
+          quiz_question_id: 1,
+          question_text: "Which option is correct?",
+          question_type: "MULTIPLE_CHOICE",
+          points: 1,
+          display_order: 1,
+          options: [
+            { option_id: 11, option_text: "Secret answer", option_order: 1, is_correct: true },
+            { option_id: 12, option_text: "Student choice", option_order: 2, is_correct: false },
+          ],
+          selected_option_id: 12,
+          answer_text: "Student choice",
+          points_awarded: 0,
+          is_correct: false,
+          explanation: "Private answer explanation",
+        },
+      ],
+    });
+
+    renderQuizResult({
+      classwork_assignment_id: 42,
+      show_scores: true,
+      grade: 1,
+      questions: [{ is_correct: true, points_awarded: 1 }],
+    });
+
+    expect(await screen.findByText("Score Hidden")).toBeTruthy();
+    expect(getQuizAttemptMock).toHaveBeenCalledWith(42);
+    expect(screen.getByText("Submission recorded")).toBeTruthy();
+    expect(screen.queryByText(/Show incorrect only/i)).toBeNull();
+    expect(screen.queryByText("Question Breakdown")).toBeNull();
+    expect(screen.queryByText("Secret answer")).toBeNull();
+    expect(screen.queryByText("Student choice")).toBeNull();
+    expect(screen.queryByText("Private answer explanation")).toBeNull();
+    expect(document.body.textContent).not.toContain("0 / 1 pts");
   });
 });

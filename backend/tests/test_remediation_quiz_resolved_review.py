@@ -7,6 +7,7 @@ from app.models.intervention.Intervention import Intervention
 from app.models.quiz.Question import Question
 from app.models.quiz.QuestionOption import QuestionOption
 from app.models.quiz.QuizQuestion import QuizQuestion
+from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.intervention.RemediationReadingPrerequisiteService import (
     ReadingPrerequisiteSnapshotItem,
@@ -27,6 +28,11 @@ def _setup_two_question_remedial_quiz(c, intervention_id: int = 3101):
     intervention = _create_active_intervention(c, intervention_id)
     reading_cw, reading_as, _ = _create_reading(c, "Required Algebra Reading")
     quiz_cw, quiz_as, quiz = _create_remedial_quiz(c, intervention, title="Remediation Quiz 1")
+    setting = c["db"].query(QuizSetting).filter_by(
+        classwork_id=quiz_cw.classwork_id,
+    ).one()
+    setting.show_correct_answers = True
+    setting.summary_release_mode = "IMMEDIATE"
 
     # Adjust first question to 7 points and add a 3-point second question (total 10).
     first_link = c["db"].query(QuizQuestion).filter_by(quiz_id=quiz.quiz_id).one()

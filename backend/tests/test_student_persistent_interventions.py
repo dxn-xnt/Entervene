@@ -1,6 +1,6 @@
 """Student-safe persistent Intervention reads alongside the legacy suggestions."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -19,6 +19,7 @@ from app.models.intervention.InterventionReadingReview import InterventionReadin
 from app.models.intervention.InterventionSupportMaterial import InterventionSupportMaterial
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.quiz.QuizSetting import QuizSetting
 from app.models.suggestion.StudentSuggestion import StudentSuggestion
 from app.services.intervention.InterventionSupportMaterialService import create_material
 from app.services.intervention.TeacherInterventionService import activate_teacher_candidate
@@ -58,6 +59,12 @@ def test_exact_student_sees_only_active_safe_support(candidate_context):
                      created_by_staff_id=_staff(ctx), is_published=True, total_points=Decimal("10"))
     db.add(work)
     db.flush()
+    setting = QuizSetting(
+        classwork_id=work.classwork_id,
+        show_correct_answers=True,
+        summary_release_mode="IMMEDIATE",
+    )
+    db.add(setting)
     assignment = ClassworkAssignment(classwork_id=work.classwork_id, class_id=ctx["class"].class_id,
         academic_period_id=ctx["period"].academic_period_id, assigned_by_staff_id=_staff(ctx), is_published=True,
         recipient_student_id=ctx["student"].student_id, source_intervention_id=_id(ctx), remediation_request_id=uuid4())
@@ -83,6 +90,14 @@ def test_exact_student_sees_only_active_safe_support(candidate_context):
     assert classmate.get("/student/interventions").json()["items"] == []
     assert classmate.get(path).status_code == 404
     assert _client(ctx, ctx["staff"].user_id, "teacher").get(path).status_code == 403
+
+    setting.summary_release_mode = "SCHEDULED"
+    setting.summary_release_at = datetime.now(timezone.utc) + timedelta(days=1)
+    db.commit()
+    hidden_activity = own.get(path).json()["activities"][0]
+    assert hidden_activity["grade"] is None
+    assert hidden_activity["total_points"] is None
+    assert hidden_activity["is_passed"] is False
 
     material = db.get(InterventionSupportMaterial, draft.material_id)
     material.status = "SENT"
