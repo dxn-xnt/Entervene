@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingPanel } from "@/components/loading-panel";
+import { Alert } from "@/components/retroui/Alert";
 import {
   Empty,
   EmptyHeader,
@@ -67,6 +68,16 @@ import {
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import "./attendance.css";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
+import {
+  classifyAttendanceSaveError,
+  getAttendanceDateIssue,
+  getLocalIsoDate,
+  isPeriodEndedBeforeDate,
+  resolveInitialAttendanceDateForPeriod,
+} from "./attendance-utils";
+
+const ATTENDANCE_CSV_EXPORT_TOAST_ID = "attendance-csv-export";
+const ATTENDANCE_SAVE_TOAST_ID = "attendance-save";
 
 type StudentInfo = {
   student_id: string;
@@ -167,11 +178,30 @@ export default function TeacherAttendancePage() {
   }, [selectedYear, selectedPeriod]);
 
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>("");
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0],
+  const [selectedDate, setSelectedDate] = useState<string>(() =>
+    getLocalIsoDate(),
   );
   const [activeTab, setActiveTab] = useState<"marking" | "summary" | "scan">(
     "marking",
+  );
+
+  // Keep selectedDate within the authoritative selected academic period when period loads/changes.
+  // Never silently preselect an old historical date when today is outside the selected period.
+  useEffect(() => {
+    if (!selectedPeriod) return;
+    setSelectedDate((current) =>
+      resolveInitialAttendanceDateForPeriod(current, selectedPeriod),
+    );
+  }, [selectedPeriod]);
+
+  const isPeriodPastDates = useMemo(
+    () => isPeriodEndedBeforeDate(selectedPeriod),
+    [selectedPeriod],
+  );
+
+  const dateIssue = useMemo(
+    () => getAttendanceDateIssue(selectedDate, selectedPeriod),
+    [selectedDate, selectedPeriod],
   );
 
   // Automatically switch away from live scanner tab if in historical read-only mode
@@ -218,8 +248,10 @@ export default function TeacherAttendancePage() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const logsRequestIdRef = useRef(0);
   const [saving, setSaving] = useState(false);
+  const saveInFlightRef = useRef(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const exportInFlightRef = useRef(false);
 
   // Compute Attendance Targets from scoped teaching and advisory classes
   const targets = useMemo<AttendanceTarget[]>(() => {
@@ -261,7 +293,7 @@ export default function TeacherAttendancePage() {
 
   // Compute if current student marks differ from saved baseline
   const isDirty = useMemo(() => {
-    if (isReadOnly) return false;
+    if (isReadOnly || !selectedDate) return false;
     if (studentList.length === 0 || initialMarksRef.current.size === 0)
       return false;
     return studentList.some((s) => {
@@ -395,7 +427,13 @@ export default function TeacherAttendancePage() {
 
         const logMap = new Map(
           fullLogs
-            .filter((l) => l.date === selectedDate)
+            .filter(
+              (l) =>
+                l.date === selectedDate &&
+                (selectedSubjectId !== undefined
+                  ? l.subject_id === selectedSubjectId
+                  : l.subject_id == null),
+            )
             .map((l) => [l.student_id, l]),
         );
 
@@ -480,10 +518,21 @@ export default function TeacherAttendancePage() {
 
   // Save Batch Attendance
   const handleSaveAttendance = async () => {
-    if (isReadOnly || !selectedClassId) return;
+    if (isReadOnly || !selectedClassId || saveInFlightRef.current || saving) {
+      return;
+    }
+    if (dateIssue) {
+      toast.error("Cannot save attendance", {
+        id: ATTENDANCE_SAVE_TOAST_ID,
+        description: dateIssue.message,
+      });
+      return;
+    }
+
+    saveInFlightRef.current = true;
+    setSaving(true);
     try {
-      setSaving(true);
-      await recordBatchAttendance({
+      const savedRecords = await recordBatchAttendance({
         class_id: selectedClassId,
         subject_id: selectedSubjectId,
         academic_period_id: selectedAcademicPeriodId,
@@ -505,28 +554,56 @@ export default function TeacherAttendancePage() {
       );
       setAllClassLogs(fullLogs);
 
-      setSaveSuccess(true);
+      const savedByStudent = new Map(
+        savedRecords.map((r) => [r.student_id, r]),
+      );
+      const syncedStudents = studentList.map((s) => {
+        const persisted = savedByStudent.get(s.student_id);
+        if (!persisted) return s;
+        return {
+          ...s,
+          status: persisted.status,
+          remarks: persisted.remarks ?? "",
+        };
+      });
+      setStudentList(syncedStudents);
       initialMarksRef.current = new Map(
-        studentList.map((s) => [
+        syncedStudents.map((s) => [
           s.student_id,
           { status: s.status, remarks: s.remarks },
         ]),
       );
+
+      setSaveSuccess(true);
+      toast.success("Attendance log saved.", {
+        id: ATTENDANCE_SAVE_TOAST_ID,
+        description: `${syncedStudents.length} student record${syncedStudents.length === 1 ? "" : "s"} saved for ${selectedDate}.`,
+      });
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error("Failed to save attendance:", err);
-      alert("Error saving attendance records.");
+      const classified = classifyAttendanceSaveError(err);
+      toast.error(classified.title, {
+        id: ATTENDANCE_SAVE_TOAST_ID,
+        description: classified.description,
+      });
     } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
     }
   };
 
   // Export Class Attendance CSV
   const handleExportCsv = async () => {
-    if (!selectedClassId) return;
+    if (!selectedClassId || exportInFlightRef.current || isExporting) return;
+
+    exportInFlightRef.current = true;
+    setIsExporting(true);
+    const toastId = toast.loading("Preparing attendance CSV export...", {
+      id: ATTENDANCE_CSV_EXPORT_TOAST_ID,
+    });
+
     try {
-      setIsExporting(true);
-      toast.info("Preparing attendance CSV export...");
       const { blob, filename } = await exportClassAttendanceCSV(
         selectedClassId,
         {
@@ -536,20 +613,28 @@ export default function TeacherAttendancePage() {
         },
       );
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast.success("Attendance CSV downloaded successfully.");
+      try {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      toast.success("Attendance CSV download started.", {
+        id: toastId,
+        description: `Your browser should begin downloading ${filename}.`,
+      });
     } catch (err) {
       console.error("Export attendance CSV error:", err);
       toast.error(
         err instanceof Error ? err.message : "Failed to export attendance CSV.",
+        { id: toastId },
       );
     } finally {
+      exportInFlightRef.current = false;
       setIsExporting(false);
     }
   };
@@ -927,7 +1012,7 @@ export default function TeacherAttendancePage() {
                     <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
                       Attendance
                     </h1>
-                    {isReadOnly && (
+                    {isReadOnly ? (
                       <Badge
                         variant="surface"
                         size="sm"
@@ -935,7 +1020,15 @@ export default function TeacherAttendancePage() {
                       >
                         Historical · Read-Only
                       </Badge>
-                    )}
+                    ) : isPeriodPastDates ? (
+                      <Badge
+                        variant="surface"
+                        size="sm"
+                        className="font-semibold"
+                      >
+                        Past Term Dates
+                      </Badge>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1112,7 +1205,16 @@ export default function TeacherAttendancePage() {
                       <DatePicker
                         aria-label="Attendance date"
                         value={selectedDate}
-                        onValueChange={(value) => setSelectedDate(value)}
+                        min={selectedPeriod?.startDate ?? undefined}
+                        max={selectedPeriod?.endDate ?? undefined}
+                        required
+                        aria-invalid={dateIssue?.severity === "error"}
+                        aria-describedby={
+                          dateIssue ? "attendance-date-error" : undefined
+                        }
+                        onValueChange={(value) => {
+                          if (value) setSelectedDate(value);
+                        }}
                       />
                     </div>
 
@@ -1135,14 +1237,33 @@ export default function TeacherAttendancePage() {
                     </div>
                   </div>
 
+                  {dateIssue && !isReadOnly && (
+                    <Alert
+                      id="attendance-date-error"
+                      status={dateIssue.severity}
+                      className="py-2.5 px-4 text-xs font-semibold flex items-center gap-2"
+                    >
+                      <AlertTriangle className="size-4 shrink-0" />
+                      <span>{dateIssue.message}</span>
+                    </Alert>
+                  )}
+
                   {isReadOnly && (
-                    <div className="rounded border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-900 flex items-center gap-2">
-                      <AlertTriangle className="size-4 shrink-0 text-amber-700" />
+                    <Alert
+                      status="warning"
+                      className="py-2.5 px-4 text-xs font-semibold flex items-center gap-2"
+                    >
+                      <AlertTriangle className="size-4 shrink-0" />
                       <span>
                         Historical academic period: Attendance records are
                         viewable in read-only mode.
+                        {!selectedDate &&
+                        selectedPeriod?.startDate &&
+                        selectedPeriod?.endDate
+                          ? ` Select a date between ${selectedPeriod.startDate} and ${selectedPeriod.endDate} to inspect a specific day.`
+                          : ""}
                       </span>
-                    </div>
+                    </Alert>
                   )}
 
                   <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none shadow-md hover:shadow-none">
@@ -1175,7 +1296,10 @@ export default function TeacherAttendancePage() {
                         size="sm"
                         onClick={handleSaveAttendance}
                         disabled={
-                          isReadOnly || saving || studentList.length === 0
+                          isReadOnly ||
+                          saving ||
+                          studentList.length === 0 ||
+                          Boolean(dateIssue)
                         }
                         className="flex w-full items-center justify-center gap-2 shadow-none sm:w-auto"
                       >
@@ -1420,12 +1544,17 @@ export default function TeacherAttendancePage() {
                           {selectedTarget?.label || "Select a class"}
                         </strong>
                         <span>
-                          {selectedDate} · {studentList.length} students
+                          {selectedDate || "Select a date"} ·{" "}
+                          {studentList.length} students
                         </span>
                       </div>
                       <Button
                         onClick={handleSaveAttendance}
-                        disabled={saving || studentList.length === 0}
+                        disabled={
+                          saving ||
+                          studentList.length === 0 ||
+                          Boolean(dateIssue)
+                        }
                         className="w-full gap-2 shadow-none"
                         aria-live="polite"
                       >
