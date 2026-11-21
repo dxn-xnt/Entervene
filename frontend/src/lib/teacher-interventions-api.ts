@@ -21,6 +21,10 @@ export interface TeacherInterventionSummary {
   triggering_intervention_level: string;
   current_prediction_revision: number;
   current_predicted_grade?: number | null;
+  current_raw_predicted_grade?: number | null;
+  current_prediction_status?: "AVAILABLE" | "UNAVAILABLE" | string | null;
+  predicted_grade_ceiling?: number | null;
+  was_ceiling_applied?: boolean | null;
   current_intervention_level?: string | null;
   candidate_activation_eligible?: boolean | null;
   candidate_activation_reason?: string | null;
@@ -59,6 +63,7 @@ export interface TeacherInterventionDetail extends TeacherInterventionSummary {
 
 export interface TeacherResolvedInterventionDetail extends TeacherInterventionDetail {
   resolution_projection: number | null;
+  raw_resolution_projection?: number | null;
   targeted_activities: Array<{ assignment_id: number; title: string; classwork_type: string; submission_status: string | null; grade: number | null; total_points: number | null; original_assignment_id?: number | null; original_title?: string | null; exam_subtype?: string | null; original_grade?: number | null; effective_grade?: number | null }>;
   sent_reviewer: { title: string; introduction: string; body: string } | null;
 }
@@ -255,6 +260,12 @@ export type RemediationActivityLifecycleStatus =
 
 export interface RemediationProgress {
   triggering_projection: number; latest_projection: number | null; latest_revision: number | null;
+  latest_raw_projection?: number | null;
+  latest_projection_status?: "AVAILABLE" | "UNAVAILABLE" | string | null;
+  latest_projection_unavailable_reasons?: string[];
+  predicted_grade_ceiling?: number | null;
+  effective_grade_ceiling?: number | null;
+  was_ceiling_applied?: boolean;
   passing_threshold?: number | null;
   remediation_status?: RemediationActivityLifecycleStatus;
   completed_remediation: Array<{ title: string; assignment_id: number; grade: number | null; total_points: number | null }>;
@@ -274,6 +285,10 @@ export interface RemediationPredictionImpactTarget {
   possible_score_gain: number;
   hypothetical_predicted_grade: number | null;
   predicted_gain: number | null;
+  remediation_adjusted_predicted_grade?: number | null;
+  applied_grade_ceiling?: number | null;
+  was_ceiling_applied?: boolean;
+  capped_predicted_gain?: number | null;
 }
 
 export interface RemediationPredictionImpact {
@@ -286,6 +301,13 @@ export interface RemediationPredictionImpact {
   current_predicted_grade: number | null;
   max_remediation_predicted_grade: number | null;
   predicted_gain: number | null;
+  unremediated_baseline_predicted_grade?: number | null;
+  predicted_grade_ceiling?: number | null;
+  effective_grade_ceiling?: number | null;
+  remediation_adjusted_current_predicted_grade?: number | null;
+  remediation_adjusted_max_predicted_grade?: number | null;
+  remediation_adjusted_predicted_gain?: number | null;
+  was_ceiling_applied?: boolean;
   passing_threshold?: number | null;
   score_adjustment_cap?: number | null;
   targets: RemediationPredictionImpactTarget[];
@@ -297,6 +319,7 @@ export interface RemediationPlan {
   original_exam_assignment_id?: number | null;
   target_assignment_ids?: number[];
   score_adjustment_cap?: number;
+  predicted_grade_ceiling?: number | null;
   selected_resources: Array<{ kind: "LESSON" | "CLASSWORK"; id: number }>;
   ai_suggestion: null | { recommended_format: RemediationFormat; recommended_grade_treatment?: RemediationGradeTreatment | null; reason: string; focus: Array<{ competency: string }>; evidence_used: Record<string, unknown> };
 }
@@ -372,7 +395,7 @@ export const saveRemediationPlan = (
   plan: Omit<Pick<RemediationPlan, "teacher_choice" | "grade_treatment">, "selected_resources"> & {
     selected_resources: SaveRemediationResourceRef[];
     resource_recipient_scope?: ResourceRecipientScope;
-  } & Partial<Pick<RemediationPlan, "original_exam_assignment_id" | "target_assignment_ids" | "score_adjustment_cap">>,
+  } & Partial<Pick<RemediationPlan, "original_exam_assignment_id" | "target_assignment_ids" | "score_adjustment_cap" | "predicted_grade_ceiling">>,
 ) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
 export const generateRemediationAdvisory = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation/advisory`, "POST");
 export const previewScoreAdjustment = (
@@ -436,8 +459,14 @@ export interface AIMidtermTargetEstimate {
   assignment_id: number;
   maximum_hypothetical_effective_score: number;
   hypothetical_predicted_term_grade: number;
+  raw_hypothetical_predicted_term_grade?: number | null;
+  remediation_adjusted_predicted_term_grade?: number | null;
+  applied_grade_ceiling?: number | null;
+  was_ceiling_applied?: boolean;
   step_estimated_difference: number;
   estimated_difference_from_baseline: number;
+  capped_step_estimated_difference?: number | null;
+  capped_estimated_difference_from_baseline?: number | null;
 }
 
 export interface AIMidtermWhatIf {
@@ -450,6 +479,11 @@ export interface AIMidtermWhatIf {
   prediction_purpose: "CURRENT_TERM_FINAL_GRADE_PROJECTION";
   evidence_basis: "LIVE_ACTUAL_EVIDENCE_WITH_EPHEMERAL_CAPPED_WW_PT_OVERRIDES";
   baseline_predicted_term_grade?: number | null;
+  unremediated_baseline_predicted_term_grade?: number | null;
+  selected_grade_ceiling?: number | null;
+  effective_grade_ceiling?: number | null;
+  baseline_remediation_adjusted_predicted_term_grade?: number | null;
+  baseline_was_ceiling_applied?: boolean;
   readiness: Record<string, unknown>;
   target_estimates: AIMidtermTargetEstimate[];
   unavailable_reasons: ProjectionUnavailableReason[];
@@ -475,8 +509,32 @@ export interface SubjectGradeProjectionResponse {
 
 export const projectSubjectGrade = (
   id: number,
-  payload: { target_assignment_ids: number[]; score_adjustment_cap?: number }
+  payload: {
+    target_assignment_ids: number[];
+    score_adjustment_cap?: number;
+    predicted_grade_ceiling?: number;
+  }
 ) => read<SubjectGradeProjectionResponse>(`${base}/${id}/remediation/subject-grade-projection`, "POST", payload);
+
+export function formatPassingStatusMessage(
+  afterGrade: number | null,
+  passingThreshold: number | null | undefined,
+): string | null {
+  if (
+    afterGrade == null ||
+    passingThreshold == null ||
+    !Number.isFinite(afterGrade) ||
+    !Number.isFinite(passingThreshold)
+  ) {
+    return null;
+  }
+  const thresholdLabel = Number.isInteger(passingThreshold)
+    ? passingThreshold.toFixed(0)
+    : passingThreshold.toFixed(1);
+  return afterGrade >= passingThreshold
+    ? `Reaches passing (${thresholdLabel})`
+    : `Still below passing (${thresholdLabel})`;
+}
 
 export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, candidates: TeacherInterventionSummary[]): TeacherInterventionSummary | undefined {
   return candidates.find((candidate) => candidate.status === "CANDIDATE"
