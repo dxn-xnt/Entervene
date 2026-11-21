@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   RefreshCw,
@@ -61,8 +60,6 @@ export interface AiRemediationDraftModalProps {
   savedAssessment: RemediationAssessmentCreateResult | null;
   isEditingDraft: boolean;
   setIsEditingDraft: (editing: boolean) => void;
-  quizQuestionMode?: "NEW_TARGETED" | "REUSE_ORIGINAL";
-  setQuizQuestionMode?: (mode: "NEW_TARGETED" | "REUSE_ORIGINAL") => void;
   draftValidation: DraftValidationResult;
   capInput?: string;
   plan: RemediationPlan;
@@ -71,6 +68,7 @@ export interface AiRemediationDraftModalProps {
   onGenerateWithAI: () => void | Promise<void>;
   retryDisabled?: boolean;
   onSaveAssessmentDraft: () => void | Promise<void>;
+  onContinueToQuizBuilder?: (draft: RemediationQuizDraft) => void | Promise<void>;
   onUpdateQuizQuestion?: (
     qIndex: number,
     updates: Partial<RemediationQuizQuestionDraft>
@@ -113,8 +111,6 @@ export default function AiRemediationDraftModal({
   savedAssessment,
   isEditingDraft,
   setIsEditingDraft,
-  quizQuestionMode,
-  setQuizQuestionMode,
   draftValidation,
   capInput,
   plan,
@@ -123,6 +119,7 @@ export default function AiRemediationDraftModal({
   onGenerateWithAI,
   retryDisabled,
   onSaveAssessmentDraft,
+  onContinueToQuizBuilder,
   onUpdateQuizQuestion,
   onUpdateQuizOption,
   onUpdateQuizAnswerKey,
@@ -132,13 +129,6 @@ export default function AiRemediationDraftModal({
   onUpdateClassworkTeacherGuide,
 }: AiRemediationDraftModalProps) {
   const navigate = useNavigate();
-  const [internalQuizQuestionMode, setInternalQuizQuestionMode] = useState<
-    "NEW_TARGETED" | "REUSE_ORIGINAL"
-  >("NEW_TARGETED");
-
-  const currentQuizQuestionMode = quizQuestionMode ?? internalQuizQuestionMode;
-  const handleQuizQuestionModeChange =
-    setQuizQuestionMode ?? setInternalQuizQuestionMode;
 
   const updateQuizQuestion =
     onUpdateQuizQuestion ??
@@ -429,42 +419,6 @@ export default function AiRemediationDraftModal({
                     </ul>
                   </div>
                 </Alert>
-              )}
-
-              {generatedDraft.draft_format === "QUIZ" && (
-                <Card className="flex flex-col gap-1.5 p-3 border-2 border-border rounded bg-card">
-                  <Label className="font-bold text-sm">Question Selection Mode</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <Card
-                      className={`p-2.5 border-2 transition-all border-2! cursor-pointer ${currentQuizQuestionMode === "NEW_TARGETED"
-                        ? "border-primary bg-primary"
-                        : "border-border"
-                        }`}
-                      onClick={() => handleQuizQuestionModeChange("NEW_TARGETED")}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm">Generate New Targeted Questions</span>
-                        <Badge variant="solid" size="sm">Supported</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Generates new practice items targeting verified weak competencies and lessons.
-                      </p>
-                    </Card>
-
-                    <Card
-                      className="p-2.5 border-2! border-border opacity-60 cursor-not-allowed bg-muted/20"
-                      aria-disabled="true"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm">Reuse Original Questions</span>
-                        <Badge variant="outline" size="sm">Unsupported</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Backend assessment service does not support verbatim question extraction.
-                      </p>
-                    </Card>
-                  </div>
-                </Card>
               )}
 
               {generatedDraft.draft_format === "QUIZ" && (
@@ -944,6 +898,18 @@ export default function AiRemediationDraftModal({
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {generatedDraft && !generatingDraft && !savedAssessment && generatedDraft.draft_format === "QUIZ" && onContinueToQuizBuilder && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void onContinueToQuizBuilder(generatedDraft as RemediationQuizDraft)}
+                disabled={draftSaveState === "validating" || draftSaveState === "saving"}
+                className="gap-1.5"
+              >
+                <ExternalLink className="size-3.5" />
+                Open in Quiz Builder
+              </Button>
+            )}
             {generatedDraft && !generatingDraft && (
               <Button
                 size="sm"

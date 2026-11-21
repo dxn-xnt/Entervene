@@ -7,14 +7,11 @@ from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTer
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.intervention.InterventionSupportMaterial import InterventionSupportMaterial
+from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.grading.RemedialExamination import effective_exam_score_for_change
-from app.services.intervention.RemediationPostGradingService import (
-    ActualRemediationPredictionEvaluation,
-    STATUS_AVAILABLE,
-    evaluate_actual_remediation_prediction,
-)
+from app.services.quiz.QuizResultsReleasePolicy import quiz_results_are_visible
 
 
 def resolution_prediction(
@@ -31,30 +28,6 @@ def resolution_prediction(
     )
     if resolved_source is None:
         return None
-    plan = row.remediation_plan if isinstance(row.remediation_plan, dict) else {}
-    frozen = plan.get("resolution_ceiling_snapshot")
-    if isinstance(frozen, dict) and isinstance(frozen.get("prediction_id"), int):
-        snap_pred = db.get(DevelopmentCurrentTermPrediction, frozen["prediction_id"])
-        if (
-            snap_pred is not None
-            and (
-                snap_pred.student_id,
-                snap_pred.class_id,
-                snap_pred.subject_id,
-                snap_pred.source_period_id,
-                snap_pred.target_period_id,
-                snap_pred.model_version_id,
-            )
-            == (
-                row.student_id,
-                row.class_id,
-                row.subject_id,
-                row.academic_period_id,
-                row.academic_period_id,
-                resolved_source.model_version_id,
-            )
-        ):
-            return snap_pred
     query = db.query(DevelopmentCurrentTermPrediction).filter_by(
         student_id=row.student_id, class_id=row.class_id, subject_id=row.subject_id,
         source_period_id=row.academic_period_id, target_period_id=row.academic_period_id,
@@ -87,33 +60,14 @@ def resolution_prediction(
     return query.order_by(DevelopmentCurrentTermPrediction.revision.desc()).first()
 
 
-def resolution_projection_evaluation(
-    db: Session,
-    row: Intervention,
-) -> ActualRemediationPredictionEvaluation | None:
+def resolution_projection(db: Session, row: Intervention) -> float | None:
     prediction = resolution_prediction(db, row)
     if prediction is None or not isinstance(prediction.evidence_snapshot, dict):
         return None
     readiness = prediction.evidence_snapshot.get("readiness")
-    if not isinstance(readiness, dict) or readiness.get("status") != "READY":
+    value = prediction.evidence_snapshot.get("projected_final_term_grade_raw")
+    if not isinstance(readiness, dict) or readiness.get("status") != "READY" or not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
-    return evaluate_actual_remediation_prediction(db, row, prediction)
-
-
-def resolution_projection(
-    db: Session,
-    row: Intervention,
-    *,
-    evaluation: ActualRemediationPredictionEvaluation | None = None,
-) -> float | None:
-    resolved_eval = evaluation if evaluation is not None else resolution_projection_evaluation(db, row)
-    if (
-        resolved_eval is None
-        or resolved_eval.status != STATUS_AVAILABLE
-        or resolved_eval.remediation_adjusted_predicted_grade is None
-    ):
-        return None
-    value = float(resolved_eval.remediation_adjusted_predicted_grade)
     if row.resolution_reason == "IMPROVED_PREDICTION":
         threshold_val = 85.0
         try:
@@ -127,9 +81,32 @@ def resolution_projection(
                 threshold_val = float(res.threshold)
         except Exception:
             pass
-        if value < threshold_val:
+        if float(value) < threshold_val:
             return None
-    return value
+    return float(value)
+
+
+def _activity_score_visible(
+    db: Session,
+    assignment: ClassworkAssignment,
+    work,
+    submission: StudentSubmission | None,
+    *,
+    student_view: bool,
+) -> bool:
+    if not student_view:
+        return True
+    if work is None:
+        return False
+    if (work.classwork_type or "").strip().upper() == "QUIZ":
+        setting = db.query(QuizSetting).filter_by(classwork_id=work.classwork_id).first()
+        return quiz_results_are_visible(
+            work,
+            setting,
+            assignment,
+            submission_status=submission.status if submission else None,
+        )
+    return bool(work.show_scores)
 
 
 def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -> list[dict]:
@@ -144,21 +121,30 @@ def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -
         work = assignment.classwork
         if not submission and (not assignment.is_published or not work.is_published or work.is_archived):
             continue
-        visible_score = not student_view or work.show_scores
+        visible_score = _activity_score_visible(
+            db, assignment, work, submission, student_view=student_view,
+        )
         original_assignment_id = assignment.original_exam_assignment_id
         original = db.get(ClassworkAssignment, original_assignment_id) if original_assignment_id else None
         original_submission = db.query(StudentSubmission).filter_by(
             classwork_assignment_id=original.classwork_assignment_id, student_id=row.student_id,
         ).order_by(StudentSubmission.submission_id.desc()).first() if original else None
+        original_visible_score = (
+            _activity_score_visible(
+                db, original, original.classwork, original_submission, student_view=student_view,
+            )
+            if original
+            else visible_score
+        )
         original_grade = (
             float(original_submission.grade)
-            if original_submission and original_submission.grade is not None and visible_score
+            if original_submission and original_submission.grade is not None and visible_score and original_visible_score
             else None
         )
         rem_grade = float(submission.grade) if submission and submission.grade is not None else None
         effective_grade = (
             effective_exam_score_for_change(db, assignment, row.student_id, rem_grade)
-            if original and visible_score
+            if original and visible_score and original_visible_score
             else None
         )
         exam_subtype = work.exam_subtype if original else None
@@ -173,13 +159,20 @@ def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -
                 original_submission = db.query(StudentSubmission).filter_by(
                     classwork_assignment_id=link.original_assignment_id, student_id=row.student_id,
                 ).order_by(StudentSubmission.submission_id.desc()).first() if original else None
+                original_visible_score = (
+                    _activity_score_visible(
+                        db, original, original.classwork, original_submission, student_view=student_view,
+                    )
+                    if original
+                    else visible_score
+                )
                 raw_orig = (
                     float(original_submission.grade)
                     if original_submission and original_submission.grade is not None
                     else None
                 )
-                original_grade = raw_orig if visible_score else None
-                if visible_score and raw_orig is not None:
+                original_grade = raw_orig if (visible_score and original_visible_score) else None
+                if visible_score and original_visible_score and raw_orig is not None:
                     if rem_grade is not None and original and original.classwork and original.classwork.total_points:
                         from app.services.grading.RemediationScoreAdjuster import adjust_remediation_score
                         adj = adjust_remediation_score(

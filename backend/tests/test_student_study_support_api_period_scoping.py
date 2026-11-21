@@ -7,7 +7,7 @@ Verifies:
 3. Students can only see their own active and resolved interventions (strict cross-student isolation).
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -24,9 +24,13 @@ from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.auth.UserAccount import UserAccount
+from app.models.classwork.Classwork import Classwork
+from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+from app.models.quiz.QuizSetting import QuizSetting
+from app.models.submissions.StudentSubmission import StudentSubmission
 from tests.test_classwork_submission_authorization import authz_context
 
 
@@ -181,3 +185,135 @@ def test_cross_student_isolation(authz_context):
     assert r2.status_code == 200
     assert len(r2.json()["items"]) == 1
     assert r2.json()["items"][0]["intervention_id"] == inv.intervention_id
+
+
+def test_persistent_study_support_active_and_resolved_enforce_quiz_release_policy(authz_context):
+    """Both active and resolved Study Support endpoints enforce canonical quiz release policy."""
+    c = authz_context
+    db = c["db"]
+    student = c["student"]
+    now = datetime.now(timezone.utc)
+
+    inv = Intervention(
+        intervention_id=8010,
+        student_id=student.student_id,
+        class_id=c["allowed_class"].class_id,
+        subject_id=c["subject"].subject_id,
+        academic_period_id=c["period"].academic_period_id,
+        source_prediction_id=8010,
+        status="ACTIVE",
+        diagnosis_snapshot={},
+        remediation_plan={"selected_resources": []},
+        activated_at=now,
+        activated_by_staff_id=c["owner"].staff_id,
+    )
+    db.add(inv)
+    db.flush()
+
+    quiz_cw = Classwork(
+        title="Support Release Policy Quiz",
+        classwork_type="QUIZ",
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+        show_scores=True,
+        total_points=Decimal("20"),
+    )
+    db.add(quiz_cw)
+    db.flush()
+    setting = QuizSetting(
+        classwork_id=quiz_cw.classwork_id,
+        show_correct_answers=True,
+        summary_release_mode="IMMEDIATE",
+    )
+    db.add(setting)
+    assignment = ClassworkAssignment(
+        classwork_id=quiz_cw.classwork_id,
+        class_id=c["allowed_class"].class_id,
+        academic_period_id=c["period"].academic_period_id,
+        assigned_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+        due_date=now + timedelta(days=2),
+        recipient_student_id=student.student_id,
+        source_intervention_id=inv.intervention_id,
+        remediation_request_id=uuid4(),
+    )
+    db.add(assignment)
+    db.flush()
+    db.add(StudentSubmission(
+        student_id=student.student_id,
+        classwork_assignment_id=assignment.classwork_assignment_id,
+        status="graded",
+        grade=Decimal("18"),
+        attempt_count=1,
+    ))
+    db.commit()
+
+    client = _make_client(db, c["accounts"]["student"], role="student")
+
+    def _active_activity():
+        res = client.get(f"/api/v1/student/interventions/{inv.intervention_id}")
+        assert res.status_code == 200, res.text
+        return res.json()["activities"][0]
+
+    # 1. Active intervention: IMMEDIATE exposes score
+    act = _active_activity()
+    assert act["grade"] == 18.0
+    assert act["total_points"] == 20.0
+
+    # 2. Active intervention: future SCHEDULED hides grade and total_points
+    setting.summary_release_mode = "SCHEDULED"
+    setting.summary_release_at = now + timedelta(days=1)
+    db.commit()
+    act = _active_activity()
+    assert act["grade"] is None
+    assert act["total_points"] is None
+    assert act["is_passed"] is False
+
+    # 3. Active intervention: AFTER_DUE_DATE before due date hides grade
+    setting.summary_release_mode = "AFTER_DUE_DATE"
+    setting.summary_release_at = None
+    db.commit()
+    act = _active_activity()
+    assert act["grade"] is None
+    assert act["total_points"] is None
+
+    # 4. Active intervention: legacy mixed (show_scores=True, show_correct_answers=False) fails closed
+    setting.summary_release_mode = "IMMEDIATE"
+    setting.show_correct_answers = False
+    db.commit()
+    act = _active_activity()
+    assert act["grade"] is None
+    assert act["total_points"] is None
+
+    # 5. Resolved intervention: must enforce the exact same policy via InterventionHistoryService
+    inv.status = "RESOLVED"
+    inv.resolution_reason = "IMPROVED_PREDICTION"
+    inv.resolved_at = now
+    setting.show_correct_answers = True
+    setting.summary_release_mode = "SCHEDULED"
+    setting.summary_release_at = now + timedelta(days=1)
+    db.commit()
+
+    resolved_hidden = client.get("/api/v1/student/interventions/resolved")
+    assert resolved_hidden.status_code == 200, resolved_hidden.text
+    res_act = resolved_hidden.json()["items"][0]["activities"][0]
+    assert res_act["grade"] is None
+    assert res_act["total_points"] is None
+
+    # Legacy mixed also stays hidden in resolved history
+    setting.summary_release_mode = "IMMEDIATE"
+    setting.show_correct_answers = False
+    db.commit()
+    resolved_mixed = client.get("/api/v1/student/interventions/resolved").json()["items"][0]["activities"][0]
+    assert resolved_mixed["grade"] is None
+    assert resolved_mixed["total_points"] is None
+
+    # Once released, resolved history shows the score
+    setting.show_correct_answers = True
+    setting.summary_release_mode = "SCHEDULED"
+    setting.summary_release_at = now - timedelta(minutes=5)
+    db.commit()
+    resolved_visible = client.get("/api/v1/student/interventions/resolved").json()["items"][0]["activities"][0]
+    assert resolved_visible["grade"] == 18.0
+    assert resolved_visible["total_points"] == 20.0

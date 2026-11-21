@@ -32,6 +32,10 @@ from app.schemas.Quiz import (
 )
 from app.services.classwork.ClassworkShared import is_quiz_type
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+from app.services.quiz.QuizResultsReleasePolicy import (
+    apply_quiz_results_release_policy,
+    effective_quiz_results_release_policy,
+)
 
 
 QUESTION_MULTIPLE_CHOICE = "MULTIPLE_CHOICE"
@@ -238,6 +242,7 @@ def upsert_quiz_builder(
         setting = QuizSetting(classwork_id=classwork.classwork_id)
         db.add(setting)
     setting.is_shuffle_questions = payload.settings.is_shuffle_questions
+    setting.is_shuffle_options = bool(payload.settings.is_shuffle_options)
     setting.enable_per_question_scoring = payload.settings.enable_per_question_scoring
     setting.enable_per_question_time_limits = payload.settings.enable_per_question_time_limits
     setting.max_attempts = payload.settings.max_attempts
@@ -277,7 +282,24 @@ def update_quiz_results_settings(
         db.add(setting)
         db.flush()
 
-    release_mode = payload.summary_release_mode.strip().upper()
+    if payload.release_policy is not None:
+        if payload.show_quiz_results is not None or payload.summary_release_mode is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Use release_policy without legacy quiz visibility fields",
+            )
+        release_mode = (
+            "NEVER" if payload.release_policy == "HIDDEN" else payload.release_policy
+        )
+        desired_visibility = payload.release_policy != "HIDDEN"
+    else:
+        if payload.summary_release_mode is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Quiz Results Release is required",
+            )
+        release_mode = payload.summary_release_mode.strip().upper()
+        desired_visibility = payload.show_quiz_results
     if release_mode == "SCHEDULED" and payload.summary_release_at is None:
         raise HTTPException(status_code=422, detail="Quiz results release date and time is required")
     if release_mode != "SCHEDULED" and payload.summary_release_at is not None:
@@ -285,21 +307,21 @@ def update_quiz_results_settings(
     if release_mode == "AFTER_DUE_DATE" and not _classwork_has_due_date(db, classwork.classwork_id):
         raise HTTPException(status_code=422, detail="Set a quiz due date before releasing results after the due date")
 
-    visibility_changed = payload.show_quiz_results is not None and (
-        locked_classwork.show_scores != payload.show_quiz_results
-        or setting.show_correct_answers != payload.show_quiz_results
+    visibility_changed = desired_visibility is not None and (
+        locked_classwork.show_scores != desired_visibility
+        or setting.show_correct_answers != desired_visibility
     )
     release_changed = (
         setting.summary_release_mode != release_mode
         or setting.summary_release_at != payload.summary_release_at
     )
     answers_will_be_enabled = (
-        payload.show_quiz_results is True
-        if payload.show_quiz_results is not None
+        desired_visibility is True
+        if desired_visibility is not None
         else bool(setting.show_correct_answers)
     )
     could_reveal_answers = (
-        (payload.show_quiz_results is True and visibility_changed)
+        (desired_visibility is True and visibility_changed)
         or (release_changed and release_mode != "NEVER" and answers_will_be_enabled)
     )
     if could_reveal_answers and not payload.confirm_answer_reveal:
@@ -311,14 +333,27 @@ def update_quiz_results_settings(
             },
         )
 
-    if payload.show_quiz_results is not None:
-        locked_classwork.show_scores = payload.show_quiz_results
-        setting.show_correct_answers = payload.show_quiz_results
-    setting.summary_release_mode = release_mode
-    setting.summary_release_at = payload.summary_release_at
+    if payload.release_policy is not None:
+        apply_quiz_results_release_policy(
+            locked_classwork,
+            setting,
+            payload.release_policy,
+        )
+    else:
+        if desired_visibility is not None:
+            locked_classwork.show_scores = desired_visibility
+            setting.show_correct_answers = desired_visibility
+        setting.summary_release_mode = release_mode
+    setting.summary_release_at = (
+        payload.summary_release_at if release_mode == "SCHEDULED" else None
+    )
     db.flush()
     return QuizResultsSettingsResponse(
         classwork_id=locked_classwork.classwork_id,
+        release_policy=effective_quiz_results_release_policy(
+            locked_classwork,
+            setting,
+        ),
         show_scores=locked_classwork.show_scores,
         show_correct_answers=setting.show_correct_answers,
         summary_release_mode=setting.summary_release_mode,
@@ -383,6 +418,11 @@ def update_quiz_configuration(
     if has_attempts and (
         (quiz is not None and quiz.duration_minutes != payload.duration_minutes)
         or (setting is not None and setting.is_shuffle_questions != payload.is_shuffle_questions)
+        or (
+            setting is not None
+            and payload.is_shuffle_options is not None
+            and setting.is_shuffle_options != payload.is_shuffle_options
+        )
         or (setting is not None and setting.enable_per_question_scoring != payload.enable_per_question_scoring)
         or (setting is not None and setting.enable_per_question_time_limits != payload.enable_per_question_time_limits)
     ):
@@ -407,6 +447,8 @@ def update_quiz_configuration(
 
     quiz.duration_minutes = payload.duration_minutes
     setting.is_shuffle_questions = payload.is_shuffle_questions
+    if payload.is_shuffle_options is not None:
+        setting.is_shuffle_options = payload.is_shuffle_options
     setting.enable_per_question_scoring = payload.enable_per_question_scoring
     setting.enable_per_question_time_limits = payload.enable_per_question_time_limits
     setting.max_attempts = payload.max_attempts
@@ -418,6 +460,7 @@ def update_quiz_configuration(
         classwork_id=locked_classwork.classwork_id,
         duration_minutes=quiz.duration_minutes,
         is_shuffle_questions=setting.is_shuffle_questions,
+        is_shuffle_options=bool(setting.is_shuffle_options),
         enable_per_question_scoring=setting.enable_per_question_scoring,
         enable_per_question_time_limits=setting.enable_per_question_time_limits,
         max_attempts=setting.max_attempts or payload.max_attempts,
@@ -684,6 +727,7 @@ def _setting_out(setting: QuizSetting) -> QuizSettingOut:
     return QuizSettingOut(
         quiz_setting_id=setting.quiz_setting_id,
         is_shuffle_questions=setting.is_shuffle_questions,
+        is_shuffle_options=bool(getattr(setting, "is_shuffle_options", False)),
         enable_per_question_scoring=setting.enable_per_question_scoring,
         enable_per_question_time_limits=setting.enable_per_question_time_limits,
         max_attempts=setting.max_attempts,

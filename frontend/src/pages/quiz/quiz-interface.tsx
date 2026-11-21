@@ -406,7 +406,7 @@ const StudentQuizTake = () => {
       {/* Answer options */}
       {currentQuestion.question_type === "MULTIPLE_CHOICE" ? (
         <div className="grid grid-cols-1 gap-4 px-3 py-4 sm:px-6 sm:py-6 md:grid-cols-2 md:px-24">
-          {currentQuestion.options
+          {[...currentQuestion.options]
             .sort((a, b) => a.option_order - b.option_order)
             .map((opt) => {
               const selected = answers.get(currentQuestion.quiz_question_id)?.selected_option_id === opt.option_id;

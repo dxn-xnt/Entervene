@@ -12,7 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch, getTeacherClassworks } from "@/lib/api";
@@ -50,6 +50,7 @@ import {
   type RemediationResource,
   type OriginalExamination,
   type RemediationClassworkTarget,
+  type RemediationQuizDraft,
 } from "@/lib/teacher-interventions-api";
 
 const tabs: Array<TabItem<TabId>> = [
@@ -101,8 +102,24 @@ const tabType: Partial<Record<TabId, string>> = {
 
 export default function Classworks() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [routeParams, setRouteParams] = useSearchParams();
   const remediationType = routeParams.get("remediation");
+  const remediationQuizModeParam = routeParams.get("quiz_mode");
+  const remediationQuizMode: "manual" | "reuse" | "ai" | undefined =
+    remediationQuizModeParam === "reuse" ||
+    remediationQuizModeParam === "ai" ||
+    remediationQuizModeParam === "manual"
+      ? remediationQuizModeParam
+      : remediationType === "QUIZ"
+        ? "manual"
+        : undefined;
+  const remediationExplicitOriginalClassworkId = Number(
+    routeParams.get("original_classwork_id"),
+  );
+  const aiRemediationDraft =
+    (location.state as { aiRemediationDraft?: RemediationQuizDraft } | null)
+      ?.aiRemediationDraft ?? null;
   const remediationSubject = routeParams.get("subject_id");
   const remediationTitle = routeParams.get("title") || undefined;
   const remediationInstructions = routeParams.get("instructions") || undefined;
@@ -488,15 +505,74 @@ export default function Classworks() {
     setShowCreateWizard(true);
   };
 
+  const resolvedOriginalClassworkId = useMemo(() => {
+    if (
+      Number.isInteger(remediationExplicitOriginalClassworkId) &&
+      remediationExplicitOriginalClassworkId > 0
+    ) {
+      return remediationExplicitOriginalClassworkId;
+    }
+    if (
+      remediationGradeTreatment === "EXAMINATION" &&
+      remediationOriginalExam?.classwork_id
+    ) {
+      return remediationOriginalExam.classwork_id;
+    }
+    const targetAssignmentId =
+      remediationGradeTreatment === "EXAMINATION"
+        ? remediationOriginalAssignmentId
+        : initialTargetAssignmentId ?? remediationOriginalClassworkId;
+    if (!Number.isInteger(targetAssignmentId) || targetAssignmentId <= 0) {
+      return null;
+    }
+    const act = (
+      remediationTarget?.diagnosis_snapshot.supporting_activities || []
+    ).find((a) =>
+      a.classwork_assignment_id != null
+        ? a.classwork_assignment_id === targetAssignmentId
+        : a.classwork_id === targetAssignmentId,
+    );
+    if (act?.classwork_id) return act.classwork_id;
+    const matchedItem = items.find((item) =>
+      item.assignments?.some(
+        (a) => a.classwork_assignment_id === targetAssignmentId,
+      ),
+    );
+    return matchedItem?.classwork_id ?? null;
+  }, [
+    remediationExplicitOriginalClassworkId,
+    remediationGradeTreatment,
+    remediationOriginalExam,
+    remediationOriginalAssignmentId,
+    initialTargetAssignmentId,
+    remediationOriginalClassworkId,
+    remediationTarget,
+    items,
+  ]);
+
   const closeCreateWizard = () => {
     setShowCreateWizard(false);
     setSelectedType(null);
     if (remediationType) {
       const next = new URLSearchParams(routeParams);
       next.delete("remediation");
+      next.delete("quiz_mode");
+      next.delete("original_classwork_id");
       next.delete("title");
       next.delete("instructions");
       setRouteParams(next, { replace: true });
+    }
+  };
+
+  const returnToInterventionStep3 = () => {
+    const targetId =
+      remediationTarget?.intervention_id ??
+      (Number.isInteger(interventionId) && interventionId > 0
+        ? interventionId
+        : null);
+    closeCreateWizard();
+    if (remediationType && targetId) {
+      navigate(`/teacher/interventions?active=${targetId}&setup=1&step=3`);
     }
   };
 
@@ -833,6 +909,9 @@ export default function Classworks() {
                       }
                       initialTitle={remediationTitle}
                       initialInstructions={remediationInstructions}
+                      initialQuizMode={remediationQuizMode}
+                      initialOriginalClassworkId={resolvedOriginalClassworkId}
+                      initialAiRemediationDraft={aiRemediationDraft}
                       remediationDraft={Boolean(remediationType)}
                       remediationTarget={remediationTarget}
                       remediationFocus={remediationFocus}
@@ -841,9 +920,17 @@ export default function Classworks() {
                       remediationOriginalTargets={remediationOriginalTargets}
                       initialTargetAssignmentId={initialTargetAssignmentId}
                       remediationReferences={remediationReferences}
-                      onClose={closeCreateWizard}
+                      onClose={
+                        remediationType
+                          ? returnToInterventionStep3
+                          : closeCreateWizard
+                      }
                       onSuccess={handleClassworkCreated}
-                      onBack={() => setSelectedType(null)}
+                      onBack={
+                        remediationType
+                          ? returnToInterventionStep3
+                          : () => setSelectedType(null)
+                      }
                     />
                   ) : (
                     <CreateClassworkModal
@@ -869,9 +956,17 @@ export default function Classworks() {
                       remediationOriginalTargets={remediationOriginalTargets}
                       initialTargetAssignmentId={initialTargetAssignmentId}
                       remediationReferences={remediationReferences}
-                      onClose={closeCreateWizard}
+                      onClose={
+                        remediationType
+                          ? returnToInterventionStep3
+                          : closeCreateWizard
+                      }
                       onSuccess={handleClassworkCreated}
-                      onBack={() => setSelectedType(null)}
+                      onBack={
+                        remediationType
+                          ? returnToInterventionStep3
+                          : () => setSelectedType(null)
+                      }
                     />
                   ))}
               </Dialog>

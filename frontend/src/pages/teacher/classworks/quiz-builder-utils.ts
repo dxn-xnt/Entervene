@@ -2,6 +2,7 @@ import type { QuizQuestionDraft, QuizQuestionType, QuizSettingsDraft } from "./q
 
 export const defaultQuizSettings: QuizSettingsDraft = {
   is_shuffle_questions: false,
+  is_shuffle_options: false,
   enable_per_question_scoring: true,
   enable_per_question_time_limits: false,
   max_attempts: "1",

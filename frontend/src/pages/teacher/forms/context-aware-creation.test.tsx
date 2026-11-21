@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { Dialog } from "@/components/retroui/Dialog";
+import { apiFetch } from "@/lib/api";
 import CreateLessonModal from "./create-lesson";
 import CreateClassworkModal from "./create-classwork";
 import CreateClassworkQuizModal from "./create-classwork-quiz";
@@ -123,6 +124,47 @@ vi.mock("@/lib/api", async (importOriginal) => {
           json: () => Promise.resolve({ detail: "Quiz has not been created" }),
         });
       }
+      if (url === "/api/v1/classwork-assignments/classwork/99") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            classwork_id: 99,
+            title: "Attempted Quiz",
+            classwork_type: "QUIZ",
+            total_points: 50,
+            is_published: true,
+            show_scores: false,
+            is_locked: false,
+            is_archived: false,
+            subject_id: 10,
+            attachments: [],
+            reference_links: [],
+            linked_lessons: [sampleLesson],
+            assignments: [{
+              classwork_assignment_id: 102,
+              classwork_id: 99,
+              class_id: 100,
+              max_attempts: 1,
+              is_published: true,
+              show_scores: false,
+            }],
+          }),
+        });
+      }
+      if (url.includes("/api/v1/quizzes/classwork/99/results-settings")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            classwork_id: 99,
+            release_policy: "HIDDEN",
+            show_scores: false,
+            show_correct_answers: false,
+            summary_release_mode: "NEVER",
+            summary_release_at: null,
+            has_mixed_visibility: false,
+          }),
+        });
+      }
       if (url.includes("/api/v1/quizzes/classwork/99")) {
         return Promise.resolve({
           ok: true,
@@ -141,6 +183,63 @@ vi.mock("@/lib/api", async (importOriginal) => {
           }),
         });
       }
+      if (url.includes("/api/v1/quizzes/classwork/55")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            duration_minutes: 30,
+            has_attempts: false,
+            settings: {
+              is_shuffle_questions: false,
+              is_shuffle_options: false,
+              enable_per_question_scoring: true,
+              enable_per_question_time_limits: false,
+              max_attempts: 3,
+              show_correct_answers: true,
+              summary_release_mode: "IMMEDIATE",
+              summary_release_at: null,
+            },
+            questions: [
+              {
+                quiz_question_id: 1,
+                question_id: 10,
+                question_text: "What is the rhyme scheme of a Shakespearean sonnet?",
+                question_type: "MULTIPLE_CHOICE",
+                points: 12,
+                display_order: 1,
+                difficulty_level: "MEDIUM",
+                explanation: "Shakespearean sonnets use ABAB CDCD EFEF GG.",
+                lesson_id: 1,
+                options: [
+                  { option_id: 1, option_text: "ABAB CDCD EFEF GG", is_correct: true, option_order: 1 },
+                  { option_id: 2, option_text: "AABB CCDD EEFF GG", is_correct: false, option_order: 2 },
+                ],
+              },
+              {
+                quiz_question_id: 2,
+                question_id: 11,
+                question_text: "How many lines are in a traditional sonnet?",
+                question_type: "MULTIPLE_CHOICE",
+                points: 8,
+                display_order: 2,
+                difficulty_level: "EASY",
+                explanation: "A traditional sonnet always has 14 lines.",
+                lesson_id: 1,
+                options: [
+                  { option_id: 3, option_text: "12 lines", is_correct: false, option_order: 1 },
+                  { option_id: 4, option_text: "14 lines", is_correct: true, option_order: 2 },
+                ],
+              },
+            ],
+          }),
+        });
+      }
+      if (url.includes("/api/v1/classwork-assignments/with-assignments")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ classwork_id: 777 }),
+        });
+      }
       if (url.includes("/api/v1/quizzes/classwork/")) {
         return Promise.resolve({
           ok: true,
@@ -149,6 +248,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
             has_attempts: false,
             settings: {
               is_shuffle_questions: true,
+              is_shuffle_options: true,
               enable_per_question_scoring: true,
               enable_per_question_time_limits: false,
               max_attempts: 2,
@@ -163,6 +263,18 @@ vi.mock("@/lib/api", async (importOriginal) => {
     }),
   };
 });
+
+if (typeof HTMLElement !== "undefined") {
+  if (!HTMLElement.prototype.scrollIntoView) {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+  }
+  if (!HTMLElement.prototype.hasPointerCapture) {
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+  }
+  if (!HTMLElement.prototype.releasePointerCapture) {
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+  }
+}
 
 afterEach(() => {
   cleanup();
@@ -261,6 +373,343 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
 
     expect(screen.queryByText("Reference Links")).toBeNull();
     expect(screen.queryByText("Add reference link")).toBeNull();
+  });
+
+  it("loads original target quiz questions into Quiz Builder when initialQuizMode is reuse and allows going back from Step 1", async () => {
+    const onBack = vi.fn();
+    render(
+      <MemoryRouter>
+        <Dialog open={true}>
+          <CreateClassworkQuizModal
+            selectedType="QUIZ"
+            subjects={sampleSubjects}
+            loads={sampleLoads}
+            initialSubjectId="10"
+            initialClassId={100}
+            initialLessonId={1}
+            initialTitle="English 8 focused practice"
+            initialQuizMode="reuse"
+            initialOriginalClassworkId={55}
+            remediationDraft={true}
+            remediationGradeTreatment="WRITTEN_WORK"
+            remediationOriginalTargets={[
+              {
+                assignment_id: 201,
+                classwork_id: 55,
+                title: "Poetry Quiz 1",
+                component: "WRITTEN_WORK",
+                original_score: 10,
+                max_points: 20,
+              },
+            ]}
+            initialTargetAssignmentId={201}
+            onClose={vi.fn()}
+            onSuccess={vi.fn()}
+            onBack={onBack}
+          />
+        </Dialog>
+      </MemoryRouter>,
+    );
+
+    // Opens directly on Step 1 (details), skipping Choose Quiz Creation Method
+    expect(screen.queryByText("Choose Quiz Creation Method")).toBeNull();
+    expect(await screen.findByText(/Step 1 of 3/i)).toBeDefined();
+
+    // Advance to Step 2 (Quiz question builder) and verify reused question loaded
+    const nextBtn = await screen.findByRole("button", { name: /Next/i });
+    await vi.waitFor(() => expect(nextBtn.hasAttribute("disabled")).toBe(false));
+    nextBtn.click();
+
+    expect(await screen.findByText("Quiz question builder")).toBeDefined();
+    expect(
+      screen.getByDisplayValue("What is the rhyme scheme of a Shakespearean sonnet?"),
+    ).toBeDefined();
+
+    // Go back from Step 2 to Step 1, then click Previous on Step 1 to return to Step 3 method selection
+    const prevBtn = screen.getByRole("button", { name: /Previous/i });
+    prevBtn.click();
+    expect(await screen.findByText(/Step 1 of 3/i)).toBeDefined();
+
+    const step1PrevBtn = screen.getByRole("button", { name: /Previous/i });
+    step1PrevBtn.click();
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads original questions, choices, correct answers, and points, preserves shuffle settings on save, and prevents overwriting edits across step navigation", async () => {
+    const onSuccess = vi.fn();
+    render(
+      <MemoryRouter>
+        <Dialog open={true}>
+          <CreateClassworkQuizModal
+            selectedType="QUIZ"
+            subjects={sampleSubjects}
+            loads={sampleLoads}
+            initialSubjectId="10"
+            initialClassId={100}
+            initialLessonId={1}
+            initialTitle="Poetry Remediation Quiz"
+            initialQuizMode="reuse"
+            initialOriginalClassworkId={55}
+            remediationDraft={true}
+            remediationGradeTreatment="WRITTEN_WORK"
+            remediationOriginalTargets={[
+              {
+                assignment_id: 201,
+                classwork_id: 55,
+                title: "Poetry Quiz 1",
+                component: "WRITTEN_WORK",
+                original_score: 10,
+                max_points: 20,
+              },
+            ]}
+            initialTargetAssignmentId={201}
+            onClose={vi.fn()}
+            onSuccess={onSuccess}
+            onBack={vi.fn()}
+          />
+        </Dialog>
+      </MemoryRouter>,
+    );
+
+    const nextBtn = await screen.findByRole("button", { name: /Next/i });
+    await vi.waitFor(() => expect(nextBtn.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(nextBtn);
+
+    expect(await screen.findByText("Quiz question builder")).toBeDefined();
+    expect(screen.getByText("20/20 pts")).toBeDefined();
+
+    // Verify both original questions, choices, correct answers, and points loaded accurately
+    expect(
+      screen.getByDisplayValue("What is the rhyme scheme of a Shakespearean sonnet?"),
+    ).toBeDefined();
+    expect(
+      screen.getByDisplayValue("How many lines are in a traditional sonnet?"),
+    ).toBeDefined();
+    expect(screen.getByDisplayValue("ABAB CDCD EFEF GG")).toBeDefined();
+    expect(screen.getByDisplayValue("AABB CCDD EEFF GG")).toBeDefined();
+    expect(screen.getByDisplayValue("12 lines")).toBeDefined();
+    expect(screen.getByDisplayValue("14 lines")).toBeDefined();
+    expect(screen.getByDisplayValue("12")).toBeDefined();
+    expect(screen.getByDisplayValue("8")).toBeDefined();
+
+    const choice1Checkboxes = screen.getAllByRole("checkbox", {
+      name: "Mark choice 1 correct",
+    });
+    const choice2Checkboxes = screen.getAllByRole("checkbox", {
+      name: "Mark choice 2 correct",
+    });
+    // Question 1 has choice 1 correct; Question 2 has choice 2 correct
+    expect(choice1Checkboxes[0].getAttribute("aria-checked")).toBe("true");
+    expect(choice2Checkboxes[0].getAttribute("aria-checked")).toBe("false");
+    expect(choice1Checkboxes[1].getAttribute("aria-checked")).toBe("false");
+    expect(choice2Checkboxes[1].getAttribute("aria-checked")).toBe("true");
+
+    // Toggle both Shuffle questions and Shuffle answer choices in Step 2
+    const shuffleQuestionsSwitch = screen.getByRole("switch", {
+      name: "Shuffle questions",
+    });
+    const shuffleChoicesSwitch = screen.getByRole("switch", {
+      name: "Shuffle answer choices",
+    });
+    expect(shuffleQuestionsSwitch.getAttribute("aria-checked")).toBe("false");
+    expect(shuffleChoicesSwitch.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(shuffleQuestionsSwitch);
+    fireEvent.click(shuffleChoicesSwitch);
+    expect(shuffleQuestionsSwitch.getAttribute("aria-checked")).toBe("true");
+    expect(shuffleChoicesSwitch.getAttribute("aria-checked")).toBe("true");
+
+    // Edit question 1 text, navigate back to Step 1 and forward to Step 2, and verify edit is not overwritten or duplicated
+    const q1Textarea = screen.getByDisplayValue(
+      "What is the rhyme scheme of a Shakespearean sonnet?",
+    );
+    fireEvent.change(q1Textarea, {
+      target: {
+        value: "What is the rhyme scheme of a Shakespearean sonnet? (Edited)",
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Previous/i }));
+    expect(await screen.findByText(/Step 1 of 3/i)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: /Next/i }));
+    expect(await screen.findByText("Quiz question builder")).toBeDefined();
+    expect(
+      screen.getByDisplayValue(
+        "What is the rhyme scheme of a Shakespearean sonnet? (Edited)",
+      ),
+    ).toBeDefined();
+    expect(screen.getAllByText(/^Question \d+$/)).toHaveLength(2);
+
+    // Advance to Step 3 (assign) and verify shuffle settings persist and submit in quiz_payload
+    fireEvent.click(screen.getByRole("button", { name: /Next/i }));
+    expect(await screen.findByText(/Step 3 of 3/i)).toBeDefined();
+
+    const step3ShuffleQuestions = screen.getByRole("switch", {
+      name: "Shuffle questions",
+    });
+    const step3ShuffleChoices = screen.getByRole("switch", {
+      name: "Shuffle answer choices",
+    });
+    expect(step3ShuffleQuestions.getAttribute("aria-checked")).toBe("true");
+    expect(step3ShuffleChoices.getAttribute("aria-checked")).toBe("true");
+
+    // Submit the quiz creation
+    const submitBtn = screen.getByRole("button", { name: /^Save Draft$/i });
+    fireEvent.click(submitBtn);
+
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    const mockedApiFetch = vi.mocked(apiFetch);
+    const submitCall = mockedApiFetch.mock.calls.find(([url]) =>
+      String(url).includes("/api/v1/classwork-assignments/with-assignments"),
+    );
+    expect(submitCall).toBeDefined();
+    const submittedFormData = submitCall?.[1]?.body as FormData;
+    const quizPayload = JSON.parse(
+      String(submittedFormData.get("quiz_payload")),
+    );
+    expect(quizPayload.settings.is_shuffle_questions).toBe(true);
+    expect(quizPayload.settings.is_shuffle_options).toBe(true);
+    expect(quizPayload.questions).toHaveLength(2);
+    expect(quizPayload.questions[0].question_text).toBe(
+      "What is the rhyme scheme of a Shakespearean sonnet? (Edited)",
+    );
+    expect(quizPayload.questions[0].points).toBe(12);
+    expect(quizPayload.questions[0].options[0].is_correct).toBe(true);
+    expect(quizPayload.questions[1].points).toBe(8);
+    expect(quizPayload.questions[1].options[1].is_correct).toBe(true);
+  });
+
+  it("keeps manual and AI quiz builder workflows functional", async () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <Dialog open={true}>
+          <CreateClassworkQuizModal
+            selectedType="QUIZ"
+            subjects={sampleSubjects}
+            loads={sampleLoads}
+            initialSubjectId="10"
+            initialClassId={100}
+            initialLessonId={1}
+            initialTitle="Manual Remediation Quiz"
+            initialQuizMode="manual"
+            remediationDraft={true}
+            remediationGradeTreatment="PRACTICE_ONLY"
+            onClose={vi.fn()}
+            onSuccess={vi.fn()}
+            onBack={vi.fn()}
+          />
+        </Dialog>
+      </MemoryRouter>,
+    );
+
+    const nextBtn = await screen.findByRole("button", { name: /Next/i });
+    fireEvent.click(nextBtn);
+    expect(await screen.findByText("Quiz question builder")).toBeDefined();
+    expect(screen.getAllByText(/^Question \d+$/)).toHaveLength(1);
+    unmount();
+
+    const onAiBack = vi.fn();
+    render(
+      <MemoryRouter>
+        <Dialog open={true}>
+          <CreateClassworkQuizModal
+            selectedType="QUIZ"
+            subjects={sampleSubjects}
+            loads={sampleLoads}
+            initialSubjectId="10"
+            initialClassId={100}
+            initialLessonId={1}
+            initialQuizMode="ai"
+            initialAiRemediationDraft={{
+              draft_format: "QUIZ",
+              target_component: "WRITTEN_WORK",
+              grade_treatment: "PRACTICE_ONLY",
+              title: "AI Remediation Quiz",
+              instructions: "Complete all AI questions.",
+              total_points: 20,
+              questions: [
+                {
+                  question_text: "Which poetic device compares two things using like or as?",
+                  question_type: "MULTIPLE_CHOICE",
+                  points: 12,
+                  display_order: 1,
+                  difficulty_level: "EASY",
+                  targeted_lesson_id: 1,
+                  targeted_competency_id: 1,
+                  options: [
+                    { option_text: "Simile", option_order: 1 },
+                    { option_text: "Metaphor", option_order: 2 },
+                  ],
+                  teacher_answer_key: {
+                    correct_answer: "Simile",
+                    explanation: "Simile uses like or as.",
+                  },
+                },
+                {
+                  question_text: "Which device gives human qualities to non-human things?",
+                  question_type: "MULTIPLE_CHOICE",
+                  points: 8,
+                  display_order: 2,
+                  difficulty_level: "MEDIUM",
+                  targeted_lesson_id: 1,
+                  targeted_competency_id: 1,
+                  options: [
+                    { option_text: "Hyperbole", option_order: 1 },
+                    { option_text: "Personification", option_order: 2 },
+                  ],
+                  teacher_answer_key: {
+                    correct_answer: "B.",
+                    explanation: "Personification assigns human traits.",
+                  },
+                },
+              ],
+            }}
+            remediationDraft={true}
+            remediationGradeTreatment="PRACTICE_ONLY"
+            onClose={vi.fn()}
+            onSuccess={vi.fn()}
+            onBack={onAiBack}
+          />
+        </Dialog>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByDisplayValue("AI Remediation Quiz")).toBeDefined();
+    expect(screen.getByDisplayValue("Complete all AI questions.")).toBeDefined();
+    expect(screen.getByDisplayValue("20")).toBeDefined();
+
+    const aiNextBtn = screen.getByRole("button", { name: /Next/i });
+    fireEvent.click(aiNextBtn);
+    expect(await screen.findByText("Quiz question builder")).toBeDefined();
+    expect(screen.getByText("20/20 pts")).toBeDefined();
+    expect(
+      screen.getByDisplayValue(
+        "Which poetic device compares two things using like or as?",
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByDisplayValue(
+        "Which device gives human qualities to non-human things?",
+      ),
+    ).toBeDefined();
+
+    // Verify both exact-text and letter-coded answer keys mapped accurately
+    const aiChoice1Boxes = screen.getAllByRole("checkbox", {
+      name: "Mark choice 1 correct",
+    });
+    const aiChoice2Boxes = screen.getAllByRole("checkbox", {
+      name: "Mark choice 2 correct",
+    });
+    expect(aiChoice1Boxes[0].getAttribute("aria-checked")).toBe("true");
+    expect(aiChoice2Boxes[0].getAttribute("aria-checked")).toBe("false");
+    expect(aiChoice1Boxes[1].getAttribute("aria-checked")).toBe("false");
+    expect(aiChoice2Boxes[1].getAttribute("aria-checked")).toBe("true");
+
+    // Verify back-navigation returns to Step 1 and then Step 3 method selection
+    fireEvent.click(screen.getByRole("button", { name: /Previous/i }));
+    expect(await screen.findByText(/Step 1 of 3/i)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: /Previous/i }));
+    expect(onAiBack).toHaveBeenCalledTimes(1);
   });
 
   it("defaults new Study Support quizzes to three attempts and visible results only for intervention quizzes", () => {
@@ -462,6 +911,7 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     expect(duration.value).toBe("30");
     expect(attempts.value).toBe("2");
     expect(screen.getByRole("switch", { name: "Shuffle questions" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("switch", { name: "Shuffle answer choices" }).getAttribute("aria-checked")).toBe("true");
     expect(duration.disabled).toBe(false);
   });
 
@@ -502,10 +952,12 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     const duration = await screen.findByLabelText("Duration (minutes)") as HTMLInputElement;
     const attempts = screen.getByLabelText("Allowed Attempts") as HTMLInputElement;
     const shuffleSwitch = screen.getByRole("switch", { name: "Shuffle questions" });
+    const shuffleChoicesSwitch = screen.getByRole("switch", { name: "Shuffle answer choices" });
 
     expect(duration.disabled).toBe(false);
     expect(attempts.disabled).toBe(false);
     expect((shuffleSwitch as HTMLButtonElement).disabled).toBe(false);
+    expect((shuffleChoicesSwitch as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByText(/Locked because students have already attempted this quiz/i)).toBeNull();
   });
 
@@ -546,18 +998,131 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     const duration = await screen.findByLabelText("Duration (minutes)") as HTMLInputElement;
     const attempts = screen.getByLabelText("Allowed Attempts") as HTMLInputElement;
     const shuffleSwitch = screen.getByRole("switch", { name: "Shuffle questions" }) as HTMLButtonElement;
+    const shuffleChoicesSwitch = screen.getByRole("switch", { name: "Shuffle answer choices" }) as HTMLButtonElement;
 
     // Question structure and scoring controls are locked
     expect(duration.disabled).toBe(true);
     expect(attempts.disabled).toBe(false);
     expect(shuffleSwitch.disabled).toBe(true);
+    expect(shuffleChoicesSwitch.disabled).toBe(true);
 
     // A single, clear explanation describes all locked quiz controls.
     expect(screen.getByText("Quiz settings locked")).toBeTruthy();
     expect(screen.getByText(/A student has already started this quiz/)).toBeTruthy();
 
     // Result release controls remain editable
-    const showResultsSwitch = screen.getByRole("switch", { name: /Show quiz results to students/i }) as HTMLButtonElement;
-    expect(showResultsSwitch.disabled).toBe(false);
+    const releaseSelector = screen.getByRole("combobox", { name: /Quiz Results Release/i }) as HTMLButtonElement;
+    expect(releaseSelector.disabled).toBe(false);
+    expect(screen.queryByRole("switch", { name: /Show quiz results to students/i })).toBeNull();
+  });
+
+  it("saves release-only changes on a started quiz via results-settings without calling classwork update or assign", async () => {
+    const apiFetchMock = vi.mocked(apiFetch);
+    apiFetchMock.mockClear();
+    const onSuccess = vi.fn();
+    const attemptedQuizClasswork: TeacherClasswork = {
+      classwork_id: 99,
+      title: "Attempted Quiz",
+      classwork_type: "QUIZ",
+      total_points: 50,
+      is_published: true,
+      show_scores: true,
+      is_locked: false,
+      is_archived: false,
+      subject_id: 10,
+      attachments: [],
+      reference_links: [],
+      linked_lessons: [sampleLesson],
+      assignments: [{
+        classwork_assignment_id: 102,
+        classwork_id: 99,
+        class_id: 100,
+        max_attempts: 1,
+        is_published: true,
+        show_scores: true,
+      }],
+    };
+
+    render(
+      <MemoryRouter>
+        <EditClassworkModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classwork={attemptedQuizClasswork}
+          onSuccess={onSuccess}
+        />
+      </MemoryRouter>,
+    );
+
+    const releaseSelector = await screen.findByRole("combobox", { name: /Quiz Results Release/i });
+    await waitFor(() => expect((releaseSelector as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(releaseSelector);
+    fireEvent.click(await screen.findByText("Keep results hidden"));
+    fireEvent.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+
+    const calledUrls = apiFetchMock.mock.calls.map(([url, init]) => ({
+      url: String(url),
+      method: (init as RequestInit | undefined)?.method ?? "GET",
+      body: (init as RequestInit | undefined)?.body,
+    }));
+    const resultsCall = calledUrls.find(
+      (call) => call.url === "/api/v1/quizzes/classwork/99/results-settings" && call.method === "PUT",
+    );
+    expect(resultsCall).toBeDefined();
+    expect(JSON.parse(String(resultsCall?.body))).toEqual({
+      release_policy: "HIDDEN",
+      summary_release_at: null,
+      confirm_answer_reveal: false,
+    });
+    expect(
+      calledUrls.some((call) => call.url === "/api/v1/classwork-assignments/classwork/99" && call.method === "PUT"),
+    ).toBe(false);
+    expect(
+      calledUrls.some((call) => call.url === "/api/v1/classwork-assignments/classwork/99/assign" && call.method === "POST"),
+    ).toBe(false);
+  });
+
+  it("treats legacy mixed scheduled quizzes as hidden without rendering the scheduled date picker", async () => {
+    const legacyMixedScheduledQuiz: TeacherClasswork = {
+      classwork_id: 88,
+      title: "Legacy Mixed Scheduled Quiz",
+      classwork_type: "QUIZ",
+      total_points: 20,
+      is_published: true,
+      show_scores: false,
+      is_locked: false,
+      is_archived: false,
+      subject_id: 10,
+      attachments: [],
+      reference_links: [],
+      assignments: [{
+        classwork_assignment_id: 103,
+        classwork_id: 88,
+        class_id: 100,
+        max_attempts: 1,
+        is_published: true,
+        show_scores: false,
+      }],
+    };
+
+    render(
+      <MemoryRouter>
+        <EditClassworkModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classwork={legacyMixedScheduledQuiz}
+          onSuccess={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText(/This legacy quiz has mixed visibility settings and is treated as hidden/i),
+    ).toBeDefined();
+    expect(screen.queryByLabelText("Release Date & Time")).toBeNull();
+    expect(screen.getByText(/Scores and answer feedback remain hidden from students/i)).toBeDefined();
   });
 });

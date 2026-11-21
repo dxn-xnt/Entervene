@@ -274,7 +274,7 @@ def auth_headers(account, role="teacher"):
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_lesson_classwork_assignments_returns_enriched_scores(client, test_db):
+def test_lesson_classwork_assignments_respects_scheduled_quiz_results_release(client, test_db):
     data = seed_basic_data(test_db)
     cw = Classwork(
         classwork_id=10,
@@ -289,6 +289,14 @@ def test_lesson_classwork_assignments_returns_enriched_scores(client, test_db):
     )
     test_db.add(cw)
     test_db.flush()
+    release_at = datetime.now(timezone.utc) + timedelta(days=1)
+    setting = QuizSetting(
+        classwork_id=cw.classwork_id,
+        show_correct_answers=True,
+        summary_release_mode="SCHEDULED",
+        summary_release_at=release_at,
+    )
+    test_db.add(setting)
 
     test_db.add(ClassworkLesson(classwork_id=10, lesson_id=1))
     cwa = ClassworkAssignment(
@@ -320,8 +328,18 @@ def test_lesson_classwork_assignments_returns_enriched_scores(client, test_db):
     item = items[0]
     assert item["classwork_assignment_id"] == 101
     assert item["is_submitted"] is True
-    assert item["grade"] == 18.0
-    assert item["show_scores"] is True
+    assert item["grade"] is None
+    assert item["show_scores"] is False
+
+    setting.summary_release_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    test_db.commit()
+    released = client.get(
+        "/api/v1/lessons/1/classwork-assignments?class_id=100",
+        headers=headers,
+    )
+    assert released.status_code == 200, released.text
+    assert released.json()[0]["grade"] == 18.0
+    assert released.json()[0]["show_scores"] is True
 
 
 def test_lesson_classwork_assignments_hides_scores_when_show_scores_is_false(client, test_db):
@@ -564,8 +582,25 @@ def test_get_my_todos_respects_grading_and_score_visibility(client, test_db):
         show_scores=False,
         created_by_staff_id="STF001",
     )
-    test_db.add_all([cw1, cw2])
+    cw3 = Classwork(
+        classwork_id=22,
+        title="Scheduled Quiz Result",
+        classwork_type="QUIZ",
+        classwork_category="WRITTEN_WORK",
+        subject_id=10,
+        total_points=30.0,
+        is_published=True,
+        show_scores=True,
+        created_by_staff_id="STF001",
+    )
+    test_db.add_all([cw1, cw2, cw3])
     test_db.flush()
+    test_db.add(QuizSetting(
+        classwork_id=cw3.classwork_id,
+        show_correct_answers=True,
+        summary_release_mode="SCHEDULED",
+        summary_release_at=datetime.now(timezone.utc) + timedelta(days=1),
+    ))
 
     cwa1 = ClassworkAssignment(
         classwork_assignment_id=201,
@@ -583,7 +618,15 @@ def test_get_my_todos_respects_grading_and_score_visibility(client, test_db):
         assigned_by_staff_id="STF001",
         is_published=True,
     )
-    test_db.add_all([cwa1, cwa2])
+    cwa3 = ClassworkAssignment(
+        classwork_assignment_id=203,
+        classwork_id=22,
+        class_id=100,
+        academic_period_id=1,
+        assigned_by_staff_id="STF001",
+        is_published=True,
+    )
+    test_db.add_all([cwa1, cwa2, cwa3])
     test_db.flush()
 
     sub1 = StudentSubmission(
@@ -600,7 +643,14 @@ def test_get_my_todos_respects_grading_and_score_visibility(client, test_db):
         status="graded",
         grade=25.0,
     )
-    test_db.add_all([sub1, sub2])
+    sub3 = StudentSubmission(
+        submission_id=12,
+        classwork_assignment_id=203,
+        student_id=data["student"].student_id,
+        status="graded",
+        grade=24.0,
+    )
+    test_db.add_all([sub1, sub2, sub3])
     test_db.commit()
 
     headers = auth_headers(data["student_account"], role="student")
@@ -609,9 +659,13 @@ def test_get_my_todos_respects_grading_and_score_visibility(client, test_db):
     all_todos = res.json()["all"]
     todo1 = next(t for t in all_todos if t["assignment_id"] == 201)
     todo2 = next(t for t in all_todos if t["assignment_id"] == 202)
+    todo3 = next(t for t in all_todos if t["assignment_id"] == 203)
 
     assert todo1["grade"] == 28.0
     assert todo1["is_submitted"] is True
     assert todo2["grade"] is None  # Hidden because show_scores=False
     assert todo2["is_submitted"] is True
+    assert todo3["grade"] is None
+    assert todo3["show_scores"] is False
+    assert todo3["is_submitted"] is True
 

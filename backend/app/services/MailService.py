@@ -28,6 +28,10 @@ def _invitation_link(token: str, frontend_url: str | None = None) -> str:
     return f"{frontend_url or _frontend_url()}/setup-password?token={token}"
 
 
+def _password_reset_link(token: str, frontend_url: str | None = None) -> str:
+    return f"{frontend_url or _frontend_url()}/reset-password?token={quote(token, safe='')}"
+
+
 def _env_flag(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -61,6 +65,32 @@ def _log_demo_invitation_link(email: str, token: str, frontend_url: str | None =
         "+------------------------------------------------------------+\n"
         f"| To   : {email}\n"
         f"| Link : {link}\n"
+        "+------------------------------------------------------------+"
+    )
+
+
+def _log_development_password_reset_link(
+    email: str,
+    token: str,
+    frontend_url: str | None = None,
+) -> None:
+    environment = (
+        os.getenv("APP_ENVIRONMENT")
+        or os.getenv("APP_ENV")
+        or settings.app_environment
+    ).strip().lower()
+    mail_driver = (os.getenv("MAIL_DRIVER") or settings.mail_driver).strip().lower()
+    if environment not in {"development", "test"}:
+        return
+    if mail_driver != "console" and not _demo_invitation_link_logging_enabled():
+        return
+    logger.info(
+        "\n"
+        "+------------------------------------------------------------+\n"
+        "| DEVELOPMENT PASSWORD RESET LINK                            |\n"
+        "+------------------------------------------------------------+\n"
+        f"| To   : {email}\n"
+        f"| Link : {_password_reset_link(token, frontend_url)}\n"
         "+------------------------------------------------------------+"
     )
 
@@ -203,11 +233,12 @@ def send_invitation_email(email: str, token: str) -> None:
 
 
 def send_password_reset_email(email: str, token: str) -> None:
-    frontend_url = (getattr(settings, "frontend_url", None) or "http://localhost:5173").rstrip("/")
-    link = f"{frontend_url}/reset-password?token={quote(token, safe='')}"
+    frontend_url = _frontend_url()
+    link = _password_reset_link(token, frontend_url)
+    _log_development_password_reset_link(email, token, frontend_url)
     mail_driver = (os.getenv("MAIL_DRIVER") or settings.mail_driver).lower()
     if mail_driver == "console":
-        logger.info("[MailService] Password reset email skipped because MAIL_DRIVER is console.")
+        logger.info("[MailService] MAIL_DRIVER is set to 'console'. Skipping SMTP delivery.")
         return
 
     smtp_user = os.getenv("SMTP_USER") or settings.smtp_user

@@ -298,6 +298,12 @@ def apply_resource_recipient_scope(
 
     _require_scope(db, staff_id, intervention)
 
+    # Persist only an explicit choice saved against the intervention that
+    # originally created this reading. Attaching the reading to another
+    # intervention must not broaden its authoritative Repost scope.
+    if classwork.intervention_resource_origin_id == intervention.intervention_id:
+        classwork.intervention_resource_recipient_scope = resolved_scope
+
     period = db.get(AcademicPeriod, intervention.academic_period_id)
     if period is None:
         raise HTTPException(status_code=400, detail="Academic period not found")
@@ -629,26 +635,9 @@ def get_intervention_resource_recipient_context(
             detail="The Study Support origin for this reading is no longer available",
         )
     _require_scope(db, staff_id, intervention)
-    assignments = (
-        db.query(ClassworkAssignment)
-        .filter(ClassworkAssignment.classwork_id == classwork.classwork_id)
-        .all()
-    )
-    authorized_ids = set(
-        resolve_authorized_subject_class_ids(
-            db,
-            staff_id,
-            intervention.subject_id,
-            intervention.academic_period_id,
-        )
-    ) | {intervention.class_id}
     return {
         "origin_intervention_id": intervention.intervention_id,
-        "current_scope": describe_resource_recipient_scope(
-            assignments,
-            row=intervention,
-            authorized_subject_class_ids=authorized_ids,
-        ),
+        "current_scope": classwork.intervention_resource_recipient_scope or "UNASSIGNED",
         "recipient_scopes": resolve_intervention_recipient_scopes(
             db, staff_id, intervention
         ),

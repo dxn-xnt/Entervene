@@ -40,10 +40,13 @@ from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
+from app.models.academic.LessonDelivery import LessonDelivery
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+from app.models.academic.SubjectPeriodGradingTemplate import SubjectPeriodGradingTemplate
+from app.models.academic.SubjectYearGradingTemplate import SubjectYearGradingTemplate
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.auth.Role import Role
 from app.models.auth.UserAccount import UserAccount
@@ -51,6 +54,7 @@ from app.models.auth.UserRoles import UserRoles
 from app.models.classwork.ActivityRubricLevel import ActivityRubricLevel
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkAssignmentRecipient import ClassworkAssignmentRecipient
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkCoverage import ClassworkCoverage
 from app.models.classwork.ClassworkLesson import ClassworkLesson
@@ -91,12 +95,16 @@ TABLES = [
     SubjectLoad.__table__,
     SubjectOffering.__table__,
     SubjectOfferingPathway.__table__,
+    SubjectPeriodGradingTemplate.__table__,
+    SubjectYearGradingTemplate.__table__,
     TeacherSubstitution.__table__,
     Competency.__table__,
     Lesson.__table__,
     LessonAssignment.__table__,
+    LessonDelivery.__table__,
     Classwork.__table__,
     ClassworkAssignment.__table__,
+    ClassworkAssignmentRecipient.__table__,
     ClassworkAttachment.__table__,
     ClassworkCoverage.__table__,
     ClassworkLesson.__table__,

@@ -110,14 +110,6 @@ def _select_submission(
     return graded[[_as_utc(value) for value in timestamps].index(latest)], False
 
 
-def _validate_exclude_intervention_id(exclude_intervention_id: int | None) -> int | None:
-    if exclude_intervention_id is None:
-        return None
-    if isinstance(exclude_intervention_id, bool) or not isinstance(exclude_intervention_id, int) or exclude_intervention_id <= 0:
-        raise ValueError("exclude_intervention_id must be a positive integer.")
-    return exclude_intervention_id
-
-
 def _classwork_rows(
     db: Session,
     student_id: UUID,
@@ -125,11 +117,8 @@ def _classwork_rows(
     subject_id: int,
     source_period_id: int,
     cutoff_at: datetime | None,
-    *,
-    exclude_intervention_id: int | None = None,
-    excluded_assignment_ids: set[int] | None = None,
 ) -> tuple[list[tuple[ClassworkAssignment, Classwork, StudentSubmission | None, bool]], bool]:
-    query = (
+    assignments = (
         db.query(ClassworkAssignment, Classwork)
         .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
         .filter(
@@ -140,15 +129,9 @@ def _classwork_rows(
             Classwork.is_graded.is_(True),
             Classwork.classwork_type != "READING",
         )
+        .order_by(ClassworkAssignment.classwork_assignment_id)
+        .all()
     )
-    if exclude_intervention_id is not None:
-        query = query.filter(
-            (ClassworkAssignment.source_intervention_id.is_(None))
-            | (ClassworkAssignment.source_intervention_id != exclude_intervention_id)
-        )
-    if excluded_assignment_ids:
-        query = query.filter(~ClassworkAssignment.classwork_assignment_id.in_(excluded_assignment_ids))
-    assignments = query.order_by(ClassworkAssignment.classwork_assignment_id).all()
     assignment_ids = [assignment.classwork_assignment_id for assignment, _ in assignments]
     submissions = (
         db.query(StudentSubmission)
@@ -292,20 +275,13 @@ def build_current_period_features_from_records(
     cutoff_at: datetime | None = None,
     hypothetical_ww_pt_scores: Mapping[int, float] | None = None,
     hypothetical_exam_scores: Mapping[int, float] | None = None,
-    exclude_intervention_id: int | None = None,
 ) -> dict[str, Any]:
     """Build the normal live feature vector, with optional ephemeral score overrides.
 
     Overrides are deliberately restricted to scored, original assignments in
     this exact evidence scope. They change only earned-score aggregates; activity
     counts, possible points, and persisted rows are untouched.
-
-    When exclude_intervention_id is supplied, all remediation assignments and
-    WW/PT remediation links belonging to that intervention are excluded in
-    memory (read-only) so original scores and legitimate regular academic
-    evidence are preserved without that intervention's remediation effects.
     """
-    excluded_id = _validate_exclude_intervention_id(exclude_intervention_id)
     overrides = {int(key): float(value) for key, value in (hypothetical_ww_pt_scores or {}).items()}
     if any(not math.isfinite(value) or value < 0 for value in overrides.values()):
         raise ValueError("Hypothetical WW/PT scores must be finite and non-negative.")
@@ -341,28 +317,7 @@ def build_current_period_features_from_records(
     exam_observations: list[ExaminationObservation] = []
     domain_warnings: list[dict[str, Any]] = []
 
-    excluded_link_remediation_ids: set[int] = set()
-    if excluded_id is not None:
-        excluded_link_remediation_ids = {
-            row[0]
-            for row in db.query(RemediationAssignmentLink.remediation_assignment_id)
-            .filter(
-                RemediationAssignmentLink.student_id == student_id,
-                RemediationAssignmentLink.source_intervention_id == excluded_id,
-            )
-            .all()
-        }
-
-    rows, unresolved = _classwork_rows(
-        db,
-        student_id,
-        class_id,
-        subject_id,
-        source_period_id,
-        cutoff_at,
-        exclude_intervention_id=excluded_id,
-        excluded_assignment_ids=excluded_link_remediation_ids or None,
-    )
+    rows, unresolved = _classwork_rows(db, student_id, class_id, subject_id, source_period_id, cutoff_at)
     exam_rows = [
         (asgn, cw, sub, unres) for asgn, cw, sub, unres in rows
         if getattr(cw, "classwork_category", None) == "EXAMS"
@@ -378,16 +333,17 @@ def build_current_period_features_from_records(
     asgn_ids = [assignment.classwork_assignment_id for assignment, _, _, _ in rows]
     links: list[RemediationAssignmentLink] = []
     if asgn_ids:
-        link_query = db.query(RemediationAssignmentLink).filter(
-            RemediationAssignmentLink.student_id == student_id,
-            (
-                RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
-                | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
-            ),
+        links = (
+            db.query(RemediationAssignmentLink)
+            .filter(
+                RemediationAssignmentLink.student_id == student_id,
+                (
+                    RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                    | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                ),
+            )
+            .all()
         )
-        if excluded_id is not None:
-            link_query = link_query.filter(RemediationAssignmentLink.source_intervention_id != excluded_id)
-        links = link_query.all()
     if cutoff_at is not None:
         cutoff_utc = _as_utc(cutoff_at)
         links = [

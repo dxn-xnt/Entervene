@@ -324,6 +324,44 @@ export function mapUnmappedQuestionsToLesson(
   );
 }
 
+export function mapQuestionsToSingleLinkedLesson(
+  questions: QuizQuestionDraft[],
+  linkedLessonIds: readonly number[],
+): QuizQuestionDraft[] {
+  if (linkedLessonIds.length !== 1) return questions;
+
+  const [lessonId] = linkedLessonIds;
+  return questions.every((question) => question.lesson_id === lessonId)
+    ? questions
+    : mapUnmappedQuestionsToLesson(questions, lessonId);
+}
+
+export function reconcileQuestionLessonMappings(
+  questions: QuizQuestionDraft[],
+  linkedLessonIds: readonly number[],
+): QuizQuestionDraft[] {
+  const onlyLessonId = linkedLessonIds.length === 1 ? linkedLessonIds[0] : null;
+  let changed = false;
+  const reconciled = questions.map((question) => {
+    const lessonId = onlyLessonId ?? sanitizeQuestionLessonId(
+      question.lesson_id,
+      linkedLessonIds,
+    );
+    if (question.lesson_id === lessonId) return question;
+    changed = true;
+    return { ...question, lesson_id: lessonId };
+  });
+  return changed ? reconciled : questions;
+}
+
+export function areQuestionMappingControlsDisabled(
+  isCreating: boolean,
+  isLessonLocked: boolean,
+  unmappedCount: number,
+): boolean {
+  return isCreating || (isLessonLocked && unmappedCount === 0);
+}
+
 export function assignSelectedQuestionsToLesson(
   questions: QuizQuestionDraft[],
   selectedQuestionIds: ReadonlySet<string>,

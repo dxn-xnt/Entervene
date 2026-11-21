@@ -188,7 +188,7 @@ def quiz_attempt_context():
     setting = QuizSetting(
         classwork_id=classwork.classwork_id,
         max_attempts=1,
-        show_correct_answers=False,
+        show_correct_answers=True,
     )
     db.add_all([assignment, quiz, setting])
     db.flush()
@@ -525,7 +525,7 @@ def test_after_due_date_summary_releases_only_after_due_without_writes(quiz_atte
     assert c["db"].query(StudentPeriodGrade).count() == period_grade_count
 
 
-def test_never_release_keeps_score_but_hides_all_question_feedback(quiz_attempt_context):
+def test_never_release_hides_score_and_all_question_feedback(quiz_attempt_context):
     c = quiz_attempt_context
     c["setting"].show_correct_answers = True
     c["setting"].summary_release_mode = "NEVER"
@@ -536,7 +536,7 @@ def test_never_release_keeps_score_but_hides_all_question_feedback(quiz_attempt_
 
     assert response.status_code == 200
     body = response.json()
-    assert body["grade"] == 6.0
+    assert body["grade"] is None
     assert body["summary_available"] is False
     assert "not available" in body["summary_message"]
     for question in body["questions"]:
@@ -561,7 +561,7 @@ def test_release_mode_missing_required_date_fails_closed(quiz_attempt_context, r
 
     assert response.status_code == 200
     body = response.json()
-    assert body["grade"] == 6.0
+    assert body["grade"] is None
     assert body["summary_available"] is False
     assert body["summary_release_at"] is None
     assert "currently unavailable" in body["summary_message"]
@@ -587,7 +587,7 @@ def test_unsupported_release_mode_fails_closed():
     assert "currently unavailable" in message
 
 
-def test_released_summary_includes_student_answers_without_revealing_correct_key(quiz_attempt_context):
+def test_legacy_mixed_visibility_fails_closed_even_when_summary_is_released(quiz_attempt_context):
     c = quiz_attempt_context
     c["setting"].show_correct_answers = False
     c["setting"].summary_release_mode = "IMMEDIATE"
@@ -613,11 +613,69 @@ def test_released_summary_includes_student_answers_without_revealing_correct_key
     assert response.status_code == 200
     body = response.json()
     assert body["summary_available"] is True
-    assert body["questions"][0]["selected_option_id"] == c["wrong"].option_id
-    assert body["questions"][0]["points_awarded"] == 0.0
+    assert body["show_scores"] is False
+    assert body["grade"] is None
+    assert body["questions"][0]["selected_option_id"] is None
+    assert body["questions"][0]["points_awarded"] is None
     assert body["questions"][0]["options"][0]["is_correct"] is None
     assert body["questions"][0]["explanation"] is None
-    assert body["questions"][1]["answer_text"] == "Variables store values."
+    assert body["questions"][1]["answer_text"] is None
+
+
+def test_hidden_results_redact_released_summary_and_follow_current_setting(quiz_attempt_context):
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+    c["classwork"].show_scores = False
+    c["setting"].enable_per_question_scoring = True
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["db"].commit()
+
+    submitted = _submit_fixture_quiz(c, selected_option_id=c["wrong"].option_id)
+
+    assert submitted.status_code == 200
+    hidden = submitted.json()
+    assert hidden["summary_available"] is True
+    assert hidden["show_scores"] is False
+    assert hidden["grade"] is None
+    assert hidden["passing_threshold"] is None
+    for question in hidden["questions"]:
+        assert question["answer_text"] is None
+        assert question["selected_option_id"] is None
+        assert question["points_awarded"] is None
+        assert question["is_correct"] is None
+        assert question["explanation"] is None
+        assert all(option["is_correct"] is None for option in question["options"])
+
+    c["classwork"].show_scores = True
+    c["db"].commit()
+    visible = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert visible.status_code == 200
+    assert visible.json()["grade"] == 0.0
+    assert visible.json()["questions"][0]["selected_option_id"] == c["wrong"].option_id
+    assert visible.json()["questions"][0]["points_awarded"] == 0.0
+    assert visible.json()["questions"][0]["is_correct"] is False
+    assert visible.json()["questions"][0]["options"][0]["is_correct"] is True
+
+    c["classwork"].show_scores = False
+    c["db"].commit()
+    hidden_again = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert hidden_again.status_code == 200
+    assert hidden_again.json()["grade"] is None
+    assert hidden_again.json()["questions"][0]["selected_option_id"] is None
+    assert hidden_again.json()["questions"][0]["points_awarded"] is None
+    assert hidden_again.json()["questions"][0]["is_correct"] is None
+    assert hidden_again.json()["questions"][0]["options"][0]["is_correct"] is None
+
+    c["classwork"].show_scores = True
+    c["setting"].show_correct_answers = False
+    c["db"].commit()
+    mixed_legacy = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert mixed_legacy.status_code == 200
+    assert mixed_legacy.json()["show_scores"] is False
+    assert mixed_legacy.json()["grade"] is None
+    assert mixed_legacy.json()["questions"][0]["points_awarded"] is None
 
 
 def test_immediate_release_returns_nonblank_explanation_only_with_correct_answers_enabled(
@@ -697,7 +755,7 @@ def test_partially_graded_response_releases_explanation_and_exact_teacher_feedba
     assert body["questions"][1]["explanation"] == "A variable stores a reusable value."
 
 
-def test_teacher_feedback_preserves_owner_visibility_without_releasing_never_summary(
+def test_teacher_feedback_is_withheld_from_student_without_releasing_never_summary(
     quiz_attempt_context,
 ):
     c = quiz_attempt_context
@@ -719,7 +777,7 @@ def test_teacher_feedback_preserves_owner_visibility_without_releasing_never_sum
     assert result.status_code == 200
     body = result.json()
     assert body["summary_available"] is False
-    assert body["feedback"] == "Review variables before the next lesson."
+    assert body["feedback"] is None
     assert all(question["explanation"] is None for question in body["questions"])
 
     _act_as(c, "other_student", "student")
@@ -1166,3 +1224,83 @@ def test_editing_intervention_quiz_attempt_limit_after_submission_updates_remain
     assert body["attempts_remaining"] == 4
     assert body["grade"] == saved_grade
     assert len(body["questions"]) == 2
+
+
+def test_student_attempt_shuffles_questions_and_answer_choices_while_preserving_grading_and_original_quiz(
+    quiz_attempt_context,
+):
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+    c["setting"].is_shuffle_questions = True
+    c["setting"].is_shuffle_options = True
+    c["setting"].show_correct_answers = True
+    c["setting"].max_attempts = 1
+    c["assignment"].max_attempts = 1
+    c["db"].commit()
+
+    canonical_question_ids = [
+        c["mc_link"].quiz_question_id,
+        c["short_link"].quiz_question_id,
+    ]
+    canonical_option_ids = [
+        c["correct"].option_id,
+        c["wrong"].option_id,
+    ]
+
+    started = c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start")
+    assert started.status_code == 200, started.json()
+    started_body = started.json()
+
+    # Reloading the attempt returns the exact same shuffled order for the active attempt
+    reloaded = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert reloaded.status_code == 200, reloaded.json()
+    reloaded_body = reloaded.json()
+
+    started_question_ids = [q["quiz_question_id"] for q in started_body["questions"]]
+    reloaded_question_ids = [q["quiz_question_id"] for q in reloaded_body["questions"]]
+    assert started_question_ids == reloaded_question_ids
+    assert started_question_ids != canonical_question_ids
+    assert [q["display_order"] for q in started_body["questions"]] == [1, 2]
+
+    mc_question = next(
+        q for q in started_body["questions"] if q["question_type"] == "MULTIPLE_CHOICE"
+    )
+    shuffled_option_ids = [opt["option_id"] for opt in mc_question["options"]]
+    assert shuffled_option_ids != canonical_option_ids
+    assert [opt["option_order"] for opt in mc_question["options"]] == [1, 2]
+
+    # Submit using the correct option_id even though its option_order was shuffled
+    submit_resp = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={
+            "answers": [
+                {
+                    "quiz_question_id": c["mc_link"].quiz_question_id,
+                    "selected_option_id": c["correct"].option_id,
+                },
+                {
+                    "quiz_question_id": c["short_link"].quiz_question_id,
+                    "answer_text": "Variables store values for reuse.",
+                },
+            ]
+        },
+    )
+    assert submit_resp.status_code == 200, submit_resp.json()
+    submit_body = submit_resp.json()
+    graded_mc = next(
+        q for q in submit_body["questions"] if q["quiz_question_id"] == c["mc_link"].quiz_question_id
+    )
+    assert graded_mc["selected_option_id"] == c["correct"].option_id
+
+    # Verify original database records for question order and option order were not mutated
+    c["db"].refresh(c["mc_link"])
+    c["db"].refresh(c["short_link"])
+    c["db"].refresh(c["correct"])
+    c["db"].refresh(c["wrong"])
+    assert c["mc_link"].display_order == 1
+    assert c["short_link"].display_order == 2
+    assert c["correct"].option_order == 1
+    assert c["correct"].is_correct is True
+    assert c["wrong"].option_order == 2
+    assert c["wrong"].is_correct is False
+

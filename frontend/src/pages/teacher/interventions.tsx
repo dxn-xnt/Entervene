@@ -280,6 +280,7 @@ export default function TeacherInterventions() {
   const close = () => {
     const next = new URLSearchParams(params);
     next.delete("setup");
+    next.delete("step");
     next.delete("candidate");
     next.delete("active");
     next.delete("resolved");
@@ -289,6 +290,7 @@ export default function TeacherInterventions() {
   const open = (id: number) => {
     const next = new URLSearchParams(params);
     next.delete("setup");
+    next.delete("step");
     next.set(view, String(id));
     setParams(next);
   };
@@ -296,6 +298,7 @@ export default function TeacherInterventions() {
   const selectView = (nextView: "candidate" | "active" | "resolved") => {
     const next = new URLSearchParams(params);
     next.delete("setup");
+    next.delete("step");
     next.delete("candidate");
     next.delete("active");
     next.delete("resolved");
@@ -915,6 +918,9 @@ export default function TeacherInterventions() {
         onClose={close}
         selectedKind={selectedKind}
         startSetup={params.get("setup") === "1"}
+        initialStep={
+          params.get("step") ? Number(params.get("step")) : undefined
+        }
         detail={detail}
         detailLoading={detailLoading}
         detailError={detailError}

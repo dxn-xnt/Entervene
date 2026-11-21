@@ -52,12 +52,15 @@ from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAut
 from app.services.ai import Provider
 from app.services.ai.UsageGuard import ai_configured
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
-from app.services.classwork.ClassworkShared import aware_utc, is_quiz_type, is_reading_type
+from app.services.classwork.ClassworkShared import is_quiz_type, is_reading_type
 from app.services.quiz.QuizAttemptService import (
     COMPLETED_ATTEMPT_STATUSES,
     _attempt_feedback_visibility,
     _can_submit,
     _summary_release_state,
+)
+from app.services.quiz.QuizResultsReleasePolicy import (
+    effective_quiz_results_release_policy,
 )
 from app.services.submission.SubmissionService import feedback_fingerprint, teacher_owns_assignment
 
@@ -589,6 +592,10 @@ def _load_feedback_context(
             setting,
             submission,
             summary_available=summary_available,
+            show_scores=(
+                effective_quiz_results_release_policy(classwork, setting)
+                != "HIDDEN"
+            ),
         )
         return _FeedbackContext(
             submission_id=submission.submission_id,
@@ -932,19 +939,10 @@ def get_submission_feedback_eligibility(
             message=message,
         )
 
-    if not context.answer_release_authorized:
-        code, message = _answer_release_unavailable(context)
-        return FeedbackEligibilityResponse(
-            submission_id=submission_id,
-            eligible=False,
-            answer_release_authorized=False,
-            code=code,
-            message=message,
-        )
     return FeedbackEligibilityResponse(
         submission_id=submission_id,
         eligible=True,
-        answer_release_authorized=True,
+        answer_release_authorized=context.answer_release_authorized,
     )
 
 
@@ -956,7 +954,6 @@ async def generate_submission_feedback_suggestion(
     """Generate a teacher-private draft without changing any academic record."""
     context = _load_feedback_context(db, staff_id, submission_id)
     _assert_ai_available()
-    _assert_answer_release_authorized(context)
     evidence_fingerprint = _evidence_fingerprint(context)
     current_feedback_fingerprint = feedback_fingerprint(context.feedback)
     prompt, included_items = _build_prompt(context)
@@ -1255,28 +1252,10 @@ def _determine_scheduled_release_time(
         return now
 
     setting = db.query(QuizSetting).filter_by(classwork_id=classwork.classwork_id).first()
-    if not setting or not setting.show_correct_answers or not getattr(setting, "show_scores", True):
-        return None
-
-    retake_available = _can_submit(db, assignment, classwork, submission)
-    due_date = aware_utc(assignment.due_date)
-    mode = (setting.summary_release_mode or "IMMEDIATE").strip().upper()
-
-    if retake_available:
-        if due_date and due_date > now:
-            sched = due_date
-            if mode == "SCHEDULED" and setting.summary_release_at and aware_utc(setting.summary_release_at) > sched:
-                sched = aware_utc(setting.summary_release_at)
-            return sched
-        return None
-
-    if mode == "IMMEDIATE":
-        return now
-    elif mode == "SCHEDULED":
-        return aware_utc(setting.summary_release_at) if setting.summary_release_at else None
-    elif mode == "AFTER_DUE_DATE":
-        return due_date
-    return None
+    # Draft generation is teacher-private and uses GENERAL evidence whenever
+    # results or answer release are restricted. Publication remains guarded by
+    # _assert_answer_release_authorized, including retake protections.
+    return now if setting is not None else None
 
 
 def enqueue_automatic_feedback_draft(
@@ -1430,11 +1409,10 @@ async def process_feedback_draft_job(db: Session, draft_id: int) -> bool:
         db.commit()
         return False
 
-    # 3. Load feedback context & verify release eligibility
+    # 3. Load teacher-private feedback context. Student publication remains a
+    # separate, release-gated operation.
     try:
         context = _load_feedback_context(db, staff_id, draft.submission_id)
-        if is_quiz_type(classwork.classwork_type):
-            _assert_answer_release_authorized(context)
         if is_quiz_type(classwork.classwork_type) or (context.focus_points and getattr(settings, "contextual_ai_feedback_authorized", False)):
             _assert_ai_available()
     except HTTPException as exc:
