@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -25,6 +25,7 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.quiz.Question import Question
@@ -49,6 +50,7 @@ TABLES = [
     StudentClass.__table__,
     Lesson.__table__,
     Classwork.__table__,
+    ClassworkLesson.__table__,
     ClassworkAssignment.__table__,
     StudentSubmission.__table__,
     Quiz.__table__,
@@ -176,6 +178,10 @@ def quiz_api_context():
     )
     db.add_all([lesson, quiz_classwork, non_quiz_classwork, foreign_quiz])
     db.flush()
+    db.add(ClassworkLesson(
+        classwork_id=quiz_classwork.classwork_id,
+        lesson_id=lesson.lesson_id,
+    ))
 
     assignment = ClassworkAssignment(
         classwork_id=quiz_classwork.classwork_id,
@@ -246,6 +252,7 @@ def _valid_payload(lesson_id: int):
                 "question_type": "SHORT_ANSWER",
                 "points": 4,
                 "display_order": 2,
+                "lesson_id": lesson_id,
                 "options": [],
             },
         ],
@@ -289,7 +296,7 @@ def test_examination_quiz_builder_persists_question_lesson_mapping(quiz_api_cont
     )
     assert response.status_code == 200
     assert response.json()["questions"][0]["lesson_id"] == c["lesson"].lesson_id
-    assert response.json()["questions"][1]["lesson_id"] is None
+    assert response.json()["questions"][1]["lesson_id"] == c["lesson"].lesson_id
     saved = c["db"].query(QuizQuestion).join(Question).filter(
         QuizQuestion.quiz_id == response.json()["quiz_id"],
         QuizQuestion.display_order == 1,
@@ -558,6 +565,72 @@ def test_quiz_results_settings_update_both_visibility_fields_after_attempt_exist
     setting = c["db"].query(QuizSetting).filter(QuizSetting.classwork_id == classwork_id).one()
     assert c["quiz_classwork"].show_scores is True
     assert setting.show_correct_answers is True
+
+
+@pytest.mark.parametrize(
+    ("policy", "expected_mode", "visible"),
+    [
+        ("HIDDEN", "NEVER", False),
+        ("IMMEDIATE", "IMMEDIATE", True),
+        ("AFTER_DUE_DATE", "AFTER_DUE_DATE", True),
+        ("SCHEDULED", "SCHEDULED", True),
+    ],
+)
+def test_unified_quiz_results_release_maps_to_legacy_storage(
+    quiz_api_context, policy, expected_mode, visible,
+):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    assert c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}",
+        json=_valid_payload(c["lesson"].lesson_id),
+    ).status_code == 200
+    if policy == "AFTER_DUE_DATE":
+        c["assignment"].due_date = datetime.now(timezone.utc) + timedelta(days=1)
+        c["db"].commit()
+    release_at = (
+        (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+        if policy == "SCHEDULED"
+        else None
+    )
+
+    response = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={
+            "release_policy": policy,
+            "summary_release_at": release_at,
+            "confirm_answer_reveal": visible,
+        },
+    )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["release_policy"] == policy
+    assert response.json()["show_scores"] is visible
+    assert response.json()["show_correct_answers"] is visible
+    assert response.json()["summary_release_mode"] == expected_mode
+    c["db"].refresh(c["quiz_classwork"])
+    setting = c["db"].query(QuizSetting).filter_by(classwork_id=classwork_id).one()
+    assert c["quiz_classwork"].show_scores is visible
+    assert setting.show_correct_answers is visible
+
+
+def test_unified_release_rejects_missing_due_date_and_schedule(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+
+    after_due = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={"release_policy": "AFTER_DUE_DATE", "confirm_answer_reveal": True},
+    )
+    assert after_due.status_code == 422
+    assert "due date" in after_due.json()["detail"].lower()
+
+    scheduled = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork_id}/results-settings",
+        json={"release_policy": "SCHEDULED", "confirm_answer_reveal": True},
+    )
+    assert scheduled.status_code == 422
+    assert "date and time" in scheduled.json()["detail"].lower()
 
 
 def test_quiz_results_settings_preserve_mixed_visibility_until_explicit_choice(quiz_api_context):

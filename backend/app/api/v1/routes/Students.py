@@ -23,7 +23,9 @@ from app.models.classwork.Classwork import Classwork
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.attendance.Attendance import AttendanceRecord
 from app.models.quiz.QuizAnswer import QuizAnswer
+from app.models.quiz.QuizSetting import QuizSetting
 from app.services.academic.AcademicLifecycleService import resolve_active_academic_year
+from app.services.quiz.QuizResultsReleasePolicy import quiz_results_are_visible
 
 router = APIRouter()
 
@@ -104,12 +106,30 @@ def get_my_studyboard_metrics(
     if academic_period_id is not None:
         submission_query = submission_query.filter(ClassworkAssignment.academic_period_id == academic_period_id)
     submission_rows = submission_query.all() if class_id is not None else []
+    submission_quiz_settings = {
+        setting.classwork_id: setting
+        for setting in db.query(QuizSetting).filter(
+            QuizSetting.classwork_id.in_([
+                classwork.classwork_id
+                for _, _, classwork, _ in submission_rows
+                if classwork.classwork_type.upper() == "QUIZ"
+            ])
+        ).all()
+    }
     daily_seconds = {i: 0 for i in range(7)}
     subject_seconds: dict[int, dict] = {}
     trend_buckets: dict[int, list[float]] = {i: [] for i in range(6)}
     on_time = late = 0
     visible_quiz_submission_ids = []
     for submission, assignment, classwork, subject in submission_rows:
+        score_visible = bool(classwork.show_scores)
+        if classwork.classwork_type.upper() == "QUIZ":
+            score_visible = quiz_results_are_visible(
+                classwork,
+                submission_quiz_settings.get(classwork.classwork_id),
+                assignment,
+                submission_status=submission.status,
+            )
         activity_at = submission.submitted_at or submission.created_at
         if activity_at and monday <= _manila_date(activity_at) < monday + timedelta(days=7):
             seconds = max(0, submission.reading_focused_seconds or 0)
@@ -124,12 +144,12 @@ def get_my_studyboard_metrics(
                 on_time += 1
             else:
                 late += 1
-        if (submission.grade is not None and classwork.total_points and classwork.show_scores
+        if (submission.grade is not None and classwork.total_points and score_visible
                 and submission.graded_at and _manila_date(submission.graded_at) >= six_weeks_ago):
             week = (_manila_date(submission.graded_at) - six_weeks_ago).days // 7
             if week in trend_buckets:
                 trend_buckets[week].append(float(submission.grade / classwork.total_points * 100))
-        if classwork.classwork_type.upper() == "QUIZ" and classwork.show_scores and submission.status == "graded":
+        if classwork.classwork_type.upper() == "QUIZ" and score_visible and submission.status == "graded":
             visible_quiz_submission_ids.append(submission.submission_id)
 
     quiz_answers = (
@@ -564,6 +584,20 @@ def get_my_todos(
         )
 
     results = results.order_by(ClassworkAssignment.due_date.asc().nulls_last()).all()
+    result_classworks = {
+        classwork.classwork_id: classwork
+        for classwork in db.query(Classwork).filter(
+            Classwork.classwork_id.in_([row.classwork_id for row in results])
+        ).all()
+    }
+    result_quiz_settings = {
+        setting.classwork_id: setting
+        for setting in db.query(QuizSetting).filter(
+            QuizSetting.classwork_id.in_([
+                row.classwork_id for row in results if row.classwork_type.upper() == "QUIZ"
+            ])
+        ).all()
+    }
 
     pending_items = []
     pastdue_items = []
@@ -584,9 +618,18 @@ def get_my_todos(
         status = "completed" if is_submitted else ("pastdue" if is_past_due else "pending")
 
         total_pts = float(row.total_points) if row.total_points is not None else (None if not row.is_graded or row.classwork_type == "READING" else 100.0)
+        score_visible = row.show_scores is not False
+        if row.classwork_type.upper() == "QUIZ":
+            score_visible = quiz_results_are_visible(
+                result_classworks[row.classwork_id],
+                result_quiz_settings.get(row.classwork_id),
+                row,
+                submission_status=row.submission_status,
+                now=now,
+            )
         visible_grade = (
             float(row.grade)
-            if (row.grade is not None and row.show_scores is not False and row.submission_status == "graded")
+            if (row.grade is not None and score_visible and row.submission_status == "graded")
             else None
         )
 
@@ -606,7 +649,7 @@ def get_my_todos(
             "status": status,
             "is_submitted": is_submitted,
             "submission_status": row.submission_status,
-            "show_scores": row.show_scores,
+            "show_scores": score_visible,
             "grade": visible_grade,
         }
 

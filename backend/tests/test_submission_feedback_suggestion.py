@@ -446,9 +446,9 @@ def test_eligibility_reports_retake_and_answer_release_restrictions(feedback_con
     feedback_context["db"].commit()
     restricted = feedback_context["client"].get(_eligibility_endpoint(feedback_context))
     assert restricted.status_code == 200, restricted.text
-    assert restricted.json()["eligible"] is False
+    assert restricted.json()["eligible"] is True
     assert restricted.json()["answer_release_authorized"] is False
-    assert restricted.json()["code"] == "FEEDBACK_CORRECT_ANSWERS_DISABLED"
+    assert restricted.json()["code"] is None
 
 
 def test_eligibility_does_not_mask_authorization_failures(feedback_context):
@@ -562,7 +562,9 @@ def test_available_retake_is_rejected_using_current_attempt_rule(feedback_contex
         ("AFTER_DUE_DATE", "FEEDBACK_ANSWER_RELEASE_PENDING"),
     ],
 )
-def test_unreleased_answer_modes_reject_before_provider(feedback_context, monkeypatch, mode, expected_code):
+def test_unreleased_answer_modes_allow_private_general_draft_but_block_publication(
+    feedback_context, monkeypatch, mode, expected_code,
+):
     captured = _capture_provider(monkeypatch)
     setting = feedback_context["setting"]
     setting.show_correct_answers = True
@@ -573,11 +575,25 @@ def test_unreleased_answer_modes_reject_before_provider(feedback_context, monkey
         feedback_context["assignment"].due_date = datetime.now(timezone.utc) + timedelta(days=1)
     feedback_context["db"].commit()
 
-    response = feedback_context["client"].post(_endpoint(feedback_context))
+    generated = feedback_context["client"].post(_endpoint(feedback_context))
 
-    assert response.status_code == 409, response.text
-    assert response.json()["detail"]["code"] == expected_code
-    assert captured["calls"] == 0
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["detail_level"] == "GENERAL"
+    assert generated.json()["answer_release_authorized"] is False
+    assert generated.json()["included_item_count"] == 0
+    assert "released_question_evidence" not in _provider_evidence(captured)
+    assert captured["calls"] == 1
+
+    published = feedback_context["client"].put(
+        f"/api/v1/submissions/{feedback_context['submission'].submission_id}/feedback",
+        json={
+            "feedback": generated.json()["feedback"],
+            "expected_evidence_fingerprint": generated.json()["evidence_fingerprint"],
+            "expected_feedback_fingerprint": generated.json()["feedback_fingerprint"],
+        },
+    )
+    assert published.status_code == 409, published.text
+    assert published.json()["detail"]["code"] == expected_code
 
 
 @pytest.mark.parametrize("mode", ["SCHEDULED", "AFTER_DUE_DATE"])
@@ -608,7 +624,9 @@ def test_feedback_becomes_available_after_answer_release_boundary(
 
 
 @pytest.mark.parametrize("mode", ["SCHEDULED", "AFTER_DUE_DATE"])
-def test_missing_release_date_rejects_before_provider(feedback_context, monkeypatch, mode):
+def test_missing_release_date_allows_private_draft_but_blocks_publication(
+    feedback_context, monkeypatch, mode,
+):
     captured = _capture_provider(monkeypatch)
     setting = feedback_context["setting"]
     setting.show_correct_answers = True
@@ -617,11 +635,22 @@ def test_missing_release_date_rejects_before_provider(feedback_context, monkeypa
     feedback_context["assignment"].due_date = None
     feedback_context["db"].commit()
 
-    response = feedback_context["client"].post(_endpoint(feedback_context))
+    generated = feedback_context["client"].post(_endpoint(feedback_context))
 
-    assert response.status_code == 409, response.text
-    assert response.json()["detail"]["code"] == "FEEDBACK_ANSWER_RELEASE_INVALID"
-    assert captured["calls"] == 0
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["detail_level"] == "GENERAL"
+    assert generated.json()["answer_release_authorized"] is False
+    assert captured["calls"] == 1
+    published = feedback_context["client"].put(
+        f"/api/v1/submissions/{feedback_context['submission'].submission_id}/feedback",
+        json={
+            "feedback": generated.json()["feedback"],
+            "expected_evidence_fingerprint": generated.json()["evidence_fingerprint"],
+            "expected_feedback_fingerprint": generated.json()["feedback_fingerprint"],
+        },
+    )
+    assert published.status_code == 409, published.text
+    assert published.json()["detail"]["code"] == "FEEDBACK_ANSWER_RELEASE_INVALID"
 
 
 def test_released_answers_use_structured_scored_evidence_only(feedback_context, monkeypatch):
@@ -801,15 +830,28 @@ def test_invalid_or_unsafe_ai_output_is_rejected(feedback_context, monkeypatch, 
     assert response.json()["detail"]["code"] == expected_code
 
 
-def test_correct_answers_disabled_rejects_before_provider(feedback_context, monkeypatch):
+def test_correct_answers_disabled_allows_private_general_draft_but_blocks_publication(
+    feedback_context, monkeypatch,
+):
     captured = _capture_provider(monkeypatch)
     feedback_context["setting"].show_correct_answers = False
     feedback_context["db"].commit()
-    response = feedback_context["client"].post(_endpoint(feedback_context))
+    generated = feedback_context["client"].post(_endpoint(feedback_context))
 
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "FEEDBACK_CORRECT_ANSWERS_DISABLED"
-    assert captured["calls"] == 0
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["detail_level"] == "GENERAL"
+    assert generated.json()["answer_release_authorized"] is False
+    assert captured["calls"] == 1
+    published = feedback_context["client"].put(
+        f"/api/v1/submissions/{feedback_context['submission'].submission_id}/feedback",
+        json={
+            "feedback": generated.json()["feedback"],
+            "expected_evidence_fingerprint": generated.json()["evidence_fingerprint"],
+            "expected_feedback_fingerprint": generated.json()["feedback_fingerprint"],
+        },
+    )
+    assert published.status_code == 409
+    assert published.json()["detail"]["code"] == "FEEDBACK_CORRECT_ANSWERS_DISABLED"
 
 
 def test_long_evidence_is_bounded_before_provider_call(feedback_context, monkeypatch):
@@ -1798,7 +1840,9 @@ def test_scored_classwork_student_reads_withhold_existing_feedback_when_scores_h
     assert released.json()["feedback"] == "Existing teacher comment."
 
 
-def test_quiz_student_feedback_response_is_unchanged_when_scores_hidden(feedback_context):
+def test_quiz_student_submission_response_withholds_grade_and_feedback_until_release(
+    feedback_context,
+):
     feedback_context["classwork"].show_scores = False
     feedback_context["db"].commit()
     feedback_context["identity"].update(
@@ -1809,7 +1853,20 @@ def test_quiz_student_feedback_response_is_unchanged_when_scores_hidden(feedback
         f"/api/v1/submissions/{feedback_context['submission'].submission_id}",
     )
     assert result.status_code == 200, result.text
-    assert result.json()["feedback"] == "Existing teacher comment."
+    assert result.json()["grade"] is None
+    assert result.json()["feedback"] is None
+    assert result.json()["feedback_fingerprint"] == feedback_service.feedback_fingerprint(None)
+
+    feedback_context["classwork"].show_scores = True
+    feedback_context["setting"].show_correct_answers = True
+    feedback_context["setting"].summary_release_mode = "IMMEDIATE"
+    feedback_context["db"].commit()
+    released = feedback_context["client"].get(
+        f"/api/v1/submissions/{feedback_context['submission'].submission_id}",
+    )
+    assert released.status_code == 200, released.text
+    assert released.json()["grade"] == 21.0
+    assert released.json()["feedback"] == "Existing teacher comment."
 
 
 def test_auto_ai_feedback_draft_toggle_off(feedback_context, monkeypatch):
@@ -1950,8 +2007,10 @@ def test_auto_ai_feedback_draft_publication_marks_approved(feedback_context, mon
     assert draft_after.json()["status"] == "APPROVED"
 
 
-def test_auto_ai_feedback_delayed_release_quiz(feedback_context, monkeypatch):
-    """Quiz with scheduled release does not generate early; generates when release arrives."""
+def test_auto_ai_feedback_scheduled_release_generates_teacher_private_draft_immediately(
+    feedback_context, monkeypatch,
+):
+    """Scheduled student release does not delay teacher-private draft generation."""
     captured = _capture_provider(monkeypatch, feedback="Delayed release feedback.")
     submission_id = feedback_context["submission"].submission_id
     db = feedback_context["db"]
@@ -1971,17 +2030,7 @@ def test_auto_ai_feedback_delayed_release_quiz(feedback_context, monkeypatch):
     assert draft.scheduled_for is not None
     db.commit()
 
-    # Worker runs now: should not process because scheduled_for is in the future
-    processed = asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
-    assert processed == 0
-    assert captured["calls"] == 0
-
-    # Simulate arrival of scheduled release time
-    draft.scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=10)
-    setting.summary_release_at = datetime.now(timezone.utc) - timedelta(seconds=10)
-    db.commit()
-
-    # Worker runs again: should now claim and process
+    # The worker may prepare the private draft before student release.
     processed = asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
     assert processed == 1
     assert captured["calls"] == 1
@@ -1991,12 +2040,15 @@ def test_auto_ai_feedback_delayed_release_quiz(feedback_context, monkeypatch):
     assert resp.json()["status"] == "READY"
 
 
-def test_auto_ai_feedback_hidden_scores_release_triggers_generation(feedback_context, monkeypatch):
-    """Enabling previously hidden scores triggers generation for graded submissions."""
+def test_auto_ai_feedback_hidden_results_generates_private_draft_without_publication(
+    feedback_context, monkeypatch,
+):
+    """Hidden student results still permit one teacher-private general draft."""
     captured = _capture_provider(monkeypatch, feedback="Unhidden scores feedback.")
     submission_id = feedback_context["submission"].submission_id
     db = feedback_context["db"]
     classwork = feedback_context["classwork"]
+    existing_feedback = feedback_context["submission"].feedback
     classwork.auto_ai_feedback_enabled = True
 
     # Hide scores and answers initially
@@ -2005,32 +2057,32 @@ def test_auto_ai_feedback_hidden_scores_release_triggers_generation(feedback_con
     setting.show_correct_answers = False
     db.commit()
 
-    # Enqueue when scores hidden: cannot schedule
+    # Hidden results do not block internal draft preparation.
     draft = feedback_service.enqueue_automatic_feedback_draft(db, submission_id, "T-FEEDBACK")
+    assert draft is not None
     db.commit()
 
-    # Worker cannot generate while scores/answers hidden
-    if draft:
-        asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
-    assert captured["calls"] == 0
-
-    # Teacher enables scores and answers
-    classwork.show_scores = True
-    setting.show_correct_answers = True
-    db.commit()
-
-    # Sync classwork draft jobs triggers enqueuing
-    enqueued = feedback_service.sync_and_dispatch_classwork_draft_jobs(db, classwork.classwork_id, "T-FEEDBACK")
-    assert enqueued >= 1
-
-    # Worker runs and completes generation
     processed = asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
-    assert processed >= 1
+    assert processed == 1
     assert captured["calls"] == 1
 
     resp = feedback_context["client"].get(f"/api/v1/submissions/{submission_id}/feedback/draft")
     assert resp.status_code == 200
     assert resp.json()["status"] == "READY"
+
+    # Changing release settings never publishes the draft. The worker may
+    # refresh it with newly authorized evidence for later teacher review.
+    classwork.show_scores = True
+    setting.show_correct_answers = True
+    db.commit()
+
+    enqueued = feedback_service.sync_and_dispatch_classwork_draft_jobs(db, classwork.classwork_id, "T-FEEDBACK")
+    assert enqueued == 1
+    processed_again = asyncio.run(feedback_service.process_pending_feedback_draft_jobs(db))
+    assert processed_again == 1
+    assert captured["calls"] == 2
+    feedback_context["db"].refresh(feedback_context["submission"])
+    assert feedback_context["submission"].feedback == existing_feedback
 
 
 def test_auto_ai_feedback_concurrent_workers_claim_once(feedback_context, monkeypatch):

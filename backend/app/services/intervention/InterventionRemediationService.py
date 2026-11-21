@@ -222,11 +222,15 @@ def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
             and not assignment_is_locked(a)
             for a in assignments
         ))
-        current_scope = describe_resource_recipient_scope(
-            assignments,
-            row=row,
-            authorized_subject_class_ids=authorized_subject_class_ids,
-        )
+        current_scope = (
+            cw.intervention_resource_recipient_scope
+            if cw.intervention_resource_origin_id is not None
+            else describe_resource_recipient_scope(
+                assignments,
+                row=row,
+                authorized_subject_class_ids=authorized_subject_class_ids,
+            )
+        ) or "UNASSIGNED"
         linked_lessons = {lesson.lesson_id for lesson in cw.lessons}
         linked_competencies = {lesson.competency_id for lesson in cw.lessons if lesson.competency_id is not None}
         for coverage in db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all():

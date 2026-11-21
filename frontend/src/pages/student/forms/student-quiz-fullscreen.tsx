@@ -69,6 +69,9 @@ export default function StudentQuizFullscreen({
   const isSummaryMode =
     selectedQuizAttempt.status !== "pending" &&
     selectedQuizAttempt.summary_available;
+  const canShowResults =
+    selectedClasswork.show_scores !== false &&
+    selectedQuizAttempt.show_scores !== false;
   const totalPoints =
     selectedQuizAttempt.total_points ?? selectedClasswork.total_points ?? 0;
 
@@ -102,7 +105,7 @@ export default function StudentQuizFullscreen({
           <div className="text-center">
             <p className="text-xl font-black leading-none">
               {isSummaryMode
-                ? selectedClasswork.show_scores
+                ? canShowResults
                   ? `${selectedQuizAttempt.grade ?? 0}/${totalPoints}`
                   : "Hidden"
                 : formatExamTimer(quizRemainingSeconds)}
@@ -157,7 +160,9 @@ export default function StudentQuizFullscreen({
               <div className="mt-4">
                 <p className="text-sm font-semibold">Quiz Summary</p>
                 <p className="text-sm text-gray-600">
-                  Review your recorded answers and item scores.
+                  {canShowResults
+                    ? "Review your recorded answers and item scores."
+                    : "Your submission was recorded. Results are hidden by your teacher."}
                 </p>
               </div>
             ) : !quizReviewMode ? (
@@ -193,7 +198,7 @@ export default function StudentQuizFullscreen({
             </p>
           ) : null}
 
-          {isSummaryMode ? (
+          {isSummaryMode && canShowResults ? (
             <section className="mx-auto max-w-4xl space-y-3">
               {questions.map((question, index) => {
                 const selectedOption = question.options.find(
@@ -210,7 +215,7 @@ export default function StudentQuizFullscreen({
                       </h2>
                       <Badge
                         variant={
-                          selectedClasswork.show_scores &&
+                          canShowResults &&
                             question.points_awarded != null
                             ? question.points_awarded >= question.points
                               ? "success"
@@ -222,7 +227,7 @@ export default function StudentQuizFullscreen({
                         size="sm"
                         className="shrink-0 text-sm font-bold"
                       >
-                        {selectedClasswork.show_scores
+                        {canShowResults
                           ? `${question.points_awarded ?? 0}/${question.points} pts`
                           : `${question.points} pts`}
                       </Badge>
@@ -274,6 +279,13 @@ export default function StudentQuizFullscreen({
                 );
               })}
             </section>
+          ) : isSummaryMode ? (
+            <Card className="mx-auto block w-full max-w-3xl border-black bg-white p-6 text-center shadow-md hover:shadow-none">
+              <p className="text-lg font-bold">Submission recorded</p>
+              <p className="mt-1 text-sm text-gray-600">
+                Question scores, correctness, and answer breakdowns are hidden by your teacher.
+              </p>
+            </Card>
           ) : quizReviewMode ? (
             <section className="mx-auto max-w-3xl">
               <div className="mb-2 flex items-center justify-between">

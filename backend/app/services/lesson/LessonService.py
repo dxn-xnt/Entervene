@@ -18,6 +18,7 @@ from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.quiz.QuizSetting import QuizSetting
 from app.schemas.Lesson import LessonAssignRequest, LessonCreate, LessonResponse, LessonUpdate
 from app.services.classwork.ClassworkShared import aware_utc
 from app.services.lesson.LessonFileService import files_from_form, resolve_lesson_file_path
@@ -30,6 +31,7 @@ from app.services.lesson.LessonShared import (
     get_owned_lesson,
     student_has_subject_period,
 )
+from app.services.quiz.QuizResultsReleasePolicy import quiz_results_are_visible
 
 
 def create_lesson_record(body: LessonCreate, staff_id: str, db: Session) -> LessonResponse:
@@ -601,6 +603,17 @@ def lesson_classwork_assignments(
         display_status = submission.status if submission else _missing_status(assignment, now)
         is_graded = bool(classwork.is_graded) if classwork is not None else True
         show_scores = bool(classwork.show_scores) if classwork is not None else True
+        if classwork is not None and classwork.classwork_type.upper() == "QUIZ":
+            setting = db.query(QuizSetting).filter_by(
+                classwork_id=classwork.classwork_id,
+            ).first()
+            show_scores = quiz_results_are_visible(
+                classwork,
+                setting,
+                assignment,
+                submission_status=submission.status if submission else None,
+                now=now,
+            )
         is_submitted = bool(
             submission
             and (

@@ -37,6 +37,9 @@ from app.services.grading.ComponentMapper import (
     classify_classwork_component, classify_template_component_name,
 )
 from app.services.cloning.ContentCloningErrors import ContentCloningError
+from app.services.cloning.ContentCloningEligibilityService import (
+    require_repost_eligible_classworks,
+)
 from app.services.cloning.ContentCloningPackageService import (
     MAX_PACKAGE_ATTACHMENTS_BYTES, MAX_SINGLE_FILE_BYTES, _canonical_json,
 )
@@ -215,6 +218,14 @@ def validate_clone_inputs(
     items: list[CloneItem],
     asset_root: Path,
 ) -> None:
+    require_repost_eligible_classworks(
+        db,
+        {
+            item.source_entity_id
+            for item in items
+            if item.item_type == "CLASSWORK"
+        },
+    )
     subject = db.get(Subject, destination.subject_id)
     if subject is None:
         raise _conflict("GRADING_TEMPLATE_MISSING", "The destination subject has no grading template.")
@@ -376,6 +387,8 @@ def clone_snapshot_graph(
                 is_locked=True, is_published=False, is_archived=False,
                 subject_id=destination.subject_id,
                 created_by_staff_id=actor_staff_id,
+                intervention_resource_origin_id=None,
+                intervention_resource_recipient_scope=None,
             )
             db.add(copy)
             db.flush()

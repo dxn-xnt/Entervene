@@ -55,30 +55,14 @@ function questionStatusClass(status: QuestionStatus): string {
   }
 }
 
-type QuizResultNavigationState = {
-  submittedAttempt?: QuizAttemptResponse;
-} | null;
-
 const StudentQuizResult = () => {
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const aid = Number(assignmentId);
   const origin = quizReturnContext(location.search);
-  const navState = (location.state as QuizResultNavigationState) ?? null;
-  const initialSubmittedAttempt =
-    navState?.submittedAttempt &&
-    navState.submittedAttempt.classwork_assignment_id === aid
-      ? {
-          ...navState.submittedAttempt,
-          questions: Array.isArray(navState.submittedAttempt.questions)
-            ? navState.submittedAttempt.questions
-            : [],
-        }
-      : null;
-
-  const [quiz, setQuiz] = useState<QuizAttemptResponse | null>(initialSubmittedAttempt);
-  const [loading, setLoading] = useState(!initialSubmittedAttempt);
+  const [quiz, setQuiz] = useState<QuizAttemptResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showIncorrectOnly, setShowIncorrectOnly] = useState(false);
 
@@ -91,15 +75,13 @@ const StudentQuizResult = () => {
 
     let cancelled = false;
     async function loadResult() {
-      if (!initialSubmittedAttempt) {
-        setLoading(true);
-      }
+      setLoading(true);
       setError(null);
       try {
         const data = await getQuizAttempt(aid);
         if (!cancelled) setQuiz(data);
       } catch (err) {
-        if (!cancelled && !initialSubmittedAttempt) {
+        if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load quiz results.");
         }
       } finally {
@@ -111,7 +93,7 @@ const StudentQuizResult = () => {
     return () => {
       cancelled = true;
     };
-  }, [aid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [aid]);
 
   const isQuestionIncorrect = (q: QuizAttemptQuestion) => q.is_correct === false;
 
@@ -398,8 +380,18 @@ const StudentQuizResult = () => {
                 </Card>
               )}
 
-              {/* Item-by-item breakdown if summary is released */}
-              {quiz.summary_available && quiz.questions.length > 0 && (
+              {quiz.summary_available && !canShowScores && (
+                <Card className="border-2 border-black bg-white p-5 text-center shadow-none hover:shadow-none">
+                  <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
+                  <h2 className="mt-2 text-lg font-bold">Submission recorded</h2>
+                  <p className="mt-1 text-sm text-black/60">
+                    Question scores, correctness, and answer breakdowns are hidden by your teacher.
+                  </p>
+                </Card>
+              )}
+
+              {/* Item-by-item outcomes require both summary release and result visibility. */}
+              {quiz.summary_available && canShowScores && quiz.questions.length > 0 && (
                 <div className="flex flex-col gap-4">
                   {/* Sticky Question Navigator */}
                   <div className="sticky top-0 z-20 py-2 -mx-1 px-1 sm:px-0 bg-background/95 backdrop-blur-sm">

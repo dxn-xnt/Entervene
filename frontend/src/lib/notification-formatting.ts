@@ -1,6 +1,6 @@
 import type { NotificationItem } from "@/lib/notifications-api";
 
-export type StudentNotificationTab = "all" | "classwork" | "deadlines" | "study_support";
+export type StudentNotificationTab = "all" | "classwork" | "study_support";
 export type TeacherNotificationTab = "all" | "repost" | "submissions" | "interventions";
 
 const STUDENT_STUDY_SUPPORT_TYPES = new Set<NotificationItem["notification_type"]>([
@@ -33,14 +33,17 @@ export function isStudentStudySupportType(
   return STUDENT_STUDY_SUPPORT_TYPES.has(notificationType);
 }
 
+export function isStudentDeadlineNotification(
+  notificationType: NotificationItem["notification_type"],
+): boolean {
+  return STUDENT_DEADLINE_TYPES.has(notificationType);
+}
+
 export function getStudentNotificationCategory(
   notificationType: NotificationItem["notification_type"],
 ): Exclude<StudentNotificationTab, "all"> {
   if (STUDENT_STUDY_SUPPORT_TYPES.has(notificationType)) {
     return "study_support";
-  }
-  if (STUDENT_DEADLINE_TYPES.has(notificationType)) {
-    return "deadlines";
   }
   if (STUDENT_CLASSWORK_TYPES.has(notificationType)) {
     return "classwork";
@@ -61,7 +64,6 @@ export function getStudentNotificationBadgeLabel(
 ): string {
   const category = getStudentNotificationCategory(notificationType);
   if (category === "study_support") return "Study Support";
-  if (category === "deadlines") return "Deadlines";
   return "Classwork";
 }
 

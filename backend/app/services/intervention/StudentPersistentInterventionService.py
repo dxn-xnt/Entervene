@@ -11,9 +11,11 @@ from app.models.intervention.InterventionReadingReview import InterventionReadin
 from app.models.intervention.InterventionSupportMaterial import InterventionSupportMaterial
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.quiz.QuizSetting import QuizSetting
 from app.services.classwork.ClassworkShared import assignment_is_locked
 from app.services.intervention.InterventionHistoryService import sent_reviewer, targeted_activities
 from app.services.intervention.PracticeReadingCycleService import current_practice_reading_cycle
+from app.services.quiz.QuizResultsReleasePolicy import quiz_results_are_visible
 from app.schemas.StudentPersistentIntervention import (
     StudentPersistentIntervention, StudentPersistentInterventionList,
     StudentPreparationProgress, StudentRequiredReading,
@@ -260,13 +262,21 @@ def _summary(db: Session, row: Intervention, student_id) -> StudentPersistentInt
         activity_passed, _threshold = evaluate_intervention_quiz_pass(
             db, assignment, work, submission,
         )
+        score_visible = bool(work.show_scores)
+        if work.classwork_type.upper() == "QUIZ":
+            score_visible = quiz_results_are_visible(
+                work,
+                db.query(QuizSetting).filter_by(classwork_id=work.classwork_id).first(),
+                assignment,
+                submission_status=submission.status if submission else None,
+            )
         activities.append(StudentSupportActivity(
             assignment_id=assignment.classwork_assignment_id,
             title=work.title, classwork_type=work.classwork_type,
             submission_status=submission.status if submission else None,
-            is_passed=activity_passed,
-            grade=float(submission.grade) if submission and submission.grade is not None and work.show_scores else None,
-            total_points=float(work.total_points) if work.total_points is not None and work.show_scores else None,
+            is_passed=activity_passed if score_visible else False,
+            grade=float(submission.grade) if submission and submission.grade is not None and score_visible else None,
+            total_points=float(work.total_points) if work.total_points is not None and score_visible else None,
             access_state=access_state,
             access_enforced=access_enforced,
             prerequisite_code=prereq_code,

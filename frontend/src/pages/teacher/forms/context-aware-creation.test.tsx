@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { Dialog } from "@/components/retroui/Dialog";
+import { apiFetch } from "@/lib/api";
 import CreateLessonModal from "./create-lesson";
 import CreateClassworkModal from "./create-classwork";
 import CreateClassworkQuizModal from "./create-classwork-quiz";
@@ -123,6 +124,47 @@ vi.mock("@/lib/api", async (importOriginal) => {
           json: () => Promise.resolve({ detail: "Quiz has not been created" }),
         });
       }
+      if (url === "/api/v1/classwork-assignments/classwork/99") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            classwork_id: 99,
+            title: "Attempted Quiz",
+            classwork_type: "QUIZ",
+            total_points: 50,
+            is_published: true,
+            show_scores: false,
+            is_locked: false,
+            is_archived: false,
+            subject_id: 10,
+            attachments: [],
+            reference_links: [],
+            linked_lessons: [sampleLesson],
+            assignments: [{
+              classwork_assignment_id: 102,
+              classwork_id: 99,
+              class_id: 100,
+              max_attempts: 1,
+              is_published: true,
+              show_scores: false,
+            }],
+          }),
+        });
+      }
+      if (url.includes("/api/v1/quizzes/classwork/99/results-settings")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            classwork_id: 99,
+            release_policy: "HIDDEN",
+            show_scores: false,
+            show_correct_answers: false,
+            summary_release_mode: "NEVER",
+            summary_release_at: null,
+            has_mixed_visibility: false,
+          }),
+        });
+      }
       if (url.includes("/api/v1/quizzes/classwork/99")) {
         return Promise.resolve({
           ok: true,
@@ -137,6 +179,24 @@ vi.mock("@/lib/api", async (importOriginal) => {
               show_correct_answers: true,
               summary_release_mode: "IMMEDIATE",
               summary_release_at: null,
+            },
+          }),
+        });
+      }
+      if (url.includes("/api/v1/quizzes/classwork/88")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            duration_minutes: 30,
+            has_attempts: true,
+            settings: {
+              is_shuffle_questions: false,
+              enable_per_question_scoring: true,
+              enable_per_question_time_limits: false,
+              max_attempts: 1,
+              show_correct_answers: true,
+              summary_release_mode: "SCHEDULED",
+              summary_release_at: "2026-12-01T09:00:00Z",
             },
           }),
         });
@@ -163,6 +223,18 @@ vi.mock("@/lib/api", async (importOriginal) => {
     }),
   };
 });
+
+if (typeof HTMLElement !== "undefined") {
+  if (!HTMLElement.prototype.scrollIntoView) {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+  }
+  if (!HTMLElement.prototype.hasPointerCapture) {
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+  }
+  if (!HTMLElement.prototype.releasePointerCapture) {
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+  }
+}
 
 afterEach(() => {
   cleanup();
@@ -557,7 +629,118 @@ describe("Context-Aware Creation & Quiz Reference Link Removal (Priorities 4 & 5
     expect(screen.getByText(/A student has already started this quiz/)).toBeTruthy();
 
     // Result release controls remain editable
-    const showResultsSwitch = screen.getByRole("switch", { name: /Show quiz results to students/i }) as HTMLButtonElement;
-    expect(showResultsSwitch.disabled).toBe(false);
+    const releaseSelector = screen.getByRole("combobox", { name: /Quiz Results Release/i }) as HTMLButtonElement;
+    expect(releaseSelector.disabled).toBe(false);
+    expect(screen.queryByRole("switch", { name: /Show quiz results to students/i })).toBeNull();
+  });
+
+  it("saves release-only changes on a started quiz via results-settings without calling classwork update or assign", async () => {
+    const apiFetchMock = vi.mocked(apiFetch);
+    apiFetchMock.mockClear();
+    const onSuccess = vi.fn();
+    const attemptedQuizClasswork: TeacherClasswork = {
+      classwork_id: 99,
+      title: "Attempted Quiz",
+      classwork_type: "QUIZ",
+      total_points: 50,
+      is_published: true,
+      show_scores: true,
+      is_locked: false,
+      is_archived: false,
+      subject_id: 10,
+      attachments: [],
+      reference_links: [],
+      linked_lessons: [sampleLesson],
+      assignments: [{
+        classwork_assignment_id: 102,
+        classwork_id: 99,
+        class_id: 100,
+        max_attempts: 1,
+        is_published: true,
+        show_scores: true,
+      }],
+    };
+
+    render(
+      <MemoryRouter>
+        <EditClassworkModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classwork={attemptedQuizClasswork}
+          onSuccess={onSuccess}
+        />
+      </MemoryRouter>,
+    );
+
+    const releaseSelector = await screen.findByRole("combobox", { name: /Quiz Results Release/i });
+    await waitFor(() => expect((releaseSelector as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(releaseSelector);
+    fireEvent.click(await screen.findByText("Keep results hidden"));
+    fireEvent.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+
+    const calledUrls = apiFetchMock.mock.calls.map(([url, init]) => ({
+      url: String(url),
+      method: (init as RequestInit | undefined)?.method ?? "GET",
+      body: (init as RequestInit | undefined)?.body,
+    }));
+    const resultsCall = calledUrls.find(
+      (call) => call.url === "/api/v1/quizzes/classwork/99/results-settings" && call.method === "PUT",
+    );
+    expect(resultsCall).toBeDefined();
+    expect(JSON.parse(String(resultsCall?.body))).toEqual({
+      release_policy: "HIDDEN",
+      summary_release_at: null,
+      confirm_answer_reveal: false,
+    });
+    expect(
+      calledUrls.some((call) => call.url === "/api/v1/classwork-assignments/classwork/99" && call.method === "PUT"),
+    ).toBe(false);
+    expect(
+      calledUrls.some((call) => call.url === "/api/v1/classwork-assignments/classwork/99/assign" && call.method === "POST"),
+    ).toBe(false);
+  });
+
+  it("treats legacy mixed scheduled quizzes as hidden without rendering the scheduled date picker", async () => {
+    const legacyMixedScheduledQuiz: TeacherClasswork = {
+      classwork_id: 88,
+      title: "Legacy Mixed Scheduled Quiz",
+      classwork_type: "QUIZ",
+      total_points: 20,
+      is_published: true,
+      show_scores: false,
+      is_locked: false,
+      is_archived: false,
+      subject_id: 10,
+      attachments: [],
+      reference_links: [],
+      assignments: [{
+        classwork_assignment_id: 103,
+        classwork_id: 88,
+        class_id: 100,
+        max_attempts: 1,
+        is_published: true,
+        show_scores: false,
+      }],
+    };
+
+    render(
+      <MemoryRouter>
+        <EditClassworkModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classwork={legacyMixedScheduledQuiz}
+          onSuccess={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText(/This legacy quiz has mixed visibility settings and is treated as hidden/i),
+    ).toBeDefined();
+    expect(screen.queryByLabelText("Release Date & Time")).toBeNull();
+    expect(screen.getByText(/Scores and answer feedback remain hidden from students/i)).toBeDefined();
   });
 });

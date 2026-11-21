@@ -21,6 +21,10 @@ from app.models.auth.UserRoles import UserRoles
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
+from app.services.cloning.ContentCloningEligibilityService import (
+    classwork_repost_eligible_sql_filter,
+    standard_classwork_assignment_sql_filter,
+)
 from app.services.cloning.ContentCloningErrors import ContentCloningError
 
 
@@ -534,6 +538,8 @@ class ContentCloningAuthorizationService:
             .filter(
                 Classwork.subject_id == subject_id,
                 ClassworkAssignment.academic_period_id.is_not(None),
+                classwork_repost_eligible_sql_filter(),
+                standard_classwork_assignment_sql_filter(),
             )
         )
         classwork_query = cls._apply_source_period_filter(

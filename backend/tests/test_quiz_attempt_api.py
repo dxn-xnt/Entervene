@@ -188,7 +188,7 @@ def quiz_attempt_context():
     setting = QuizSetting(
         classwork_id=classwork.classwork_id,
         max_attempts=1,
-        show_correct_answers=False,
+        show_correct_answers=True,
     )
     db.add_all([assignment, quiz, setting])
     db.flush()
@@ -525,7 +525,7 @@ def test_after_due_date_summary_releases_only_after_due_without_writes(quiz_atte
     assert c["db"].query(StudentPeriodGrade).count() == period_grade_count
 
 
-def test_never_release_keeps_score_but_hides_all_question_feedback(quiz_attempt_context):
+def test_never_release_hides_score_and_all_question_feedback(quiz_attempt_context):
     c = quiz_attempt_context
     c["setting"].show_correct_answers = True
     c["setting"].summary_release_mode = "NEVER"
@@ -536,7 +536,7 @@ def test_never_release_keeps_score_but_hides_all_question_feedback(quiz_attempt_
 
     assert response.status_code == 200
     body = response.json()
-    assert body["grade"] == 6.0
+    assert body["grade"] is None
     assert body["summary_available"] is False
     assert "not available" in body["summary_message"]
     for question in body["questions"]:
@@ -561,7 +561,7 @@ def test_release_mode_missing_required_date_fails_closed(quiz_attempt_context, r
 
     assert response.status_code == 200
     body = response.json()
-    assert body["grade"] == 6.0
+    assert body["grade"] is None
     assert body["summary_available"] is False
     assert body["summary_release_at"] is None
     assert "currently unavailable" in body["summary_message"]
@@ -587,7 +587,7 @@ def test_unsupported_release_mode_fails_closed():
     assert "currently unavailable" in message
 
 
-def test_released_summary_includes_student_answers_without_revealing_correct_key(quiz_attempt_context):
+def test_legacy_mixed_visibility_fails_closed_even_when_summary_is_released(quiz_attempt_context):
     c = quiz_attempt_context
     c["setting"].show_correct_answers = False
     c["setting"].summary_release_mode = "IMMEDIATE"
@@ -613,11 +613,69 @@ def test_released_summary_includes_student_answers_without_revealing_correct_key
     assert response.status_code == 200
     body = response.json()
     assert body["summary_available"] is True
-    assert body["questions"][0]["selected_option_id"] == c["wrong"].option_id
-    assert body["questions"][0]["points_awarded"] == 0.0
+    assert body["show_scores"] is False
+    assert body["grade"] is None
+    assert body["questions"][0]["selected_option_id"] is None
+    assert body["questions"][0]["points_awarded"] is None
     assert body["questions"][0]["options"][0]["is_correct"] is None
     assert body["questions"][0]["explanation"] is None
-    assert body["questions"][1]["answer_text"] == "Variables store values."
+    assert body["questions"][1]["answer_text"] is None
+
+
+def test_hidden_results_redact_released_summary_and_follow_current_setting(quiz_attempt_context):
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+    c["classwork"].show_scores = False
+    c["setting"].enable_per_question_scoring = True
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["mc_link"].question.explanation = "The correct answer is Variable."
+    c["db"].commit()
+
+    submitted = _submit_fixture_quiz(c, selected_option_id=c["wrong"].option_id)
+
+    assert submitted.status_code == 200
+    hidden = submitted.json()
+    assert hidden["summary_available"] is True
+    assert hidden["show_scores"] is False
+    assert hidden["grade"] is None
+    assert hidden["passing_threshold"] is None
+    for question in hidden["questions"]:
+        assert question["answer_text"] is None
+        assert question["selected_option_id"] is None
+        assert question["points_awarded"] is None
+        assert question["is_correct"] is None
+        assert question["explanation"] is None
+        assert all(option["is_correct"] is None for option in question["options"])
+
+    c["classwork"].show_scores = True
+    c["db"].commit()
+    visible = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert visible.status_code == 200
+    assert visible.json()["grade"] == 0.0
+    assert visible.json()["questions"][0]["selected_option_id"] == c["wrong"].option_id
+    assert visible.json()["questions"][0]["points_awarded"] == 0.0
+    assert visible.json()["questions"][0]["is_correct"] is False
+    assert visible.json()["questions"][0]["options"][0]["is_correct"] is True
+
+    c["classwork"].show_scores = False
+    c["db"].commit()
+    hidden_again = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert hidden_again.status_code == 200
+    assert hidden_again.json()["grade"] is None
+    assert hidden_again.json()["questions"][0]["selected_option_id"] is None
+    assert hidden_again.json()["questions"][0]["points_awarded"] is None
+    assert hidden_again.json()["questions"][0]["is_correct"] is None
+    assert hidden_again.json()["questions"][0]["options"][0]["is_correct"] is None
+
+    c["classwork"].show_scores = True
+    c["setting"].show_correct_answers = False
+    c["db"].commit()
+    mixed_legacy = c["client"].get(f"/api/v1/quizzes/assignment/{assignment_id}/attempt")
+    assert mixed_legacy.status_code == 200
+    assert mixed_legacy.json()["show_scores"] is False
+    assert mixed_legacy.json()["grade"] is None
+    assert mixed_legacy.json()["questions"][0]["points_awarded"] is None
 
 
 def test_immediate_release_returns_nonblank_explanation_only_with_correct_answers_enabled(
@@ -697,7 +755,7 @@ def test_partially_graded_response_releases_explanation_and_exact_teacher_feedba
     assert body["questions"][1]["explanation"] == "A variable stores a reusable value."
 
 
-def test_teacher_feedback_preserves_owner_visibility_without_releasing_never_summary(
+def test_teacher_feedback_is_withheld_from_student_without_releasing_never_summary(
     quiz_attempt_context,
 ):
     c = quiz_attempt_context
@@ -719,7 +777,7 @@ def test_teacher_feedback_preserves_owner_visibility_without_releasing_never_sum
     assert result.status_code == 200
     body = result.json()
     assert body["summary_available"] is False
-    assert body["feedback"] == "Review variables before the next lesson."
+    assert body["feedback"] is None
     assert all(question["explanation"] is None for question in body["questions"])
 
     _act_as(c, "other_student", "student")
@@ -1166,3 +1224,163 @@ def test_editing_intervention_quiz_attempt_limit_after_submission_updates_remain
     assert body["attempts_remaining"] == 4
     assert body["grade"] == saved_grade
     assert len(body["questions"]) == 2
+
+
+def test_student_my_assignments_and_grade_notifications_enforce_quiz_release_policy(quiz_attempt_context):
+    c = quiz_attempt_context
+    db = c["db"]
+    student = c["student"]
+    assignment = c["assignment"]
+    classwork = c["classwork"]
+    setting = c["setting"]
+
+    from app.models.academic.SubjectLoad import SubjectLoad
+    db.add(SubjectLoad(
+        staff_id=classwork.created_by_staff_id,
+        class_id=assignment.class_id,
+        subject_id=classwork.subject_id,
+        academic_period_id=assignment.academic_period_id,
+        status="active",
+        is_active_version=True,
+    ))
+
+    # Submit and grade a quiz while results are scheduled in the future
+    setting.show_correct_answers = True
+    setting.summary_release_mode = "SCHEDULED"
+    setting.summary_release_at = datetime.now(timezone.utc) + timedelta(days=2)
+    db.commit()
+
+    submitted = _submit_fixture_quiz(c)
+    assert submitted.status_code == 200
+    submission = db.query(StudentSubmission).one()
+
+    from app.models.notifications.Notification import Notification
+    from app.schemas.Submission import GradeRequest
+    from app.services.classwork.ClassworkService import student_assignments
+    from app.services.submission.SubmissionService import grade_student_submission
+
+    # Grade via submission service while scheduled release is still in the future
+    grade_student_submission(
+        submission.submission_id,
+        GradeRequest(grade=9.0, feedback="Hidden teacher feedback"),
+        classwork.created_by_staff_id,
+        db,
+    )
+
+    # No grade_released notification may leak the score before release
+    notifs = db.query(Notification).filter(
+        Notification.user_id == student.user_id,
+        Notification.notification_type == "grade_released",
+    ).all()
+    assert notifs == []
+
+    # /my-assignments must hide the score before scheduled release
+    before = student_assignments(student, db)["graded"][0]
+    assert before["grade"] is None
+    assert before["show_scores"] is False
+
+    # Legacy mixed visibility must also hide the score
+    setting.summary_release_mode = "IMMEDIATE"
+    setting.summary_release_at = None
+    setting.show_correct_answers = False
+    db.commit()
+    mixed = student_assignments(student, db)["graded"][0]
+    assert mixed["grade"] is None
+    assert mixed["show_scores"] is False
+
+    # Once released, /my-assignments exposes the grade and grading notifies the student
+    setting.show_correct_answers = True
+    db.commit()
+    after = student_assignments(student, db)["graded"][0]
+    assert after["grade"] == 9.0
+    assert after["show_scores"] is True
+
+    grade_student_submission(
+        submission.submission_id,
+        GradeRequest(grade=10.0, feedback="Hidden teacher feedback"),
+        classwork.created_by_staff_id,
+        db,
+    )
+    released_notifs = db.query(Notification).filter(
+        Notification.user_id == student.user_id,
+        Notification.notification_type == "grade_released",
+    ).all()
+    assert len(released_notifs) == 1
+    assert "10.0" in released_notifs[0].body
+
+
+def test_started_published_quiz_allows_due_date_and_release_policy_update_without_readiness_error(
+    quiz_attempt_context,
+):
+    """Teachers can adjust due date and release policy after attempts start without spurious readiness errors."""
+    c = quiz_attempt_context
+    db = c["db"]
+    classwork = c["classwork"]
+    assignment = c["assignment"]
+    staff_id = classwork.created_by_staff_id
+
+    from app.models.academic.SubjectLoad import SubjectLoad
+    db.add(SubjectLoad(
+        staff_id=staff_id,
+        class_id=assignment.class_id,
+        subject_id=classwork.subject_id,
+        academic_period_id=assignment.academic_period_id,
+        status="active",
+        is_active_version=True,
+    ))
+    db.commit()
+
+    # Start a student attempt so questions are frozen
+    started = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment.classwork_assignment_id}/start"
+    )
+    assert started.status_code == 200
+
+    # Simulate an existing published quiz with a legacy readiness mismatch
+    # (e.g. unmapped question or mismatched points) that cannot be edited post-attempt.
+    c["mc_link"].question.lesson_id = None
+    db.commit()
+
+    from app.schemas.Classwork import ClassworkAssignRequest, ClassworkUpdate
+    from app.schemas.Quiz import QuizResultsSettingsUpdate
+    from app.services.classwork.ClassworkService import (
+        assign_classwork_to_classes,
+        update_classwork_record,
+    )
+    from app.services.quiz.QuizBuilderService import update_quiz_results_settings
+
+    # Metadata edit on already-started published quiz must not fail readiness
+    updated_cw = update_classwork_record(
+        classwork.classwork_id,
+        ClassworkUpdate(title="Updated Started Quiz", is_published=True),
+        staff_id,
+        db,
+    )
+    assert updated_cw.title == "Updated Started Quiz"
+
+    # Setting a due date on already-started published quiz must not fail readiness
+    due_at = datetime.now(timezone.utc) + timedelta(days=3)
+    assign_result = assign_classwork_to_classes(
+        classwork.classwork_id,
+        ClassworkAssignRequest(
+            class_ids=[assignment.class_id],
+            due_date=due_at,
+            is_published=True,
+        ),
+        staff_id,
+        db,
+    )
+    assert assignment.class_id in assign_result["updated_class_ids"]
+
+    # Switching release policy to AFTER_DUE_DATE succeeds cleanly
+    release_res = update_quiz_results_settings(
+        db,
+        classwork,
+        QuizResultsSettingsUpdate(
+            release_policy="AFTER_DUE_DATE",
+            confirm_answer_reveal=True,
+        ),
+    )
+    assert release_res.release_policy == "AFTER_DUE_DATE"
+    assert release_res.show_scores is True
+    assert release_res.show_correct_answers is True
