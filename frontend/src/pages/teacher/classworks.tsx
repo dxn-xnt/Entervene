@@ -294,9 +294,18 @@ export default function Classworks() {
   const [items, setItems] = useState<TeacherClasswork[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
-  const [subjectFilter, setSubjectFilter] = useState("all");
-  const [classFilter, setClassFilter] = useState("all");
+  const [subjectFilter, setSubjectFilter] = useState(() =>
+    !routeParams.get("remediation") && routeParams.get("subject_id")
+      ? String(routeParams.get("subject_id"))
+      : "all",
+  );
+  const [classFilter, setClassFilter] = useState(() =>
+    routeParams.get("class_id") ? String(routeParams.get("class_id")) : "all",
+  );
   const [statusFilter, setStatusFilter] = useState("all");
+  const gradedOnlyParam = routeParams.get("graded") === "true";
+  const categoryParam = routeParams.get("category")?.toUpperCase() || null;
+  const gradingStatusParam = routeParams.get("grading_status") || null;
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortMode] = useState<SortMode>("newest");
   const [showCreateWizard, setShowCreateWizard] = useState(false);
@@ -366,8 +375,9 @@ export default function Classworks() {
     [loads],
   );
 
-  // Auto-reset filters if selected filter is not present in newly scoped loads
+  // Auto-reset filters if selected filter is not present in newly scoped loads (once loads finish)
   useEffect(() => {
+    if (loadingClasses) return;
     if (
       subjectFilter !== "all" &&
       !subjects.some((s) => String(s.id) === subjectFilter)
@@ -380,7 +390,7 @@ export default function Classworks() {
     ) {
       setClassFilter("all");
     }
-  }, [subjects, classSections, subjectFilter, classFilter]);
+  }, [loadingClasses, subjects, classSections, subjectFilter, classFilter]);
 
   const isLoading = loadingClasses || loadingItems;
   const error = itemsError || (classesError ? classesError.message : "");
@@ -403,12 +413,35 @@ export default function Classworks() {
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "published" ? item.is_published : !item.is_published);
+      const matchesGraded = !gradedOnlyParam || Boolean(item.is_graded);
+      const itemCategory = (item.classwork_category || "").toUpperCase();
+      const normalizedItemCategory =
+        itemCategory === "QUARTERLY_ASSESSMENT" ? "EXAMS" : itemCategory;
+      const matchesCategory =
+        !categoryParam || normalizedItemCategory === categoryParam;
+      let matchesGradingQueue = true;
+      if (gradingStatusParam === "needs_grading") {
+        if (!item.is_graded || !item.is_published) {
+          matchesGradingQueue = false;
+        } else {
+          const cacheKey = `${item.classwork_id}:${classFilter}`;
+          const tracking = trackingByClasswork[cacheKey];
+          if (tracking) {
+            matchesGradingQueue = (tracking.submitted ?? []).some(
+              (sub) => sub.status === "submitted" || sub.status === "late",
+            );
+          }
+        }
+      }
       return (
         matchesType &&
         matchesSearch &&
         matchesSubject &&
         matchesClass &&
-        matchesStatus
+        matchesStatus &&
+        matchesGraded &&
+        matchesCategory &&
+        matchesGradingQueue
       );
     });
 
@@ -420,12 +453,16 @@ export default function Classworks() {
     });
   }, [
     activeTab,
+    categoryParam,
     classFilter,
+    gradedOnlyParam,
+    gradingStatusParam,
     items,
     search,
     sortMode,
     statusFilter,
     subjectFilter,
+    trackingByClasswork,
   ]);
 
   useEffect(() => {

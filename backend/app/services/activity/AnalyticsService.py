@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, distinct, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -27,25 +27,36 @@ from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.schemas.TeacherDashboard import DashboardGrade, DashboardGradeDetails, DashboardScopeLabel, DashboardSupportSummary
+from app.schemas.TeacherDashboard import (
+    DashboardAnalyticsPayload,
+    DashboardGrade,
+    DashboardGradeDetails,
+)
 from app.services.activity.TeacherDashboardMetrics import (
     DashboardScope,
+    build_dashboard_analytics_trend,
+    build_dashboard_category_performance,
     build_dashboard_engagement,
-    build_dashboard_performance_trend,
-    dashboard_month_window,
+    build_dashboard_subject_comparisons,
     dashboard_term_progress,
+    is_gradable_online_classwork,
+    is_official_graded_classwork,
+    is_submission_requiring_classwork,
+    read_and_summarize_dashboard_interventions,
     read_dashboard_current_grades,
     read_dashboard_lesson_evidence,
-    read_dashboard_student_names,
-    rank_dashboard_performers,
     resolve_dashboard_passing_threshold,
+    resolve_teacher_dashboard_loads,
     summarize_dashboard_attendance,
+    summarize_dashboard_graded_performance,
+    summarize_dashboard_grading_completion,
     summarize_dashboard_submissions,
+    summarize_dashboard_submission_rate,
     summarize_dashboard_grades,
     summarize_dashboard_grade_distribution,
     summarize_dashboard_engagement,
     summarize_dashboard_lesson_performance,
-    summarize_dashboard_support,
+    summarize_dashboard_threshold_outcomes,
 )
 from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 
@@ -838,20 +849,10 @@ def build_teacher_dashboard_health(
     now = _dashboard_aware_datetime(_teacher_dashboard_now())
     school_now = now.astimezone(ZoneInfo("Asia/Manila"))
 
-    # An explicitly selected period never includes legacy or other-period loads.
-    load_query = db.query(SubjectLoad).join(Class, SubjectLoad.class_id == Class.class_id).filter(
-        SubjectLoad.staff_id == staff_id,
-        SubjectLoad.is_active_version.is_(True),
-        SubjectLoad.status.in_(["active", "published"]),
-        Class.class_status == "active",
+    # Resolve direct + substituted teaching loads; allow archived classes in historical periods.
+    loads, authorized_staff_by_combo = resolve_teacher_dashboard_loads(
+        db, staff_id, target_period, school_now.date(),
     )
-    if target_period:
-        loads = load_query.filter(
-            SubjectLoad.academic_period_id == target_period.academic_period_id,
-            Class.academic_year_id == target_period.academic_year_id,
-        ).order_by(SubjectLoad.class_id, SubjectLoad.subject_id).all()
-    else:
-        loads = []
 
     # Fixed-size metadata reads, not one relationship query per load.
     class_ids = {load.class_id for load in loads if load.class_id}
@@ -880,7 +881,6 @@ def build_teacher_dashboard_health(
             })
 
     # Keep authorized options available when narrowing the analytics scope.
-    # The legacy class_id/subject_id parameters remain trend-only selectors.
     dashboard_filters = list(available_filters)
     available_filters = [
         item for item in available_filters
@@ -892,9 +892,9 @@ def build_teacher_dashboard_health(
     threshold_subjects = [item for item in threshold_subjects if item.subject_id in scoped_subject_ids]
     unique_class_ids = {f["class_id"] for f in available_filters}
 
-    # Cache only canonical active enrollments for every denominator and numerator.
+    # Cache canonical academic-year enrollments for every denominator and numerator.
     enrolled_by_class = {cid: set() for cid in unique_class_ids}
-    if unique_class_ids:
+    if unique_class_ids and target_period is not None:
         enrollments = db.query(StudentClass).filter(
             StudentClass.class_id.in_(unique_class_ids),
             StudentClass.academic_year_id == target_period.academic_year_id,
@@ -904,49 +904,91 @@ def build_teacher_dashboard_health(
             enrolled_by_class[enrollment.class_id].add(enrollment.student_id)
     total_students = len(set().union(*enrolled_by_class.values())) if enrolled_by_class else 0
 
-    # Use the same teacher, load tuple and exact period scope for all dashboard data.
+    # Bulk-read published, non-archived assignments with eager-loaded classwork + recipients
+    # (prevents N+1 lazy recipient reads in assignment_allows_student).
+    # Classwork.is_archived == False stays enforced in both active and historical periods.
     all_assignments = []
     if seen_combos and target_period:
+        combo_predicates = []
+        for cid, sid in sorted(seen_combos):
+            allowed_staff = sorted(authorized_staff_by_combo.get((cid, sid), {staff_id}))
+            combo_predicates.append(
+                and_(
+                    ClassworkAssignment.class_id == cid,
+                    Classwork.subject_id == sid,
+                    or_(
+                        Classwork.created_by_staff_id.in_(allowed_staff),
+                        ClassworkAssignment.assigned_by_staff_id.in_(allowed_staff),
+                    ),
+                )
+            )
         all_assignments = (
             db.query(ClassworkAssignment)
             .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
-            .options(joinedload(ClassworkAssignment.classwork))
+            .options(
+                joinedload(ClassworkAssignment.classwork),
+                selectinload(ClassworkAssignment.recipients),
+            )
             .filter(
-                (Classwork.created_by_staff_id == staff_id) | (ClassworkAssignment.assigned_by_staff_id == staff_id),
                 ClassworkAssignment.is_published.is_(True),
                 Classwork.is_archived.is_(False),
                 ClassworkAssignment.academic_period_id == target_period.academic_period_id,
-                or_(*(
-                    and_(ClassworkAssignment.class_id == cid, Classwork.subject_id == sid)
-                    for cid, sid in sorted(seen_combos)
-                )),
+                or_(*combo_predicates),
             )
             .all()
         )
 
-    assignments_by_combo = {combo: [] for combo in seen_combos}
-    assignments_by_id = {}
+    assignments_by_combo: dict[tuple[int, int], list[ClassworkAssignment]] = {combo: [] for combo in seen_combos}
+    assignments_by_id: dict[int, ClassworkAssignment] = {}
+    submission_assignments_by_id: dict[int, ClassworkAssignment] = {}
+    gradable_online_assignments_by_id: dict[int, ClassworkAssignment] = {}
+    graded_official_assignments_by_id: dict[int, ClassworkAssignment] = {}
+
     for assignment in all_assignments:
-        assignments_by_combo[(assignment.class_id, assignment.classwork.subject_id)].append(assignment)
-        assignments_by_id[assignment.classwork_assignment_id] = assignment
-    submissions = []
+        combo = (assignment.class_id, assignment.classwork.subject_id)
+        if combo in assignments_by_combo:
+            assignments_by_combo[combo].append(assignment)
+        aid = assignment.classwork_assignment_id
+        assignments_by_id[aid] = assignment
+        if is_submission_requiring_classwork(assignment):
+            submission_assignments_by_id[aid] = assignment
+        if is_gradable_online_classwork(assignment):
+            gradable_online_assignments_by_id[aid] = assignment
+        if is_official_graded_classwork(assignment):
+            graded_official_assignments_by_id[aid] = assignment
+
+    submissions: list[StudentSubmission] = []
     if assignments_by_id:
         submissions = db.query(StudentSubmission).filter(
             StudentSubmission.classwork_assignment_id.in_(assignments_by_id),
         ).all()
-    engagement = build_dashboard_engagement(assignments_by_id, enrolled_by_class, submissions, now)
-    engagement_summary = summarize_dashboard_engagement(engagement)
+
+    # Build separated snapshots from the single bulk submission query (zero extra SQL).
+    submission_snapshot = build_dashboard_engagement(
+        submission_assignments_by_id, enrolled_by_class, submissions, now,
+    )
+    gradable_online_snapshot = build_dashboard_engagement(
+        gradable_online_assignments_by_id, enrolled_by_class, submissions, now,
+    )
+    graded_official_snapshot = build_dashboard_engagement(
+        graded_official_assignments_by_id, enrolled_by_class, submissions, now,
+    )
+
+    # Lesson evidence uses official graded assessments only (excludes Practice & ungraded readings).
     lesson_subjects = {
         sid: (subjects_by_id[sid].subject_name if sid in subjects_by_id else "Subject name unavailable",
               tuple(sorted({item["class_id"] for item in available_filters if item["subject_id"] == sid})))
         for sid in scoped_subject_ids
     }
     lesson_performance = summarize_dashboard_lesson_performance(
-        read_dashboard_lesson_evidence(db, engagement, subjects=lesson_subjects),
+        read_dashboard_lesson_evidence(db, graded_official_snapshot, subjects=lesson_subjects),
     )
-    # One explicit-year policy context for every authorized subject; never active-year inference.
+
+    # Explicit-year + period passing threshold context; never hardcode 75.
     policy_context = read_passing_threshold_context_or_422(
-        db, academic_year_id=target_period.academic_year_id,
+        db,
+        academic_year_id=target_period.academic_year_id,
+        academic_period_id=target_period.academic_period_id,
         subject_ids=scoped_subject_ids,
     ) if target_period and scoped_subject_ids else None
     thresholds = {
@@ -961,27 +1003,21 @@ def build_teacher_dashboard_health(
         for f in available_filters
     ])
     grade_summary = summarize_dashboard_grades(current_grades, thresholds)
-    student_names = read_dashboard_student_names(db, {
-        grade.student_id for grade in current_grades
-    })
-    scope_labels = {
-        (item["class_id"], item["subject_id"]): DashboardScopeLabel(
-            section_name=item["section_name"], subject_name=item["subject_name"],
-        )
-        for item in available_filters
-    }
-    performers = rank_dashboard_performers(current_grades, student_names, scope_labels)
+    threshold_summary = summarize_dashboard_threshold_outcomes(
+        grade_summary, thresholds, scoped_subject_ids,
+    )
     distribution = summarize_dashboard_grade_distribution(current_grades)
     grade_details = DashboardGradeDetails(
         total_grade_count=distribution.total_grade_count,
         available_grade_count=distribution.available_grade_count,
         unavailable_grade_count=distribution.unavailable_grade_count,
-        top_performer_limit=performers.limit,
-        cutoff_tie_omitted_count=performers.cutoff_tie_omitted_count,
-        warnings=[*grade_summary.warnings, *performers.warnings],
+        grade_coverage_percent=threshold_summary.grade_coverage_percent,
+        warnings=list(grade_summary.warnings),
     )
-    attendance_by_class = {cid: [] for cid in unique_class_ids}
-    if unique_class_ids:
+
+    # Unified selected-period attendance window (consistent across KPI, matrix, active & historical terms).
+    attendance_by_class: dict[int, list[AttendanceRecord]] = {cid: [] for cid in unique_class_ids}
+    if unique_class_ids and target_period is not None:
         for record in db.query(AttendanceRecord).filter(
             AttendanceRecord.class_id.in_(unique_class_ids),
             AttendanceRecord.date >= target_period.start_date,
@@ -989,31 +1025,25 @@ def build_teacher_dashboard_health(
         ).all():
             if record.student_id in enrolled_by_class[record.class_id]:
                 attendance_by_class[record.class_id].append(record)
-    month_window = dashboard_month_window(
-        now, target_period.start_date, target_period.end_date,
-    ) if target_period else None
-    month_attendance = [
+
+    period_attendance = summarize_dashboard_attendance([
+        record for records in attendance_by_class.values() for record in records
+    ])
+    attendance_by_section = [
         {
             "class_id": cid,
             "section": next(f["section_name"] for f in available_filters if f["class_id"] == cid),
-            **summarize_dashboard_attendance([
-                record for record in attendance_by_class[cid]
-                if month_window and month_window.start_date <= record.date <= month_window.end_date
-            ]).model_dump(mode="json"),
+            **summarize_dashboard_attendance(attendance_by_class[cid]).model_dump(mode="json"),
         }
         for cid in sorted(unique_class_ids)
     ]
-    attendance_today = summarize_dashboard_attendance([
-        record for records in attendance_by_class.values() for record in records
-        if record.date == school_now.date()
-    ])
-    # Excuses match the DEADLINE date, not the submission date or monthly window.
-    # Fetch all relevant deadline dates even when they precede this month.
+
+    # Excuses match the Manila deadline date for participation lateness.
     deadline_dates = {
         _dashboard_aware_datetime(a.due_date).astimezone(ZoneInfo("Asia/Manila")).date()
-        for a in all_assignments if a.due_date is not None
+        for a in submission_assignments_by_id.values() if a.due_date is not None
     }
-    excuses = []
+    excuses: list[AttendanceRecord] = []
     if unique_class_ids and deadline_dates:
         excuses = [
             record for record in db.query(AttendanceRecord).filter(
@@ -1024,71 +1054,103 @@ def build_teacher_dashboard_health(
             if record.student_id in enrolled_by_class[record.class_id]
         ]
     late_summary, weekdays = summarize_dashboard_submissions(
-        assignments_by_id,
-        engagement.eligible_submissions,
-        excuses, now,
+        submission_assignments_by_id,
+        submission_snapshot.eligible_submissions,
+        excuses,
+        now,
         target_period.start_date if target_period else school_now.date(),
         target_period.end_date if target_period else school_now.date(),
         require_subject_match=False,
     )
-    support = summarize_dashboard_support(
-        current_grades, thresholds, engagement,
-        [record for records in attendance_by_class.values() for record in records],
-        excuses, now, month_window, target_period.start_date, target_period.end_date,
-        student_names, scope_labels, require_subject_match=False,
-    ) if target_period is not None and month_window is not None else DashboardSupportSummary()
+
+    submission_rate_summary = summarize_dashboard_submission_rate(
+        submission_snapshot, late_summary=late_summary,
+    )
+    grading_completion_summary = summarize_dashboard_grading_completion(gradable_online_snapshot)
+    graded_performance_summary = summarize_dashboard_graded_performance(graded_official_snapshot)
+    engagement_summary = summarize_dashboard_engagement(submission_snapshot)
+
+    intervention_analytics = read_and_summarize_dashboard_interventions(
+        db, seen_combos, enrolled_by_class, target_period,
+    )
+    subject_comparisons = build_dashboard_subject_comparisons(
+        available_filters,
+        enrolled_by_class,
+        submission_snapshot,
+        gradable_online_snapshot,
+        graded_official_snapshot,
+        current_grades,
+        thresholds,
+    )
+    category_performance = build_dashboard_category_performance(
+        graded_official_snapshot, gradable_online_snapshot,
+    )
+
     term_progress = dashboard_term_progress(
         target_period.start_date, target_period.end_date, school_now.date(),
     ) if target_period else None
 
-    total_expected = engagement_summary.expected_count
-    total_submitted = engagement_summary.completed_count
-    overall_completion_rate = engagement_summary.completion_rate_percent
-
-    # Ungraded count
-    pending_subs = [
-        s for subs in engagement.selected_by_assignment.values() for s in subs
-        if s.status in {"submitted", "late"} and s.grade is None
-    ]
-    ungraded_count = engagement_summary.pending_grading_count
-
-    # Determine selected class & subject for the trend chart
+    # Determine trend chart scope:
+    # - Explicit class_id + subject_id narrows trend to that authorized combo.
+    # - Otherwise, trend reflects the unified active dashboard scope across all filtered loads.
     sel_class_id = None
     sel_subj_id = None
-    sel_section_name = ""
-    sel_subject_name = ""
+    sel_section_name = "All Classes" if len(unique_class_ids) != 1 else ""
+    sel_subject_name = "All Subjects" if len(scoped_subject_ids) != 1 else ""
 
     if (class_id is None) != (subject_id is None):
         raise HTTPException(status_code=400, detail="class_id and subject_id must be provided together")
     if class_id is not None and subject_id is not None:
-        matching = next((f for f in available_filters if f["class_id"] == class_id and f["subject_id"] == subject_id), None)
+        matching = next(
+            (f for f in available_filters if f["class_id"] == class_id and f["subject_id"] == subject_id),
+            None,
+        )
         if matching is None:
             raise HTTPException(status_code=403, detail="You are not authorized for the selected class and subject")
         sel_class_id = class_id
         sel_subj_id = subject_id
         sel_section_name = matching["section_name"]
         sel_subject_name = matching["subject_name"]
+        trend_sub_asgns = [
+            a for a in assignments_by_combo[(sel_class_id, sel_subj_id)]
+            if a.classwork_assignment_id in submission_assignments_by_id
+        ]
+        trend_graded_asgns = [
+            a for a in assignments_by_combo[(sel_class_id, sel_subj_id)]
+            if a.classwork_assignment_id in graded_official_assignments_by_id
+        ]
+    else:
+        if len(available_filters) == 1:
+            sel_class_id = available_filters[0]["class_id"]
+            sel_subj_id = available_filters[0]["subject_id"]
+            sel_section_name = available_filters[0]["section_name"]
+            sel_subject_name = available_filters[0]["subject_name"]
+        elif available_filters:
+            if len(unique_class_ids) == 1:
+                sel_class_id = next(iter(unique_class_ids))
+                sel_section_name = available_filters[0]["section_name"]
+            if len(scoped_subject_ids) == 1:
+                sel_subj_id = next(iter(scoped_subject_ids))
+                sel_subject_name = available_filters[0]["subject_name"]
+        trend_sub_asgns = list(submission_assignments_by_id.values())
+        trend_graded_asgns = list(graded_official_assignments_by_id.values())
 
-    if sel_class_id is None and available_filters:
-        first_f = available_filters[0]
-        sel_class_id = first_f["class_id"]
-        sel_subj_id = first_f["subject_id"]
-        sel_section_name = first_f["section_name"]
-        sel_subject_name = first_f["subject_name"]
+    trend_points = [
+        point.model_dump(mode="json")
+        for point in build_dashboard_analytics_trend(
+            submission_snapshot, graded_official_snapshot, trend_sub_asgns, trend_graded_asgns,
+        )
+    ]
+    trend_graded_summary = summarize_dashboard_graded_performance(
+        graded_official_snapshot, [a.classwork_assignment_id for a in trend_graded_asgns],
+    )
+    trend_sub_summary = summarize_dashboard_submission_rate(
+        submission_snapshot, [a.classwork_assignment_id for a in trend_sub_asgns],
+    )
+    trend_warnings = [*trend_sub_summary.warnings, *trend_graded_summary.warnings]
+    has_sufficient_data = trend_graded_summary.graded_assignment_count >= 3
 
-    trend_points: list[dict[str, Any]] = []
-    selected_assignment_ids = []
-    if sel_class_id is not None and sel_subj_id is not None:
-        class_asgns = assignments_by_combo[(sel_class_id, sel_subj_id)]
-        selected_assignment_ids = [a.classwork_assignment_id for a in class_asgns]
-        trend_points = [point.model_dump(mode="json") for point in
-                        build_dashboard_performance_trend(engagement, class_asgns)]
-    trend_summary = summarize_dashboard_engagement(engagement, selected_assignment_ids)
-    # Sufficiency means three scored tasks, not three date groups. One/two actual
-    # date groups remain renderable; metadata distinguishes tasks from groups.
-    has_sufficient_data = trend_summary.graded_task_count >= 3
-
-    # Section-by-Section Health Matrix
+    # Section-by-Section Health Matrix (strictly aggregate, zero student PII)
     section_matrix: list[dict[str, Any]] = []
     for f in available_filters:
         cid = f["class_id"]
@@ -1101,21 +1163,33 @@ def build_teacher_dashboard_health(
             grade_level_label = cls_obj.academic_level.level_name
 
         asgns_for_sec = assignments_by_combo[(cid, sid)]
+        sec_sub_ids = [
+            a.classwork_assignment_id for a in asgns_for_sec
+            if a.classwork_assignment_id in submission_assignments_by_id
+        ]
+        sec_gradable_ids = [
+            a.classwork_assignment_id for a in asgns_for_sec
+            if a.classwork_assignment_id in gradable_online_assignments_by_id
+        ]
+        sec_graded_ids = [
+            a.classwork_assignment_id for a in asgns_for_sec
+            if a.classwork_assignment_id in graded_official_assignments_by_id
+        ]
 
-        section_engagement = summarize_dashboard_engagement(
-            engagement, [a.classwork_assignment_id for a in asgns_for_sec],
-        )
-        sec_completion_rate = section_engagement.completion_rate_percent
-        sec_avg_score = section_engagement.avg_score_percent
+        sec_sub = summarize_dashboard_submission_rate(submission_snapshot, sec_sub_ids)
+        sec_gc = summarize_dashboard_grading_completion(gradable_online_snapshot, sec_gradable_ids)
+        sec_gp = summarize_dashboard_graded_performance(graded_official_snapshot, sec_graded_ids)
+        sec_engagement = summarize_dashboard_engagement(submission_snapshot, sec_sub_ids)
         section_grades = summarize_dashboard_grades(
             [grade for grade in current_grades if grade.class_id == cid and grade.subject_id == sid],
-            {sid: thresholds[sid]},
+            {sid: thresholds[sid]} if sid in thresholds else {},
         )
-        sec_passing_rate = section_grades.passing_rate_percent
-
-        # Attendance calculation
+        sec_coverage = (
+            round(float(section_grades.available_grade_count) / float(section_grades.total_grade_count) * 100.0, 1)
+            if section_grades.total_grade_count > 0
+            else None
+        )
         section_attendance = summarize_dashboard_attendance(attendance_by_class[cid])
-        sec_attendance_rate = section_attendance.rate
 
         section_matrix.append({
             "class_id": cid,
@@ -1125,54 +1199,29 @@ def build_teacher_dashboard_health(
             "subject_name": f["subject_name"],
             "student_count": student_count,
             "published_classworks": len(asgns_for_sec),
-            "avg_score_percent": sec_avg_score,
-            "passing_rate_percent": sec_passing_rate,
-            "completion_rate_percent": sec_completion_rate,
-            "attendance_rate_percent": sec_attendance_rate,
+            "avg_score_percent": sec_gp.avg_graded_score_percent,
+            "avg_graded_score_percent": sec_gp.avg_graded_score_percent,
+            "passing_rate_percent": section_grades.passing_rate_percent,
+            "grade_coverage_percent": sec_coverage,
+            "completion_rate_percent": sec_sub.submission_rate_percent,
+            "submission_rate_percent": sec_sub.submission_rate_percent,
+            "grading_completion_rate_percent": sec_gc.grading_completion_rate_percent,
+            "awaiting_grading_count": sec_gc.awaiting_grading_count,
+            "attendance_rate_percent": section_attendance.rate,
             "attendance_record_count": section_attendance.record_count,
-            "engagement": section_engagement.model_dump(mode="json"),
+            "engagement": sec_engagement.model_dump(mode="json"),
             **section_grades.model_dump(mode="json"),
         })
 
-    # Live Action Queue: pending_grading
-    pending_subs = sorted(
-        pending_subs,
-        key=lambda s: (
-            _dashboard_aware_datetime(s.submitted_at) if s.submitted_at else datetime.min.replace(tzinfo=timezone.utc),
-            s.submission_id,
-        ),
-        reverse=True,
-    )[:5]
-
-    # One name-only SELECT, preserving the existing first/last queue format.
-    pending_student_ids = {row.student_id for row in pending_subs}
-    pending_names = {
-        str(row.student_id): f"{row.first_name} {row.last_name}"
-        for row in db.query(Student.student_id, Student.first_name, Student.last_name).filter(
-            Student.student_id.in_(pending_student_ids),
-        ).all()
-    } if pending_student_ids else {}
-    pending_grading_list = []
-    for ps in pending_subs:
-        assignment = assignments_by_id[ps.classwork_assignment_id]
-        cw_obj = assignment.classwork
-        cls_obj = classes_by_id.get(assignment.class_id)
-        pending_grading_list.append({
-            "submission_id": ps.submission_id,
-            "student_id": str(ps.student_id),
-            "student_name": pending_names.get(str(ps.student_id), "Name unavailable"),
-            "classwork_id": cw_obj.classwork_id if cw_obj else None,
-            "classwork_title": cw_obj.title if cw_obj else "Classwork",
-            "section_name": cls_obj.section_name if cls_obj else "",
-            "submitted_at": ps.submitted_at.isoformat() if ps.submitted_at else None,
-        })
-
-    # Live Action Queue: upcoming_deadlines
+    # Aggregate upcoming deadlines (zero student PII)
     next_monday = (school_now + timedelta(days=7 - school_now.weekday())).replace(
         hour=0, minute=0, second=0, microsecond=0,
     )
     upcoming_asgns = sorted(
-        [a for a in all_assignments if a.due_date and now <= _dashboard_aware_datetime(a.due_date) < next_monday],
+        [
+            a for a in submission_assignments_by_id.values()
+            if a.due_date and now <= _dashboard_aware_datetime(a.due_date) < next_monday
+        ],
         key=lambda a: (_dashboard_aware_datetime(a.due_date), a.classwork_assignment_id),
     )[:5]
 
@@ -1180,120 +1229,109 @@ def build_teacher_dashboard_health(
     for ua in upcoming_asgns:
         cw_obj = ua.classwork
         cls_obj = classes_by_id.get(ua.class_id)
-        deadline_engagement = summarize_dashboard_engagement(engagement, [ua.classwork_assignment_id])
+        deadline_sub = summarize_dashboard_submission_rate(submission_snapshot, [ua.classwork_assignment_id])
         upcoming_deadlines_list.append({
             "classwork_id": cw_obj.classwork_id if cw_obj else None,
             "title": cw_obj.title if cw_obj else "Assignment",
             "section_name": cls_obj.section_name if cls_obj else "",
             "due_date": ua.due_date.isoformat() if ua.due_date else None,
             "assignment_id": ua.classwork_assignment_id,
-            "submitted_count": deadline_engagement.completed_count,
-            "total_students": deadline_engagement.expected_count,
-            "eligible_count": deadline_engagement.expected_count,
-            "warnings": [warning.model_dump(mode="json") for warning in deadline_engagement.warnings],
+            "submitted_count": deadline_sub.submitted_count,
+            "total_students": deadline_sub.expected_count,
+            "eligible_count": deadline_sub.expected_count,
+            "warnings": [warning.model_dump(mode="json") for warning in deadline_sub.warnings],
         })
 
-    cw_count = len([a for a in all_assignments if a.classwork and (a.classwork.classwork_type or "").upper() != "QUIZ"])
-    quiz_count = len([a for a in all_assignments if a.classwork and (a.classwork.classwork_type or "").upper() == "QUIZ"])
-    total_published = len(all_assignments)
-
+    # Six real, percentage-first analytics cards (zero placeholders, zero "Not calculated")
     cards = [
         {
-            "title": "Active Classes",
-            "count": str(len(unique_class_ids)),
-            "stat": f"{len(unique_class_ids)} sections",
-            "statDescription": f"in {period_name}",
-        },
-        {
-            "title": "Enrolled Students",
-            "count": str(total_students),
-            "stat": f"{total_students} learners",
-            "statDescription": "total across sections",
-        },
-        {
-            "title": "Overall Completion",
-            "count": f"{int(overall_completion_rate)}%" if overall_completion_rate is not None else "—",
-            "stat": (f"{total_submitted} of {total_expected} submitted" if total_submitted is not None else
-                     f"{engagement_summary.resolved_completed_count} resolved of {total_expected} expected"),
-            "statDescription": "Selected-period eligible student-task requirements; unique latest completed attempts.",
-        },
-        {
-            "title": "Ungraded Queue",
-            "count": str(ungraded_count) if ungraded_count is not None else "—",
-            "stat": (f"{ungraded_count} submissions" if ungraded_count is not None else
-                     f"{engagement_summary.resolved_pending_grading_count} resolved submissions"),
-            "statDescription": "Latest completed attempts pending teacher grading.",
-        },
-        {
-            "title": "Current grade",
-            "count": str(grade_summary.current_grade) if grade_summary.current_grade is not None else "—",
-            "stat": f"{grade_summary.available_grade_count} of {grade_summary.total_grade_count} student-subject grades available",
-            "statDescription": "Weighted and transmuted, as in the class record.",
-        },
-        {
-            "title": "Passing Rate",
-            "count": f"{grade_summary.passing_rate_percent}%" if grade_summary.passing_rate_percent is not None else "—",
+            "title": "Classwork Submission Rate",
+            "count": (
+                f"{submission_rate_summary.submission_rate_percent}%"
+                if submission_rate_summary.submission_rate_percent is not None
+                else "—"
+            ),
             "stat": (
-                f"{grade_summary.passing_count} of {grade_summary.available_grade_count} available grades"
-                if grade_summary.passing_count is not None else
-                f"{grade_summary.available_grade_count} of {grade_summary.total_grade_count} student-subject grades available"
+                f"{submission_rate_summary.submitted_count} of {submission_rate_summary.expected_count} expected"
+                if submission_rate_summary.submitted_count is not None
+                else f"{submission_rate_summary.resolved_submitted_count} resolved of {submission_rate_summary.expected_count} expected"
             ),
-            "statDescription": (
-                grade_summary.warnings[0].message if grade_summary.warnings else
-                "Against each subject's grading template passing grade."
-            ),
+            "statDescription": "Online submission-requiring classwork in the selected period.",
         },
         {
-            "title": "Late Submissions",
-            "count": f"{late_summary.late_rate_percent}%" if late_summary.late_rate_percent is not None else "—",
-            "stat": f"{late_summary.late_count} of {late_summary.eligible_count} assessed submissions · {late_summary.excused_excluded_count} excused excluded",
-            "statDescription": (
-                late_summary.warnings[0].message if late_summary.warnings else
-                "Late submissions, excluding excused submissions."
-            ),
-        },
-        {
-            "title": "Grading Turnaround",
-            "count": "—",
-            "statDescription": "Not calculated",
-        },
-        {
-            "title": "Attendance Today",
+            "title": "Grading Completion Rate",
             "count": (
-                f"{attendance_today.present_count + attendance_today.late_count} / {attendance_today.record_count}"
-                if attendance_today.record_count else "—"
+                f"{grading_completion_summary.grading_completion_rate_percent}%"
+                if grading_completion_summary.grading_completion_rate_percent is not None
+                else "—"
             ),
-            "stat": f"{attendance_today.late_count} late · {attendance_today.absent_count} absent · {attendance_today.excused_count} excused",
-            "statDescription": "Present + late / recorded entries today.",
+            "stat": (
+                f"{grading_completion_summary.finalized_count} of {grading_completion_summary.submitted_gradable_count} finalized · {grading_completion_summary.awaiting_grading_count} awaiting teacher grading"
+                if grading_completion_summary.finalized_count is not None
+                else f"{grading_completion_summary.resolved_awaiting_grading_count} awaiting teacher grading"
+            ),
+            "statDescription": "Includes both auto-graded and teacher-graded finalized submissions.",
         },
         {
-            "title": "Feedback Coverage",
-            "count": "—",
-            "stat": "Not calculated",
-            "statDescription": "No aggregate available",
-        },
-        {
-            "title": "Term Progress",
+            "title": "Avg. Graded Assessment Score",
             "count": (
-                "—" if term_progress and term_progress.warnings else
-                "Not started" if term_progress and school_now.date() < target_period.start_date else
-                "Ended" if term_progress and school_now.date() > target_period.end_date else
-                f"Week {term_progress.week_number}" if term_progress else "—"
+                f"{graded_performance_summary.avg_graded_score_percent}%"
+                if graded_performance_summary.avg_graded_score_percent is not None
+                else "—"
             ),
-            "stat": f"of {term_progress.total_weeks}" if term_progress else "",
-            "statDescription": (
-                term_progress.warnings[0].message if term_progress and term_progress.warnings else
-                f"Calendar progress in {period_name}."
-            ),
-            "progressValue": term_progress.progress_percent if term_progress and term_progress.progress_percent is not None else 0,
+            "stat": f"{graded_performance_summary.scored_submission_count} finalized official submissions",
+            "statDescription": "Official graded assessments only; excludes Practice Assessments and ungraded work.",
         },
         {
-            "title": "Published Work",
-            "count": str(total_published),
-            "stat": f"{cw_count} classworks · {quiz_count} quizzes",
-            "statDescription": "published in the selected period",
+            "title": "Term Passing Rate",
+            "count": (
+                f"{grade_summary.passing_rate_percent}%"
+                if grade_summary.passing_rate_percent is not None
+                else "—"
+            ),
+            "stat": (
+                f"{grade_summary.passing_count} of {grade_summary.available_grade_count} graded · {grade_summary.available_grade_count}/{grade_summary.total_grade_count} grade coverage"
+                if grade_summary.passing_count is not None
+                else f"{grade_summary.available_grade_count} of {grade_summary.total_grade_count} grades available"
+            ),
+            "statDescription": (
+                grade_summary.warnings[0].message
+                if grade_summary.warnings
+                else "Evaluated against each subject's configured passing threshold."
+            ),
+        },
+        {
+            "title": "Improved-Prediction Resolution Rate",
+            "count": (
+                f"{intervention_analytics.improved_prediction_resolution_rate_percent}%"
+                if intervention_analytics.improved_prediction_resolution_rate_percent is not None
+                else "—"
+            ),
+            "stat": (
+                f"{intervention_analytics.resolved_improved_count} of {intervention_analytics.active_count + intervention_analytics.resolved_total_count} active/resolved · {intervention_analytics.candidate_count} candidates"
+            ),
+            "statDescription": "Interventions resolved via improved prediction crossing the subject threshold.",
+        },
+        {
+            "title": "Period Attendance Rate",
+            "count": f"{period_attendance.rate}%" if period_attendance.rate is not None else "—",
+            "stat": f"{period_attendance.present_count + period_attendance.late_count} of {period_attendance.record_count} recorded entries",
+            "statDescription": f"Present + late entries across {period_name}.",
         },
     ]
+
+    analytics_payload = DashboardAnalyticsPayload(
+        submission_rate=submission_rate_summary,
+        grading_completion=grading_completion_summary,
+        graded_performance=graded_performance_summary,
+        term_grades=grade_summary,
+        threshold_summary=threshold_summary,
+        period_attendance=period_attendance,
+        interventions=intervention_analytics,
+        subject_comparisons=subject_comparisons,
+        category_performance=category_performance,
+        grade_distribution=distribution,
+    )
 
     return {
         "term_info": {
@@ -1305,11 +1343,18 @@ def build_teacher_dashboard_health(
         },
         "dashboard_filters": dashboard_filters,
         "cards": cards,
+        "analytics": analytics_payload.model_dump(mode="json"),
         "kpis": {
             "active_classes": len(unique_class_ids),
             "enrolled_students": total_students,
-            "overall_completion_rate": overall_completion_rate,
-            "ungraded_count": ungraded_count,
+            "overall_completion_rate": submission_rate_summary.submission_rate_percent,
+            "grading_completion_rate": grading_completion_summary.grading_completion_rate_percent,
+            "ungraded_count": grading_completion_summary.awaiting_grading_count,
+            "avg_graded_score_percent": graded_performance_summary.avg_graded_score_percent,
+            "passing_rate_percent": grade_summary.passing_rate_percent,
+            "grade_coverage_percent": threshold_summary.grade_coverage_percent,
+            "period_attendance_rate": period_attendance.rate,
+            "improved_prediction_resolution_rate": intervention_analytics.improved_prediction_resolution_rate_percent,
         },
         "engagement": engagement_summary.model_dump(mode="json"),
         "trend_chart": {
@@ -1319,38 +1364,32 @@ def build_teacher_dashboard_health(
             "selected_section_name": sel_section_name,
             "selected_subject_name": sel_subject_name,
             "has_sufficient_data": has_sufficient_data,
-            "graded_task_count": trend_summary.graded_task_count,
+            "graded_task_count": trend_graded_summary.graded_assignment_count,
             "date_group_count": len(trend_points),
-            "warnings": [warning.model_dump(mode="json") for warning in trend_summary.warnings],
+            "warnings": [warning.model_dump(mode="json") for warning in trend_warnings],
             "points": trend_points,
         },
         "section_matrix": section_matrix,
         "phase_two": {
             "grades": grade_summary.model_dump(mode="json"),
-            "attendance_today": attendance_today.model_dump(mode="json"),
-            "month_window": month_window.model_dump(mode="json") if month_window else None,
+            "period_attendance": period_attendance.model_dump(mode="json"),
             "late_submissions": late_summary.model_dump(mode="json"),
             "weekdays": weekdays.model_dump(mode="json"),
             "term_progress": term_progress.model_dump(mode="json") if term_progress else None,
             "require_subject_match": False,
         },
         "action_queue": {
-            "pending_grading": pending_grading_list,
             "upcoming_deadlines": upcoming_deadlines_list,
         },
         "details": {
-            "students_to_check_in_with": support.model_dump(mode="json"),
-            "top_performers": [item.model_dump(mode="json") for item in performers.items],
             "grade_details": grade_details.model_dump(mode="json"),
-            "due_this_week": [],
+            "threshold_summary": threshold_summary.model_dump(mode="json"),
             "lesson_performance": lesson_performance.model_dump(mode="json"),
-            "submissions_by_weekday": [
-                {"day": day.label, "count": day.count}
-                for day in weekdays.days
-            ],
-            "hardest_questions": [],
             "grade_distribution": [item.model_dump(mode="json") for item in distribution.bands],
-            "attendance_by_section": month_attendance,
+            "attendance_by_section": attendance_by_section,
+            "subject_comparisons": [item.model_dump(mode="json") for item in subject_comparisons],
+            "category_performance": [item.model_dump(mode="json") for item in category_performance],
+            "interventions": intervention_analytics.model_dump(mode="json"),
         },
     }
 

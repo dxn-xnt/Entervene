@@ -262,102 +262,37 @@ def dashboard(db, data, **kwargs):
     )
 
 
-def test_phase_six_real_support_payload_without_demo_or_private_contact_fields(db, data):
-    """Mocked-behavior: actual roster and class-record grades, never predictions."""
+def test_v2_dashboard_excludes_student_name_rosters_and_placeholders(db, data):
+    """Analytics-first redesign: zero student names/IDs/LRNs or uncalculated placeholders."""
+    import json
     result = dashboard(db, data)
-    support = result["details"]["students_to_check_in_with"]
+    assert "students_to_check_in_with" not in result["details"]
     assert "students_needing_support" not in result["details"]
-    assert support["total_entry_count"] == 2
-    assert support["qualifying_entry_count"] >= 1
-    assert {row["student_id"] for row in support["items"]}.issubset({
-        str(data["students"][key].student_id) for key in ("active_one", "active_two")
-    })
-    for row in support["items"]:
-        assert row["name"].startswith("Student, ")
-        assert row["academic_period_id"] == data["period"].academic_period_id
-        assert {reason["code"] for reason in row["reasons"]} == {"below_passing"}
-        assert not ({"student_lrn", "email", "phone", "score", "prediction_id"} & row.keys())
+    assert "top_performers" not in result["details"]
+    assert "pending_grading" not in result["action_queue"]
+    encoded = json.dumps(result)
+    for forbidden in (
+        "Student, ", "student_name", "student_id", "student_lrn",
+        "Grading Turnaround", "Feedback Coverage", "Not calculated",
+    ):
+        assert forbidden not in encoded
 
 
-def test_phase_six_expanded_name_lookup_keeps_ungraded_learner_with_overdue_work(db, data, monkeypatch):
-    """Mocked-behavior: one expanded name lookup, no invented identity or grade."""
-    from types import SimpleNamespace
-    from app.services.activity import TeacherDashboardMetrics
-    ids = [data["students"][key].student_id for key in ("active_one", "active_two")]
-    monkeypatch.setattr(TeacherDashboardMetrics, "teacher_student_gradebook", lambda *_args: SimpleNamespace(studentGrades=[
-        SimpleNamespace(student_id=ids[0], transmuted_grade=90),
-        SimpleNamespace(student_id=ids[1], transmuted_grade=None),
-    ]))
-    data["assignments"]["main_pending"].due_date = NOW - timedelta(hours=1)
-    result = dashboard(db, data)["details"]["students_to_check_in_with"]
-    assert result["unavailable_grade_count"] == 1
-    assert len(result["items"]) == 1
-    row = result["items"][0]
-    assert row["student_id"] == str(ids[1]) and row["name"] == "Student, active_two"
-    assert row["current_grade"] is None
-    assert [reason["code"] for reason in row["reasons"]] == ["overdue_work"]
-
-
-@pytest.mark.parametrize("scope", ["empty_period", "previous_period", "empty_teacher", "other_teacher"])
-def test_phase_six_support_remains_teacher_period_and_active_roster_scoped(db, data, scope):
-    """Mocked-behavior: all scope inputs are existing authorized dashboard reads."""
-    staff = data[scope] if scope.endswith("teacher") else data["teacher"]
-    period = data[scope] if scope.endswith("period") else data["period"]
-    db.flush()
-    result = AnalyticsService.build_teacher_dashboard_health(db, staff.staff_id, period)
-    support = result["details"]["students_to_check_in_with"]
-    combos = {(f["class_id"], f["subject_id"]) for f in result["trend_chart"]["available_filters"]}
-    assert all(row["academic_period_id"] == period.academic_period_id
-               and (row["class_id"], row["subject_id"]) in combos for row in support["items"])
-    if scope in {"empty_period", "empty_teacher"}:
-        assert support["items"] == [] and support["total_entry_count"] == 0
-    assert all(row["student_id"] not in {str(data["students"][key].student_id) for key in ("withdrawn", "inactive")} for row in support["items"])
-
-
-def test_phase_six_excused_events_do_not_qualify_but_unexcused_absence_dates_do(db, data, monkeypatch):
-    """Mocked-behavior: one excuse covers deadline indicators across subjects."""
-    from types import SimpleNamespace
-    from app.services.activity import TeacherDashboardMetrics
-    ids = [data["students"][key].student_id for key in ("active_one", "active_two")]
-    monkeypatch.setattr(TeacherDashboardMetrics, "teacher_student_gradebook", lambda *_args: SimpleNamespace(studentGrades=[
-        SimpleNamespace(student_id=student_id, transmuted_grade=90) for student_id in ids
-    ]))
-    due = NOW - timedelta(days=1)
-    overdue = add_assignment(db, data, "support_excused_overdue", due_date=due)
-    late = add_assignment(db, data, "support_excused_late", due_date=due)
-    add_submission(db, data, "support_late_one", late, data["students"]["active_one"])
-    add_submission(db, data, "support_late_two", late, data["students"]["active_two"])
-    for student_id in ids:
-        db.add(AttendanceRecord(student_id=student_id, class_id=data["class_"].class_id,
-            subject_id=data["other_subject"].subject_id, date=date(2026, 10, 7), status="excused"))
-    full_result = dashboard(db, data)
-    result = full_result["details"]["students_to_check_in_with"]
-    assert result["items"] == []
-    assert result["qualifying_entry_count"] == 0
-    assert full_result["engagement"]["expected_count"] == 8
-    assert full_result["engagement"]["completed_count"] == 5
-    for day in range(1, 6):
-        db.add(AttendanceRecord(student_id=ids[0], class_id=data["class_"].class_id,
-            subject_id=data["subject"].subject_id, date=date(2026, 10, day),
-            status="absent" if day < 3 else "present"))
-    result = dashboard(db, data)["details"]["students_to_check_in_with"]
-    assert len(result["items"]) == 1 and result["items"][0]["student_id"] == str(ids[0])
-    assert [r["code"] for r in result["items"][0]["reasons"]] == ["unexcused_absences"]
-    assert result["items"][0]["reasons"][0]["count"] == 2
-    assert dashboard(db, data)["engagement"]["expected_count"] == 8
-
-
-def test_phase_six_runtime_threshold_change_and_missing_configuration(db, data, monkeypatch):
-    """Mocked-behavior: candidate membership follows the current subject group."""
+def test_v2_threshold_summary_updates_at_runtime_and_handles_missing_configuration(db, data, monkeypatch):
+    """Configured subject passing thresholds update at runtime without hardcoding 75."""
     from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
     rows = [StudentPeriodGrade(student_id=data["students"][key].student_id,
         class_id=data["class_"].class_id, subject_id=data["subject"].subject_id,
         academic_period_id=data["period"].academic_period_id,
         transmuted_grade=Decimal("84.99"), is_finalized=True) for key in ("active_one", "active_two")]
     db.add_all(rows)
-    assert dashboard(db, data)["details"]["students_to_check_in_with"]["qualifying_entry_count"] == 2
+    initial = dashboard(db, data)["analytics"]["threshold_summary"]
+    assert initial["meeting_threshold_count"] == 0 and initial["below_threshold_count"] == 2
+    assert initial["grade_coverage_percent"] == 100.0
     data["subject"].grading_template.passing_threshold = Decimal("83.25")
-    assert dashboard(db, data)["details"]["students_to_check_in_with"]["items"] == []
+    updated = dashboard(db, data)["analytics"]["threshold_summary"]
+    assert updated["meeting_threshold_count"] == 2 and updated["below_threshold_count"] == 0
+    assert updated["uniform_passing_threshold"] == 83.25
     monkeypatch.setattr(
         "app.services.activity.AnalyticsService.resolve_dashboard_passing_threshold",
         lambda s, **_policy: ThresholdResolution(
@@ -370,76 +305,31 @@ def test_phase_six_runtime_threshold_change_and_missing_configuration(db, data, 
             ),
         ),
     )
-    support = dashboard(db, data)["details"]["students_to_check_in_with"]
-    assert support["items"] == [] and support["warnings"][0]["code"] == "invalid_passing_threshold"
+    missing = dashboard(db, data)["analytics"]["threshold_summary"]
+    assert missing["meeting_threshold_count"] is None
+    assert missing["warnings"][0]["code"] == "invalid_passing_threshold"
 
 
-def test_phase_six_entire_path_read_only_even_with_a_dirty_name(db, data, monkeypatch):
-    """Mocked-behavior: forbid every write API and SQL DML after fixture setup."""
+def test_v2_entire_path_read_only_even_with_dirty_session(db, data, monkeypatch):
+    """Forbid every write API and SQL DML after fixture setup."""
     from sqlalchemy import event
     db.flush()
     staff_id, period = data["teacher"].staff_id, data["period"]
     learner = data["students"]["active_one"]
-    student_id = str(learner.student_id)
     learner.first_name = "Unsaved fixture edit"
     def reject_write(*_args, **_kwargs):
-        raise AssertionError("Dashboard support attempted a write")
+        raise AssertionError("Dashboard attempted a write")
     for method in ("add", "add_all", "delete", "flush", "commit"):
         monkeypatch.setattr(db, method, reject_write)
     def select_only(_connection, _cursor, statement, _parameters, _context, _many):
         assert statement.lstrip().upper().startswith("SELECT")
     event.listen(db.get_bind(), "before_cursor_execute", select_only)
     try:
-        support = AnalyticsService.build_teacher_dashboard_health(db, staff_id, period)["details"]["students_to_check_in_with"]
+        result = AnalyticsService.build_teacher_dashboard_health(db, staff_id, period)
     finally:
         event.remove(db.get_bind(), "before_cursor_execute", select_only)
-    row = next(item for item in support["items"] if item["student_id"] == student_id)
-    assert row["name"] == "Student, active_one" and learner in db.dirty
-
-
-def test_phase_six_no_additional_selects_and_one_expanded_name_query(db, data, monkeypatch):
-    """Mocked-behavior: compare enabled/disabled aggregation and larger rosters."""
-    from sqlalchemy import event
-    from app.schemas.TeacherDashboard import DashboardSupportSummary
-    real_helper = AnalyticsService.summarize_dashboard_support
-    staff_id, period_id = data["teacher"].staff_id, data["period"].academic_period_id
-    def capture(helper):
-        monkeypatch.setattr(AnalyticsService, "summarize_dashboard_support", helper)
-        db.flush()
-        db.expire_all()
-        period = db.get(AcademicPeriod, period_id)
-        statements = []
-        def read(_connection, _cursor, statement, _parameters, _context, _many):
-            assert statement.lstrip().upper().startswith("SELECT")
-            statements.append(statement)
-        event.listen(db.get_bind(), "before_cursor_execute", read)
-        try:
-            AnalyticsService.build_teacher_dashboard_health(db, staff_id, period)
-        finally:
-            event.remove(db.get_bind(), "before_cursor_execute", read)
-        names = [sql for sql in statements if "student.first_name" in sql and "FROM student " in sql
-                 and "student.middle_name" in sql and "student.suffix" in sql
-                 and "student.student_lrn" not in sql]
-        assert len(names) == 1
-        assert all(field not in names[0] for field in ("student_lrn", "email", "contact", "password"))
-        return len(statements)
-    without = capture(lambda *_args, **_kwargs: DashboardSupportSummary())
-    small = capture(real_helper)
-    assert small == without
-    for index in range(6):
-        learner = Student(student_id=uuid.uuid4(), student_lrn=f"{200 + index:012d}",
-            first_name=f"Support{index}", last_name="Synthetic", academic_level_id=data["class_"].academic_level_id)
-        db.add(learner)
-        db.flush()
-        db.add(StudentClass(student_id=learner.student_id, class_id=data["class_"].class_id,
-            academic_year_id=data["year"].academic_year_id, enrollment_status="enrolled"))
-    large_without = capture(lambda *_args, **_kwargs: DashboardSupportSummary())
-    large = capture(real_helper)
-    # The protected class-record implementation reads period grades per learner.
-    # Phase 6 must add zero reads at BOTH sizes, rather than hide that baseline.
-    assert large == large_without
-    print(f"Phase 6 SELECT count: small={small}/{without}, large={large}/{large_without} "
-          "(enabled/disabled); additional SELECTs=0; name SELECTs=1")
+    assert result["analytics"]["threshold_summary"]["available_grade_count"] == 2
+    assert learner in db.dirty
 
 
 def create_client(db, identity):
@@ -454,10 +344,12 @@ def create_client(db, identity):
 
 def test_exact_teacher_term_and_active_enrollment_scope(db, data):
     result = dashboard(db, data)
-    assert result["kpis"] == {
-        "active_classes": 1, "enrolled_students": 2,
-        "overall_completion_rate": 75.0, "ungraded_count": 1,
-    }
+    assert result["kpis"]["active_classes"] == 1
+    assert result["kpis"]["enrolled_students"] == 2
+    assert result["kpis"]["overall_completion_rate"] == 75.0
+    assert result["kpis"]["ungraded_count"] == 1
+    assert result["kpis"]["grading_completion_rate"] == 66.7
+    assert result["kpis"]["avg_graded_score_percent"] == 71.0
     points = result["trend_chart"]["points"]
     assert [p["classwork_id"] for p in points] == [
         data["assignments"][key].classwork_id for key in ["main_graded", "main_pending"]
@@ -467,14 +359,13 @@ def test_exact_teacher_term_and_active_enrollment_scope(db, data):
     assert result["trend_chart"]["has_sufficient_data"] is False
     section = result["section_matrix"][0]
     assert (section["student_count"], section["published_classworks"]) == (2, 2)
-    assert section["avg_score_percent"] == 71.0  # The trend's observed score is unchanged.
+    assert section["avg_score_percent"] == 71.0
     assert section["passing_threshold"] == float(data["subject"].grading_template.passing_threshold)
     assert section["available_grade_count"] == section["total_grade_count"] == 2
     assert section["passing_rate_percent"] == 0.0
     assert (section["completion_rate_percent"], section["attendance_rate_percent"]) == (75.0, 50.0)
     queue = result["action_queue"]
-    assert [s["submission_id"] for s in queue["pending_grading"]] == [data["submissions"]["pending_active"].submission_id]
-    assert queue["pending_grading"][0]["student_id"] == str(data["students"]["active_one"].student_id)
+    assert "pending_grading" not in queue
     assert [a["classwork_id"] for a in queue["upcoming_deadlines"]] == [p["classwork_id"] for p in points]
     assert [(a["submitted_count"], a["total_students"]) for a in queue["upcoming_deadlines"]] == [(2, 2), (1, 2)]
 
@@ -499,24 +390,24 @@ def test_empty_scope_has_honest_phase_one_zeros_and_empty_data(db, data, empty_k
     teacher = data["empty_teacher"] if empty_kind == "no_teacher_loads" else data["teacher"]
     period = None if empty_kind == "no_period" else data["empty_period"] if empty_kind == "selected_period" else data["period"]
     result = AnalyticsService.build_teacher_dashboard_health(db, teacher.staff_id, period)
-    assert result["kpis"] == {
-        "active_classes": 0, "enrolled_students": 0,
-        "overall_completion_rate": 0.0, "ungraded_count": 0,
-    }
+    assert result["kpis"]["active_classes"] == 0
+    assert result["kpis"]["enrolled_students"] == 0
+    assert result["kpis"]["overall_completion_rate"] is None
+    assert result["kpis"]["grading_completion_rate"] is None
+    assert result["kpis"]["ungraded_count"] == 0
     cards = {card["title"]: card for card in result["cards"]}
-    assert (cards["Active Classes"]["count"], cards["Active Classes"]["stat"]) == ("0", "0 sections")
-    assert (cards["Overall Completion"]["count"], cards["Overall Completion"]["stat"]) == ("0%", "0 of 0 submitted")
-    assert (cards["Ungraded Queue"]["count"], cards["Ungraded Queue"]["stat"]) == ("0", "0 submissions")
-    assert cards["Current grade"]["count"] == "—"
+    assert cards["Classwork Submission Rate"]["count"] == "—"
+    assert cards["Grading Completion Rate"]["count"] == "—"
+    assert cards["Term Passing Rate"]["count"] == "—"
     assert result["trend_chart"]["available_filters"] == result["trend_chart"]["points"] == []
     assert result["section_matrix"] == []
-    assert result["action_queue"] == {"pending_grading": [], "upcoming_deadlines": []}
+    assert result["action_queue"] == {"upcoming_deadlines": []}
 
 
 def test_selected_previous_period_does_not_leak_active_period(db, data):
     result = dashboard(db, data, period=data["previous_period"])
     assert [p["classwork_id"] for p in result["trend_chart"]["points"]] == [data["assignments"]["old_period"].classwork_id]
-    assert [s["submission_id"] for s in result["action_queue"]["pending_grading"]] == [data["submissions"]["excluded_old_period"].submission_id]
+    assert result["analytics"]["grading_completion"]["awaiting_grading_count"] == 1
     assert result["kpis"]["overall_completion_rate"] == 50.0
 
 
@@ -530,10 +421,10 @@ def test_selected_authorized_combo_changes_chart_but_keeps_teacher_totals(db, da
     assignment = add_assignment(db, data, "second_section", class_=class_)
     add_submission(db, data, "second_section", assignment, data["students"]["previous"], status="graded", grade=Decimal("40.00"))
     result = dashboard(db, data, class_id=class_.class_id, subject_id=data["subject"].subject_id)
-    assert result["kpis"] == {
-        "active_classes": 2, "enrolled_students": 3,
-        "overall_completion_rate": 80.0, "ungraded_count": 1,
-    }
+    assert result["kpis"]["active_classes"] == 2
+    assert result["kpis"]["enrolled_students"] == 3
+    assert result["kpis"]["overall_completion_rate"] == 80.0
+    assert result["kpis"]["ungraded_count"] == 1
     assert len(result["section_matrix"]) == 2
     assert result["trend_chart"]["selected_class_id"] == class_.class_id
     assert [p["classwork_id"] for p in result["trend_chart"]["points"]] == [assignment.classwork_id]
@@ -545,10 +436,7 @@ def test_assignment_creator_or_assignor_must_be_the_scoped_teacher(db, data):
     data["assignments"]["main_pending"].assigned_by_staff_id = data["other_teacher"].staff_id
     result = dashboard(db, data)
     assert result["kpis"]["ungraded_count"] == 2
-    assert {s["submission_id"] for s in result["action_queue"]["pending_grading"]} == {
-        data["submissions"]["pending_active"].submission_id,
-        data["submissions"]["excluded_other_shared"].submission_id,
-    }
+    assert result["analytics"]["grading_completion"]["awaiting_grading_count"] == 2
 
 
 def test_trend_requires_three_actual_valid_mastery_points(db, data):
@@ -560,11 +448,12 @@ def test_trend_requires_three_actual_valid_mastery_points(db, data):
     assert dashboard(db, data)["trend_chart"]["has_sufficient_data"] is False
 
 
-def test_missing_enrollments_and_no_submissions_remain_zero_not_null(db, data):
+def test_missing_enrollments_and_no_submissions_remain_zero_or_null_honestly(db, data):
     db.query(StudentSubmission).delete(synchronize_session=False)
     result = dashboard(db, data)
     assert result["kpis"]["overall_completion_rate"] == 0.0
     assert result["kpis"]["ungraded_count"] == 0
+    assert result["analytics"]["grading_completion"]["grading_completion_rate_percent"] is None
     assert result["section_matrix"][0]["avg_score_percent"] is None
     assert result["section_matrix"][0]["passing_rate_percent"] is None
     assert all(p["avg_score_percent"] is None and p["completion_rate_percent"] == 0.0 for p in result["trend_chart"]["points"])
@@ -572,8 +461,9 @@ def test_missing_enrollments_and_no_submissions_remain_zero_not_null(db, data):
     db.flush()
     empty = dashboard(db, data)
     assert empty["kpis"]["enrolled_students"] == 0
+    assert empty["kpis"]["overall_completion_rate"] is None
     assert empty["section_matrix"][0]["attendance_rate_percent"] is None
-    assert all(p["total_enrolled"] == 0 and p["completion_rate_percent"] == 0.0 for p in empty["trend_chart"]["points"])
+    assert all(p["total_enrolled"] == 0 and p["completion_rate_percent"] is None for p in empty["trend_chart"]["points"])
 
 
 @pytest.mark.parametrize("total_points,expected", [(None, None), (Decimal("0.00"), None), (Decimal("100.00"), 0.0)])
@@ -622,17 +512,15 @@ def test_upcoming_queue_limit_keeps_five_earliest_scoped_deadlines(db, data):
     assert [a["classwork_id"] for a in result["action_queue"]["upcoming_deadlines"]] == expected[:5]
 
 
-def test_pending_queue_is_limited_after_scope_and_status_filters(db, data):
-    own = []
+def test_pending_grading_counts_all_scoped_ungraded_submissions_without_student_pii(db, data):
     for index in range(7):
         assignment = add_assignment(db, data, f"queue_{index}")
         submission = add_submission(db, data, f"queue_{index}", assignment, data["students"]["active_one"], status="late")
-        # Keep all fixture events through now; preserve the newest-first test.
         submission.submitted_at = NOW - timedelta(minutes=7 - index)
-        own.append(submission.submission_id)
     result = dashboard(db, data)
     assert result["kpis"]["ungraded_count"] == 8
-    assert [s["submission_id"] for s in result["action_queue"]["pending_grading"]] == list(reversed(own))[:5]
+    assert result["analytics"]["grading_completion"]["awaiting_grading_count"] == 8
+    assert "pending_grading" not in result["action_queue"]
 
 
 def test_noncurrent_load_version_draft_and_inactive_class_are_excluded(db, data):
@@ -672,14 +560,12 @@ def test_admin_route_can_select_teacher_without_other_teacher_data(db, data):
         "academic_period_id": data["period"].academic_period_id, "staff_id": data["other_teacher"].staff_id,
     })
     assert response.status_code == 200
-    assert {s["submission_id"] for s in response.json()["action_queue"]["pending_grading"]} == {
-        data["submissions"]["excluded_other_shared"].submission_id,
-        data["submissions"]["excluded_other_foreign"].submission_id,
-    }
+    assert response.json()["kpis"]["ungraded_count"] == 2
+    assert response.json()["analytics"]["grading_completion"]["awaiting_grading_count"] == 2
 
 
-def test_active_substitute_does_not_inherit_primary_teacher_dashboard_data(db, data):
-    """Phase 1 uses primary loads; substitute dashboard support is deferred."""
+def test_active_substitute_sees_authorized_substituted_load(db, data):
+    """Active substitute teachers see aggregate analytics for their authorized substituted load."""
     load = db.query(SubjectLoad).filter(
         SubjectLoad.staff_id == data["teacher"].staff_id,
         SubjectLoad.academic_period_id == data["period"].academic_period_id,
@@ -693,8 +579,6 @@ def test_active_substitute_does_not_inherit_primary_teacher_dashboard_data(db, d
     )
     db.add(substitution)
     db.commit()
-    assert substitution.subject_load.staff_id == data["teacher"].staff_id
-    assert substitution.start_date <= NOW.date() <= substitution.end_date
 
     client = create_client(db, {"sub": str(data["empty_teacher"].user_id), "role": "teacher"})
     response = client.get("/analytics/teacher/dashboard-health", params={
@@ -703,22 +587,14 @@ def test_active_substitute_does_not_inherit_primary_teacher_dashboard_data(db, d
     })
     assert response.status_code == 200
     body = response.json()
-    assert body["kpis"] == {
-        "active_classes": 0, "enrolled_students": 0,
-        "overall_completion_rate": 0.0, "ungraded_count": 0,
-    }
-    assert body["trend_chart"]["available_filters"] == body["trend_chart"]["points"] == []
-    assert body["section_matrix"] == []
-    assert body["action_queue"] == {"pending_grading": [], "upcoming_deadlines": []}
+    assert body["kpis"]["active_classes"] == 1
+    assert body["kpis"]["enrolled_students"] == 2
+    assert body["kpis"]["overall_completion_rate"] == 75.0
+    assert body["kpis"]["ungraded_count"] == 1
 
     primary = dashboard(db, data)
-    assert primary["kpis"] == {
-        "active_classes": 1, "enrolled_students": 2,
-        "overall_completion_rate": 75.0, "ungraded_count": 1,
-    }
-    assert [s["submission_id"] for s in primary["action_queue"]["pending_grading"]] == [
-        data["submissions"]["pending_active"].submission_id,
-    ]
+    assert primary["kpis"]["active_classes"] == 1
+    assert primary["kpis"]["ungraded_count"] == 1
 
 
 @pytest.mark.parametrize("period_id", [0, -1, 999999])
@@ -743,37 +619,23 @@ def test_student_role_is_forbidden(db, data):
     assert client.get("/analytics/teacher/dashboard-health").status_code == 403
 
 
-def test_month_attendance_uses_all_recorded_rows_and_active_roster(db, data):
-    """Mocked behavior: all four statuses, no invented missing-day entries."""
+def test_period_attendance_uses_all_recorded_rows_and_active_roster(db, data):
+    """Unified selected-period attendance across all four statuses, no invented missing-day entries."""
     for index, status in enumerate(["present", "late", "excused", "absent"]):
         db.add(AttendanceRecord(
             class_id=data["class_"].class_id, student_id=data["students"]["active_one"].student_id,
             date=NOW.date() - timedelta(days=index), status=status,
         ))
     result = dashboard(db, data)
-    monthly = result["details"]["attendance_by_section"][0]
-    assert monthly["record_count"] == 6  # Two existing + four new, no withdrawn row.
-    assert monthly["present_count"] == 2 and monthly["late_count"] == 1
-    assert monthly["excused_count"] == 1 and monthly["absent_count"] == 2
-    assert monthly["rate"] == 50.0
-    assert result["phase_two"]["attendance_today"]["record_count"] == 1
+    sec_att = result["details"]["attendance_by_section"][0]
+    assert sec_att["record_count"] == 6
+    assert sec_att["present_count"] == 2 and sec_att["late_count"] == 1
+    assert sec_att["excused_count"] == 1 and sec_att["absent_count"] == 2
+    assert sec_att["rate"] == 50.0
+    assert result["analytics"]["period_attendance"]["record_count"] == 6
+    assert result["analytics"]["period_attendance"]["rate"] == 50.0
     previous = dashboard(db, data, period=data["previous_period"])
-    assert all(row["record_count"] == 0 and row["rate"] is None for row in previous["details"]["attendance_by_section"])
-
-
-def test_month_boundaries_and_today_use_the_same_manila_clock(db, data, monkeypatch):
-    """Mocked behavior: UTC September becomes Manila October, future rows excluded."""
-    monkeypatch.setattr(AnalyticsService, "_teacher_dashboard_now", lambda: datetime(2026, 9, 30, 16, tzinfo=timezone.utc))
-    for day in [date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 2)]:
-        db.add(AttendanceRecord(
-            class_id=data["class_"].class_id, student_id=data["students"]["active_two"].student_id,
-            date=day, status="late",
-        ))
-    result = dashboard(db, data)
-    assert result["details"]["attendance_by_section"][0]["record_count"] == 1
-    assert result["details"]["attendance_by_section"][0]["rate"] == 100.0
-    assert result["phase_two"]["attendance_today"]["late_count"] == 1
-    assert result["phase_two"]["month_window"]["start_date"] == "2026-10-01"
+    assert previous["analytics"]["period_attendance"]["record_count"] == 1
 
 
 def test_missing_threshold_keeps_grade_but_marks_passing_unavailable(db, data, monkeypatch):
@@ -796,8 +658,8 @@ def test_missing_threshold_keeps_grade_but_marks_passing_unavailable(db, data, m
     assert summary["passing_rate_percent"] is None
     assert summary["warnings"][0]["code"] == "invalid_passing_threshold"
     assert result["section_matrix"][0]["passing_rate_percent"] is None
-    assert next(card for card in result["cards"] if card["title"] == "Passing Rate")["count"] == "—"
-    assert len(result["details"]["top_performers"]) == summary["available_grade_count"]
+    assert next(card for card in result["cards"] if card["title"] == "Term Passing Rate")["count"] == "—"
+    assert "top_performers" not in result["details"]
     assert sum(item["count"] for item in result["details"]["grade_distribution"]) == summary["available_grade_count"]
     assert result["details"]["grade_details"]["warnings"] == summary["warnings"]
 
@@ -848,10 +710,10 @@ def test_weekday_counts_are_manila_six_rows_plus_sunday(db, data):
     data["submissions"]["graded_two"].submitted_at = datetime(2026, 9, 30, 17, tzinfo=timezone.utc)
     result = dashboard(db, data)
     summary = result["phase_two"]["weekdays"]
-    assert len(summary["days"]) == len(result["details"]["submissions_by_weekday"]) == 6
+    assert len(summary["days"]) == 6
     assert summary["sunday_count"] == 1
     assert summary["total_count"] == 3
-    assert [row["count"] for row in result["details"]["submissions_by_weekday"]] == [0, 0, 0, 2, 0, 0]
+    assert [row["count"] for row in summary["days"]] == [0, 0, 0, 2, 0, 0]
     previous = dashboard(db, data, period=data["previous_period"])
     assert previous["phase_two"]["weekdays"]["total_count"] == 0
 
@@ -884,24 +746,20 @@ def test_route_period_lookup_does_not_autoflush_dirty_session(db, data, monkeypa
         event.remove(db.get_bind(), "before_cursor_execute", select_only)
 
 
-def test_phase_three_uses_real_scoped_current_grades_names_and_neutral_bands(db, data):
-    """Mocked-behavior: these detail arrays no longer contain demo payloads."""
+def test_phase_three_uses_real_scoped_current_grades_and_neutral_bands_without_student_names(db, data):
+    """Analytics-first: grade distribution uses real neutral percentages with zero student names."""
     result = dashboard(db, data)
     details = result["details"]
     coverage = details["grade_details"]
-    rows = details["top_performers"]
-    assert len(rows) == coverage["available_grade_count"] == 2
+    assert "top_performers" not in details
+    assert coverage["available_grade_count"] == 2
     assert coverage["total_grade_count"] == 2
     assert coverage["unavailable_grade_count"] == 0
-    assert coverage["top_performer_limit"] == 3
+    assert coverage["grade_coverage_percent"] == 100.0
     assert coverage["warnings"] == result["phase_two"]["grades"]["warnings"]
-    assert {item["name"] for item in rows} == {"Student, active_one", "Student, active_two"}
-    assert all(item["subject_name"] == data["subject"].subject_name for item in rows)
-    assert all(item["section_name"] == data["class_"].section_name for item in rows)
-    assert [item["current_grade"] for item in rows] == sorted([item["current_grade"] for item in rows], reverse=True)
     assert sum(item["count"] for item in details["grade_distribution"]) == 2
+    assert round(sum(item["percent"] for item in details["grade_distribution"]), 1) == 100.0
     assert all("variant" not in item for item in details["grade_distribution"])
-    assert all("score" not in item for item in rows)
 
 
 @pytest.mark.parametrize("scope", ["empty_period", "previous_period", "empty_teacher", "other_teacher"])
@@ -911,15 +769,9 @@ def test_phase_three_keeps_teacher_and_period_isolation(db, data, scope):
     staff = data[scope] if scope.endswith("teacher") else data["teacher"]
     db.flush()
     result = AnalyticsService.build_teacher_dashboard_health(db, staff.staff_id, period)
-    rows = result["details"]["top_performers"]
-    assert all(row["academic_period_id"] == period.academic_period_id for row in rows)
-    combos = {(item["class_id"], item["subject_id"]) for item in result["trend_chart"]["available_filters"]}
-    assert all((row["class_id"], row["subject_id"]) in combos for row in rows)
+    assert "top_performers" not in result["details"]
     if scope in {"empty_period", "empty_teacher"}:
-        assert rows == []
         assert result["details"]["grade_details"]["total_grade_count"] == 0
-    if scope == "other_teacher":
-        assert any(warning["code"] == "grade_scope_unavailable" for warning in result["details"]["grade_details"]["warnings"])
     assert sum(band["count"] for band in result["details"]["grade_distribution"]) == result["details"]["grade_details"]["available_grade_count"]
 
 
@@ -957,16 +809,6 @@ def test_phase_three_is_not_scoped_to_the_trend_selector(db, data):
     assert error.value.status_code == 403
 
 
-def test_phase_three_missing_names_keep_available_grades_and_warn(db, data, monkeypatch):
-    """Mocked-behavior: metadata absence is not grade unavailability."""
-    monkeypatch.setattr(AnalyticsService, "read_dashboard_student_names", lambda _db, _ids: {})
-    result = dashboard(db, data)
-    assert [row["name"] for row in result["details"]["top_performers"]] == ["Name unavailable"] * 2
-    assert result["details"]["grade_details"]["available_grade_count"] == 2
-    assert result["details"]["grade_details"]["unavailable_grade_count"] == 0
-    assert any(warning["code"] == "student_name_unavailable" for warning in result["details"]["grade_details"]["warnings"])
-
-
 def test_phase_three_authorization_unavailable_keeps_coverage_and_warning(db, data, monkeypatch):
     """Mocked-behavior: missing authorized scope is neither zero nor demo data."""
     from app.services.activity import TeacherDashboardMetrics
@@ -975,7 +817,7 @@ def test_phase_three_authorization_unavailable_keeps_coverage_and_warning(db, da
     monkeypatch.setattr(TeacherDashboardMetrics, "teacher_student_gradebook", denied)
     result = dashboard(db, data)
     details = result["details"]
-    assert details["top_performers"] == []
+    assert "top_performers" not in details
     assert details["grade_details"]["unavailable_grade_count"] == details["grade_details"]["total_grade_count"] == 2
     assert [band["count"] for band in details["grade_distribution"]] == [0] * 5
     assert details["grade_details"]["warnings"][0]["code"] == "grade_scope_unavailable"
@@ -1022,9 +864,8 @@ def test_phase_four_latest_retake_keeps_unique_completion_and_latest_review(db, 
     assert result["kpis"]["overall_completion_rate"] == 75.0 and result["kpis"]["ungraded_count"] == 2
     assert result["trend_chart"]["points"][0]["avg_score_percent"] == 91.0
     assert result["trend_chart"]["points"][0]["scored_count"] == 1
-    assert {row["submission_id"] for row in result["action_queue"]["pending_grading"]} == {
-        latest.submission_id, data["submissions"]["pending_active"].submission_id,
-    }
+    assert result["analytics"]["grading_completion"]["awaiting_grading_count"] == 2
+    assert result["analytics"]["grading_completion"]["finalized_count"] == 1
     assert result["action_queue"]["upcoming_deadlines"][0]["submitted_count"] == 2
     assert result["phase_two"]["weekdays"]["total_count"] == 3
 
@@ -1032,7 +873,7 @@ def test_phase_four_latest_retake_keeps_unique_completion_and_latest_review(db, 
 def test_phase_four_targeted_assignment_uses_one_eligible_student_everywhere(db, data):
     """Mocked-behavior: active but non-target rows excluded from every metric."""
     item = make_targeted_assignment(db, data, "target", data["students"]["active_one"], due_date=NOW)
-    target = add_submission(db, data, "target", item, data["students"]["active_one"], status="graded", grade=Decimal("50"))
+    add_submission(db, data, "target", item, data["students"]["active_one"], status="graded", grade=Decimal("50"))
     add_submission(db, data, "not_target", item, data["students"]["active_two"], status="submitted")
     result = dashboard(db, data)
     assert result["engagement"]["expected_count"] == 5 and result["engagement"]["completed_count"] == 4
@@ -1046,7 +887,7 @@ def test_phase_four_targeted_assignment_uses_one_eligible_student_everywhere(db,
     assert point["assignment_ids"] == [data["assignments"]["main_graded"].classwork_assignment_id, item.classwork_assignment_id]
     assert point["avg_score_percent"] == 80.7 and point["scored_count"] == 3
     assert point["eligible_count"] == point["submitted_count"] == 3
-    assert target.submission_id not in {row["submission_id"] for row in result["action_queue"]["pending_grading"]}
+    assert result["analytics"]["grading_completion"]["awaiting_grading_count"] == 1
 
 
 def test_phase_four_outside_target_keeps_deadline_and_configuration_warning(db, data):
@@ -1074,8 +915,7 @@ def test_phase_four_ambiguous_attempts_flag_totals_and_keep_valid_review_rows(db
     assert result["trend_chart"]["points"][0]["avg_score_percent"] is None
     assert result["action_queue"]["upcoming_deadlines"][0]["submitted_count"] is None
     assert result["engagement"]["warnings"][0]["code"] == "ambiguous_submission_attempts"
-    assert [row["submission_id"] for row in result["action_queue"]["pending_grading"]] == [data["submissions"]["pending_active"].submission_id]
-    assert next(card for card in result["cards"] if card["title"] == "Overall Completion")["count"] == "—"
+    assert next(card for card in result["cards"] if card["title"] == "Classwork Submission Rate")["count"] == "—"
 
 
 def test_phase_four_future_attempts_are_not_dashboard_evidence(db, data):
@@ -1149,8 +989,7 @@ def test_phase_four_engagement_query_count_does_not_grow_with_fixture_size(db, d
     print(f"Engagement SELECT count: small={len(small)}, large={len(large)} (gradebook calls isolated).")
     for statements in (small, large):
         name_reads = [sql for sql in statements if "student.first_name" in sql and "FROM student " in sql]
-        assert len(name_reads) == 1
-        assert all(column not in name_reads[0] for column in ("student_lrn", "email", "contact", "password"))
+        assert len(name_reads) == 0
 
 
 def seed_dashboard_lesson_data(db, data):
@@ -1408,7 +1247,6 @@ def test_dashboard_scope_cannot_include_unhandled_loads(db, data, scope):
     assert result['kpis']['active_classes'] == 0
     assert result['kpis']['enrolled_students'] == 0
     assert result['section_matrix'] == []
-    assert result['action_queue']['pending_grading'] == []
     assert result['action_queue']['upcoming_deadlines'] == []
     assert result['trend_chart']['points'] == []
     assert len(result['dashboard_filters']) == 1
@@ -1423,5 +1261,5 @@ def test_dashboard_scope_route_preserves_teacher_authorization(db, data):
     })
     assert response.status_code == 200
     assert response.json()['kpis']['active_classes'] == 0
-    assert response.json()['action_queue']['pending_grading'] == []
+    assert response.json()['analytics']['grading_completion']['awaiting_grading_count'] == 0
     assert client.get('/analytics/teacher/dashboard-health', params={'dashboard_class_id': 0}).status_code == 422

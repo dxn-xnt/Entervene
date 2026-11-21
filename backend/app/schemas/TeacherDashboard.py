@@ -102,6 +102,7 @@ class DashboardPerformerSummary(BaseModel):
 class DashboardGradeBand(BaseModel):
     band: str
     count: int = Field(default=0, ge=0)
+    percent: float = Field(default=0.0, ge=0.0)
 
 
 class DashboardGradeDistribution(BaseModel):
@@ -115,6 +116,7 @@ class DashboardGradeDetails(BaseModel):
     total_grade_count: int = Field(ge=0)
     available_grade_count: int = Field(ge=0)
     unavailable_grade_count: int = Field(ge=0)
+    grade_coverage_percent: float | None = None
     top_performer_limit: int = Field(default=3, ge=1)
     cutoff_tie_omitted_count: int = Field(default=0, ge=0)
     warnings: list[DashboardWarning] = Field(default_factory=list)
@@ -250,3 +252,115 @@ class DashboardSupportSummary(BaseModel):
     omitted_entry_count: int = Field(default=0, ge=0)
     unavailable_grade_count: int = Field(default=0, ge=0)
     warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardSubmissionRateSummary(BaseModel):
+    submission_rate_percent: float | None = None
+    submitted_count: int | None = Field(default=0, ge=0)
+    expected_count: int = Field(default=0, ge=0)
+    resolved_submitted_count: int = Field(default=0, ge=0)
+    late_rate_percent: float | None = None
+    late_count: int = Field(default=0, ge=0)
+    late_eligible_count: int = Field(default=0, ge=0)
+    excused_excluded_count: int = Field(default=0, ge=0)
+    eligible_assignment_count: int = Field(default=0, ge=0)
+    warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardGradingCompletionSummary(BaseModel):
+    grading_completion_rate_percent: float | None = None
+    finalized_count: int | None = Field(default=0, ge=0)
+    auto_graded_count: int | None = Field(default=0, ge=0)
+    teacher_graded_count: int | None = Field(default=0, ge=0)
+    awaiting_grading_count: int | None = Field(default=0, ge=0)
+    submitted_gradable_count: int | None = Field(default=0, ge=0)
+    resolved_finalized_count: int = Field(default=0, ge=0)
+    resolved_awaiting_grading_count: int = Field(default=0, ge=0)
+    eligible_assignment_count: int = Field(default=0, ge=0)
+    warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardGradedPerformanceSummary(BaseModel):
+    avg_graded_score_percent: float | None = None
+    scored_submission_count: int = Field(default=0, ge=0)
+    graded_assignment_count: int = Field(default=0, ge=0)
+    eligible_assignment_count: int = Field(default=0, ge=0)
+    warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardThresholdSummary(BaseModel):
+    meeting_threshold_count: int | None = Field(default=None, ge=0)
+    below_threshold_count: int | None = Field(default=None, ge=0)
+    meeting_threshold_percent: float | None = None
+    below_threshold_percent: float | None = None
+    available_grade_count: int = Field(default=0, ge=0)
+    total_grade_count: int = Field(default=0, ge=0)
+    grade_coverage_percent: float | None = None
+    uniform_passing_threshold: float | None = None
+    has_mixed_thresholds: bool = False
+    warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardSubjectComparisonItem(BaseModel):
+    subject_id: int
+    subject_name: str
+    section_count: int = Field(default=0, ge=0)
+    student_count: int = Field(default=0, ge=0)
+    submission_rate_percent: float | None = None
+    grading_completion_rate_percent: float | None = None
+    avg_graded_score_percent: float | None = None
+    passing_rate_percent: float | None = None
+    mean_current_grade: float | None = None
+    available_grade_count: int = Field(default=0, ge=0)
+    total_grade_count: int = Field(default=0, ge=0)
+    grade_coverage_percent: float | None = None
+    passing_threshold: float | None = None
+
+
+class DashboardCategoryPerformanceItem(BaseModel):
+    category: str
+    label: str
+    assignment_count: int = Field(default=0, ge=0)
+    scored_submission_count: int = Field(default=0, ge=0)
+    avg_graded_score_percent: float | None = None
+    grading_completion_rate_percent: float | None = None
+    awaiting_grading_count: int | None = Field(default=0, ge=0)
+
+
+class DashboardPracticeAssessmentSummary(BaseModel):
+    published_count: int = Field(default=0, ge=0)
+    attempted_count: int = Field(default=0, ge=0)
+    passed_count: int = Field(default=0, ge=0)
+    attempt_participation_rate_percent: float | None = None
+    attempted_pass_rate_percent: float | None = None
+    is_ungraded: bool = True
+    excluded_from_official_grades: bool = True
+
+
+class DashboardInterventionAnalytics(BaseModel):
+    candidate_count: int = Field(default=0, ge=0)
+    active_count: int = Field(default=0, ge=0)
+    resolved_improved_count: int = Field(default=0, ge=0)
+    resolved_other_count: int = Field(default=0, ge=0)
+    resolved_total_count: int = Field(default=0, ge=0)
+    total_count: int = Field(default=0, ge=0)
+    activated_count: int = Field(default=0, ge=0)
+    activation_rate_percent: float | None = None
+    improved_prediction_resolution_rate_percent: float | None = None
+    other_resolution_rate_percent: float | None = None
+    practice_assessments: DashboardPracticeAssessmentSummary = Field(
+        default_factory=DashboardPracticeAssessmentSummary
+    )
+
+
+class DashboardAnalyticsPayload(BaseModel):
+    submission_rate: DashboardSubmissionRateSummary = Field(default_factory=DashboardSubmissionRateSummary)
+    grading_completion: DashboardGradingCompletionSummary = Field(default_factory=DashboardGradingCompletionSummary)
+    graded_performance: DashboardGradedPerformanceSummary = Field(default_factory=DashboardGradedPerformanceSummary)
+    term_grades: GradeSummary = Field(default_factory=GradeSummary)
+    threshold_summary: DashboardThresholdSummary = Field(default_factory=DashboardThresholdSummary)
+    period_attendance: AttendanceSummary = Field(default_factory=AttendanceSummary)
+    interventions: DashboardInterventionAnalytics = Field(default_factory=DashboardInterventionAnalytics)
+    subject_comparisons: list[DashboardSubjectComparisonItem] = Field(default_factory=list)
+    category_performance: list[DashboardCategoryPerformanceItem] = Field(default_factory=list)
+    grade_distribution: DashboardGradeDistribution = Field(default_factory=DashboardGradeDistribution)
