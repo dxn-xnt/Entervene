@@ -28,6 +28,13 @@ class TeacherInterventionSummary(BaseModel):
     current_intervention_level: str | None = None
     candidate_activation_eligible: bool | None = None
     candidate_activation_reason: str | None = None
+    resolution_recommended: bool = False
+    resolution_recommendation_reason: str | None = None
+    can_confirm_resolution: bool = False
+    resolution_continued_at: datetime | None = None
+    resolution_continued_by_staff_id: str | None = None
+    unfinished_remediation_count: int = 0
+    has_in_progress_remediation: bool = False
     created_at: datetime
     activated_at: datetime | None = None
     resolved_at: datetime | None = None

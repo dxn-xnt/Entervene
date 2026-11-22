@@ -701,6 +701,9 @@ export default function CreateClassworkModal({
           String(remediationTarget.intervention_id),
         );
         formData.append("remediation_request_id", remediationRequestId);
+        if (selectedType !== "READING") {
+          formData.append("max_attempts", "3");
+        }
         if (
           remediationOriginalExam &&
           remediationGradeTreatment === "EXAMINATION"

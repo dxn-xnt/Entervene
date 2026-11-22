@@ -21,9 +21,10 @@ from app.schemas.Notification import NotificationCreate, NotificationListRespons
 
 
 INTERVENTION_NOTIFICATION_TYPES = (
-    "intervention_candidate", "intervention_resolved", "intervention_reviewer_available",
+    "intervention_candidate", "intervention_resolved", "intervention_resolution_recommended",
+    "intervention_reviewer_available",
     "intervention_assessment_submitted", "intervention_passed",
-    "intervention_assessment_not_passed",
+    "intervention_assessment_not_passed", "intervention_needs_teacher_review",
 )
 EXCLUDED_FEED_NOTIFICATION_TYPES = ("announcement",)
 

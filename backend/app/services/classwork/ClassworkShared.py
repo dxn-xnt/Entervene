@@ -258,6 +258,17 @@ def assignment_is_locked(ca: ClassworkAssignment, now: Optional[datetime] = None
     return bool(ca.is_locked or (lock_date and now_value < lock_date))
 
 
-def classwork_uses_attempt_limit(cw: Classwork) -> bool:
-    """Only quiz classwork should enforce a resubmission attempt cap."""
-    return is_quiz_type(cw.classwork_type)
+def classwork_uses_attempt_limit(
+    cw: Classwork,
+    assignment: Optional[ClassworkAssignment] = None,
+) -> bool:
+    """Enforce attempt limits on quizzes and all non-reading remediation assessments."""
+    if is_quiz_type(cw.classwork_type):
+        return True
+    if (
+        assignment is not None
+        and assignment.source_intervention_id is not None
+        and not is_reading_type(cw.classwork_type)
+    ):
+        return True
+    return False

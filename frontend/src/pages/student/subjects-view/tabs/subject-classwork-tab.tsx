@@ -27,7 +27,10 @@ import { Button } from "@/components/student/button";
 import { useToast } from "@/components/retroui/Toast";
 import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/student-quiz-answer";
 import { API_URL, apiFetch } from "@/lib/api";
-import { STUDY_SUPPORT_QUIZ_PASSED_MESSAGE } from "@/lib/quiz-api";
+import {
+  STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE,
+  STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
+} from "@/lib/quiz-api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
@@ -140,6 +143,7 @@ interface QuizAttempt {
   can_submit: boolean;
   is_intervention_quiz?: boolean;
   is_passed?: boolean;
+  needs_teacher_review?: boolean;
   passing_threshold?: number | null;
   show_scores?: boolean;
   total_points?: number;
@@ -1621,6 +1625,17 @@ export default function SubjectClassworkTab({
                                       {STUDY_SUPPORT_QUIZ_PASSED_MESSAGE}
                                     </Alert.Description>
                                   </Alert>
+                                ) : selectedQuizAttempt.needs_teacher_review ||
+                                  (selectedQuizAttempt.is_intervention_quiz &&
+                                    selectedQuizAttempt.status === "graded" &&
+                                    !selectedQuizAttempt.can_submit &&
+                                    (selectedQuizAttempt.attempts_remaining ?? 0) === 0) ? (
+                                  <Alert status="error">
+                                    <Alert.Title>Needs Teacher Review</Alert.Title>
+                                    <Alert.Description>
+                                      {STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE}
+                                    </Alert.Description>
+                                  </Alert>
                                 ) : (
                                   <Button
                                     type="button"
@@ -1669,6 +1684,7 @@ export default function SubjectClassworkTab({
                       </div>
                     ) : selectedSubmission ? (
                       <SubmissionViewer
+                        assignmentId={selectedClasswork.classwork_assignment_id}
                         submission={selectedSubmission}
                         dueDate={selectedClasswork.due_date ?? undefined}
                         isLocked={selectedClasswork.is_locked}
@@ -1681,6 +1697,16 @@ export default function SubjectClassworkTab({
                           handleDeleteSubmission(
                             selectedClasswork.classwork_assignment_id,
                           )
+                        }
+                        onSubmitRetry={(files) =>
+                          handleSubmit(
+                            selectedClasswork.classwork_assignment_id,
+                            files,
+                          )
+                        }
+                        isRetrying={
+                          submittingId ===
+                          selectedClasswork.classwork_assignment_id
                         }
                         onResubmit={async () => {
                           const sub = await fetchSubmissionForAssignment(

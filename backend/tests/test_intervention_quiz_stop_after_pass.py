@@ -527,10 +527,12 @@ def test_failing_all_three_attempts_preserves_existing_max_attempts_behavior(int
         assert body["attempts_used"] == expected_used
         assert body["attempts_remaining"] == expected_rem
         assert body["can_submit"] is (expected_rem > 0)
+        assert body["needs_teacher_review"] is (expected_rem == 0)
 
     fourth = env["client"].post(f"/api/v1/quizzes/assignment/{aid}/start")
     assert fourth.status_code == 403
-    assert fourth.json()["detail"] == "Maximum attempts reached"
+    assert "Maximum attempts reached" in fourth.json()["detail"]
+    assert "Needs Teacher Review" in fourth.json()["detail"]
 
 
 def test_hidden_results_still_enforces_stop_after_pass_without_leaking_score(intervention_quiz_env):

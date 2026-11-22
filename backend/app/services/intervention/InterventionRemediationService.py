@@ -354,6 +354,25 @@ def progress(db: Session, row: Intervention) -> dict:
                     effective_result = float(adj.effective_score)
                 elif original_result is not None:
                     effective_result = original_result
+        from app.services.intervention.RemediationAttemptPolicy import (
+            evaluate_remediation_attempt_state,
+            list_remediation_attempt_history,
+        )
+        attempt_state = evaluate_remediation_attempt_state(db, assignment, work, submission)
+        attempt_rows = list_remediation_attempt_history(
+            db, assignment.classwork_assignment_id, row.student_id,
+        )
+        attempt_history = [
+            {
+                "submission_id": item.submission_id,
+                "attempt_count": item.attempt_count,
+                "status": item.status,
+                "grade": float(item.grade) if item.grade is not None and work.show_scores else None,
+                "submitted_at": item.submitted_at.isoformat() if item.submitted_at else None,
+                "graded_at": item.graded_at.isoformat() if item.graded_at else None,
+            }
+            for item in attempt_rows
+        ]
         assigned.append({"title": work.title, "assignment_id": assignment.classwork_assignment_id,
                          "classwork_id": work.classwork_id,
                          "classwork_type": work.classwork_type,
@@ -366,6 +385,12 @@ def progress(db: Session, row: Intervention) -> dict:
                          "is_graded": work.is_graded,
                          "is_published": is_published,
                          "submission_status": submission.status if submission else ("draft" if not is_published else None),
+                         "attempt_count": attempt_state["attempts_used"],
+                         "max_attempts": attempt_state["max_attempts"],
+                         "attempts_remaining": attempt_state["attempts_remaining"],
+                         "is_passed": attempt_state["is_passed"],
+                         "needs_teacher_review": attempt_state["needs_teacher_review"],
+                         "attempt_history": attempt_history,
                          "grade": float(submission.grade) if submission and submission.grade is not None and work.show_scores else None,
                          "total_points": float(work.total_points) if work.total_points is not None and work.show_scores else None})
         if is_published and submission and submission.status == "graded":
@@ -421,13 +446,22 @@ def progress(db: Session, row: Intervention) -> dict:
         )
     else:
         remediation_status = "GRADED"
-        status_reason = (
-            f"Graded remediation has been applied, and the latest AI-predicted grade remains below {threshold_val:g}."
-            if latest_grade is not None and float(latest_grade) < threshold_val
-            else "Latest valid projection is unavailable."
-            if latest_grade is None
-            else "Current status is awaiting reconciliation."
+        has_needs_teacher_review = any(
+            bool(item.get("needs_teacher_review")) for item in published_assigned
         )
+        if has_needs_teacher_review:
+            status_reason = (
+                "Student exhausted all 3 remediation attempts without passing. "
+                "Needs Teacher Review."
+            )
+        else:
+            status_reason = (
+                f"Graded remediation has been applied, and the latest AI-predicted grade remains below {threshold_val:g}."
+                if latest_grade is not None and float(latest_grade) < threshold_val
+                else "Latest valid projection is unavailable."
+                if latest_grade is None
+                else "Current status is awaiting reconciliation."
+            )
 
     return {"triggering_projection": float(source_grade if source_grade is not None else source.predicted_period_grade),
             "latest_projection": float(latest_grade) if latest_grade is not None else None,

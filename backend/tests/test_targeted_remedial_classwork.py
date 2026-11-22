@@ -1,5 +1,6 @@
 """Focused recipient checks for existing Classwork, Quiz, and submission APIs."""
 import asyncio
+from datetime import datetime, timedelta, timezone
 import json
 from uuid import uuid4
 
@@ -665,7 +666,7 @@ def test_targeted_quiz_attempt_rejects_classmate(quiz_attempt_context):
     assert analysis.total_students == 1
 
 
-def test_quiz_creator_produces_valid_link_and_enforces_one_attempt(candidate_context):
+def test_quiz_creator_produces_valid_link_and_enforces_three_attempts(candidate_context):
     c = candidate_context; db = c["db"]
     account = UserAccount(user_id=uuid4(), email=f"rem-quiz-{uuid4().hex[:8]}@example.test", password_hash="test")
     db.add(account); db.flush(); c["student"].user_id = account.user_id; db.commit()
@@ -676,29 +677,34 @@ def test_quiz_creator_produces_valid_link_and_enforces_one_attempt(candidate_con
         target_assignment_ids=[target.classwork_assignment_id],
     ))
 
-    # Reject more than 1 attempt
+    # Reject more than 3 attempts
+    due = datetime.now(timezone.utc) + timedelta(days=7)
+    payload_4 = _valid_quiz_payload()
+    payload_4["settings"]["max_attempts"] = 4
     with pytest.raises(HTTPException) as multi_attempt_err:
         asyncio.run(create_classwork_wizard_record(
-            title="Remedial Quiz 2 attempts", classwork_type="QUIZ", subject_id=c["subject"].subject_id,
+            title="Remedial Quiz 4 attempts", classwork_type="QUIZ", subject_id=c["subject"].subject_id,
             description=None, instructions="Practice", classwork_category="WRITTEN_WORK", total_points=10,
-            is_published=True, class_ids=json.dumps([c["class"].class_id]), academic_period_id=c["period"].academic_period_id,
-            lesson_ids="[]", due_date=None, lock_date=None, allow_late_submissions=False, max_attempts=2,
-            quiz_payload=json.dumps(_valid_quiz_payload()), rubric_payload=None, files=None,
+            is_published=False, class_ids=json.dumps([c["class"].class_id]), academic_period_id=c["period"].academic_period_id,
+            lesson_ids="[]", due_date=due, lock_date=None, allow_late_submissions=False, max_attempts=4,
+            quiz_payload=json.dumps(payload_4), rubric_payload=None, files=None,
             intervention_id=_id(c), remediation_request_id=uuid4(),
             original_classwork_assignment_id=target.classwork_assignment_id,
             current_user={"sub": str(c["staff"].user_id), "role": "teacher"},
             staff_id=_staff(c), db=db,
         ))
     assert multi_attempt_err.value.status_code == 400
-    assert "one attempt" in multi_attempt_err.value.detail.lower()
+    assert "3 attempts" in multi_attempt_err.value.detail.lower()
 
-    # Exactly 1 attempt succeeds and creates link
+    # Up to 3 attempts succeeds and creates link
+    payload_3 = _valid_quiz_payload()
+    payload_3["settings"]["max_attempts"] = 3
     result = asyncio.run(create_classwork_wizard_record(
-        title="Remedial Quiz 1 attempt", classwork_type="QUIZ", subject_id=c["subject"].subject_id,
+        title="Remedial Quiz 3 attempts", classwork_type="QUIZ", subject_id=c["subject"].subject_id,
         description=None, instructions="Practice", classwork_category="WRITTEN_WORK", total_points=10,
-        is_published=True, class_ids=json.dumps([c["class"].class_id]), academic_period_id=c["period"].academic_period_id,
-        lesson_ids="[]", due_date=None, lock_date=None, allow_late_submissions=False, max_attempts=1,
-        quiz_payload=json.dumps(_valid_quiz_payload()), rubric_payload=None, files=None,
+        is_published=False, class_ids=json.dumps([c["class"].class_id]), academic_period_id=c["period"].academic_period_id,
+        lesson_ids="[]", due_date=due, lock_date=None, allow_late_submissions=False, max_attempts=3,
+        quiz_payload=json.dumps(payload_3), rubric_payload=None, files=None,
         intervention_id=_id(c), remediation_request_id=uuid4(),
         original_classwork_assignment_id=target.classwork_assignment_id,
         current_user={"sub": str(c["staff"].user_id), "role": "teacher"},
@@ -710,6 +716,9 @@ def test_quiz_creator_produces_valid_link_and_enforces_one_attempt(candidate_con
     assert link.source_intervention_id == _id(c)
     assert link.student_id == c["student"].student_id
     assert link.component == "WRITTEN_WORK"
+    remediation_assignment = db.get(ClassworkAssignment, link.remediation_assignment_id)
+    assert remediation_assignment is not None
+    assert remediation_assignment.max_attempts == 3
 
 
 def test_graded_remediation_rejects_missing_or_forged_original_id(candidate_context):

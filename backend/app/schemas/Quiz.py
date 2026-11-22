@@ -206,6 +206,7 @@ class QuizAttemptResponse(BaseModel):
     can_submit: bool
     is_intervention_quiz: bool = False
     is_passed: bool = False
+    needs_teacher_review: bool = False
     passing_threshold: Optional[float] = None
     show_scores: bool = True
     summary_available: bool = False

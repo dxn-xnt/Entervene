@@ -22,6 +22,7 @@ import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
 import {
   getQuizAttempt,
+  STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE,
   STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
   type QuizAttemptResponse,
   type QuizAttemptQuestion,
@@ -308,16 +309,28 @@ const StudentQuizResult = () => {
                   <Badge
                     size="sm"
                     variant={
-                      isPassed || quiz.status === "graded"
+                      isPassed
                         ? "success"
-                        : quiz.status === "late"
+                        : quiz.needs_teacher_review ||
+                            (quiz.is_intervention_quiz &&
+                              quiz.status === "graded" &&
+                              attemptsRemaining === 0)
                           ? "destructive"
-                          : "outline"
+                          : quiz.status === "graded"
+                            ? "success"
+                            : quiz.status === "late"
+                              ? "destructive"
+                              : "outline"
                     }
                   >
                     {isPassed
                       ? "Passed"
-                      : quiz.status.charAt(0).toUpperCase() + quiz.status.slice(1).toLowerCase()}
+                      : quiz.needs_teacher_review ||
+                          (quiz.is_intervention_quiz &&
+                            quiz.status === "graded" &&
+                            attemptsRemaining === 0)
+                        ? "Needs Teacher Review"
+                        : quiz.status.charAt(0).toUpperCase() + quiz.status.slice(1).toLowerCase()}
                   </Badge>
 
                   <span className="text-sm text-black/60 font-medium">
@@ -333,6 +346,16 @@ const StudentQuizResult = () => {
                   <Alert.Title>Passed</Alert.Title>
                   <Alert.Description>
                     {STUDY_SUPPORT_QUIZ_PASSED_MESSAGE}
+                  </Alert.Description>
+                </Alert>
+              ) : quiz.needs_teacher_review ||
+                (quiz.is_intervention_quiz &&
+                  quiz.status === "graded" &&
+                  attemptsRemaining === 0) ? (
+                <Alert status="error">
+                  <Alert.Title>Needs Teacher Review</Alert.Title>
+                  <Alert.Description>
+                    {STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE}
                   </Alert.Description>
                 </Alert>
               ) : shouldPromptRetake ? (

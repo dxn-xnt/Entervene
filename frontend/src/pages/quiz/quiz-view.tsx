@@ -12,6 +12,7 @@ import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
 import {
   getQuizAttempt,
+  STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE,
   STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
   type QuizAttemptResponse,
 } from "@/lib/quiz-api";
@@ -208,6 +209,24 @@ const StudentQuizView = () => {
                         </Alert.Description>
                       </Alert>
                     )}
+
+                    {!quiz.is_passed &&
+                      (quiz.needs_teacher_review ||
+                        (quiz.is_intervention_quiz &&
+                          quiz.status === "graded" &&
+                          (quiz.attempts_remaining ??
+                            Math.max(
+                              0,
+                              quiz.max_attempts -
+                                (quiz.attempts_used ?? quiz.attempt_count),
+                            )) === 0)) && (
+                        <Alert status="error" className="mt-4">
+                          <Alert.Title>Needs Teacher Review</Alert.Title>
+                          <Alert.Description>
+                            {STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE}
+                          </Alert.Description>
+                        </Alert>
+                      )}
 
                     <div className="mt-6 flex w-full flex-wrap items-center justify-center gap-3 sm:mt-8 lg:mt-12">
                       {isCompleted && (

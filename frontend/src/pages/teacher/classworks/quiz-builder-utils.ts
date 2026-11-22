@@ -22,13 +22,9 @@ export function interventionQuizCreationDefaults(
     | null
     | undefined,
 ) {
+  void gradeTreatment;
   return {
-    maxAttempts:
-      gradeTreatment === "EXAMINATION"
-        ? "1"
-        : isTargeted
-          ? "3"
-          : defaultQuizSettings.max_attempts,
+    maxAttempts: isTargeted ? "3" : defaultQuizSettings.max_attempts,
     showScores: isTargeted ? true : defaultQuizSettings.show_correct_answers,
   };
 }

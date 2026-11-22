@@ -2,8 +2,15 @@ import { useState } from "react";
 import { AlertCircle, ExternalLink } from "lucide-react";
 import AttachmentDisplay from "./attachment-display";
 import ConfirmDialog from "./confirm-dialog";
+import SubmissionForm, { type SubmissionLinkDraft } from "./submission-form";
 import { API_URL } from "@/lib/api";
 import { formatDateTime } from "@/lib/formatters";
+import {
+  STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE,
+  STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
+} from "@/lib/quiz-api";
+import { Alert } from "@/components/retroui/Alert";
+import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "./retroui/Card";
 
@@ -66,7 +73,18 @@ interface SubmissionAttachment {
   uploaded_at?: string;
 }
 
+interface SubmissionAttemptHistoryItem {
+  submission_id: number;
+  attempt_count: number;
+  status: string;
+  submitted_at?: string | null;
+  graded_at?: string | null;
+  grade?: number | null;
+  feedback?: string | null;
+}
+
 interface SubmissionViewerProps {
+  assignmentId?: number;
   submission: {
     submission_id: number;
     status: string;
@@ -76,6 +94,15 @@ interface SubmissionViewerProps {
     attempt_count: number;
     attachments: SubmissionAttachment[];
     links?: SavedSubmissionLink[];
+    is_intervention_assessment?: boolean;
+    max_attempts?: number | null;
+    attempts_used?: number | null;
+    attempts_remaining?: number | null;
+    is_passed?: boolean;
+    passing_threshold?: number | null;
+    needs_teacher_review?: boolean;
+    can_retry?: boolean;
+    attempt_history?: SubmissionAttemptHistoryItem[];
   };
   maxAttempts?: number;
   dueDate?: string;
@@ -83,7 +110,9 @@ interface SubmissionViewerProps {
   allowLateSubmissions?: boolean;
   onResubmit?: () => void | Promise<void>;
   onDeleteSubmission?: (submissionId: number) => Promise<void | boolean>;
+  onSubmitRetry?: (files: File[], links: SubmissionLinkDraft[]) => Promise<void>;
   isDeleting?: boolean;
+  isRetrying?: boolean;
   showScores?: boolean;
   hideFeedbackWithScores?: boolean;
   hideGrade?: boolean;
@@ -96,6 +125,7 @@ function canResubmit(dueDate?: string, isLocked?: boolean, allowLateSubmissions?
 }
 
 export default function SubmissionViewer({
+  assignmentId,
   submission,
   maxAttempts,
   dueDate,
@@ -103,18 +133,24 @@ export default function SubmissionViewer({
   allowLateSubmissions = false,
   onResubmit,
   onDeleteSubmission,
+  onSubmitRetry,
   isDeleting = false,
+  isRetrying = false,
   showScores = true,
   hideFeedbackWithScores = false,
 }: SubmissionViewerProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  const isRemediation = Boolean(submission.is_intervention_assessment);
+  const effectiveMaxAttempts = submission.max_attempts ?? maxAttempts ?? (isRemediation ? 3 : undefined);
+  const isGraded = submission.status === "graded";
   const allowResubmit = canResubmit(dueDate, isLocked, allowLateSubmissions);
+  const allowDeleteResubmit = allowResubmit && !(isRemediation && isGraded);
   const submittedDate = submission.submitted_at
     ? formatDateTime(submission.submitted_at)
     : "N/A";
 
-  const resubmitButton = allowResubmit ? (
+  const resubmitButton = allowDeleteResubmit ? (
     <Button
       size="sm"
       variant="outline"
@@ -156,16 +192,57 @@ export default function SubmissionViewer({
             />
           )}
           <div className="flex flex-row justify-between px-1 -mt-2">
-
             <p className="text-sm text-muted-foreground">Submitted on {submittedDate}</p>
-            <p className="text-sm text-muted-foreground">
-              {submission.attempt_count} of {maxAttempts} attemps
-            </p>
+            {effectiveMaxAttempts != null && (
+              <p className="text-sm text-muted-foreground">
+                Attempt {submission.attempt_count} of {effectiveMaxAttempts}
+              </p>
+            )}
           </div>
-
         </div>
       )}
 
+      {/* Remediation Attempt Status */}
+      {isRemediation && isGraded && (
+        <div className="space-y-3">
+          {submission.is_passed ? (
+            <Alert status="success">
+              <Alert.Title>Passed</Alert.Title>
+              <Alert.Description>
+                {STUDY_SUPPORT_QUIZ_PASSED_MESSAGE}
+              </Alert.Description>
+            </Alert>
+          ) : submission.needs_teacher_review ? (
+            <Alert status="error">
+              <Alert.Title>Needs Teacher Review</Alert.Title>
+              <Alert.Description>
+                {STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE}
+              </Alert.Description>
+            </Alert>
+          ) : submission.can_retry ? (
+            <div className="space-y-3">
+              <Alert status="warning">
+                <Alert.Title>Passing score not reached yet</Alert.Title>
+                <Alert.Description>
+                  {showScores && submission.passing_threshold != null
+                    ? `You need at least ${submission.passing_threshold}% to pass this Study Support assessment. `
+                    : "You haven't reached the passing score for this Study Support assessment yet. "}
+                  {`You have ${submission.attempts_remaining ?? 0} ${(submission.attempts_remaining ?? 0) === 1 ? "attempt" : "attempts"} remaining. Submit a new attempt below — your previous attempt history will be preserved.`}
+                </Alert.Description>
+              </Alert>
+              {onSubmitRetry && allowResubmit && assignmentId != null && (
+                <SubmissionForm
+                  assignmentId={assignmentId}
+                  maxAttempts={effectiveMaxAttempts ?? 3}
+                  currentAttempt={submission.attempt_count}
+                  isLoading={isRetrying}
+                  onSubmit={onSubmitRetry}
+                />
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Feedback */}
       {submission.feedback && (showScores || !hideFeedbackWithScores) && (
@@ -176,24 +253,52 @@ export default function SubmissionViewer({
           </Card>
         </div>
       )}
-      <div>
-        {allowResubmit ? (
-          <p className="text-sm text-muted-foreground px-1 -mt-2">
-            {dueDate && new Date() > new Date(dueDate) && allowLateSubmissions
-              ? "You can resubmit after the due date, but the new submission will be marked late."
-              : "You can delete your current submission and resubmit before the due date."}
-          </p>
-        ) : (
-          <div className="flex gap-2 text-sm text-red-700 -mt-2">
-            <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
-            <span>
-              {isLocked
-                ? "This assignment is locked and cannot be resubmitted"
-                : "The due date has passed. Resubmission is not allowed."}
-            </span>
+
+      {/* Preserved Remediation Attempt History */}
+      {isRemediation && submission.attempt_history && submission.attempt_history.length > 1 && (
+        <div className="space-y-2">
+          <p className="text-sm font-semibold px-1">Attempt History</p>
+          <div className="space-y-1.5">
+            {submission.attempt_history.map((item) => (
+              <Card
+                key={item.submission_id}
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs shadow-none"
+              >
+                <span className="font-semibold">Attempt {item.attempt_count}</span>
+                <div className="flex items-center gap-2">
+                  {showScores && item.grade != null && (
+                    <span className="font-medium">Score: {item.grade}</span>
+                  )}
+                  <Badge variant="outline" size="sm" className="capitalize">
+                    {item.status}
+                  </Badge>
+                </div>
+              </Card>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {!(isRemediation && isGraded) && (
+        <div>
+          {allowDeleteResubmit ? (
+            <p className="text-sm text-muted-foreground px-1 -mt-2">
+              {dueDate && new Date() > new Date(dueDate) && allowLateSubmissions
+                ? "You can resubmit after the due date, but the new submission will be marked late."
+                : "You can delete your current submission and resubmit before the due date."}
+            </p>
+          ) : (
+            <div className="flex gap-2 text-sm text-red-700 -mt-2">
+              <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+              <span>
+                {isLocked
+                  ? "This assignment is locked and cannot be resubmitted"
+                  : "The due date has passed. Resubmission is not allowed."}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <ConfirmDialog
         open={showDeleteConfirm}

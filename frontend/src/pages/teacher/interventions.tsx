@@ -27,6 +27,7 @@ import { describeActivationConflict } from "@/lib/intervention-activation-confli
 import InterventionModal from "./forms/intervention-modal";
 import {
   activateTeacherCandidate,
+  continueTeacherActive,
   getTeacherActive,
   getTeacherCandidate,
   getTeacherResolved,
@@ -34,6 +35,7 @@ import {
   listTeacherActive,
   listTeacherCandidates,
   listTeacherResolved,
+  resolveTeacherActive,
   type TeacherInterventionDetail,
   type TeacherInterventionSummary,
   type TeacherResolvedInterventionDetail,
@@ -135,6 +137,9 @@ export default function TeacherInterventions() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
+  const [resolutionAction, setResolutionAction] = useState<
+    "continue" | "resolve" | null
+  >(null);
   const [reviewStale, setReviewStale] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -364,6 +369,63 @@ export default function TeacherInterventions() {
       }
     } finally {
       setActivating(false);
+    }
+  };
+
+  const handleContinueSupport = async () => {
+    if (!detail || detail.status !== "ACTIVE" || resolutionAction) return;
+    setResolutionAction("continue");
+    setActionError(null);
+    try {
+      const updated = await continueTeacherActive(detail.intervention_id);
+      setDetail(updated);
+      toast.success({
+        title: "Support continued",
+        description: `Intervention remains active for ${updated.student_name} in ${updated.subject_name}.`,
+      });
+      await refreshActive();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to continue support. Please try again.";
+      setActionError(message);
+    } finally {
+      setResolutionAction(null);
+    }
+  };
+
+  const handleResolveIntervention = async () => {
+    if (!detail || detail.status !== "ACTIVE" || resolutionAction) return;
+    setResolutionAction("resolve");
+    setActionError(null);
+    try {
+      const resolved = await resolveTeacherActive(detail.intervention_id);
+      setDetail(resolved);
+      toast.success({
+        title: "Intervention resolved",
+        description: `Intervention resolved for ${resolved.student_name} in ${resolved.subject_name}.`,
+      });
+      const next = new URLSearchParams(params);
+      next.delete("candidate");
+      next.delete("active");
+      next.delete("setup");
+      next.delete("step");
+      next.set("view", "resolved");
+      next.set("resolved", String(resolved.intervention_id));
+      setParams(next);
+      await Promise.all([refreshActive(), refreshResolved()]);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to resolve intervention. Please try again.";
+      setActionError(message);
+      if (error instanceof InterventionApiError && error.status === 409) {
+        void refreshActive();
+      }
+    } finally {
+      setResolutionAction(null);
     }
   };
 
@@ -811,6 +873,15 @@ export default function TeacherInterventions() {
                                     </Badge>
                                   );
                                 })()}
+                                {activeView && candidate.resolution_recommended && (
+                                  <Badge
+                                    variant="success"
+                                    size="sm"
+                                    className="whitespace-nowrap"
+                                  >
+                                    Resolution Recommended
+                                  </Badge>
+                                )}
                                 {!activeView &&
                                   !resolvedView &&
                                   candidate.candidate_activation_eligible ===
@@ -926,8 +997,11 @@ export default function TeacherInterventions() {
         detailError={detailError}
         actionError={actionError}
         activating={activating}
+        resolutionAction={resolutionAction}
         reviewStale={reviewStale}
         onActivate={activate}
+        onContinueSupport={handleContinueSupport}
+        onResolveIntervention={handleResolveIntervention}
         previousResolved={previousResolved}
         newerActive={newerActive}
       />
