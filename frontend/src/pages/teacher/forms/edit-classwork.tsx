@@ -4,7 +4,11 @@ import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { unorderedValues, optionalNumber } from "@/lib/form-changes";
-import { NoChangesMessage } from "@/components/retroui/FormMessage";
+import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
+import {
+  getMinFutureDeadlineInput,
+  validateFutureDeadline,
+} from "@/lib/deadline-validation";
 import {
   Check,
   CheckCheck,
@@ -290,6 +294,7 @@ export default function EditClassworkModal({
     currentClasswork.activity_mode,
   ]);
 
+  const [dueDateError, setDueDateError] = useState("");
   const setFormError = (msg: string) => {
     toast.error({ title: msg });
   };
@@ -972,6 +977,18 @@ export default function EditClassworkModal({
         currentClasswork.assignments?.map((item) => item.class_id) ?? [],
       ),
     ];
+    const dueDateChanged = editDraft.due_date !== initialDraft.due_date;
+    const hasNewSections = selectedClassIds.some(
+      (id) => !initialClassIds.includes(id),
+    );
+    if (!isReading && editDraft.due_date && (dueDateChanged || hasNewSections)) {
+      const deadlineError = validateFutureDeadline(editDraft.due_date);
+      if (deadlineError) {
+        setDueDateError(deadlineError);
+        return;
+      }
+    }
+    setDueDateError("");
     const classworkDetailsChanged =
       editDraft.title.trim() !== initialDraft.title.trim() ||
       editDraft.description.trim() !== initialDraft.description.trim() ||
@@ -1104,9 +1121,11 @@ export default function EditClassworkModal({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               class_ids: selectedClassIds,
-              due_date: editDraft.due_date
-                ? new Date(editDraft.due_date).toISOString()
-                : null,
+              due_date: !dueDateChanged
+                ? (currentClasswork.assignments?.[0]?.due_date ?? null)
+                : editDraft.due_date
+                  ? new Date(editDraft.due_date).toISOString()
+                  : null,
               lock_date: editDraft.lock_date
                 ? new Date(editDraft.lock_date).toISOString()
                 : null,
@@ -1802,16 +1821,35 @@ export default function EditClassworkModal({
                       >
                         <DatePicker
                           includeTime
+                          min={getMinFutureDeadlineInput()}
                           value={editDraft.due_date}
-                          onValueChange={(value) =>
+                          onValueChange={(value) => {
+                            const initialDueDate =
+                              classworkToEditDraft(currentClasswork).due_date;
+                            const nextDeadlineError =
+                              value && value !== initialDueDate
+                                ? validateFutureDeadline(value)
+                                : "";
+                            setDueDateError(nextDeadlineError);
                             setEditDraft((current) => ({
                               ...current,
                               due_date: value,
-                            }))
-                          }
+                            }));
+                          }}
                           disabled={isSavingEdit}
+                          aria-invalid={Boolean(dueDateError)}
+                          aria-describedby={
+                            dueDateError
+                              ? "edit-classwork-due-date-error"
+                              : undefined
+                          }
                           className="w-full bg-white border-2 border-black rounded shadow-none"
                         />
+                        {dueDateError && (
+                          <FormMessage id="edit-classwork-due-date-error">
+                            {dueDateError}
+                          </FormMessage>
+                        )}
                       </Field>
                     )}
 
