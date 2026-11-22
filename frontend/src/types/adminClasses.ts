@@ -460,6 +460,7 @@ export type DistributeStudentsPayload = {
 
 export type DistributeStudentsResponse = {
   assignments_by_section: Record<string, string[]>;
+  student_gwas?: Record<string, number | null>;
 };
 
 export type AdvisorySubjectItem = {

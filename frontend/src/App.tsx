@@ -30,6 +30,7 @@ const AdminSettings = lazy(() => import("./pages/admin/system-settings"));
 const AcademicPeriods = lazy(() => import("./pages/admin/academic-periods"));
 const AdminProfile = lazy(() => import("./pages/admin/profile-view"));
 const AdminSubstitutions = lazy(() => import("./pages/admin/substitutions"));
+const AdminNotifications = lazy(() => import("./pages/admin/notifications"));
 
 // import AppLayout from "./layouts/app-layout";
 
@@ -121,6 +122,7 @@ const App = () => {
                   <Route path={routes.admin.subjectPredictions} element={<SubjectPrediction />} />
                   <Route path={routes.admin.subjectSectionPredictions} element={<SectionPredictions />} />
                   <Route path={routes.admin.substitutions} element={<AdminSubstitutions />} />
+                  <Route path={routes.admin.notifications} element={<AdminNotifications />} />
                 </Route>
 
                 {/* Teacher */}

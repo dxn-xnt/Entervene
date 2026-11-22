@@ -2,6 +2,7 @@ import type { NotificationItem } from "@/lib/notifications-api";
 
 export type StudentNotificationTab = "all" | "classwork" | "study_support";
 export type TeacherNotificationTab = "all" | "repost" | "interventions";
+export type AdminNotificationTab = "all" | "academic" | "alerts";
 
 const STUDENT_STUDY_SUPPORT_TYPES = new Set<NotificationItem["notification_type"]>([
   "risk_alert",
@@ -97,6 +98,31 @@ export function matchesTeacherNotificationTab(
   return true;
 }
 
+export function matchesAdminNotificationTab(
+  notificationType: NotificationItem["notification_type"],
+  tab: AdminNotificationTab,
+): boolean {
+  if (tab === "all") return true;
+  if (tab === "academic") {
+    return (
+      notificationType.startsWith("grade_submission_") ||
+      notificationType === "grade_released" ||
+      notificationType === "submission_graded" ||
+      notificationType.startsWith("classwork_") ||
+      notificationType === "assignment_due" ||
+      notificationType.startsWith("repost_")
+    );
+  }
+  if (tab === "alerts") {
+    return (
+      notificationType === "risk_alert" ||
+      notificationType.startsWith("intervention_") ||
+      notificationType.startsWith("study_support_")
+    );
+  }
+  return true;
+}
+
 export function formatNotificationTitle(title: string): string {
   const cleaned = title.trim();
   if (!cleaned) return "";
@@ -138,3 +164,151 @@ export function formatNotificationBody(body: string | null | undefined): string 
     .replace(/\s+\./g, ".")
     .trim();
 }
+
+export interface SystemSettingNotificationMeta {
+  summary: string;
+  changedBy?: string;
+  academicYear?: string;
+  changedOn?: string;
+  reason?: string;
+}
+
+export function parseSystemSettingNotification(
+  body: string | null | undefined,
+  createdAt?: string | null,
+): SystemSettingNotificationMeta {
+  if (!body) {
+    return {
+      summary: "",
+      changedOn: createdAt
+        ? new Date(createdAt).toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          })
+        : undefined,
+    };
+  }
+
+  const lines = body.split("\n").map((l) => l.trim()).filter(Boolean);
+  let summary = "";
+  let changedBy: string | undefined;
+  let academicYear: string | undefined;
+  let changedOn: string | undefined;
+  let reason: string | undefined;
+
+  for (const line of lines) {
+    const cleanLine = line.replace(/^[•\-*]\s*/, "");
+    if (/^Changed by:\s*/i.test(cleanLine)) {
+      changedBy = cleanLine.replace(/^Changed by:\s*/i, "").trim();
+    } else if (/^Academic Year:\s*/i.test(cleanLine)) {
+      academicYear = cleanLine.replace(/^Academic Year:\s*/i, "").trim();
+    } else if (/^Changed on:\s*/i.test(cleanLine)) {
+      changedOn = cleanLine.replace(/^Changed on:\s*/i, "").trim();
+    } else if (/^Reason:\s*/i.test(cleanLine)) {
+      reason = cleanLine.replace(/^Reason:\s*/i, "").trim();
+    } else if (!summary) {
+      summary = cleanLine;
+    } else {
+      summary += ` ${cleanLine}`;
+    }
+  }
+
+  if (!changedOn && createdAt) {
+    try {
+      const d = new Date(createdAt);
+      changedOn = d.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      // ignore invalid date
+    }
+  }
+
+  return { summary, changedBy, academicYear, changedOn, reason };
+}
+
+export function formatSystemSettingSentence(
+  meta: SystemSettingNotificationMeta,
+): string {
+  const { summary, changedBy, academicYear, changedOn, reason } = meta;
+  if (!summary && !changedBy) return "";
+
+  const actionText = summary.trim().replace(/\.+$/, "");
+
+  let sentence = "";
+  if (changedBy) {
+    if (/^general average passing grade\s+adjusted\s+from/i.test(actionText)) {
+      const rest = actionText.replace(
+        /^general average passing grade\s+adjusted\s+/i,
+        "",
+      );
+      sentence = `${changedBy} adjusted the General Average Passing Grade ${rest}`;
+    } else if (/^general average passing grade\s+set\s+to/i.test(actionText)) {
+      const rest = actionText.replace(
+        /^general average passing grade\s+set\s+/i,
+        "",
+      );
+      sentence = `${changedBy} set the General Average Passing Grade ${rest}`;
+    } else if (/^passing threshold\s+adjusted\s+from/i.test(actionText)) {
+      const rest = actionText.replace(/^passing threshold\s+adjusted\s+/i, "");
+      sentence = `${changedBy} adjusted the template passing threshold ${rest}`;
+    } else if (/^passing threshold\s+set\s+to/i.test(actionText)) {
+      const rest = actionText.replace(/^passing threshold\s+set\s+/i, "");
+      sentence = `${changedBy} set the template passing threshold ${rest}`;
+    } else if (
+      /^template passing threshold\s+adjusted\s+from/i.test(actionText)
+    ) {
+      const rest = actionText.replace(
+        /^template passing threshold\s+adjusted\s+/i,
+        "",
+      );
+      sentence = `${changedBy} adjusted the template passing threshold ${rest}`;
+    } else if (/^template passing threshold\s+set\s+to/i.test(actionText)) {
+      const rest = actionText.replace(
+        /^template passing threshold\s+set\s+/i,
+        "",
+      );
+      sentence = `${changedBy} set the template passing threshold ${rest}`;
+    } else if (actionText) {
+      sentence = `${changedBy} updated ${actionText.charAt(0).toLowerCase() + actionText.slice(1)}`;
+    } else {
+      sentence = `${changedBy} updated system settings`;
+    }
+  } else {
+    sentence = actionText;
+  }
+
+  if (academicYear) {
+    const yearPrefix = /academic year/i.test(academicYear)
+      ? ""
+      : "Academic Year ";
+    sentence += ` for ${yearPrefix}${academicYear}`;
+  }
+
+  if (changedOn) {
+    sentence += ` on ${changedOn}`;
+  }
+
+  if (!sentence.endsWith(".")) {
+    sentence += ".";
+  }
+
+  if (reason && reason.trim().toLowerCase() !== "no reason provided") {
+    sentence += ` Reason: ${reason.trim()}`;
+    if (!sentence.endsWith(".")) {
+      sentence += ".";
+    }
+  }
+
+  return sentence;
+}
+
