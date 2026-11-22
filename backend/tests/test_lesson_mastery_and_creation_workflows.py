@@ -45,6 +45,7 @@ from app.models.quiz.QuestionOption import QuestionOption
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.quiz.QuizSetting import QuizSetting
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.notifications.Notification import Notification
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.classwork.ClassworkShared import ensure_lessons_owned
@@ -71,6 +72,7 @@ TABLES = [
     ActivityRubricLevel.__table__,
     ClassworkAssignment.__table__,
     ClassworkAssignmentRecipient.__table__,
+    RemediationAssignmentLink.__table__,
     ClassworkLesson.__table__,
     ClassworkReferenceLink.__table__,
     Notification.__table__,
@@ -555,6 +557,93 @@ def test_published_quiz_creation_rejects_unmapped_questions(client, test_db):
     assert detail["readiness_errors"] == [
         "Question 1 needs a lesson mapping to one of the quiz's linked lessons"
     ]
+
+
+def test_publishing_draft_quiz_via_update_with_lesson_ids_succeeds(client, test_db):
+    data = seed_basic_data(test_db)
+    teacher_headers = auth_headers(data["teacher_account"], role="teacher")
+
+    create_res = client.post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data={
+            "title": "Draft Remediation Quiz",
+            "classwork_type": "QUIZ",
+            "classwork_category": "WRITTEN_WORK",
+            "total_points": "10",
+            "subject_id": "10",
+            "is_published": "false",
+            "class_ids": json.dumps([100]),
+            "lesson_ids": json.dumps([1]),
+            "quiz_payload": json.dumps({
+                "status": "DRAFT",
+                "questions": [
+                    {
+                        "question_text": "What is a point?",
+                        "question_type": "MULTIPLE_CHOICE",
+                        "points": 5,
+                        "display_order": 1,
+                        "lesson_id": 1,
+                        "options": [
+                            {"option_text": "Exact location", "is_correct": True, "option_order": 1},
+                            {"option_text": "Curved line", "is_correct": False, "option_order": 2},
+                        ],
+                    },
+                    {
+                        "question_text": "A line extends endlessly in both directions.",
+                        "question_type": "MULTIPLE_CHOICE",
+                        "points": 5,
+                        "display_order": 2,
+                        "lesson_id": 1,
+                        "options": [
+                            {"option_text": "True", "is_correct": True, "option_order": 1},
+                            {"option_text": "False", "is_correct": False, "option_order": 2},
+                        ],
+                    },
+                ],
+            }),
+        },
+        headers=teacher_headers,
+    )
+    assert create_res.status_code in (200, 201), create_res.text
+    classwork_id = create_res.json()["classwork_id"]
+
+    # Match production SessionLocal(autoflush=False) so bulk delete + re-add of
+    # ClassworkLesson rows must flush before quiz publish readiness checks run.
+    test_db.autoflush = False
+    publish_res = client.put(
+        f"/api/v1/classwork-assignments/classwork/{classwork_id}",
+        json={
+            "title": "Draft Remediation Quiz",
+            "classwork_type": "QUIZ",
+            "classwork_category": "WRITTEN_WORK",
+            "total_points": 10,
+            "is_published": True,
+            "lesson_ids": [1],
+        },
+        headers=teacher_headers,
+    )
+    assert publish_res.status_code == 200, publish_res.text
+    updated = publish_res.json()
+    assert updated["is_published"] is True
+    assert [lesson["lesson_id"] for lesson in updated["linked_lessons"]] == [1]
+
+    # Removing the linked lesson must still block publishing with readiness_errors.
+    unlinked_res = client.put(
+        f"/api/v1/classwork-assignments/classwork/{classwork_id}",
+        json={
+            "title": "Draft Remediation Quiz",
+            "classwork_type": "QUIZ",
+            "classwork_category": "WRITTEN_WORK",
+            "total_points": 10,
+            "is_published": True,
+            "lesson_ids": [],
+        },
+        headers=teacher_headers,
+    )
+    assert unlinked_res.status_code == 422, unlinked_res.text
+    detail = unlinked_res.json()["detail"]
+    assert detail["code"] == "QUIZ_NOT_PUBLISH_READY"
+    assert len(detail["readiness_errors"]) == 2
 
 def test_get_my_todos_respects_grading_and_score_visibility(client, test_db):
     data = seed_basic_data(test_db)

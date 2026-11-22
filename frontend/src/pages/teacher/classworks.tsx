@@ -246,7 +246,7 @@ export default function Classworks() {
                 const origScore = preview?.original_score ?? act?.score ?? null;
                 return {
                   assignment_id: targetId,
-                  classwork_id: act?.classwork_id ?? targetId,
+                  classwork_id: act?.classwork_id ?? preview?.classwork_id ?? targetId,
                   title:
                     preview?.title ?? act?.title ?? `Target Assignment #${targetId}`,
                   component:
@@ -279,11 +279,20 @@ export default function Classworks() {
               return;
             }
           }
-          setRemediationReferences(
-            workspace.resources.filter(
-              (item) => selected.has(`${item.kind}:${item.id}`),
-            ),
+          const selectedRefs = workspace.resources.filter((item) =>
+            selected.has(`${item.kind}:${item.id}`),
           );
+          const recommendedRefs = workspace.resources.filter(
+            (item) =>
+              item.recommended && item.match_level !== "SOURCE_ACTIVITY",
+          );
+          const targetAlignedRefs =
+            requestedTargetId != null && recommendedRefs.length > 0
+              ? selectedRefs.filter((item) => item.recommended).length > 0
+                ? selectedRefs.filter((item) => item.recommended)
+                : recommendedRefs
+              : selectedRefs;
+          setRemediationReferences(targetAlignedRefs);
           setRemediationGenerationEligibility(
             workspace.generation_eligibility ?? null,
           );

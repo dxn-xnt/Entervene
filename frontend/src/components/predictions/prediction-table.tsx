@@ -87,8 +87,11 @@ export default function PredictionTable({
     + (!hideSubject ? 1 : 0);
 
   return (
-    <div className="flex flex-col">
-      <Table wrapperClassName="mb-2 hover:shadow-none transition-all">
+    <div className="flex w-full min-w-0 flex-col">
+      <Table
+        wrapperClassName="mb-2 hover:shadow-none transition-all"
+        containerClassName="overflow-x-auto"
+      >
         <Table.Header className="bg-primary text-primary-foreground">
           <Table.Row className="border-b-2 border-black bg-primary hover:bg-primary">
             <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">

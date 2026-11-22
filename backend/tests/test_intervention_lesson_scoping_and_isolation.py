@@ -949,3 +949,195 @@ def test_same_subject_different_section_resource_and_evidence_isolation(authz_co
         q["classwork_assignment_id"] == quiz_sec1["assignment"].classwork_assignment_id
         for q in scope_sec1["questions"]
     )
+
+
+def test_score_preview_does_not_collide_between_assignment_id_and_other_classwork_id(authz_context):
+    from app.services.intervention.InterventionRemediationService import preview_score_adjustment
+
+    ctx = _setup_two_lesson_math_scenario(authz_context)
+    db = ctx["db"]
+    staff_id = ctx["owner"].staff_id
+
+    quiz_l1 = ctx["create_quiz"](
+        "Lesson 1: Basic Geometric Figures",
+        class_row=ctx["class_a"],
+        lesson_items=[(ctx["lesson_1"], Decimal("10"), Decimal("1"))],
+        student_row=ctx["student_a"],
+    )
+    quiz_l2 = ctx["create_quiz"](
+        "Constructing Parallel and Perpendicular Lines Quiz",
+        class_row=ctx["class_a"],
+        lesson_items=[(ctx["lesson_2"], Decimal("5"), Decimal("3"))],
+        student_row=ctx["student_a"],
+    )
+
+    # Simulate the exact numeric collision where another activity's classwork_id
+    # equals quiz_l1's classwork_assignment_id.
+    target_asgn_id = quiz_l1["assignment"].classwork_assignment_id
+    colliding_activity = {
+        **quiz_l2["activity"],
+        "classwork_id": target_asgn_id,
+    }
+    intervention = ctx["create_intervention"](
+        ctx["student_a"],
+        ctx["class_a"],
+        activities=[quiz_l1["activity"], colliding_activity],
+        supporting_scores=quiz_l1["supporting_scores"] + quiz_l2["supporting_scores"],
+    )
+    intervention.remediation_plan = {
+        "teacher_choice": "QUIZ",
+        "grade_treatment": "WRITTEN_WORK",
+        "target_assignment_ids": [target_asgn_id],
+        "score_adjustment_cap": 75.0,
+        "selected_resources": [],
+    }
+    db.commit()
+
+    preview_res = preview_score_adjustment(
+        db, staff_id, intervention.intervention_id, cap_percentage=75, target_assignment_ids=[target_asgn_id],
+    )
+    assert len(preview_res["previews"]) == 1
+    preview = preview_res["previews"][0]
+    assert preview["assignment_id"] == target_asgn_id
+    assert preview["classwork_id"] == quiz_l1["classwork"].classwork_id
+    assert preview["title"] == "Lesson 1: Basic Geometric Figures"
+    assert preview["original_score"] == 1.0
+    assert preview["max_points"] == 10.0
+
+
+@pytest.mark.anyio
+async def test_ai_remediation_generation_grounds_on_targeted_classwork_lessons_and_readings(
+    authz_context, monkeypatch
+):
+    import json
+    from unittest.mock import AsyncMock
+    from app.schemas.RemediationDraft import RemediationDraftGenerationRequest
+    from app.services.intervention.InterventionRemediationDraftGenerationService import (
+        generate_remediation_draft,
+    )
+
+    ctx = _setup_two_lesson_math_scenario(authz_context)
+    db = ctx["db"]
+    staff_id = ctx["owner"].staff_id
+
+    reading_l1 = ctx["create_reading"](
+        "Rays, Line Segments, Angles, and Planes",
+        lessons=[ctx["lesson_1"]],
+        class_ids=[ctx["class_a"].class_id],
+    )
+    reading_l2 = ctx["create_reading"](
+        "Constructing Parallel and Perpendicular Lines",
+        lessons=[ctx["lesson_2"]],
+        class_ids=[ctx["class_a"].class_id],
+    )
+    quiz_l1 = ctx["create_quiz"](
+        "Lesson 1: Basic Geometric Figures",
+        class_row=ctx["class_a"],
+        lesson_items=[(ctx["lesson_1"], Decimal("10"), Decimal("1"))],
+        student_row=ctx["student_a"],
+    )
+    quiz_l2 = ctx["create_quiz"](
+        "Constructing Parallel and Perpendicular Lines Quiz",
+        class_row=ctx["class_a"],
+        lesson_items=[(ctx["lesson_2"], Decimal("5"), Decimal("3"))],
+        student_row=ctx["student_a"],
+    )
+
+    intervention = ctx["create_intervention"](
+        ctx["student_a"],
+        ctx["class_a"],
+        activities=[quiz_l1["activity"], quiz_l2["activity"]],
+        supporting_scores=quiz_l1["supporting_scores"] + quiz_l2["supporting_scores"],
+    )
+    target_l1_id = quiz_l1["assignment"].classwork_assignment_id
+    intervention.remediation_plan = {
+        "teacher_choice": "QUIZ",
+        "grade_treatment": "WRITTEN_WORK",
+        "target_assignment_ids": [target_l1_id],
+        "score_adjustment_cap": 75.0,
+        "selected_resources": [
+            {"kind": "CLASSWORK", "id": reading_l1.classwork_id},
+            {"kind": "CLASSWORK", "id": reading_l2.classwork_id},
+        ],
+    }
+    db.commit()
+
+    captured_prompts: list[str] = []
+    valid_ai_resp = {
+        "draft_format": "QUIZ",
+        "target_component": "WRITTEN_WORK",
+        "grade_treatment": "WRITTEN_WORK",
+        "title": "Remediation: Basic Geometric Figures",
+        "instructions": "Review Lesson 1 and answer all questions.",
+        "total_points": 10.0,
+        "questions": [
+            {
+                "display_order": 1,
+                "question_text": "What geometric figure has one endpoint and extends infinitely in one direction?",
+                "question_type": "MULTIPLE_CHOICE",
+                "points": 5.0,
+                "difficulty_level": "EASY",
+                "targeted_lesson_id": ctx["lesson_1"].lesson_id,
+                "targeted_competency_id": ctx["comp_shared"].competency_id,
+                "options": [
+                    {"option_order": 1, "option_text": "Ray"},
+                    {"option_order": 2, "option_text": "Line segment"},
+                    {"option_order": 3, "option_text": "Plane"},
+                    {"option_order": 4, "option_text": "Point"},
+                ],
+                "teacher_answer_key": {
+                    "correct_answer": "Ray",
+                    "explanation": "A ray starts at one endpoint and extends endlessly in one direction.",
+                    "scoring_guide": "5 points for correct answer.",
+                },
+            },
+            {
+                "display_order": 2,
+                "question_text": "A line segment has two definite endpoints.",
+                "question_type": "TRUE_FALSE",
+                "points": 5.0,
+                "difficulty_level": "EASY",
+                "targeted_lesson_id": ctx["lesson_1"].lesson_id,
+                "targeted_competency_id": ctx["comp_shared"].competency_id,
+                "options": [
+                    {"option_order": 1, "option_text": "True"},
+                    {"option_order": 2, "option_text": "False"},
+                ],
+                "teacher_answer_key": {
+                    "correct_answer": "True",
+                    "explanation": "A line segment is bounded by two distinct endpoints.",
+                    "scoring_guide": "5 points for correct answer.",
+                },
+            },
+        ],
+    }
+
+    async def fake_generate_text(user_prompt, system_prompt, **kwargs):
+        captured_prompts.append(user_prompt)
+        return json.dumps(valid_ai_resp)
+
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", AsyncMock(side_effect=fake_generate_text))
+
+    req = RemediationDraftGenerationRequest(
+        draft_format="QUIZ",
+        target_component="WRITTEN_WORK",
+        grade_treatment="WRITTEN_WORK",
+        target_assignment_id=target_l1_id,
+        item_count=2,
+        total_points=10.0,
+        selected_reading_ids=[reading_l1.classwork_id, reading_l2.classwork_id],
+    )
+    draft = await generate_remediation_draft(db, staff_id, intervention.intervention_id, req)
+    assert draft.total_points == 10.0
+    assert len(captured_prompts) == 1
+    prompt = captured_prompts[0]
+
+    # Prompt must anchor on targeted original classwork, its taught lesson content, and ONLY its linked reading
+    assert "targeted_original_classwork" in prompt
+    assert "Lesson 1: Basic Geometric Figures" in prompt
+    assert "Lesson 1: Basic Geometric Figures item 1" in prompt
+    assert "taught_lesson_materials" in prompt
+    assert "Points, lines, planes, segments, and rays." in prompt
+    assert "Rays, Line Segments, Angles, and Planes" in prompt
+    assert "Constructing Parallel and Perpendicular Lines" not in prompt
+    assert "negative reciprocal slopes" not in prompt

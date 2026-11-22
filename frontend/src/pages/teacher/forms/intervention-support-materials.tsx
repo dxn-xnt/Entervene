@@ -2340,14 +2340,13 @@ const InterventionSupportMaterials = forwardRef<
 
   const selectedTargetSupportingActivity = useMemo(() => {
     if (activeTargetAssignmentId == null) return null;
+    const activities = detail.diagnosis_snapshot.supporting_activities ?? [];
     return (
-      (detail.diagnosis_snapshot.supporting_activities ?? []).find(
-        (a) =>
-          (a.classwork_assignment_id != null
-            ? a.classwork_assignment_id === activeTargetAssignmentId
-            : a.classwork_id === activeTargetAssignmentId) ||
-          a.classwork_id === activeTargetAssignmentId
-      ) ?? null
+      activities.find((a) => a.classwork_assignment_id === activeTargetAssignmentId) ??
+      activities.find(
+        (a) => a.classwork_assignment_id == null && a.classwork_id === activeTargetAssignmentId
+      ) ??
+      null
     );
   }, [activeTargetAssignmentId, detail.diagnosis_snapshot.supporting_activities]);
 
@@ -3683,12 +3682,36 @@ const InterventionSupportMaterials = forwardRef<
                       targetComponent === "EXAMINATION"
                         ? (selectedExam?.subtype ?? focus?.exam_subtype ?? "SUMMATIVE_1")
                         : null;
-                    const readingIds = reconcileSelectedResources(
+                    const recommendedReadings = resources.filter(
+                      (r) =>
+                        r.kind === "CLASSWORK" &&
+                        r.recommended &&
+                        r.match_level !== "SOURCE_ACTIVITY",
+                    );
+                    const recommendedReadingIds = new Set(
+                      recommendedReadings.map((r) => r.id),
+                    );
+                    const selectedPlanReadingIds = reconcileSelectedResources(
                       plan.selected_resources,
                       resources,
                     )
                       .filter((r) => r.kind === "CLASSWORK")
                       .map((r) => r.id);
+                    const targetAlignedSelectedReadingIds =
+                      recommendedReadingIds.size > 0
+                        ? selectedPlanReadingIds.filter((id) =>
+                            recommendedReadingIds.has(id),
+                          )
+                        : selectedPlanReadingIds;
+                    const readingIds =
+                      targetAlignedSelectedReadingIds.length > 0
+                        ? targetAlignedSelectedReadingIds
+                        : recommendedReadings.map((r) => r.id);
+                    const readingTitles = resources
+                      .filter(
+                        (r) => r.kind === "CLASSWORK" && readingIds.includes(r.id),
+                      )
+                      .map((r) => r.title);
                     const parsedCap = Number(capInput);
                     const effectiveCap = Number.isFinite(parsedCap)
                       ? parsedCap
@@ -3714,6 +3737,7 @@ const InterventionSupportMaterials = forwardRef<
                       competencyLabels:
                         focus?.competencies?.map((c) => c.label) ?? [],
                       selectedReadingIds: readingIds,
+                      selectedReadingTitles: readingTitles,
                       onRemediationGenerated: (draft) => {
                         setIsRemediationQuizAiModalOpen(false);
                         void openTool("ai", draft);

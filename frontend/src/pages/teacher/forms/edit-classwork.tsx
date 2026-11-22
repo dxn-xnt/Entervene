@@ -271,6 +271,8 @@ export default function EditClassworkModal({
     currentClasswork.intervention_resource_origin_id &&
       isReadingType(currentClasswork.classwork_type),
   );
+  const hideRemediationReferenceMaterials =
+    isRemediationActivity && !isReadingType(currentClasswork.classwork_type);
 
   const autoAiSupported = useMemo(() => {
     if (targetedAssignment) return false;
@@ -795,10 +797,12 @@ export default function EditClassworkModal({
       setFormError("Classwork title is required.");
       return;
     }
-    const linksError = validateReferenceLinks(referenceLinks);
-    if (linksError) {
-      setFormError(linksError);
-      return;
+    if (!hideRemediationReferenceMaterials) {
+      const linksError = validateReferenceLinks(referenceLinks);
+      if (linksError) {
+        setFormError(linksError);
+        return;
+      }
     }
     if (
       totalPoints !== null &&
@@ -1042,6 +1046,7 @@ export default function EditClassworkModal({
                 : false,
               lesson_ids: selectedLessonIds,
               reference_links:
+                hideRemediationReferenceMaterials ||
                 JSON.stringify(referenceLinks) ===
                   JSON.stringify(editReferenceLinks(currentClasswork))
                   ? undefined
@@ -1067,14 +1072,25 @@ export default function EditClassworkModal({
               .join("; ");
             throw new Error(msgs || "Validation error");
           }
-          throw new Error(
-            typeof detail === "string"
-              ? detail
-              : detail &&
-                typeof detail === "object" &&
-                typeof detail.message === "string"
+          if (detail && typeof detail === "object") {
+            const message =
+              typeof detail.message === "string"
                 ? detail.message
-                : "Unable to update classwork.",
+                : "Unable to update classwork.";
+            const readinessErrors = Array.isArray(detail.readiness_errors)
+              ? detail.readiness_errors.filter(
+                  (item: unknown): item is string =>
+                    typeof item === "string" && item.trim().length > 0,
+                )
+              : [];
+            throw new Error(
+              readinessErrors.length > 0
+                ? `${message} ${readinessErrors.join(" ")}`
+                : message,
+            );
+          }
+          throw new Error(
+            typeof detail === "string" ? detail : "Unable to update classwork.",
           );
         }
 
@@ -1117,6 +1133,23 @@ export default function EditClassworkModal({
               })
               .join("; ");
             throw new Error(msgs || "Validation error");
+          }
+          if (detail && typeof detail === "object") {
+            const message =
+              typeof detail.message === "string"
+                ? detail.message
+                : "Unable to update assignment settings.";
+            const readinessErrors = Array.isArray(detail.readiness_errors)
+              ? detail.readiness_errors.filter(
+                  (item: unknown): item is string =>
+                    typeof item === "string" && item.trim().length > 0,
+                )
+              : [];
+            throw new Error(
+              readinessErrors.length > 0
+                ? `${message} ${readinessErrors.join(" ")}`
+                : message,
+            );
           }
           throw new Error(
             typeof detail === "string"
@@ -1537,6 +1570,7 @@ export default function EditClassworkModal({
                   )}
                 </section>
 
+                {!hideRemediationReferenceMaterials && (
                 <section
                   aria-labelledby="edit-classwork-reference-materials"
                   className={`${isInterventionCreatedReading ? "order-3" : "order-2"} space-y-3 pt-2`}
@@ -1691,6 +1725,7 @@ export default function EditClassworkModal({
                     )}
                   </Field>
                 </section>
+                )}
 
                 {(editDraft.classwork_type === "ACTIVITY" ||
                   editDraft.classwork_type === "ASSIGNMENT") && (
