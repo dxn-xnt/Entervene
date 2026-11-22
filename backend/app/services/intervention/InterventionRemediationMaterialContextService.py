@@ -24,13 +24,14 @@ from xml.etree import ElementTree
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkCoverage import ClassworkCoverage
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.intervention.Intervention import Intervention
+from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.classwork.ClassworkShared import assignment_is_available, assignment_is_locked
 
 logger = logging.getLogger("ai.remediation.material_context")
@@ -295,6 +296,7 @@ def resolve_remediation_material_context(
     cutoff_str = academic_scope.get("evidence_cutoff_at") or intervention.diagnosis_snapshot.get("evidence_cutoff_at", "")
 
     weak_competencies = {c["competency_id"]: c for c in scope.get("competencies") or []}
+    scope_lessons = {l["lesson_id"]: l for l in scope.get("lessons") or []}
     taught_lessons = {l["lesson_id"]: l for l in scope.get("lessons") or [] if l.get("is_taught") is True}
 
     # 1. Lesson content for eligible taught lessons only
@@ -323,19 +325,27 @@ def resolve_remediation_material_context(
         .all()
     )
 
-    # Filter by class and period assignments
+    # Filter by class, period, and student recipient scope
     scoped_readings: list[Classwork] = []
     for cw in candidate_readings:
-        assignments = db.query(ClassworkAssignment).filter_by(classwork_id=cw.classwork_id).all()
+        assignments = (
+            db.query(ClassworkAssignment)
+            .options(selectinload(ClassworkAssignment.recipients))
+            .filter_by(classwork_id=cw.classwork_id)
+            .all()
+        )
         if assignments:
             matches_scope = any(
                 a.class_id == intervention.class_id
                 and a.academic_period_id == intervention.academic_period_id
+                and assignment_allows_student(a, intervention.student_id)
                 and not assignment_is_locked(a)
                 for a in assignments
             )
             if not matches_scope:
                 continue
+        elif cw.intervention_resource_origin_id not in (None, intervention.intervention_id):
+            continue
         scoped_readings.append(cw)
 
     scoped_reading_map = {cw.classwork_id: cw for cw in scoped_readings}
@@ -366,15 +376,26 @@ def resolve_remediation_material_context(
             if cw.classwork_id in target_cw_ids:
                 continue
             linked_lessons = {l.lesson_id for l in cw.lessons}
-            linked_comps = {l.competency_id for l in cw.lessons if l.competency_id is not None}
+            direct_cov_comps: set[int] = set()
             for cov in db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all():
                 if cov.competency_id is not None:
-                    linked_comps.add(cov.competency_id)
+                    direct_cov_comps.add(cov.competency_id)
                 if cov.lesson_id is not None:
                     linked_lessons.add(cov.lesson_id)
 
-            has_weak_comp = any(cid in weak_competencies for cid in linked_comps)
             has_taught_lesson = any(lid in taught_lessons for lid in linked_lessons)
+            has_scope_lesson = any(lid in scope_lessons for lid in linked_lessons)
+            # Do not infer relevance across unrelated lessons solely via a shared competency.
+            linked_comps: set[int] = set()
+            if not linked_lessons or not scope_lessons or has_scope_lesson:
+                linked_comps.update(direct_cov_comps)
+                for l in cw.lessons:
+                    if l.competency_id is not None and (
+                        not scope_lessons or l.lesson_id in scope_lessons
+                    ):
+                        linked_comps.add(l.competency_id)
+
+            has_weak_comp = any(cid in weak_competencies for cid in linked_comps)
             if has_weak_comp or has_taught_lesson:
                 target_cw_ids.append(cw.classwork_id)
 
@@ -390,14 +411,32 @@ def resolve_remediation_material_context(
         # Match relevance to weak competencies or taught lessons
         matched_comps: list[int] = []
         matched_lids: list[int] = []
+        cov_rows = db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all()
+        cw_lesson_ids = {l.lesson_id for l in cw.lessons} | {
+            cov.lesson_id for cov in cov_rows if cov.lesson_id is not None
+        }
+        allow_comp_match = (
+            not cw_lesson_ids
+            or not scope_lessons
+            or any(lid in scope_lessons for lid in cw_lesson_ids)
+        )
         for l in cw.lessons:
             if l.lesson_id in taught_lessons:
                 matched_lids.append(l.lesson_id)
-            if l.competency_id in weak_competencies:
+            if (
+                allow_comp_match
+                and l.competency_id in weak_competencies
+                and (not scope_lessons or l.lesson_id in scope_lessons)
+                and l.competency_id not in matched_comps
+            ):
                 matched_comps.append(l.competency_id)
 
-        for cov in db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all():
-            if cov.competency_id in weak_competencies and cov.competency_id not in matched_comps:
+        for cov in cov_rows:
+            if (
+                allow_comp_match
+                and cov.competency_id in weak_competencies
+                and cov.competency_id not in matched_comps
+            ):
                 matched_comps.append(cov.competency_id)
             if cov.lesson_id in taught_lessons and cov.lesson_id not in matched_lids:
                 matched_lids.append(cov.lesson_id)

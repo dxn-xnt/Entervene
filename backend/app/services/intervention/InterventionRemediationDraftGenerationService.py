@@ -10,6 +10,7 @@ they are never auto-published or submitted.
 
 from __future__ import annotations
 
+from collections import Counter
 import json
 import logging
 import re
@@ -290,6 +291,17 @@ def build_remediation_draft_prompt(
     }
     if request.draft_format == "CLASSWORK" and inherited_rubric_levels:
         grounding_data["locked_original_rubric_levels"] = inherited_rubric_levels
+    if request.draft_format == "QUIZ" and request.quiz_test_parts:
+        grounding_data["requested_quiz_test_parts"] = [
+            {
+                "part_number": idx + 1,
+                "question_type": part.question_type,
+                "count": part.count,
+                "points_per_item": part.points_per_item,
+                "difficulty_breakdown": part.difficulty_breakdown or {"EASY": part.count},
+            }
+            for idx, part in enumerate(request.quiz_test_parts)
+        ]
 
     if material_context is not None:
         reading_mats = getattr(material_context, "reading_materials", None)
@@ -409,11 +421,31 @@ def build_remediation_draft_prompt(
             },
         }
 
-    generation_instruction = (
-        f"\n\nGenerate a complete QUIZ remediation draft containing exactly {request.item_count} "
-        f"items with points summing to exactly {request.total_points}. "
-        if request.draft_format == "QUIZ"
-        else (
+    if request.draft_format == "QUIZ":
+        if request.quiz_test_parts:
+            part_lines = []
+            for idx, part in enumerate(request.quiz_test_parts, start=1):
+                breakdown = part.difficulty_breakdown or {"EASY": part.count}
+                diff_str = ", ".join(
+                    f"{qty} {lvl}" for lvl, qty in breakdown.items() if qty > 0
+                )
+                part_lines.append(
+                    f"Part {idx}: exactly {part.count} {part.question_type} item(s) at {part.points_per_item:g} point(s) each ({diff_str})"
+                )
+            generation_instruction = (
+                f"\n\nGenerate a complete QUIZ remediation draft containing exactly {request.item_count} "
+                f"items with points summing to exactly {request.total_points:g}. "
+                f"Follow requested_quiz_test_parts strictly in order: "
+                + "; ".join(part_lines)
+                + ". Match each part's exact question_type, count, points per question, and difficulty_level distribution. "
+            )
+        else:
+            generation_instruction = (
+                f"\n\nGenerate a complete QUIZ remediation draft containing exactly {request.item_count} "
+                f"items with points summing to exactly {request.total_points}. "
+            )
+    else:
+        generation_instruction = (
             f"\n\nGenerate a complete CLASSWORK remediation draft containing {request.item_count} "
             f"tasks (do NOT include a points field on tasks). You may generate fresh remediation instructions, "
             f"tasks, deliverables, and teacher_guide aligned to the student's weaknesses, but rubric_levels are "
@@ -423,7 +455,6 @@ def build_remediation_draft_prompt(
             else f"\n\nGenerate a complete CLASSWORK remediation draft containing {request.item_count} "
             f"tasks (do NOT include a points field on tasks) and rubric_levels with maximum points equal to exactly {request.total_points}. "
         )
-    )
     user_prompt = (
         "Frozen Academic Evidence and Boundaries (JSON):\n"
         + json.dumps(grounding_data, ensure_ascii=False, indent=2)
@@ -528,7 +559,56 @@ async def generate_remediation_draft_from_scope(
             ) from None
         raise
 
+    if request.draft_format == "QUIZ" and request.quiz_test_parts and isinstance(validated_draft, RemediationQuizDraft):
+        expected_types = Counter()
+        for part in request.quiz_test_parts:
+            expected_types[part.question_type] += part.count
+        actual_types = Counter(q.question_type for q in validated_draft.questions)
+        if len(validated_draft.questions) != request.item_count or actual_types != expected_types:
+            logger.warning(
+                "AI provider returned mismatched quiz_test_parts distribution: expected=%s actual=%s",
+                dict(expected_types),
+                dict(actual_types),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"AI generated draft did not match requested quiz structure "
+                    f"(expected {dict(expected_types)}, got {dict(actual_types)})"
+                ),
+            )
+
     return validated_draft
+
+
+def _resolve_generation_target_assignment_id(
+    db: Session,
+    intervention: Intervention,
+    request: RemediationDraftGenerationRequest,
+) -> int | None:
+    if request.target_assignment_id is not None:
+        return request.target_assignment_id
+    if request.grade_treatment == "PRACTICE_ONLY":
+        return None
+    plan = intervention.remediation_plan if isinstance(intervention.remediation_plan, dict) else {}
+    if request.grade_treatment == "EXAMINATION":
+        exam_id = plan.get("original_exam_assignment_id")
+        if isinstance(exam_id, int):
+            return exam_id
+    plan_targets = [
+        tid for tid in (plan.get("target_assignment_ids") or [])
+        if isinstance(tid, int)
+    ]
+    if not plan_targets:
+        return None
+    linked_ids = {
+        row[0]
+        for row in db.query(RemediationAssignmentLink.original_assignment_id)
+        .filter_by(student_id=intervention.student_id)
+        .all()
+    }
+    unlinked = [tid for tid in plan_targets if tid not in linked_ids]
+    return unlinked[-1] if unlinked else (plan_targets[0] if len(plan_targets) == 1 else None)
 
 
 def _resolve_target_original_rubric(
@@ -538,19 +618,7 @@ def _resolve_target_original_rubric(
 ) -> list[dict[str, Any]] | None:
     if request.draft_format != "CLASSWORK" or request.grade_treatment not in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
         return None
-    target_id = request.target_assignment_id
-    if target_id is None:
-        plan = intervention.remediation_plan if isinstance(intervention.remediation_plan, dict) else {}
-        plan_targets = list(plan.get("target_assignment_ids") or [])
-        if plan_targets:
-            linked_ids = {
-                row[0]
-                for row in db.query(RemediationAssignmentLink.original_assignment_id)
-                .filter_by(student_id=intervention.student_id)
-                .all()
-            }
-            unlinked = [tid for tid in plan_targets if tid not in linked_ids]
-            target_id = unlinked[-1] if unlinked else (plan_targets[0] if len(plan_targets) == 1 else None)
+    target_id = _resolve_generation_target_assignment_id(db, intervention, request)
     if target_id is None:
         return None
     target_asgn = db.get(ClassworkAssignment, target_id)
@@ -573,6 +641,71 @@ def _resolve_target_original_rubric(
         return None
     levels = serialize_classwork_rubric_levels(target_asgn.classwork)
     return levels or None
+
+
+_CLASSWORK_CATEGORY_TO_COMPONENT = {
+    "WRITTEN_WORK": "WRITTEN_WORK",
+    "PERFORMANCE_TASK": "PERFORMANCE_TASK",
+    "QUARTERLY_ASSESSMENT": "EXAMINATION",
+}
+
+
+def _validate_target_quiz_constraints(
+    db: Session,
+    intervention: Intervention,
+    request: RemediationDraftGenerationRequest,
+    target_id: int | None,
+) -> None:
+    """Validate graded QUIZ generation parameters against the locked original target classwork."""
+    if request.draft_format != "QUIZ" or request.grade_treatment not in {"WRITTEN_WORK", "EXAMINATION"}:
+        return
+    if target_id is None:
+        return
+    target_asgn = db.get(ClassworkAssignment, target_id)
+    if (
+        target_asgn is None
+        or target_asgn.classwork is None
+        or target_asgn.classwork.is_archived
+        or target_asgn.source_intervention_id is not None
+        or target_asgn.original_exam_assignment_id is not None
+        or target_asgn.class_id != intervention.class_id
+        or target_asgn.academic_period_id != intervention.academic_period_id
+        or target_asgn.classwork.subject_id != intervention.subject_id
+        or target_asgn.recipient_student_id not in (None, intervention.student_id)
+    ):
+        if request.target_assignment_id is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Target classwork assignment {target_id} is unavailable or outside this intervention scope",
+            )
+        return
+
+    expected_component = _CLASSWORK_CATEGORY_TO_COMPONENT.get(
+        str(target_asgn.classwork.classwork_category or "").upper()
+    )
+    if expected_component and expected_component != request.target_component:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Target classwork grading component '{expected_component}' is locked "
+                f"and cannot be generated as '{request.target_component}'"
+            ),
+        )
+
+    if (
+        request.quiz_test_parts is not None
+        and target_asgn.classwork.total_points is not None
+        and float(target_asgn.classwork.total_points) > 0
+    ):
+        target_max = float(target_asgn.classwork.total_points)
+        if abs(float(request.total_points) - target_max) > 0.01:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Graded remediation quiz total points ({request.total_points:g}) must equal "
+                    f"the targeted original classwork's maximum points ({target_max:g})"
+                ),
+            )
 
 
 async def generate_remediation_draft(
@@ -610,7 +743,11 @@ async def generate_remediation_draft(
         else request
     )
 
-    eligibility = resolve_remediation_generation_eligibility(db, intervention)
+    effective_target_id = _resolve_generation_target_assignment_id(db, intervention, effective_request)
+    _validate_target_quiz_constraints(db, intervention, effective_request, effective_target_id)
+    eligibility = resolve_remediation_generation_eligibility(
+        db, intervention, target_assignment_id=effective_target_id,
+    )
     scope = eligibility.pop("scope")
     scope["_generation_eligibility"] = eligibility
     material_context = resolve_remediation_material_context(

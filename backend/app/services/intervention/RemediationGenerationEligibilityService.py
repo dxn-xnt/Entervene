@@ -58,12 +58,22 @@ def _active_delivery(db: Session, row: Intervention, lesson_id: int) -> LessonDe
     ).order_by(LessonDelivery.delivered_at.asc()).first()
 
 
-def resolve_remediation_generation_eligibility(db: Session, row: Intervention) -> dict[str, Any]:
+def resolve_remediation_generation_eligibility(
+    db: Session,
+    row: Intervention,
+    *,
+    target_assignment_id: int | None = None,
+) -> dict[str, Any]:
     original = _original_cutoff(row)
     persisted = _latest(db, row.intervention_id)
     active = _utc(persisted.active_remediation_cutoff_at) if persisted else original
     try:
-        scope = resolve_generation_evidence_scope(db, row, teaching_as_of=active)
+        scope = resolve_generation_evidence_scope(
+            db,
+            row,
+            teaching_as_of=active,
+            target_assignment_id=target_assignment_id,
+        )
     except (HTTPException, Exception):
         scope = {
             "scope_version": 1,

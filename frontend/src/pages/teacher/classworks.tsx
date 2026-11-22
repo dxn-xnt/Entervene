@@ -47,6 +47,7 @@ import {
   getRemediationWorkspace,
   type TeacherInterventionDetail,
   type RemediationFocus,
+  type RemediationGenerationEligibility,
   type RemediationResource,
   type OriginalExamination,
   type RemediationClassworkTarget,
@@ -144,6 +145,10 @@ export default function Classworks() {
   const [remediationReferences, setRemediationReferences] = useState<
     RemediationResource[]
   >([]);
+  const [remediationGenerationEligibility, setRemediationGenerationEligibility] =
+    useState<RemediationGenerationEligibility | null>(null);
+  const [remediationScoreAdjustmentCap, setRemediationScoreAdjustmentCap] =
+    useState<number | null>(null);
   const [remediationError, setRemediationError] = useState("");
   useEffect(() => {
     if (!remediationType) return;
@@ -159,10 +164,20 @@ export default function Classworks() {
     setRemediationOriginalTargets([]);
     setInitialTargetAssignmentId(null);
     setRemediationReferences([]);
+    setRemediationGenerationEligibility(null);
+    setRemediationScoreAdjustmentCap(null);
     let live = true;
+    const requestedTargetId =
+      Number.isInteger(remediationOriginalAssignmentId) &&
+      remediationOriginalAssignmentId > 0
+        ? remediationOriginalAssignmentId
+        : Number.isInteger(remediationOriginalClassworkId) &&
+            remediationOriginalClassworkId > 0
+          ? remediationOriginalClassworkId
+          : null;
     void Promise.all([
       getTeacherActive(interventionId),
-      getRemediationWorkspace(interventionId),
+      getRemediationWorkspace(interventionId, requestedTargetId),
     ])
       .then(([detail, workspace]) => {
         if (live) {
@@ -268,6 +283,12 @@ export default function Classworks() {
             workspace.resources.filter(
               (item) => selected.has(`${item.kind}:${item.id}`),
             ),
+          );
+          setRemediationGenerationEligibility(
+            workspace.generation_eligibility ?? null,
+          );
+          setRemediationScoreAdjustmentCap(
+            workspace.plan.score_adjustment_cap ?? null,
           );
         }
       })
@@ -920,6 +941,12 @@ export default function Classworks() {
                       remediationOriginalTargets={remediationOriginalTargets}
                       initialTargetAssignmentId={initialTargetAssignmentId}
                       remediationReferences={remediationReferences}
+                      remediationGenerationEligibility={
+                        remediationGenerationEligibility
+                      }
+                      remediationScoreAdjustmentCap={
+                        remediationScoreAdjustmentCap
+                      }
                       onClose={
                         remediationType
                           ? returnToInterventionStep3
