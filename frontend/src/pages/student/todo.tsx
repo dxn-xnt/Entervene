@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { LoadingPanel } from "@/components/loading-panel";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 const todoTabs = [
   { id: "pending", label: "Pending", icon: Clock },
@@ -27,11 +28,14 @@ export default function ToDo() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { selectedPeriodId, isLoading: isPeriodLoading } = useAcademicPeriod();
 
   const fetchTodos = () => {
+    if (isPeriodLoading) return;
+
     setIsLoading(true);
     setError("");
-    getStudentTodos()
+    getStudentTodos(selectedPeriodId ?? undefined)
       .then((data) => setTodos(data))
       .catch((err) =>
         setError(
@@ -43,11 +47,13 @@ export default function ToDo() {
 
   useEffect(() => {
     fetchTodos();
-  }, []);
+  }, [selectedPeriodId, isPeriodLoading]);
 
   const openTodo = async (item: ApiTodoItem) => {
     if (item.assignment_id) {
-      navigate(`/student/classworks/${item.assignment_id}?from=${encodeURIComponent("/student/todo")}`);
+      navigate(
+        `/student/classworks/${item.assignment_id}?from=${encodeURIComponent("/student/todo")}`,
+      );
       return;
     }
     let targetClassId = item.class_id;
@@ -63,7 +69,7 @@ export default function ToDo() {
           );
           if (match) targetClassId = match.class_id;
         }
-      } catch { }
+      } catch {}
     }
 
     if (targetClassId && item.subject_id) {
@@ -103,7 +109,9 @@ export default function ToDo() {
           <span>•</span>
           <span>
             {item.deadline && item.deadline !== "No deadline"
-              ? (item.deadline.toLowerCase().startsWith("due") ? item.deadline : `Due ${item.deadline}`)
+              ? item.deadline.toLowerCase().startsWith("due")
+                ? item.deadline
+                : `Due ${item.deadline}`
               : "No deadline"}
           </span>
         </span>
@@ -111,12 +119,20 @@ export default function ToDo() {
       showPublicationStatus={false}
       showCategoryBadge={false}
       showType={true}
-      showCategory={Boolean(item.category && item.category.toUpperCase() !== item.type?.toUpperCase())}
+      showCategory={Boolean(
+        item.category &&
+        item.category.toUpperCase() !== item.type?.toUpperCase(),
+      )}
       onClick={() => openTodo(item)}
       rightContent={
-        item.status === "completed" && item.grade !== null && item.grade !== undefined && item.show_scores !== false ? (
+        item.status === "completed" &&
+        item.grade !== null &&
+        item.grade !== undefined &&
+        item.show_scores !== false ? (
           <Badge variant="solid" size="sm">
-            {item.total_points != null ? `${item.grade} / ${item.total_points}` : `${item.grade} pts`}
+            {item.total_points != null
+              ? `${item.grade} / ${item.total_points}`
+              : `${item.grade} pts`}
           </Badge>
         ) : null
       }
@@ -147,11 +163,9 @@ export default function ToDo() {
                   }}
                 />
               </div>
-
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-
               {isLoading ? (
                 <LoadingPanel label="Loading your to-do items..." />
               ) : error ? (
@@ -180,11 +194,13 @@ export default function ToDo() {
 
                       <section className="flex flex-col gap-3">
                         {regularUpcomingItems.length === 0 &&
-                          interventionItems.length === 0 ? (
-                          <StudentEmptyState icon={<CheckCircle2 />} title="You're all caught up!" description="You have no pending classwork right now." />
-                        ) : regularUpcomingItems.length === 0 ? (
-                          null
-                        ) : (
+                        interventionItems.length === 0 ? (
+                          <StudentEmptyState
+                            icon={<CheckCircle2 />}
+                            title="You're all caught up!"
+                            description="You have no pending classwork right now."
+                          />
+                        ) : regularUpcomingItems.length === 0 ? null : (
                           regularUpcomingItems.map(renderTodoItem)
                         )}
                       </section>
@@ -194,7 +210,11 @@ export default function ToDo() {
                   {activeTab === "pastdue" && (
                     <section className="flex flex-col gap-3">
                       {pastDueItems.length === 0 ? (
-                        <StudentEmptyState icon={<Clock />} title="No past-due classwork" description="Great job keeping up with your deadlines." />
+                        <StudentEmptyState
+                          icon={<Clock />}
+                          title="No past-due classwork"
+                          description="Great job keeping up with your deadlines."
+                        />
                       ) : (
                         pastDueItems.map(renderTodoItem)
                       )}
@@ -204,7 +224,11 @@ export default function ToDo() {
                   {activeTab === "completed" && (
                     <section className="flex flex-col gap-3">
                       {completedItems.length === 0 ? (
-                        <StudentEmptyState icon={<CheckCircle2 />} title="No completed classwork yet" description="Completed activities will appear here." />
+                        <StudentEmptyState
+                          icon={<CheckCircle2 />}
+                          title="No completed classwork yet"
+                          description="Completed activities will appear here."
+                        />
                       ) : (
                         completedItems.map(renderTodoItem)
                       )}
