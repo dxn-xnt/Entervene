@@ -25,6 +25,7 @@ import {
   getNotifications,
   markAllNotificationsAsRead,
   markNotificationAsRead,
+  NOTIFICATIONS_CHANGED_EVENT,
   type NotificationItem,
 } from "@/lib/notifications-api";
 import {
@@ -39,6 +40,7 @@ import {
   formatSubmissionDate,
   generateInitialMockSubmissions,
   isSubmissionAwaitingGrading,
+  parseBackendSubmissionNotification,
   upsertSubmissionNotification,
   type SubmissionNotificationItem,
 } from "@/lib/teacher-submissions-notifications";
@@ -96,17 +98,32 @@ const Notifications = () => {
     try {
       setLoading(true);
       setLoadError(false);
-      const mockSubmissions = generateInitialMockSubmissions();
 
       try {
         const data = await getNotifications(false, 50);
         const backendItems = data.notifications.filter(
           (item) => !isExcludedNotification(item) && !isTeacherSubmissionNotification(item),
         );
-        setNotifications([...mockSubmissions, ...backendItems]);
+
+        const backendSubmissionItems = backendItems
+          .filter((item) => item.notification_type === "submission")
+          .map(parseBackendSubmissionNotification);
+
+        const otherBackendItems = backendItems.filter(
+          (item) => item.notification_type !== "submission",
+        );
+
+        if (backendSubmissionItems.length > 0) {
+          // Dynamic backend submissions found: display real submission notifications
+          setNotifications([...backendSubmissionItems, ...otherBackendItems]);
+        } else {
+          // Fallback to initial mock submissions when backend has no submission notifications
+          const mockSubmissions = generateInitialMockSubmissions();
+          setNotifications([...mockSubmissions, ...otherBackendItems]);
+        }
       } catch (backendErr) {
         console.warn("Backend notifications unreachable, using mock submissions:", backendErr);
-        setNotifications(mockSubmissions);
+        setNotifications(generateInitialMockSubmissions());
       }
     } catch (err) {
       console.error("Failed to load notifications:", err);
@@ -118,6 +135,10 @@ const Notifications = () => {
 
   useEffect(() => {
     fetchNotifications();
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, fetchNotifications);
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, fetchNotifications);
+    };
   }, [fetchNotifications]);
 
   const handleMarkAll = async () => {
@@ -136,15 +157,11 @@ const Notifications = () => {
     }
   };
 
-  const handleCardClick = async (item: TeacherAnyNotification) => {
+  const handleCardClick = (item: TeacherAnyNotification) => {
     if (!item.is_read) {
-      if (item.notification_type !== "submission") {
-        try {
-          await markNotificationAsRead(item.notification_id);
-        } catch (err) {
-          console.error("Failed to mark notification as read:", err);
-        }
-      }
+      void markNotificationAsRead(item.notification_id).catch((err) => {
+        console.error("Failed to mark notification as read:", err);
+      });
       setNotifications((prev) =>
         prev.map((n) =>
           n.notification_id === item.notification_id

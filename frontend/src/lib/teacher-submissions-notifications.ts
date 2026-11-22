@@ -306,6 +306,68 @@ export const MOCK_SUBMISSION_EVENTS: IncomingSubmissionPayload[] = [
 ];
 
 /**
+ * Convert a backend NotificationItem of notification_type "submission"
+ * into a typed SubmissionNotificationItem.
+ */
+export function parseBackendSubmissionNotification(item: {
+  notification_id: string;
+  title: string;
+  body: string | null;
+  action_url: string | null;
+  is_read: boolean;
+  created_at: string | null;
+  read_at: string | null;
+  [key: string]: unknown;
+}): SubmissionNotificationItem {
+  const title = item.title || "";
+  const parts = title.split(":");
+  const subjectName = parts.length > 1 ? parts[0].trim() : "Classwork";
+  const rest = parts.length > 1 ? parts.slice(1).join(":").trim() : title;
+  const cwTitle = rest.includes(" - ") ? rest.split(" - ")[0].trim() : rest;
+
+  const countMatch =
+    title.match(/(\d+)\s+new submission/i) ||
+    item.body?.match(/(\d+)\s+new student classwork/i);
+  const count = countMatch ? parseInt(countMatch[1], 10) : 1;
+
+  let classworkId: string | number = "cw-unknown";
+  if (item.action_url) {
+    const match = item.action_url.match(/\/teacher\/classworks\/([^\s/?]+)/);
+    if (match) {
+      classworkId = match[1];
+    }
+  }
+
+  const latestSubmissionAt = item.created_at || new Date().toISOString();
+
+  return {
+    notification_id: item.notification_id,
+    type: "submission",
+    notification_type: "submission",
+    subject: {
+      id: `subj-${classworkId}`,
+      name: subjectName,
+    },
+    classwork: {
+      id: classworkId,
+      title: cwTitle,
+      type: "assignment",
+    },
+    submittedCount: count,
+    gradedCount: 0,
+    totalStudents: count,
+    lateCount: 0,
+    latestSubmissionAt,
+    title: item.title,
+    body: item.body,
+    action_url: item.action_url,
+    is_read: item.is_read,
+    created_at: item.created_at,
+    read_at: item.read_at,
+  };
+}
+
+/**
  * Generate initial mock submissions using the upsert logic over MOCK_SUBMISSION_EVENTS
  */
 export function generateInitialMockSubmissions(): SubmissionNotificationItem[] {

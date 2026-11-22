@@ -16,6 +16,9 @@ from app.services.intervention.StudySupportReminderService import (
 from app.services.student_record.GradeSubmissionNotificationService import (
     check_and_generate_grade_submission_notifications,
 )
+from app.services.submission.TeacherSubmissionNotificationService import (
+    check_and_generate_teacher_submission_notifications,
+)
 from app.services.settings.SystemSettingNotificationService import (
     check_and_generate_system_setting_notifications,
 )
@@ -38,9 +41,10 @@ def list_notifications(
     """
     user_id = current_user["sub"]
 
-    # Lazy generation of grade submission timing alerts for teachers
+    # Lazy generation of grade submission timing alerts and student submission alerts for teachers
     if current_user.get("role") == "teacher":
         check_and_generate_grade_submission_notifications(db=db, user_id=user_id)
+        check_and_generate_teacher_submission_notifications(db=db, user_id=user_id)
 
     # Idempotent backfill of system setting change notices for admins
     if current_user.get("role") == "admin":
