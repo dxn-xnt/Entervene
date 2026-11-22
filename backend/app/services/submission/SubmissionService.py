@@ -572,6 +572,13 @@ async def submit_student_work(
                 ))
         db.commit()
         db.refresh(submission)
+        try:
+            from app.services.submission.TeacherSubmissionNotificationService import (
+                sync_teacher_submission_notifications_for_assignment,
+            )
+            sync_teacher_submission_notifications_for_assignment(db, assignment_id)
+        except Exception:
+            pass
     except Exception:
         db.rollback()
         cleanup_saved_files(saved_paths)
@@ -663,6 +670,13 @@ def complete_reading_assignment(
     db.add(submission)
     db.commit()
     db.refresh(submission)
+    try:
+        from app.services.submission.TeacherSubmissionNotificationService import (
+            sync_teacher_submission_notifications_for_assignment,
+        )
+        sync_teacher_submission_notifications_for_assignment(db, assignment_id)
+    except Exception:
+        pass
     return build_submission_response(submission, db, for_student=True)
 
 
@@ -702,6 +716,13 @@ def record_reading_focus(
     db.add(submission)
     db.commit()
     db.refresh(submission)
+    try:
+        from app.services.submission.TeacherSubmissionNotificationService import (
+            sync_teacher_submission_notifications_for_assignment,
+        )
+        sync_teacher_submission_notifications_for_assignment(db, assignment_id)
+    except Exception:
+        pass
     return build_submission_response(submission, db, for_student=True)
 
 
@@ -720,6 +741,13 @@ def unsubmit_student_work(assignment_id: int, student: Student, db: Session) -> 
     setattr(submission, "submitted_at", None)
     db.commit()
     db.refresh(submission)
+    try:
+        from app.services.submission.TeacherSubmissionNotificationService import (
+            sync_teacher_submission_notifications_for_assignment,
+        )
+        sync_teacher_submission_notifications_for_assignment(db, assignment_id)
+    except Exception:
+        pass
     return build_submission_response(submission, db, for_student=True)
 
 
@@ -745,6 +773,13 @@ def remove_submission_attachment(
     db.delete(attachment)
     db.commit()
     db.refresh(submission)
+    try:
+        from app.services.submission.TeacherSubmissionNotificationService import (
+            sync_teacher_submission_notifications_for_assignment,
+        )
+        sync_teacher_submission_notifications_for_assignment(db, assignment_id)
+    except Exception:
+        pass
     return build_submission_response(submission, db, for_student=True)
 
 
@@ -1150,6 +1185,13 @@ def grade_student_submission(
     )
     db.commit()
     db.refresh(submission)
+    try:
+        from app.services.submission.TeacherSubmissionNotificationService import (
+            sync_teacher_submission_notifications_for_assignment,
+        )
+        sync_teacher_submission_notifications_for_assignment(db, assignment.classwork_assignment_id)
+    except Exception:
+        pass
     dispatch_background_draft_processing()
     if refresh_needed:
         refresh_after_committed_grade_change(

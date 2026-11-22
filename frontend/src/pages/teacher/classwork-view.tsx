@@ -57,6 +57,11 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import IconContainer from "@/components/icon-container";
 import { formatToTitleCase } from "@/lib/formatters";
+import {
+  getMockClassworkDetail,
+  getMockClassworkTracking,
+  getMockSubmissionDetail,
+} from "@/lib/mock-classwork-details";
 
 export type ClassworkViewProps = {
   classwork?: TeacherClasswork;
@@ -195,6 +200,15 @@ export default function ClassworkView({
     setIsClassworkLoading(true);
     setClassworkFetchError("");
 
+    const mockDetail = getMockClassworkDetail(classworkId);
+    const isMock = classworkId.startsWith("cw-") || isNaN(Number(classworkId)) || Number(classworkId) >= 100;
+
+    if (isMock && mockDetail) {
+      setSelected(mockDetail);
+      setIsClassworkLoading(false);
+      return;
+    }
+
     apiFetch(`/api/v1/classwork-assignments/classwork/${classworkId}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -211,9 +225,14 @@ export default function ClassworkView({
       })
       .catch((err) => {
         if (isMounted) {
-          setClassworkFetchError(
-            err instanceof Error ? err.message : "Unable to load classwork.",
-          );
+          if (mockDetail) {
+            setSelected(mockDetail);
+            setClassworkFetchError("");
+          } else {
+            setClassworkFetchError(
+              err instanceof Error ? err.message : "Unable to load classwork.",
+            );
+          }
           setIsClassworkLoading(false);
         }
       });
@@ -277,14 +296,19 @@ export default function ClassworkView({
       }
     } catch (err) {
       if (requestSeq !== trackingRequestSeqRef.current) return;
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Unable to load student submissions.";
-      if (isQuizType(selected.classwork_type)) {
-        setQuizAnalysisError(message);
+      const mockTracking = getMockClassworkTracking(selected.classwork_id, selected.title);
+      if (mockTracking) {
+        setTracking(mockTracking);
       } else {
-        setDetailError(message);
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Unable to load student submissions.";
+        if (isQuizType(selected.classwork_type)) {
+          setQuizAnalysisError(message);
+        } else {
+          setDetailError(message);
+        }
       }
     } finally {
       if (requestSeq === trackingRequestSeqRef.current) {
@@ -446,11 +470,23 @@ export default function ClassworkView({
       setFeedbackDraft(detail.feedback ?? "");
       setFocusPointsDraft(detail.feedback_focus_points ?? []);
     } catch (err) {
-      setSubmissionDetailError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load submission detail.",
-      );
+      if (student.submission_id) {
+        const mockDetail = getMockSubmissionDetail(student.submission_id);
+        setSelectedSubmissionDetail(mockDetail);
+        setGradeDraft(
+          mockDetail.grade !== null && mockDetail.grade !== undefined
+            ? String(mockDetail.grade)
+            : "",
+        );
+        setFeedbackDraft(mockDetail.feedback ?? "");
+        setFocusPointsDraft(mockDetail.feedback_focus_points ?? []);
+      } else {
+        setSubmissionDetailError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load submission detail.",
+        );
+      }
     } finally {
       setIsSubmissionLoading(false);
     }
@@ -723,9 +759,16 @@ export default function ClassworkView({
           {classworkFetchError || "Classwork not found."}
         </p>
         <Button
-          onClick={() => (onClose ? onClose() : navigate("/teacher/classworks"))}
+          onClick={() => {
+            const fromParam = new URLSearchParams(location.search).get("from");
+            if (fromParam) navigate(fromParam);
+            else if (onClose) onClose();
+            else navigate("/teacher/classworks");
+          }}
         >
-          Back to Classworks
+          {new URLSearchParams(location.search).get("from")?.includes("notifications")
+            ? "Back to Notifications"
+            : "Back to Classworks"}
         </Button>
       </main>
     );
@@ -862,12 +905,17 @@ export default function ClassworkView({
                     <>
                       <Breadcrumb.Item className="">
                         <Breadcrumb.Link
-                          onClick={() =>
-                            onClose ? onClose() : navigate("/teacher/classworks")
-                          }
+                          onClick={() => {
+                            const fromParam = new URLSearchParams(location.search).get("from");
+                            if (fromParam) navigate(fromParam);
+                            else if (onClose) onClose();
+                            else navigate("/teacher/classworks");
+                          }}
                           className="cursor-pointer whitespace-nowrap text-muted-foreground hover:text-black"
                         >
-                          Classworks
+                          {new URLSearchParams(location.search).get("from")?.includes("notifications")
+                            ? "Notifications"
+                            : "Classworks"}
                         </Breadcrumb.Link>
                       </Breadcrumb.Item>
                       <Breadcrumb.Separator />

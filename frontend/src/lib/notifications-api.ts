@@ -3,6 +3,7 @@ import { apiFetch } from "./api";
 export type NotificationItem = {
   notification_id: string;
   notification_type:
+    | "submission"
     | "assignment_due"
     | "classwork_updated"
     | "deadline_changed"
