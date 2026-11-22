@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, AlertCircle, ArrowUpRight, School, TrendingUp, CalendarClock } from "lucide-react";
+import { Settings, AlertCircle, ArrowUpRight, School, TrendingUp, CalendarClock, CheckCircle2, Award, Briefcase, Users } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -34,11 +34,47 @@ type EnrollmentTrendItem = {
 };
 type GradeMetricItem = { grade: string; rate: number };
 type StudentsPerGradeItem = { grade: string; count: number };
-type ActiveUserItem = { day: string; count: number; isDrop?: boolean };
-type TeacherWorkloadItem = { name: string; subject: string; classes: string; students: number };
-type AttentionClassItem = { name: string; issue: string; status: string; variant?: string };
-type TeacherNoWorkItem = { name: string; subject: string; status: string };
-type TopSubjectItem = { name: string; metric: string; rank: string };
+type ActiveUserItem = {
+  day: string;
+  date?: string;
+  count: number;
+  students?: number;
+  teachers?: number;
+  isDrop?: boolean;
+};
+type TeacherWorkloadItem = {
+  staff_id?: string;
+  user_id?: string | null;
+  name: string;
+  subject: string;
+  classes: string;
+  classes_count?: number;
+  loads_count?: number;
+  students: number;
+};
+type AttentionClassItem = {
+  class_id?: number;
+  name: string;
+  issue: string;
+  status: string;
+  variant?: string;
+};
+type TeacherNoWorkItem = {
+  staff_id?: string;
+  user_id?: string | null;
+  name: string;
+  subject: string;
+  classes_count?: number;
+  status: string;
+};
+type TopSubjectItem = {
+  subject_id?: number;
+  grade?: string | null;
+  name: string;
+  metric: string;
+  score?: number;
+  rank: string;
+};
 type GradeHealthApiItem = {
   academic_level_id: number;
   grade: string;
@@ -86,40 +122,6 @@ type AdminTermInfo = {
   academic_year_id?: number | null;
   is_active?: boolean;
 };
-
-const defaultActiveUsers = [
-  { day: "M", count: 58 },
-  { day: "T", count: 63 },
-  { day: "W", count: 61 },
-  { day: "Th", count: 66 },
-  { day: "F", count: 52, isDrop: true },
-  { day: "S", count: 12 },
-  { day: "S", count: 9 },
-];
-
-const defaultTeacherWorkload = [
-  { name: "Ms. Reyes", subject: "English", classes: "3 classes", students: 41 },
-  { name: "Mr. Cruz", subject: "Science", classes: "2 classes", students: 26 },
-  { name: "Ms. Dela Cruz", subject: "Filipino", classes: "2 classes", students: 29 },
-];
-
-const defaultClassesNeedingAttention = [
-  { name: "8 - Filipino", issue: "Completion 62%", status: "Low", variant: "destructive" },
-  { name: "9 - Computer", issue: "Passing rate 78%", status: "Watch", variant: "warning" },
-  { name: "7 - English", issue: "Ungraded 12 tasks", status: "Watch", variant: "warning" },
-];
-
-const defaultTeachersNoWork = [
-  { name: "Mr. Santos", subject: "Mathematics 10", status: "0 tasks" },
-  { name: "Ms. Villanueva", subject: "MAPEH 8", status: "0 tasks" },
-  { name: "Mr. Lim", subject: "TLE 9", status: "0 tasks" },
-];
-
-const defaultTopPerformingSubjects = [
-  { name: "7 - Science", metric: "Mastery 95%", rank: "1st" },
-  { name: "8 - Filipino", metric: "Mastery 95%", rank: "2nd" },
-  { name: "9 - English", metric: "Mastery 93%", rank: "3rd" },
-];
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -203,19 +205,19 @@ export default function AdminDashboard() {
   const studentsPerGrade = details?.students_per_grade ?? [];
   const attendanceByGrade = details?.attendance_by_grade ?? [];
   const completionByGrade = details?.completion_by_grade ?? [];
-  const activeUsers = details?.active_users_weekly || defaultActiveUsers;
-  const teacherWorkload = details?.teacher_workload || defaultTeacherWorkload;
-  const classesAttention = details?.classes_needing_attention || defaultClassesNeedingAttention;
-  const teachersNoWork = details?.teachers_no_work || defaultTeachersNoWork;
-  const topSubjects = details?.top_performing_subjects || defaultTopPerformingSubjects;
+  const activeUsers = details?.active_users_weekly ?? [];
+  const teacherWorkload = details?.teacher_workload ?? [];
+  const classesAttention = details?.classes_needing_attention ?? [];
+  const teachersNoWork = details?.teachers_no_work ?? [];
+  const topSubjects = details?.top_performing_subjects ?? [];
 
   const maxActiveUsersCount = Math.max(
     ...activeUsers.map((s) => s.count),
-    70,
+    1,
   );
   const maxStudentsGradeCount = Math.max(
     ...studentsPerGrade.map((s) => s.count),
-    20,
+    1,
   );
 
   // Grade level health matrix (analogous to section-by-section health)
@@ -282,10 +284,15 @@ export default function AdminDashboard() {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {/* Classes needing attention */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                          Classes Needing Attention
-                        </Card.Title>
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                            Classes Needing Attention
+                          </Card.Title>
+                          {isUpcomingPeriod && (
+                            <Badge variant="surface" size="sm">Upcoming</Badge>
+                          )}
+                        </div>
                         <Tooltip>
                           <TooltipTrigger
                             render={
@@ -294,7 +301,7 @@ export default function AdminDashboard() {
                                 size="sm"
                                 autoIcon={false}
                                 onClick={() => navigate(routes.admin.classes)}
-                                className="text-foreground shadow-none px-1.5"
+                                className="text-foreground shadow-none px-1.5 shrink-0"
                               >
                                 <ArrowUpRight className="size-4" />
                               </Button>
@@ -304,42 +311,78 @@ export default function AdminDashboard() {
                         </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {classesAttention.map((c, idx: number) => {
-                          const isDestructive = c.variant === "destructive" || c.status === "Low";
-                          return (
-                            <Card
-                              key={idx}
-                              onClick={() => navigate(routes.admin.classes)}
-                              className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm hover:bg-retro hover:-translate-y-1 transition-all"
-                            >
-                              <div className="flex flex-col min-w-0 pr-2">
-                                <span className="font-semibold text-foreground truncate">
-                                  {c.name}
-                                </span>
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {c.issue}
-                                </span>
-                              </div>
-                              <Badge
-                                size="sm"
-                                variant={isDestructive ? "destructive" : "default"}
-                                className="shrink-0"
+                      <Card.Content className="mt-3 flex flex-col gap-2.5 p-0 flex-1 justify-start">
+                        {isLoading ? (
+                          <div className="flex flex-col gap-2.5">
+                            {Array.from({ length: 3 }).map((_, idx) => (
+                              <div key={idx} className="h-12 w-full animate-pulse rounded bg-muted/40" />
+                            ))}
+                          </div>
+                        ) : classesAttention.length === 0 ? (
+                          <EmptyStateCard
+                            compact
+                            icon={
+                              isUpcomingPeriod ? (
+                                <CalendarClock className="text-primary-foreground" />
+                              ) : (
+                                <CheckCircle2 className="text-primary-foreground" />
+                              )
+                            }
+                            title={isUpcomingPeriod ? `Upcoming · ${activePeriodName}` : "All classes on track"}
+                            description={
+                              isUpcomingPeriod
+                                ? `Class attention alerts for ${activePeriodName} will appear once the term starts.`
+                                : `No classes currently show low passing, completion, attendance, or grading backlogs for ${activePeriodName}.`
+                            }
+                          />
+                        ) : (
+                          classesAttention.map((c, idx: number) => {
+                            const isDestructive = c.variant === "destructive" || c.status === "Low";
+                            return (
+                              <Card
+                                key={c.class_id ?? idx}
+                                onClick={() =>
+                                  navigate(
+                                    c.class_id != null
+                                      ? `/admin/classes/${c.class_id}`
+                                      : routes.admin.classes,
+                                  )
+                                }
+                                className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm hover:bg-retro hover:-translate-y-1 transition-all"
                               >
-                                {c.status}
-                              </Badge>
-                            </Card>
-                          );
-                        })}
+                                <div className="flex flex-col min-w-0 pr-2">
+                                  <span className="font-semibold text-foreground truncate">
+                                    {c.name}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground truncate">
+                                    {c.issue}
+                                  </span>
+                                </div>
+                                <Badge
+                                  size="sm"
+                                  variant={isDestructive ? "destructive" : "surface"}
+                                  className="shrink-0"
+                                >
+                                  {c.status}
+                                </Badge>
+                              </Card>
+                            );
+                          })
+                        )}
                       </Card.Content>
                     </Card>
 
                     {/* Teachers with No Published Work */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                          Teachers with No Work
-                        </Card.Title>
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                            Teachers with No Work
+                          </Card.Title>
+                          {isUpcomingPeriod && (
+                            <Badge variant="surface" size="sm">Upcoming</Badge>
+                          )}
+                        </div>
                         <Tooltip>
                           <TooltipTrigger
                             render={
@@ -348,7 +391,7 @@ export default function AdminDashboard() {
                                 size="sm"
                                 autoIcon={false}
                                 onClick={() => navigate(routes.admin.users)}
-                                className="text-foreground shadow-none px-1.5"
+                                className="text-foreground shadow-none px-1.5 shrink-0"
                               >
                                 <ArrowUpRight className="size-4" />
                               </Button>
@@ -358,30 +401,65 @@ export default function AdminDashboard() {
                         </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {teachersNoWork.map((t, idx: number) => (
-                          <Card
-                            key={idx}
-                            onClick={() => navigate(routes.admin.users)}
-                            className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
-                          >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {t.name}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
-                                {t.subject}
-                              </span>
-                            </div>
-                            <Badge
-                              size="sm"
-                              variant="destructive"
-                              className="shrink-0"
+                      <Card.Content className="mt-3 flex flex-col gap-2.5 p-0 flex-1 justify-start">
+                        {isLoading ? (
+                          <div className="flex flex-col gap-2.5">
+                            {Array.from({ length: 3 }).map((_, idx) => (
+                              <div key={idx} className="h-12 w-full animate-pulse rounded bg-muted/40" />
+                            ))}
+                          </div>
+                        ) : teachersNoWork.length === 0 ? (
+                          <EmptyStateCard
+                            compact
+                            icon={
+                              isUpcomingPeriod ? (
+                                <CalendarClock className="text-primary-foreground" />
+                              ) : (
+                                <CheckCircle2 className="text-primary-foreground" />
+                              )
+                            }
+                            title={
+                              isUpcomingPeriod
+                                ? `Upcoming · ${activePeriodName}`
+                                : "All assigned teachers have work"
+                            }
+                            description={
+                              isUpcomingPeriod
+                                ? `Published task checks for ${activePeriodName} will appear once the term starts.`
+                                : `Every teacher with active loads in ${activePeriodName} has published classwork, or no loads are assigned yet.`
+                            }
+                          />
+                        ) : (
+                          teachersNoWork.map((t, idx: number) => (
+                            <Card
+                              key={t.staff_id ?? idx}
+                              onClick={() =>
+                                navigate(
+                                  t.user_id
+                                    ? `/admin/users/teacher/${t.user_id}`
+                                    : routes.admin.users,
+                                )
+                              }
+                              className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
                             >
-                              {t.status}
-                            </Badge>
-                          </Card>
-                        ))}
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <span className="font-semibold text-foreground truncate">
+                                  {t.name}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground truncate">
+                                  {t.subject}
+                                </span>
+                              </div>
+                              <Badge
+                                size="sm"
+                                variant="destructive"
+                                className="shrink-0"
+                              >
+                                {t.status}
+                              </Badge>
+                            </Card>
+                          ))
+                        )}
                       </Card.Content>
                     </Card>
                   </div>
@@ -824,46 +902,86 @@ export default function AdminDashboard() {
                     {/* Active users this week */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                          Active users this week
-                        </Card.Title>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                            Active users this week
+                          </Card.Title>
+                          {isUpcomingPeriod && (
+                            <Badge variant="surface" size="sm">Upcoming</Badge>
+                          )}
+                        </div>
                         <Card.Description className="mt-0.5 text-xs text-muted-foreground">
                           Daily student and teacher logins
                         </Card.Description>
                       </Card.Header>
 
-                      <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
-                        {activeUsers.map((item, idx: number) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                          >
-                            <span className="font-medium text-foreground/90 shrink-0 w-10 truncate">
-                              {item.day}
-                            </span>
-                            <Progress
-                              value={Math.round(
-                                (item.count / maxActiveUsersCount) * 100,
-                              )}
-                              className={cn(
-                                "h-3 flex-1",
-                                item.isDrop && "[&>div]:bg-destructive",
-                              )}
-                            />
-                            <span className="font-semibold text-foreground text-right w-8 shrink-0">
-                              {item.count}
-                            </span>
-                          </div>
-                        ))}
+                      <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0 flex-1">
+                        {isLoading ? (
+                          <div className="h-36 w-full animate-pulse rounded bg-muted/40" />
+                        ) : activeUsers.length === 0 ? (
+                          <EmptyStateCard
+                            compact
+                            icon={
+                              isUpcomingPeriod ? (
+                                <CalendarClock className="text-primary-foreground" />
+                              ) : (
+                                <Users className="text-primary-foreground" />
+                              )
+                            }
+                            title={
+                              isUpcomingPeriod
+                                ? `Upcoming · ${activePeriodName}`
+                                : "No logins recorded this week"
+                            }
+                            description={
+                              isUpcomingPeriod
+                                ? `Daily login activity for ${activePeriodName} will appear once the term starts.`
+                                : "Daily student and teacher logins will appear here once users sign in."
+                            }
+                          />
+                        ) : (
+                          activeUsers.map((item, idx: number) => (
+                            <div
+                              key={item.date ?? idx}
+                              title={
+                                item.date
+                                  ? `${item.date}: ${item.students ?? 0} students, ${item.teachers ?? 0} teachers`
+                                  : undefined
+                              }
+                              className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                            >
+                              <span className="font-medium text-foreground/90 shrink-0 w-10 truncate">
+                                {item.day}
+                              </span>
+                              <Progress
+                                value={Math.round(
+                                  (item.count / maxActiveUsersCount) * 100,
+                                )}
+                                className={cn(
+                                  "h-3 flex-1",
+                                  item.isDrop && "[&>div]:bg-destructive",
+                                )}
+                              />
+                              <span className="font-semibold text-foreground text-right w-8 shrink-0">
+                                {item.count}
+                              </span>
+                            </div>
+                          ))
+                        )}
                       </Card.Content>
                     </Card>
 
                     {/* Top performing subjects */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                          Top Performing Subjects
-                        </Card.Title>
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                            Top Performing Subjects
+                          </Card.Title>
+                          {isUpcomingPeriod && (
+                            <Badge variant="surface" size="sm">Upcoming</Badge>
+                          )}
+                        </div>
                         <Tooltip>
                           <TooltipTrigger
                             render={
@@ -872,7 +990,7 @@ export default function AdminDashboard() {
                                 size="sm"
                                 autoIcon={false}
                                 onClick={() => navigate(routes.admin.subjects)}
-                                className="text-foreground shadow-none px-1.5"
+                                className="text-foreground shadow-none px-1.5 shrink-0"
                               >
                                 <ArrowUpRight className="size-4" />
                               </Button>
@@ -882,35 +1000,75 @@ export default function AdminDashboard() {
                         </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {topSubjects.map((s, idx: number) => (
-                          <Card
-                            key={idx}
-                            onClick={() => navigate(routes.admin.subjects)}
-                            className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm hover:bg-retro hover:-translate-y-0.5 transition-all"
-                          >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {s.name}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
-                                {s.metric}
-                              </span>
-                            </div>
-                            <Badge size="sm" variant="success" className="shrink-0">
-                              {s.rank}
-                            </Badge>
-                          </Card>
-                        ))}
+                      <Card.Content className="mt-3 flex flex-col gap-2.5 p-0 flex-1 justify-start">
+                        {isLoading ? (
+                          <div className="flex flex-col gap-2.5">
+                            {Array.from({ length: 3 }).map((_, idx) => (
+                              <div key={idx} className="h-12 w-full animate-pulse rounded bg-muted/40" />
+                            ))}
+                          </div>
+                        ) : topSubjects.length === 0 ? (
+                          <EmptyStateCard
+                            compact
+                            icon={
+                              isUpcomingPeriod ? (
+                                <CalendarClock className="text-primary-foreground" />
+                              ) : (
+                                <Award className="text-primary-foreground" />
+                              )
+                            }
+                            title={
+                              isUpcomingPeriod
+                                ? `Upcoming · ${activePeriodName}`
+                                : "No subject performance yet"
+                            }
+                            description={
+                              isUpcomingPeriod
+                                ? `Top performing subjects for ${activePeriodName} will appear once the term starts.`
+                                : `Subject rankings for ${activePeriodName} will appear once grades or graded assessments are recorded.`
+                            }
+                          />
+                        ) : (
+                          topSubjects.map((s, idx: number) => (
+                            <Card
+                              key={s.subject_id ?? idx}
+                              onClick={() =>
+                                navigate(
+                                  s.grade && s.subject_id != null
+                                    ? `/admin/subjects/${encodeURIComponent(s.grade)}/${s.subject_id}`
+                                    : routes.admin.subjects,
+                                )
+                              }
+                              className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm hover:bg-retro hover:-translate-y-0.5 transition-all"
+                            >
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <span className="font-semibold text-foreground truncate">
+                                  {s.name}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground truncate">
+                                  {s.metric}
+                                </span>
+                              </div>
+                              <Badge size="sm" variant="success" className="shrink-0">
+                                {s.rank}
+                              </Badge>
+                            </Card>
+                          ))
+                        )}
                       </Card.Content>
                     </Card>
 
                     {/* Teacher Workload */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                          Teacher Workload
-                        </Card.Title>
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                            Teacher Workload
+                          </Card.Title>
+                          {isUpcomingPeriod && teacherWorkload.length === 0 && (
+                            <Badge variant="surface" size="sm">Upcoming</Badge>
+                          )}
+                        </div>
                         <Tooltip>
                           <TooltipTrigger
                             render={
@@ -919,7 +1077,7 @@ export default function AdminDashboard() {
                                 size="sm"
                                 autoIcon={false}
                                 onClick={() => navigate(routes.admin.users)}
-                                className="text-foreground shadow-none px-1.5"
+                                className="text-foreground shadow-none px-1.5 shrink-0"
                               >
                                 <ArrowUpRight className="size-4" />
                               </Button>
@@ -929,26 +1087,47 @@ export default function AdminDashboard() {
                         </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {teacherWorkload.map((t, idx: number) => (
-                          <Card
-                            key={idx}
-                            onClick={() => navigate(routes.admin.users)}
-                            className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
-                          >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {t.name}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
-                                {t.subject} · {t.classes}
-                              </span>
-                            </div>
-                            <Badge variant="surface" size="sm" className="shrink-0 whitespace-nowrap">
-                              {t.students} students
-                            </Badge>
-                          </Card>
-                        ))}
+                      <Card.Content className="mt-3 flex flex-col gap-2.5 p-0 flex-1 justify-start">
+                        {isLoading ? (
+                          <div className="flex flex-col gap-2.5">
+                            {Array.from({ length: 3 }).map((_, idx) => (
+                              <div key={idx} className="h-12 w-full animate-pulse rounded bg-muted/40" />
+                            ))}
+                          </div>
+                        ) : teacherWorkload.length === 0 ? (
+                          <EmptyStateCard
+                            compact
+                            icon={<Briefcase className="text-primary-foreground" />}
+                            title="No assigned workloads yet"
+                            description={`Teacher workload distribution for ${activePeriodName} will appear once subject loads are published.`}
+                          />
+                        ) : (
+                          teacherWorkload.map((t, idx: number) => (
+                            <Card
+                              key={t.staff_id ?? idx}
+                              onClick={() =>
+                                navigate(
+                                  t.user_id
+                                    ? `/admin/users/teacher/${t.user_id}`
+                                    : routes.admin.users,
+                                )
+                              }
+                              className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
+                            >
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <span className="font-semibold text-foreground truncate">
+                                  {t.name}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground truncate">
+                                  {t.subject} · {t.classes}
+                                </span>
+                              </div>
+                              <Badge variant="surface" size="sm" className="shrink-0 whitespace-nowrap">
+                                {t.students} {t.students === 1 ? "student" : "students"}
+                              </Badge>
+                            </Card>
+                          ))
+                        )}
                       </Card.Content>
                     </Card>
 
@@ -963,26 +1142,37 @@ export default function AdminDashboard() {
                         </Card.Description>
                       </Card.Header>
 
-                      <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
-                        {studentsPerGrade.map((item, idx: number) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                          >
-                            <span className="font-medium text-foreground/90 shrink-0 w-14 truncate">
-                              {item.grade}
-                            </span>
-                            <Progress
-                              value={Math.round(
-                                (item.count / maxStudentsGradeCount) * 100,
-                              )}
-                              className="h-3 flex-1"
-                            />
-                            <span className="font-semibold text-foreground text-right w-8 shrink-0">
-                              {item.count}
-                            </span>
-                          </div>
-                        ))}
+                      <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0 flex-1">
+                        {isLoading ? (
+                          <div className="h-36 w-full animate-pulse rounded bg-muted/40" />
+                        ) : studentsPerGrade.length === 0 ? (
+                          <EmptyStateCard
+                            compact
+                            icon={<School className="text-primary-foreground" />}
+                            title="No enrollments yet"
+                            description="Active student counts by grade level will appear once students are enrolled in active classes."
+                          />
+                        ) : (
+                          studentsPerGrade.map((item, idx: number) => (
+                            <div
+                              key={item.grade ?? idx}
+                              className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                            >
+                              <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">
+                                {item.grade}
+                              </span>
+                              <Progress
+                                value={Math.round(
+                                  (item.count / maxStudentsGradeCount) * 100,
+                                )}
+                                className="h-3 flex-1"
+                              />
+                              <span className="font-semibold text-foreground text-right w-8 shrink-0">
+                                {item.count}
+                              </span>
+                            </div>
+                          ))
+                        )}
                       </Card.Content>
                     </Card>
                   </div>

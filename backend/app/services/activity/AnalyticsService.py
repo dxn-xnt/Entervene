@@ -22,6 +22,10 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.attendance.Attendance import AttendanceRecord
+from app.models.auth.Role import Role
+from app.models.auth.UserAccount import UserAccount
+from app.models.auth.UserLoginLog import UserLoginLog
+from app.models.auth.UserRoles import UserRoles
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
@@ -252,6 +256,458 @@ def _build_enrollment_engagement_trend(
     return trend
 
 
+def _format_staff_name(staff: AcademicStaff) -> str:
+    full = f"{staff.first_name or ''} {staff.last_name or ''}".strip()
+    return full or staff.staff_id
+
+
+def _format_class_label(cls: Class) -> str:
+    section = (cls.section_name or "").strip()
+    level = getattr(cls, "academic_level", None)
+    if level is not None and section:
+        grade_num = level.grade_level
+        lower = section.lower()
+        if (
+            lower.startswith(f"{grade_num}-")
+            or lower.startswith(f"{grade_num} ")
+            or lower.startswith(f"grade {grade_num}")
+        ):
+            return section
+        return f"Grade {grade_num} - {section}"
+    return section or f"Class #{cls.class_id}"
+
+
+def _format_subject_list(subject_names: list[str]) -> str:
+    unique = sorted({name.strip() for name in subject_names if name and name.strip()})
+    if not unique:
+        return "Assigned loads"
+    if len(unique) == 1:
+        return unique[0]
+    if len(unique) == 2:
+        return f"{unique[0]}, {unique[1]}"
+    return f"{unique[0]} +{len(unique) - 1} more"
+
+
+def _ordinal_rank(position: int) -> str:
+    if 10 <= position % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(position % 10, "th")
+    return f"{position}{suffix}"
+
+
+def _build_active_users_weekly(
+    db: Session,
+    target_period: AcademicPeriod | None,
+    now_dt: datetime,
+    *,
+    is_upcoming_period: bool,
+) -> list[dict[str, Any]]:
+    """Build daily distinct student & teacher logins (Mon-Sun, Asia/Manila)."""
+    if is_upcoming_period:
+        return []
+
+    manila_tz = ZoneInfo("Asia/Manila")
+    today_manila = now_dt.astimezone(manila_tz).date()
+    period_end = target_period.end_date if target_period is not None else None
+    period_start = target_period.start_date if target_period is not None else None
+
+    ref_date = min(today_manila, period_end) if period_end is not None else today_manila
+    if period_start is not None and ref_date < period_start:
+        return []
+
+    week_start = ref_date - timedelta(days=ref_date.weekday())
+    week_end = week_start + timedelta(days=6)
+    effective_end = min(week_end, ref_date)
+
+    # Buffer by +/- 1 day in UTC so both aware (Postgres) and naive (SQLite) rows
+    # are fetched reliably before exact Manila calendar-date bucketing in Python.
+    start_utc = datetime(
+        week_start.year, week_start.month, week_start.day, tzinfo=manila_tz,
+    ).astimezone(timezone.utc)
+    end_utc = datetime(
+        (effective_end + timedelta(days=1)).year,
+        (effective_end + timedelta(days=1)).month,
+        (effective_end + timedelta(days=1)).day,
+        tzinfo=manila_tz,
+    ).astimezone(timezone.utc)
+    buffer_start = start_utc - timedelta(days=1)
+    buffer_end = end_utc + timedelta(days=1)
+
+    students_by_day: dict[Any, set[str]] = {}
+    teachers_by_day: dict[Any, set[str]] = {}
+
+    def _record_login(user_id: Any, role_name: str | None, ts: datetime | None) -> None:
+        if ts is None or user_id is None:
+            return
+        local_date = _dashboard_aware_datetime(ts).astimezone(manila_tz).date()
+        if not (week_start <= local_date <= effective_end):
+            return
+        role = (role_name or "").strip().lower()
+        uid = str(user_id)
+        if role == "student":
+            students_by_day.setdefault(local_date, set()).add(uid)
+        elif role == "teacher":
+            teachers_by_day.setdefault(local_date, set()).add(uid)
+
+    log_rows = (
+        db.query(UserLoginLog.user_id, UserLoginLog.login_at, Role.role_name)
+        .join(UserRoles, UserRoles.user_id == UserLoginLog.user_id)
+        .join(Role, Role.role_id == UserRoles.role_id)
+        .filter(
+            func.lower(Role.role_name).in_(["student", "teacher"]),
+            UserLoginLog.login_at >= buffer_start,
+            UserLoginLog.login_at <= buffer_end,
+        )
+        .all()
+    )
+    for user_id, login_at, role_name in log_rows:
+        _record_login(user_id, role_name, login_at)
+
+    # Also include UserAccount.last_login in the same window so accounts with
+    # recorded last_login (deduplicated per user/day) are never missed.
+    account_rows = (
+        db.query(UserAccount.user_id, UserAccount.last_login, Role.role_name)
+        .join(UserRoles, UserRoles.user_id == UserAccount.user_id)
+        .join(Role, Role.role_id == UserRoles.role_id)
+        .filter(
+            func.lower(Role.role_name).in_(["student", "teacher"]),
+            UserAccount.last_login.isnot(None),
+            UserAccount.last_login >= buffer_start,
+            UserAccount.last_login <= buffer_end,
+        )
+        .all()
+    )
+    for user_id, last_login, role_name in account_rows:
+        _record_login(user_id, role_name, last_login)
+
+    day_labels = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    counts: list[tuple[str, Any, int, int, int]] = []
+    total_week_logins = 0
+    for offset, label in enumerate(day_labels):
+        day_date = week_start + timedelta(days=offset)
+        s_set = students_by_day.get(day_date, set())
+        t_set = teachers_by_day.get(day_date, set())
+        total_day = len(s_set | t_set)
+        total_week_logins += total_day
+        counts.append((label, day_date, total_day, len(s_set), len(t_set)))
+
+    if total_week_logins == 0:
+        return []
+
+    result: list[dict[str, Any]] = []
+    for idx, (label, day_date, count, student_count, teacher_count) in enumerate(counts):
+        is_drop = False
+        if 1 <= idx <= 4 and day_date <= effective_end:
+            prev_count = counts[idx - 1][2]
+            if prev_count >= 5 and count <= prev_count * 0.7:
+                is_drop = True
+        result.append({
+            "day": label,
+            "date": day_date.isoformat(),
+            "count": count,
+            "students": student_count,
+            "teachers": teacher_count,
+            "isDrop": is_drop,
+        })
+    return result
+
+
+def _build_teacher_workload(
+    active_load_rows: list[SubjectLoad],
+    staff_by_id: dict[str, AcademicStaff],
+    subjects_by_id: dict[int, Subject],
+    enrolled_by_class: dict[int, set[Any]],
+    *,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Rank active teachers in the selected period by student and load workload."""
+    loads_by_staff: dict[str, list[SubjectLoad]] = {}
+    for load in active_load_rows:
+        if load.staff_id:
+            loads_by_staff.setdefault(load.staff_id, []).append(load)
+
+    items: list[dict[str, Any]] = []
+    for staff_id, loads in loads_by_staff.items():
+        staff = staff_by_id.get(staff_id)
+        if staff is None:
+            continue
+        class_ids = {l.class_id for l in loads if l.class_id is not None}
+        subject_names = [
+            subjects_by_id[l.subject_id].subject_name
+            for l in loads
+            if l.subject_id in subjects_by_id
+        ]
+        student_ids: set[Any] = set()
+        for cid in class_ids:
+            student_ids.update(enrolled_by_class.get(cid, set()))
+        classes_count = len(class_ids)
+        items.append({
+            "staff_id": staff_id,
+            "user_id": str(staff.user_id) if staff.user_id else None,
+            "name": _format_staff_name(staff),
+            "subject": _format_subject_list(subject_names),
+            "classes": f"{classes_count} {'class' if classes_count == 1 else 'classes'}",
+            "classes_count": classes_count,
+            "loads_count": len(loads),
+            "students": len(student_ids),
+        })
+
+    items.sort(
+        key=lambda row: (
+            -row["students"],
+            -row["loads_count"],
+            -row["classes_count"],
+            row["name"].lower(),
+            row["staff_id"],
+        )
+    )
+    return items[:limit]
+
+
+def _build_teachers_no_work(
+    active_load_rows: list[SubjectLoad],
+    staff_by_id: dict[str, AcademicStaff],
+    subjects_by_id: dict[int, Subject],
+    assignments: list[ClassworkAssignment],
+    *,
+    is_upcoming_period: bool,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Find teachers with active loads in the selected period who have 0 published tasks."""
+    if is_upcoming_period or not active_load_rows:
+        return []
+
+    published_scopes: set[tuple[int, int]] = set()
+    for assignment in assignments:
+        cw = getattr(assignment, "classwork", None)
+        if cw is not None and assignment.class_id is not None and cw.subject_id is not None:
+            published_scopes.add((assignment.class_id, cw.subject_id))
+
+    loads_by_staff: dict[str, list[SubjectLoad]] = {}
+    for load in active_load_rows:
+        if load.staff_id:
+            loads_by_staff.setdefault(load.staff_id, []).append(load)
+
+    items: list[dict[str, Any]] = []
+    for staff_id, loads in loads_by_staff.items():
+        staff = staff_by_id.get(staff_id)
+        if staff is None:
+            continue
+        staff_scopes = {
+            (l.class_id, l.subject_id)
+            for l in loads
+            if l.class_id is not None and l.subject_id is not None
+        }
+        if not staff_scopes or (staff_scopes & published_scopes):
+            continue
+        class_ids = {l.class_id for l in loads if l.class_id is not None}
+        subject_names = [
+            subjects_by_id[l.subject_id].subject_name
+            for l in loads
+            if l.subject_id in subjects_by_id
+        ]
+        items.append({
+            "staff_id": staff_id,
+            "user_id": str(staff.user_id) if staff.user_id else None,
+            "name": _format_staff_name(staff),
+            "subject": _format_subject_list(subject_names),
+            "classes_count": len(class_ids),
+            "status": "0 tasks",
+        })
+
+    items.sort(key=lambda row: (-row["classes_count"], row["name"].lower(), row["staff_id"]))
+    return items[:limit]
+
+
+def _build_classes_needing_attention(
+    active_class_rows: list[Class],
+    assignments_by_id: dict[int, ClassworkAssignment],
+    engagement: Any,
+    attendance_by_class: dict[int, list[AttendanceRecord]],
+    scoped_grades: list[DashboardGrade],
+    thresholds: dict[int, Any],
+    *,
+    is_upcoming_period: bool,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Surface active classes with low passing, completion, attendance, or ungraded backlog."""
+    if is_upcoming_period or not active_class_rows:
+        return []
+
+    grades_by_class: dict[int, list[DashboardGrade]] = {}
+    for grade in scoped_grades:
+        grades_by_class.setdefault(grade.class_id, []).append(grade)
+
+    assignment_ids_by_class: dict[int, list[int]] = {}
+    for aid, assignment in assignments_by_id.items():
+        assignment_ids_by_class.setdefault(assignment.class_id, []).append(aid)
+
+    flagged: list[tuple[tuple[int, float, str, int], dict[str, Any]]] = []
+    for cls in active_class_rows:
+        cid = cls.class_id
+        issues: list[tuple[int, float, str, str, str]] = []
+
+        # 1. Passing rate check (only when recorded grades exist for this class)
+        class_grades = grades_by_class.get(cid, [])
+        if class_grades:
+            class_subject_ids = {g.subject_id for g in class_grades}
+            class_thresholds = {
+                sid: thresholds[sid] for sid in class_subject_ids if sid in thresholds
+            }
+            grade_summary = summarize_dashboard_grades(class_grades, class_thresholds)
+            if grade_summary.available_grade_count > 0 and grade_summary.passing_rate_percent is not None:
+                pr = grade_summary.passing_rate_percent
+                if pr < 75.0:
+                    issues.append((3, 75.0 - pr, f"Passing rate {pr}%", "Low", "destructive"))
+                elif pr < 85.0:
+                    issues.append((2, 85.0 - pr, f"Passing rate {pr}%", "Watch", "warning"))
+
+        # 2. Completion rate check
+        class_aids = assignment_ids_by_class.get(cid, [])
+        if class_aids:
+            completion = summarize_dashboard_engagement(engagement, class_aids)
+            if completion.expected_count > 0 and completion.completion_rate_percent is not None:
+                cr = completion.completion_rate_percent
+                if cr < 70.0:
+                    issues.append((3, 70.0 - cr, f"Completion {cr}%", "Low", "destructive"))
+                elif cr < 85.0:
+                    issues.append((2, 85.0 - cr, f"Completion {cr}%", "Watch", "warning"))
+
+        # 3. Attendance rate check
+        class_attendance = summarize_dashboard_attendance(attendance_by_class.get(cid, []))
+        if class_attendance.record_count > 0 and class_attendance.rate is not None:
+            ar = class_attendance.rate
+            if ar < 80.0:
+                issues.append((3, 80.0 - ar, f"Attendance {ar}%", "Low", "destructive"))
+            elif ar < 90.0:
+                issues.append((2, 90.0 - ar, f"Attendance {ar}%", "Watch", "warning"))
+
+        # 4. Ungraded reviewable submissions backlog
+        ungraded = 0
+        for aid in class_aids:
+            assignment = assignments_by_id[aid]
+            for sub in engagement.selected_by_assignment.get(aid, ()):
+                if is_reviewable_submission(sub, assignment):
+                    ungraded += 1
+        if ungraded >= 10:
+            issues.append((2, float(ungraded), f"Ungraded {ungraded} tasks", "Low", "destructive"))
+        elif ungraded >= 5:
+            issues.append((1, float(ungraded), f"Ungraded {ungraded} tasks", "Watch", "warning"))
+
+        if not issues:
+            continue
+
+        best = max(issues, key=lambda entry: (entry[0], entry[1]))
+        label = _format_class_label(cls)
+        sort_key = (-best[0], -best[1], label.lower(), cid)
+        flagged.append((
+            sort_key,
+            {
+                "class_id": cid,
+                "name": label,
+                "issue": best[2],
+                "status": best[3],
+                "variant": best[4],
+            },
+        ))
+
+    flagged.sort(key=lambda pair: pair[0])
+    return [item for _, item in flagged[:limit]]
+
+
+def _build_top_performing_subjects(
+    scoped_subject_ids: set[int],
+    subjects_by_id: dict[int, Subject],
+    scoped_grades: list[DashboardGrade],
+    assignments_by_id: dict[int, ClassworkAssignment],
+    enrolled_by_class: dict[int, set[Any]],
+    submissions: list[StudentSubmission],
+    *,
+    is_upcoming_period: bool,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Rank top-performing subjects using recorded period grades or graded task mastery."""
+    if is_upcoming_period or not scoped_subject_ids:
+        return []
+
+    grades_by_subject: dict[int, list[float]] = {}
+    for grade in scoped_grades:
+        if grade.current_grade is not None:
+            grades_by_subject.setdefault(grade.subject_id, []).append(grade.current_grade)
+
+    # Deduplicated latest completed submissions for active enrolled students
+    enrolled_subs = [
+        sub for sub in submissions
+        if sub.classwork_assignment_id in assignments_by_id
+        and sub.student_id in enrolled_by_class.get(
+            assignments_by_id[sub.classwork_assignment_id].class_id, set(),
+        )
+    ]
+    selected_subs, _ = select_dashboard_submissions(enrolled_subs)
+    mastery_earned: dict[int, float] = {}
+    mastery_possible: dict[int, float] = {}
+    mastery_samples: dict[int, int] = {}
+    for sub in selected_subs:
+        if sub.status != "graded" or sub.grade is None:
+            continue
+        assignment = assignments_by_id.get(sub.classwork_assignment_id)
+        cw = getattr(assignment, "classwork", None) if assignment is not None else None
+        if cw is None or cw.total_points is None or float(cw.total_points) <= 0:
+            continue
+        sid = cw.subject_id
+        mastery_earned[sid] = mastery_earned.get(sid, 0.0) + float(sub.grade)
+        mastery_possible[sid] = mastery_possible.get(sid, 0.0) + float(cw.total_points)
+        mastery_samples[sid] = mastery_samples.get(sid, 0) + 1
+
+    candidates: list[tuple[tuple[float, int, str, int], dict[str, Any]]] = []
+    for sid in scoped_subject_ids:
+        subj = subjects_by_id.get(sid)
+        if subj is None:
+            continue
+        period_grades = grades_by_subject.get(sid, [])
+        if period_grades:
+            score = round(sum(period_grades) / len(period_grades), 1)
+            metric = f"Avg Grade {score}%"
+            samples = len(period_grades)
+        elif mastery_possible.get(sid, 0.0) > 0:
+            score = round((mastery_earned[sid] / mastery_possible[sid]) * 100.0, 1)
+            metric = f"Mastery {score}%"
+            samples = mastery_samples.get(sid, 0)
+        else:
+            continue
+
+        level = getattr(subj, "academic_level", None)
+        grade_name = level.level_name if level is not None else None
+        subj_name = (subj.subject_name or "").strip()
+        if (
+            level is not None
+            and not subj_name.lower().startswith(f"{level.grade_level}")
+            and not subj_name.lower().startswith(f"grade {level.grade_level}")
+        ):
+            display_name = f"{level.grade_level} - {subj_name}"
+        else:
+            display_name = subj_name
+
+        candidates.append((
+            (-score, -samples, display_name.lower(), sid),
+            {
+                "subject_id": sid,
+                "grade": grade_name,
+                "name": display_name,
+                "metric": metric,
+                "score": score,
+            },
+        ))
+
+    candidates.sort(key=lambda pair: pair[0])
+    top: list[dict[str, Any]] = []
+    for idx, (_, item) in enumerate(candidates[:limit]):
+        item["rank"] = _ordinal_rank(idx + 1)
+        top.append(item)
+    return top
+
+
 def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> dict[str, Any]:
     period_name = target_period.period_name if target_period else "Current Term"
     academic_year_label = ""
@@ -400,9 +856,24 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
             if record.student_id in enrolled_by_class.get(record.class_id, set()):
                 attendance_by_class[record.class_id].append(record)
 
-    threshold_subjects = db.query(Subject).filter(
-        Subject.subject_id.in_(scoped_subject_ids),
-    ).all() if scoped_subject_ids else []
+    threshold_subjects = (
+        db.query(Subject)
+        .options(joinedload(Subject.academic_level))
+        .filter(Subject.subject_id.in_(scoped_subject_ids))
+        .all()
+        if scoped_subject_ids else []
+    )
+    subjects_by_id = {subject.subject_id: subject for subject in threshold_subjects}
+    active_staff_ids = {row.staff_id for row in active_load_rows if row.staff_id}
+    staff_by_id = {
+        staff.staff_id: staff
+        for staff in (
+            db.query(AcademicStaff)
+            .filter(AcademicStaff.staff_id.in_(active_staff_ids))
+            .all()
+            if active_staff_ids else []
+        )
+    }
     policy_context = read_passing_threshold_context_or_422(
         db,
         academic_year_id=year_id,
@@ -609,6 +1080,43 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
         active_class_ids,
         now_dt,
     )
+    active_users_weekly = _build_active_users_weekly(
+        db,
+        target_period,
+        now_dt,
+        is_upcoming_period=is_upcoming_period,
+    )
+    teacher_workload = _build_teacher_workload(
+        active_load_rows,
+        staff_by_id,
+        subjects_by_id,
+        enrolled_by_class,
+    )
+    classes_needing_attention = _build_classes_needing_attention(
+        active_class_rows,
+        assignments_by_id,
+        engagement,
+        attendance_by_class,
+        scoped_grades,
+        thresholds,
+        is_upcoming_period=is_upcoming_period,
+    )
+    teachers_no_work = _build_teachers_no_work(
+        active_load_rows,
+        staff_by_id,
+        subjects_by_id,
+        assignments,
+        is_upcoming_period=is_upcoming_period,
+    )
+    top_performing_subjects = _build_top_performing_subjects(
+        scoped_subject_ids,
+        subjects_by_id,
+        scoped_grades,
+        assignments_by_id,
+        enrolled_by_class,
+        submissions,
+        is_upcoming_period=is_upcoming_period,
+    )
 
     return {
         "term_info": {
@@ -644,11 +1152,11 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
                 for row in grade_health if row["completion_rate"] is not None
             ],
             "grade_health": grade_health,
-            "active_users_weekly": [],
-            "teacher_workload": [],
-            "classes_needing_attention": [],
-            "teachers_no_work": [],
-            "top_performing_subjects": [],
+            "active_users_weekly": active_users_weekly,
+            "teacher_workload": teacher_workload,
+            "classes_needing_attention": classes_needing_attention,
+            "teachers_no_work": teachers_no_work,
+            "top_performing_subjects": top_performing_subjects,
         },
     }
 
