@@ -355,12 +355,12 @@ export function SubjectCard({
   const cardInner = (
     <Card
       variant={cardVariant || "retro"}
-      className="relative flex h-full min-w-0 cursor-pointer flex-col gap-3 border-black p-3.5 pt-4 shadow-none shadow-black transition-all hover:bg-retro hover:shadow-none group-focus-visible:bg-retro"
+      className="relative flex h-full min-w-0 cursor-pointer flex-col gap-3 border-border p-3.5 pt-4 shadow-none transition-all hover:bg-retro hover:shadow-none group-focus-visible:bg-retro"
     >
       <div className="flex min-w-0 items-start gap-3">
         <Avatar
           variant="teacher"
-          className="size-14 shrink-0 rounded-full border-2 border-black"
+          className="size-14 shrink-0 rounded-full border-2 border-border"
         >
           <Avatar.Image
             src={teacherAvatar || "/avatars/teacher-avatars/12.svg"}
@@ -413,7 +413,7 @@ export function SubjectCard({
       {nextClasswork ? (
         <Card
           onClick={handleClassworkClick}
-          className="flex min-h-[72px] w-full min-w-0 flex-col justify-center gap-2 border-black bg-primary px-3 py-2 shadow-none hover:shadow-none transition-opacity hover:opacity-95 cursor-pointer"
+          className="flex min-h-[72px] w-full min-w-0 flex-col justify-center gap-2 border-border bg-primary text-primary-foreground px-3 py-2 shadow-none hover:shadow-none transition-opacity hover:opacity-95 cursor-pointer"
         >
           <div className="flex items-center justify-between gap-2">
             <Tooltip>

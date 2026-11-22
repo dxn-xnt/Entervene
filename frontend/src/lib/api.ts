@@ -183,6 +183,10 @@ export type TodoItem = {
   submission_status: string | null;
   grade: number | null;
   show_scores?: boolean;
+  allow_late_submissions?: boolean;
+  is_locked?: boolean;
+  is_actionable?: boolean;
+  is_study_support?: boolean;
 };
 
 export type StudentTodosResponse = {
@@ -201,6 +205,8 @@ export type StudentStudyboardMetrics = {
   grade_trend: Array<{ week_start: string; average: number | null }>;
   on_time_count: number;
   late_submission_count: number;
+  on_time_rate?: number | null;
+  submitted_without_deadline_count?: number;
   quiz_correct: number;
   quiz_wrong: number;
 };
