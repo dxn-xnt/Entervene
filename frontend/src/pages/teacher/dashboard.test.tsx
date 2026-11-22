@@ -346,13 +346,26 @@ describe("TeacherDashboard (Restored & Refined Original Dashboard)", () => {
     ).toBeTruthy();
     expect(screen.getByText(/24 scored lesson-linked responses/)).toBeTruthy();
 
-    // Verify retained original sections render
+    // Verify retained original sections render in their swapped positions:
+    // Submissions to Review is alongside Lowest Mastery Lessons (above Section-by-Section Health),
+    // and Attendance By Section is below Section-by-Section Health (before Submissions by weekday).
     expect(screen.getByText("Classwork Performance & Completion Trend")).toBeTruthy();
-    expect(screen.getByText("Attendance By Section")).toBeTruthy();
-    expect(screen.getByText("Section-by-Section Health")).toBeTruthy();
     expect(screen.getByText("Submissions to Review")).toBeTruthy();
+    expect(screen.getByText("Section-by-Section Health")).toBeTruthy();
+    expect(screen.getByText("Attendance By Section")).toBeTruthy();
     expect(screen.getByText("Submissions by weekday")).toBeTruthy();
     expect(screen.getByText("Grade distribution")).toBeTruthy();
+
+    const lowestMasteryIdx = html.indexOf("Lowest Mastery Lessons");
+    const submissionsToReviewIdx = html.indexOf("Submissions to Review");
+    const sectionHealthIdx = html.indexOf("Section-by-Section Health");
+    const attendanceBySectionIdx = html.indexOf("Attendance By Section");
+    const weekdayIdx = html.indexOf("Submissions by weekday");
+    expect(lowestMasteryIdx).toBeGreaterThan(-1);
+    expect(submissionsToReviewIdx).toBeGreaterThan(lowestMasteryIdx);
+    expect(sectionHealthIdx).toBeGreaterThan(submissionsToReviewIdx);
+    expect(attendanceBySectionIdx).toBeGreaterThan(sectionHealthIdx);
+    expect(weekdayIdx).toBeGreaterThan(attendanceBySectionIdx);
 
     // Verify removed sections do NOT render anywhere
     expect(screen.queryByText(/Students to Check In With/i)).toBeNull();

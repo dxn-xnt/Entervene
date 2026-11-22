@@ -708,7 +708,7 @@ export default function Dashboard() {
                     </Card.Content>
                   </Card>
 
-                  {/* 2. Learning Performance: Lowest Mastery Lessons Graph & Attendance By Section */}
+                  {/* 2. Learning Performance & Action Queue: Lowest Mastery Lessons Graph & Submissions to Review */}
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {/* Lowest Mastery Lessons Graph */}
                     <Card className="flex flex-col p-4 sm:p-5 min-h-62">
@@ -853,43 +853,78 @@ export default function Dashboard() {
                       </Card.Content>
                     </Card>
 
-                    {/* Attendance by Section */}
+                    {/* Submissions to Review */}
+                    {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="submissions to review" /> : (
                     <Card className="flex flex-col p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
-                          Attendance By Section
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
+                          Submissions to Review
                         </Card.Title>
+                        <Tooltip >
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                autoIcon={false}
+                                onClick={() => navigate(routes.teacher.classworks)}
+                                className="text-foreground shadow-none px-1.5"
+                              >
+                                <ArrowUpRight className="size-4" />
+                              </Button>
+                            }
+                          />
+                          <TooltipContent side="right">View classworks</TooltipContent>
+                        </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-3 flex flex-col justify-between gap-3 p-0">
-                        {attendanceSections.length === 0 ? (
-                          dashboardEmptyState(
-                            "No section attendance yet",
-                            "Attendance rates by section will appear here for the selected academic period.",
-                            <Calendar />,
+                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
+                        {reviewSubmissions.length === 0 && (
+                          reviewWarnings.length ? (
+                            <p className="py-6 text-sm text-muted-foreground" role="status">Review queue incomplete.</p>
+                          ) : dashboardEmptyState(
+                            isHistorical ? "No historical submissions to review" : "No submissions need grading",
+                            isHistorical ? "There are no submissions awaiting review for this period." : "You're all caught up with grading.",
+                            <CheckCircle />,
                           )
-                        ) : (
-                          attendanceSections.map((item) => (
-                            <div
-                              key={item.class_id}
-                              className="flex items-center justify-between gap-2 text-xs sm:text-sm"
-                              title={`${item.record_count} recorded ${item.record_count === 1 ? "entry" : "entries"}.`}
-                            >
-                              <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">
+                        )}
+                        {reviewSubmissions.slice(0, 3).map((item) => (
+                          <Card
+                            key={item.submission_id}
+                            onClick={() => {
+                              if (isPositiveId(item.classwork_id)) navigate(`/teacher/classworks/${item.classwork_id}`);
+                            }}
+                            className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
+                          >
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="font-semibold text-foreground truncate">
+                                {item.title}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground truncate">
                                 {item.section}
                               </span>
-                              <Progress value={item.rate ?? 0} className="h-3 flex-1" />
-                              <span className="font-semibold text-foreground text-right w-10 shrink-0">
-                                {formatPercent(item.rate)}
-                              </span>
                             </div>
-                          ))
-                        )}
+                            <Badge
+                              size="sm"
+                              variant={
+                                item.variant === "destructive"
+                                  ? "destructive"
+                                  : "default"
+                              }
+                              className="shrink-0"
+                            >
+                              {item.badge}
+                            </Badge>
+                          </Card>
+                        ))}
+                        {reviewWarnings.map((warning, index) => (
+                          <Card.Description key={`${warning.code}-${warning.assignment_id}-${index}`} className="text-xs text-muted-foreground">
+                            {warning.message}
+                          </Card.Description>
+                        ))}
                       </Card.Content>
-                      <Card.Description className="mt-3 text-[11px] text-muted-foreground mt-auto">
-                        {/* This month · Present + late / recorded entries. Excused and absent do not count as present. */}
-                      </Card.Description>
                     </Card>
+                    )}
                   </div>
 
                   {/* 3. Section-by-Section Health */}
@@ -1059,80 +1094,45 @@ export default function Dashboard() {
                     </Card.Content>
                   </Card>
 
-                  {/* 4. Remaining Existing Dashboard Functions: Submissions to Review, Weekday Submissions, Grade Distribution */}
+                  {/* 4. Remaining Existing Dashboard Functions: Attendance By Section, Weekday Submissions, Grade Distribution */}
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {/* Submissions to Review */}
-                    {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="submissions to review" /> : (
+                    {/* Attendance by Section */}
                     <Card className="flex flex-col p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
-                          Submissions to Review
+                      <Card.Header className="mb-0 p-0">
+                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
+                          Attendance By Section
                         </Card.Title>
-                        <Tooltip >
-                          <TooltipTrigger
-                            render={
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                autoIcon={false}
-                                onClick={() => navigate(routes.teacher.classworks)}
-                                className="text-foreground shadow-none px-1.5"
-                              >
-                                <ArrowUpRight className="size-4" />
-                              </Button>
-                            }
-                          />
-                          <TooltipContent side="right">View classworks</TooltipContent>
-                        </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {reviewSubmissions.length === 0 && (
-                          reviewWarnings.length ? (
-                            <p className="py-6 text-sm text-muted-foreground" role="status">Review queue incomplete.</p>
-                          ) : dashboardEmptyState(
-                            isHistorical ? "No historical submissions to review" : "No submissions need grading",
-                            isHistorical ? "There are no submissions awaiting review for this period." : "You're all caught up with grading.",
-                            <CheckCircle />,
+                      <Card.Content className="mt-3 flex flex-col justify-between gap-3 p-0">
+                        {attendanceSections.length === 0 ? (
+                          dashboardEmptyState(
+                            "No section attendance yet",
+                            "Attendance rates by section will appear here for the selected academic period.",
+                            <Calendar />,
                           )
-                        )}
-                        {reviewSubmissions.slice(0, 3).map((item) => (
-                          <Card
-                            key={item.submission_id}
-                            onClick={() => {
-                              if (isPositiveId(item.classwork_id)) navigate(`/teacher/classworks/${item.classwork_id}`);
-                            }}
-                            className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
-                          >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {item.title}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
+                        ) : (
+                          attendanceSections.map((item) => (
+                            <div
+                              key={item.class_id}
+                              className="flex items-center justify-between gap-2 text-xs sm:text-sm"
+                              title={`${item.record_count} recorded ${item.record_count === 1 ? "entry" : "entries"}.`}
+                            >
+                              <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">
                                 {item.section}
                               </span>
+                              <Progress value={item.rate ?? 0} className="h-3 flex-1" />
+                              <span className="font-semibold text-foreground text-right w-10 shrink-0">
+                                {formatPercent(item.rate)}
+                              </span>
                             </div>
-                            <Badge
-                              size="sm"
-                              variant={
-                                item.variant === "destructive"
-                                  ? "destructive"
-                                  : "default"
-                              }
-                              className="shrink-0"
-                            >
-                              {item.badge}
-                            </Badge>
-                          </Card>
-                        ))}
-                        {reviewWarnings.map((warning, index) => (
-                          <Card.Description key={`${warning.code}-${warning.assignment_id}-${index}`} className="text-xs text-muted-foreground">
-                            {warning.message}
-                          </Card.Description>
-                        ))}
+                          ))
+                        )}
                       </Card.Content>
+                      <Card.Description className="mt-3 text-[11px] text-muted-foreground mt-auto">
+                        {/* This month · Present + late / recorded entries. Excused and absent do not count as present. */}
+                      </Card.Description>
                     </Card>
-                    )}
 
                     {/* Submissions by weekday */}
                     <Card className="flex flex-col justify-start p-4 sm:p-5">
