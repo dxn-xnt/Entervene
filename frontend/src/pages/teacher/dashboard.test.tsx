@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import TeacherDashboard from "./dashboard";
 import type { TeacherDashboardHealthResponse } from "@/lib/api";
@@ -27,6 +27,7 @@ let mockAcademicContext = {
   selectedPeriodId: 201,
   selectedYear: { academic_year_id: 101, year_label: "2026-2027", is_active: true },
   selectedPeriod: { id: 201, period: "Q1", is_active: true },
+  periods: [{ id: 201, period: "Q1", is_active: true }],
   isLoading: false,
 };
 
@@ -43,13 +44,12 @@ vi.mock("@/lib/api", async () => {
   };
 });
 
-// Mock Recharts ResponsiveContainer for jsdom (zero-width container)
 vi.mock("recharts", async () => {
   const actual = await vi.importActual<typeof import("recharts")>("recharts");
   return {
     ...actual,
     ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
-      <div style={{ width: 640, height: 260 }}>{children}</div>
+      <div style={{ width: 640, height: 220 }}>{children}</div>
     ),
   };
 });
@@ -67,150 +67,32 @@ function buildSampleResponse(overrides: Partial<TeacherDashboardHealthResponse> 
       { class_id: 301, section_name: "11-Rizal", subject_id: 11, subject_name: "General Mathematics" },
       { class_id: 302, section_name: "11-Luna", subject_id: 12, subject_name: "Oral Communication" },
     ],
-    analytics: {
-      submission_rate: {
-        submission_rate_percent: 82.5,
-        submitted_count: 33,
-        expected_count: 40,
-        resolved_submitted_count: 33,
-        late_rate_percent: 9.1,
-        late_count: 3,
-        late_eligible_count: 33,
-        excused_excluded_count: 1,
-        eligible_assignment_count: 4,
-        warnings: [],
-      },
-      grading_completion: {
-        grading_completion_rate_percent: 75.0,
-        finalized_count: 18,
-        auto_graded_count: 12,
-        teacher_graded_count: 6,
-        awaiting_grading_count: 6,
-        submitted_gradable_count: 24,
-        resolved_finalized_count: 18,
-        resolved_awaiting_grading_count: 6,
-        eligible_assignment_count: 3,
-        warnings: [],
-      },
-      graded_performance: {
-        avg_graded_score_percent: 84.2,
-        scored_submission_count: 18,
-        graded_assignment_count: 3,
-        eligible_assignment_count: 3,
-        warnings: [],
-      },
-      term_grades: {
-        current_grade: 86.4,
-        passing_rate_percent: 80.0,
-        available_grade_count: 20,
-        total_grade_count: 25,
-        passing_count: 16,
-        passing_threshold: 80.0,
-        current_grade_meets_threshold: true,
-        warnings: [],
-      },
-      threshold_summary: {
-        meeting_threshold_count: 16,
-        below_threshold_count: 4,
-        meeting_threshold_percent: 80.0,
-        below_threshold_percent: 20.0,
-        available_grade_count: 20,
-        total_grade_count: 25,
-        grade_coverage_percent: 80.0,
-        uniform_passing_threshold: 80.0,
-        has_mixed_thresholds: false,
-        warnings: [],
-      },
-      period_attendance: {
-        rate: 93.4,
-        record_count: 152,
-        present_count: 135,
-        late_count: 7,
-        excused_count: 4,
-        absent_count: 6,
-      },
-      interventions: {
-        candidate_count: 2,
-        active_count: 3,
-        resolved_improved_count: 2,
-        resolved_other_count: 1,
-        resolved_total_count: 3,
-        total_count: 8,
-        activated_count: 6,
-        activation_rate_percent: 75.0,
-        improved_prediction_resolution_rate_percent: 33.3,
-        other_resolution_rate_percent: 16.7,
-        practice_assessments: {
-          published_count: 4,
-          attempted_count: 3,
-          passed_count: 2,
-          attempt_participation_rate_percent: 75.0,
-          attempted_pass_rate_percent: 66.7,
-          is_ungraded: true,
-          excluded_from_official_grades: true,
-        },
-      },
-      subject_comparisons: [
-        {
-          subject_id: 11,
-          subject_name: "General Mathematics",
-          section_count: 1,
-          student_count: 15,
-          submission_rate_percent: 85.0,
-          grading_completion_rate_percent: 80.0,
-          avg_graded_score_percent: 86.0,
-          passing_rate_percent: 80.0,
-          mean_current_grade: 87.2,
-          available_grade_count: 12,
-          total_grade_count: 15,
-          grade_coverage_percent: 80.0,
-          passing_threshold: 80.0,
-        },
-      ],
-      category_performance: [
-        {
-          category: "WRITTEN_WORK",
-          label: "Written Work",
-          assignment_count: 2,
-          scored_submission_count: 12,
-          avg_graded_score_percent: 85.0,
-          grading_completion_rate_percent: 80.0,
-          awaiting_grading_count: 3,
-        },
-      ],
-      grade_distribution: {
-        bands: [
-          { band: "90-100", count: 6, percent: 30.0 },
-          { band: "85-89", count: 6, percent: 30.0 },
-          { band: "80-84", count: 4, percent: 20.0 },
-          { band: "75-79", count: 3, percent: 15.0 },
-          { band: "Below 75", count: 1, percent: 5.0 },
-        ],
-        total_grade_count: 25,
-        available_grade_count: 20,
-        unavailable_grade_count: 5,
-      },
-    },
     kpis: {
       active_classes: 2,
       enrolled_students: 25,
-      overall_completion_rate: 82.5,
-      grading_completion_rate: 75.0,
-      ungraded_count: 6,
-      avg_graded_score_percent: 84.2,
-      passing_rate_percent: 80.0,
-      grade_coverage_percent: 80.0,
-      period_attendance_rate: 93.4,
-      improved_prediction_resolution_rate: 33.3,
+      overall_completion_rate: 82.0,
+      ungraded_count: 3,
+    },
+    engagement: {
+      expected_count: 40,
+      completed_count: 33,
+      pending_grading_count: 3,
+      resolved_completed_count: 33,
+      resolved_pending_grading_count: 3,
+      completion_rate_percent: 82.5,
+      avg_score_percent: 84.2,
+      scored_count: 30,
+      graded_task_count: 3,
+      warnings: [],
     },
     trend_chart: {
       available_filters: [
         { class_id: 301, section_name: "11-Rizal", subject_id: 11, subject_name: "General Mathematics" },
       ],
-      selected_class_id: null,
-      selected_subject_id: null,
-      selected_section_name: "All Classes",
-      selected_subject_name: "All Subjects",
+      selected_class_id: 301,
+      selected_subject_id: 11,
+      selected_section_name: "11-Rizal",
+      selected_subject_name: "General Mathematics",
       has_sufficient_data: true,
       graded_task_count: 3,
       date_group_count: 2,
@@ -218,8 +100,8 @@ function buildSampleResponse(overrides: Partial<TeacherDashboardHealthResponse> 
       points: [
         {
           classwork_id: 501,
-          title: "Quiz 1",
-          category: "Written Work",
+          title: "1 task",
+          category: "Grouped tasks",
           due_date: "2026-10-05T00:00:00Z",
           label: "Oct 05",
           short_label: "Oct 05",
@@ -240,39 +122,180 @@ function buildSampleResponse(overrides: Partial<TeacherDashboardHealthResponse> 
         student_count: 15,
         published_classworks: 3,
         avg_score_percent: 86.0,
-        avg_graded_score_percent: 86.0,
         passing_rate_percent: 80.0,
-        grade_coverage_percent: 80.0,
         completion_rate_percent: 85.0,
-        submission_rate_percent: 85.0,
-        grading_completion_rate_percent: 80.0,
-        awaiting_grading_count: 2,
         attendance_rate_percent: 93.4,
         current_grade: 87.2,
         available_grade_count: 12,
         total_grade_count: 15,
         passing_threshold: 80.0,
+        current_grade_meets_threshold: true,
       },
     ],
-    action_queue: { upcoming_deadlines: [] },
-    details: {
-      grade_distribution: [
-        { band: "90-100", count: 6, percent: 30.0 },
-        { band: "85-89", count: 6, percent: 30.0 },
-        { band: "80-84", count: 4, percent: 20.0 },
-        { band: "75-79", count: 3, percent: 15.0 },
-        { band: "Below 75", count: 1, percent: 5.0 },
+    phase_two: {
+      grades: {
+        current_grade: 86.4,
+        passing_rate_percent: 80.0,
+        available_grade_count: 20,
+        total_grade_count: 25,
+        passing_count: 16,
+        passing_threshold: 80.0,
+        current_grade_meets_threshold: true,
+        warnings: [],
+      },
+      attendance_today: {
+        rate: 92.0,
+        record_count: 25,
+        present_count: 21,
+        late_count: 2,
+        excused_count: 1,
+        absent_count: 1,
+      },
+      month_window: {
+        start_date: "2026-10-01",
+        end_date: "2026-10-08",
+        today: "2026-10-08",
+        label: "This month",
+      },
+      late_submissions: {
+        late_rate_percent: 9.1,
+        late_count: 3,
+        eligible_count: 33,
+        excused_excluded_count: 1,
+        completed_count: 34,
+        warnings: [],
+      },
+      weekdays: {
+        days: [
+          { label: "Mon", day_index: 0, count: 6 },
+          { label: "Tue", day_index: 1, count: 8 },
+          { label: "Wed", day_index: 2, count: 5 },
+          { label: "Thu", day_index: 3, count: 7 },
+          { label: "Fri", day_index: 4, count: 6 },
+          { label: "Sat", day_index: 5, count: 1 },
+        ],
+        sunday_count: 1,
+        total_count: 34,
+        warnings: [],
+      },
+      term_progress: {
+        progress_percent: 45.0,
+        elapsed_days: 40,
+        total_days: 90,
+        week_number: 6,
+        total_weeks: 13,
+        warnings: [],
+      },
+      intervention_resolution: {
+        candidate_count: 2,
+        active_count: 2,
+        resolved_improved_count: 2,
+        resolved_other_count: 1,
+        resolved_total_count: 3,
+        eligible_count: 5,
+        total_count: 7,
+        improved_prediction_resolution_rate_percent: 40.0,
+      },
+      require_subject_match: false,
+    },
+    action_queue: {
+      pending_grading: [
+        {
+          submission_id: 901,
+          student_id: "s-1",
+          student_name: "Juan Dela Cruz",
+          classwork_id: 501,
+          classwork_title: "Linear Equations Quiz",
+          section_name: "11-Rizal",
+          submitted_at: "2026-10-07T08:00:00Z",
+        },
       ],
+      upcoming_deadlines: [],
+    },
+    details: {
+      grade_details: {
+        total_grade_count: 25,
+        available_grade_count: 20,
+        unavailable_grade_count: 5,
+        warnings: [],
+      },
+      grade_distribution: [
+        { band: "90-100", count: 6 },
+        { band: "85-89", count: 6 },
+        { band: "80-84", count: 4 },
+        { band: "75-79", count: 3 },
+        { band: "Below 75", count: 1 },
+      ],
+      attendance_by_section: [
+        {
+          class_id: 301,
+          section: "11-Rizal",
+          rate: 93.4,
+          record_count: 152,
+          present_count: 135,
+          late_count: 7,
+          excused_count: 4,
+          absent_count: 6,
+        },
+      ],
+      intervention_resolution: {
+        candidate_count: 2,
+        active_count: 2,
+        resolved_improved_count: 2,
+        resolved_other_count: 1,
+        resolved_total_count: 3,
+        eligible_count: 5,
+        total_count: 7,
+        improved_prediction_resolution_rate_percent: 40.0,
+      },
       lesson_performance: {
         policy: { min_learners: 3, min_questions: 3, limit_per_subject: 5 },
-        subjects: [],
+        subjects: [
+          {
+            subject_id: 11,
+            subject_name: "General Mathematics",
+            class_ids: [301],
+            items: [
+              {
+                lesson_id: 701,
+                title: "Rational Functions",
+                performance_percent: 58.5,
+                awarded_points: 35.1,
+                possible_points: 60,
+                scored_response_count: 12,
+                learner_count: 4,
+                question_count: 3,
+              },
+              {
+                lesson_id: 702,
+                title: "Inverse Functions",
+                performance_percent: 66.7,
+                awarded_points: 40.0,
+                possible_points: 60,
+                scored_response_count: 12,
+                learner_count: 4,
+                question_count: 3,
+              },
+            ],
+            coverage: {
+              scored_mapped_response_count: 24,
+              unmapped_response_count: 2,
+              ungraded_response_count: 1,
+              invalid_response_count: 0,
+              insufficient_lesson_count: 0,
+              omitted_lesson_count: 0,
+              excluded_manual_assignment_count: 1,
+            },
+            warnings: [],
+          },
+        ],
       },
     },
     ...overrides,
   };
 }
 
-describe("TeacherDashboard (v2 Analytics-First Redesign)", () => {
+describe("TeacherDashboard (Restored & Refined Original Dashboard)", () => {
   afterEach(() => {
     cleanup();
   });
@@ -284,56 +307,87 @@ describe("TeacherDashboard (v2 Analytics-First Redesign)", () => {
       selectedPeriodId: 201,
       selectedYear: { academic_year_id: 101, year_label: "2026-2027", is_active: true },
       selectedPeriod: { id: 201, period: "Q1", is_active: true },
+      periods: [{ id: 201, period: "Q1", is_active: true }],
       isLoading: false,
     };
   });
 
-  it("renders all six percentage-first KPI cards, clarifications, and zero student rosters or Study Support copy", async () => {
+  it("renders Improved Prediction Resolution Rate directly below Active Classes, Lowest Mastery Lessons Graph, and omits removed student sections", async () => {
     mockGetTeacherDashboardHealth.mockResolvedValue(buildSampleResponse());
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <TeacherDashboard />
       </MemoryRouter>,
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Classwork Submission Rate")).toBeTruthy();
+      expect(screen.getByText("Improved Prediction Resolution Rate")).toBeTruthy();
     });
 
-    // All 6 KPI titles & real database-backed percentages
-    expect(screen.getByText("82.5%")).toBeTruthy();
-    expect(screen.getByText("Grading Completion Rate")).toBeTruthy();
-    expect(screen.getByText(/12 auto · 6 teacher/)).toBeTruthy();
-    expect(screen.getByText("6 awaiting teacher grading")).toBeTruthy();
-    expect(screen.getByText("Avg. Graded Assessment Score")).toBeTruthy();
-    expect(screen.getByText("84.2%")).toBeTruthy();
-    expect(screen.getByText("Term Passing Rate")).toBeTruthy();
-    expect(screen.getByText(/Grade coverage 80\.0% \(20\/25\)/)).toBeTruthy();
-    expect(screen.getAllByText("Improved-Prediction Resolution Rate").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Period Attendance Rate")).toBeTruthy();
+    // Verify Improved Prediction Resolution Rate is positioned immediately below Active Classes
+    const html = container.innerHTML;
+    const activeClassesIdx = html.indexOf("Active Classes");
+    const improvedRateIdx = html.indexOf("Improved Prediction Resolution Rate");
+    const overallCompletionIdx = html.indexOf("Overall Completion");
+    expect(activeClassesIdx).toBeGreaterThan(-1);
+    expect(improvedRateIdx).toBeGreaterThan(activeClassesIdx);
+    expect(overallCompletionIdx).toBeGreaterThan(improvedRateIdx);
 
-    // Configured passing threshold displayed without hardcoded 75
-    expect(screen.getByText("Configured passing threshold: 80.0")).toBeTruthy();
+    expect(screen.getByText("40%")).toBeTruthy();
+    expect(screen.getByText(/2 of 5 active & resolved/)).toBeTruthy();
 
-    // Intervention terminology & separated ungraded Practice Assessments with literal denominator
-    expect(screen.getByText("Intervention Analytics")).toBeTruthy();
-    expect(screen.getByText("Intervention Practice Assessments")).toBeTruthy();
-    expect(screen.getByText("Ungraded · Excluded from Official Grades")).toBeTruthy();
-    expect(screen.getByText("Attempted Passed")).toBeTruthy();
-    expect(screen.getByText("2/3 attempted")).toBeTruthy();
-    expect(screen.getByText("Other Resolution Reasons")).toBeTruthy();
+    // Verify Lowest Mastery Lessons Graph renders with coverage details
+    expect(screen.getByText("Lowest Mastery Lessons")).toBeTruthy();
+    expect(
+      screen.getByRole("region", {
+        name: "Lowest mastery lessons graph for General Mathematics",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText(/24 scored lesson-linked responses/)).toBeTruthy();
 
-    // Strictly absent legacy widgets & forbidden terminology
+    // Verify retained original sections render
+    expect(screen.getByText("Classwork Performance & Completion Trend")).toBeTruthy();
+    expect(screen.getByText("Attendance By Section")).toBeTruthy();
+    expect(screen.getByText("Section-by-Section Health")).toBeTruthy();
+    expect(screen.getByText("Submissions to Review")).toBeTruthy();
+    expect(screen.getByText("Submissions by weekday")).toBeTruthy();
+    expect(screen.getByText("Grade distribution")).toBeTruthy();
+
+    // Verify removed sections do NOT render anywhere
     expect(screen.queryByText(/Students to Check In With/i)).toBeNull();
-    expect(screen.queryByText(/Top Performers/i)).toBeNull();
-    expect(screen.queryByText(/Submissions to Review/i)).toBeNull();
-    expect(screen.queryByText(/Study Support/i)).toBeNull();
-    expect(screen.queryByText(/Not calculated/i)).toBeNull();
+    expect(screen.queryByText(/Top Performers?/i)).toBeNull();
   });
 
-  it("drills down to authorized teacher pages when clicking KPI cards", async () => {
-    mockGetTeacherDashboardHealth.mockResolvedValue(buildSampleResponse());
+  it("displays insufficient lesson mastery data empty state rather than zero mastery when evidence is below threshold", async () => {
+    const sample = buildSampleResponse();
+    mockGetTeacherDashboardHealth.mockResolvedValue({
+      ...sample,
+      details: {
+        ...sample.details,
+        lesson_performance: {
+          policy: { min_learners: 3, min_questions: 3, limit_per_subject: 5 },
+          subjects: [
+            {
+              subject_id: 11,
+              subject_name: "General Mathematics",
+              class_ids: [301],
+              items: [],
+              coverage: {
+                scored_mapped_response_count: 4,
+                unmapped_response_count: 0,
+                ungraded_response_count: 2,
+                invalid_response_count: 0,
+                insufficient_lesson_count: 1,
+                omitted_lesson_count: 0,
+                excluded_manual_assignment_count: 0,
+              },
+              warnings: [],
+            },
+          ],
+        },
+      },
+    });
 
     render(
       <MemoryRouter>
@@ -342,17 +396,11 @@ describe("TeacherDashboard (v2 Analytics-First Redesign)", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Grading Completion Rate")).toBeTruthy();
+      expect(screen.getByText("Insufficient lesson mastery data")).toBeTruthy();
     });
-
-    fireEvent.click(screen.getByText("Grading Completion Rate"));
-    expect(mockNavigate).toHaveBeenCalledWith("/teacher/classworks?grading_status=needs_grading");
-
-    fireEvent.click(screen.getByText("Term Passing Rate"));
-    expect(mockNavigate).toHaveBeenCalledWith("/teacher/grades");
-
-    fireEvent.click(screen.getByText("Period Attendance Rate"));
-    expect(mockNavigate).toHaveBeenCalledWith("/teacher/attendance");
+    expect(
+      screen.getByText(/Each lesson needs scores from at least 3 learners across 3 questions/),
+    ).toBeTruthy();
   });
 
   it("renders TeacherEmptyState when teacher has no assigned classes in the selected period", async () => {
@@ -372,7 +420,7 @@ describe("TeacherDashboard (v2 Analytics-First Redesign)", () => {
         kpis: {
           active_classes: 0,
           enrolled_students: 0,
-          overall_completion_rate: null,
+          overall_completion_rate: 0,
           ungraded_count: 0,
         },
       }),
@@ -385,11 +433,11 @@ describe("TeacherDashboard (v2 Analytics-First Redesign)", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("No assigned classes for this academic period")).toBeTruthy();
+      expect(screen.getByText("No classes assigned")).toBeTruthy();
     });
   });
 
-  it("renders inline error Alert with Retry action on API failure", async () => {
+  it("renders inline error Alert on API failure", async () => {
     mockGetTeacherDashboardHealth.mockRejectedValue(new Error("Network error"));
 
     render(
@@ -399,9 +447,10 @@ describe("TeacherDashboard (v2 Analytics-First Redesign)", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Unable to load dashboard analytics")).toBeTruthy();
       expect(screen.getByText("Network error")).toBeTruthy();
     });
-    expect(screen.getByText("Retry")).toBeTruthy();
+    expect(
+      screen.getAllByText("Dashboard data is unavailable.").length,
+    ).toBeGreaterThan(0);
   });
 });
