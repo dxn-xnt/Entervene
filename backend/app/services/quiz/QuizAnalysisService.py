@@ -600,10 +600,10 @@ def grade_teacher_quiz_submission(
 
     if assignment.source_intervention_id is not None and classwork.is_graded:
         from app.services.intervention.InterventionNotificationService import (
-            stage_intervention_assessment_result_or_submission,
+            stage_intervention_assessment_result,
         )
         db.flush()
-        stage_intervention_assessment_result_or_submission(db, assignment, submission)
+        stage_intervention_assessment_result(db, assignment, submission)
 
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()

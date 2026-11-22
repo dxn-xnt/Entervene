@@ -42,24 +42,6 @@ def _assessment(context, monkeypatch):
     return assignment, context["submission"]
 
 
-def test_submission_notification_is_teacher_scoped_deep_linked_and_idempotent(authz_context, monkeypatch):
-    assignment, submission = _assessment(authz_context, monkeypatch)
-
-    assert notifications.stage_intervention_assessment_submitted(authz_context["db"], assignment, submission)
-    assert not notifications.stage_intervention_assessment_submitted(authz_context["db"], assignment, submission)
-    authz_context["db"].commit()
-
-    rows = authz_context["db"].query(Notification).all()
-    assert len(rows) == 1
-    assert rows[0].user_id == authz_context["accounts"]["owner"].user_id
-    assert rows[0].notification_type == "intervention_assessment_submitted"
-    assert rows[0].title == "Intervention Assessment Submitted"
-    assert rows[0].action_url == (
-        f"/teacher/classworks/{assignment.classwork_id}?assignment={assignment.classwork_assignment_id}"
-        f"&submission={submission.submission_id}"
-    )
-
-
 @pytest.mark.parametrize(
     ("reaches_threshold", "expected_type", "expected_title", "expected_event"),
     (
@@ -86,10 +68,10 @@ def test_finalized_result_sends_one_result_without_submitted_duplicate(
         },
     )
 
-    assert notifications.stage_intervention_assessment_result_or_submission(
+    assert notifications.stage_intervention_assessment_result(
         authz_context["db"], assignment, submission,
     ) == expected_event
-    assert notifications.stage_intervention_assessment_result_or_submission(
+    assert notifications.stage_intervention_assessment_result(
         authz_context["db"], assignment, submission,
     ) == expected_event
     authz_context["db"].commit()
@@ -104,7 +86,7 @@ def test_finalized_result_sends_one_result_without_submitted_duplicate(
     ).first()
 
 
-def test_unavailable_result_falls_back_to_one_submitted_notification(authz_context, monkeypatch):
+def test_unavailable_result_does_not_fall_back_to_submission_notification(authz_context, monkeypatch):
     assignment, submission = _assessment(authz_context, monkeypatch)
     submission.status = "graded"
     submission.grade = 80
@@ -116,14 +98,13 @@ def test_unavailable_result_falls_back_to_one_submitted_notification(authz_conte
         },
     )
 
-    assert notifications.stage_intervention_assessment_result_or_submission(
+    assert notifications.stage_intervention_assessment_result(
         authz_context["db"], assignment, submission,
-    ) == "SUBMITTED"
-    assert notifications.stage_intervention_assessment_result_or_submission(
+    ) is None
+    assert notifications.stage_intervention_assessment_result(
         authz_context["db"], assignment, submission,
-    ) == "SUBMITTED"
+    ) is None
     authz_context["db"].commit()
 
     rows = authz_context["db"].query(Notification).all()
-    assert len(rows) == 1
-    assert rows[0].notification_type == "intervention_assessment_submitted"
+    assert rows == []

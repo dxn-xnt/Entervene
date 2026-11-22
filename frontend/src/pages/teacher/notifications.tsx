@@ -21,6 +21,7 @@ import {
   formatNotificationBody,
   formatNotificationTitle,
   isExcludedNotification,
+  isTeacherSubmissionNotification,
   matchesTeacherNotificationTab,
   type TeacherNotificationTab,
 } from "@/lib/notification-formatting";
@@ -49,7 +50,7 @@ const emptyStateByTab: Record<
   submissions: {
     icon: <FileCheck />,
     title: "No submission notifications",
-    description: "Student submissions and deadline summaries will appear here.",
+    description: "Deadline summaries will appear here.",
   },
   interventions: {
     icon: <AlertTriangle />,
@@ -71,7 +72,9 @@ const Notifications = () => {
       setLoading(true);
       setLoadError(false);
       const data = await getNotifications(false, 50);
-      setNotifications(data.notifications.filter((item) => !isExcludedNotification(item)));
+      setNotifications(data.notifications.filter(
+        (item) => !isExcludedNotification(item) && !isTeacherSubmissionNotification(item),
+      ));
     } catch (err) {
       console.error("Failed to load notifications:", err);
       setLoadError(true);

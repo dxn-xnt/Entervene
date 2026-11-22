@@ -470,42 +470,8 @@ async def submit_student_work(
                     title=link.title,
                     position=position,
                 ))
-        if assignment.source_intervention_id is not None and classwork.is_graded:
-            from app.services.intervention.InterventionNotificationService import (
-                stage_intervention_assessment_submitted,
-            )
-            stage_intervention_assessment_submitted(db, assignment, submission)
         db.commit()
         db.refresh(submission)
-
-        if is_late and classwork and classwork.created_by_staff_id and assignment.source_intervention_id is None:
-            try:
-                from app.models.people.AcademicStaff import AcademicStaff
-                from app.models.academic.Subject import Subject
-                from app.services.NotificationService import create_notification
-                from app.schemas.Notification import NotificationCreate
-
-                staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == classwork.created_by_staff_id).first()
-                if staff and staff.user_id:
-                    from app.services.classwork.ClassworkService import _format_subject_prefixed_title
-
-                    subj = db.query(Subject).filter(Subject.subject_id == classwork.subject_id).first()
-                    subject_name = subj.subject_name if subj else "Subject"
-                    s_name = f"{student.first_name} {student.last_name}"
-                    prefixed_title = _format_subject_prefixed_title(subject_name, classwork.title, separator=" - ")
-
-                    create_notification(
-                        db,
-                        NotificationCreate(
-                            user_id=staff.user_id,
-                            notification_type="assignment_due",
-                            title=f"Late Submission: {prefixed_title}",
-                            body=f"{s_name} turned in their work late after the due date.",
-                            action_url=f"/teacher/classworks/{classwork.classwork_id}",
-                        ),
-                    )
-            except Exception as err:
-                print(f"[Notification Error] Failed to send late submission notification: {err}")
     except Exception:
         db.rollback()
         cleanup_saved_files(saved_paths)
@@ -1064,10 +1030,10 @@ def grade_student_submission(
 
     if assignment.source_intervention_id is not None and classwork and classwork.is_graded:
         from app.services.intervention.InterventionNotificationService import (
-            stage_intervention_assessment_result_or_submission,
+            stage_intervention_assessment_result,
         )
         db.flush()
-        stage_intervention_assessment_result_or_submission(db, assignment, submission)
+        stage_intervention_assessment_result(db, assignment, submission)
 
     refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()

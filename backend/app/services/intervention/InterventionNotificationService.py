@@ -97,7 +97,6 @@ def _stage_assessment_event(
     intervention, (_staff_id, user_id) = scope
     action_url = _assessment_action_url(assignment, submission)
     notification_type = {
-        "SUBMITTED": "intervention_assessment_submitted",
         "PASSED": "intervention_passed",
         "NOT_PASSED": "intervention_assessment_not_passed",
     }[event]
@@ -118,21 +117,17 @@ def _stage_assessment_event(
     )
     subject_name = intervention.subject.subject_name
     title = {
-        "SUBMITTED": "Intervention Assessment Submitted",
         "PASSED": "Intervention Passed",
         "NOT_PASSED": "Intervention Assessment Not Passed",
     }[event]
-    if event == "SUBMITTED":
-        body = f"{student_name} submitted the {subject_name} Intervention Assessment."
-    else:
-        score = (
-            f" Score: {format(Decimal(str(submission.grade)).normalize(), 'f')}"
-            f"/{format(Decimal(str(assignment.classwork.total_points)).normalize(), 'f')}."
-            if submission.grade is not None and assignment.classwork.total_points is not None
-            else ""
-        )
-        result = "reached" if event == "PASSED" else "did not reach"
-        body = f"{student_name} {result} the {subject_name} passing threshold.{score}"
+    score = (
+        f" Score: {format(Decimal(str(submission.grade)).normalize(), 'f')}"
+        f"/{format(Decimal(str(assignment.classwork.total_points)).normalize(), 'f')}."
+        if submission.grade is not None and assignment.classwork.total_points is not None
+        else ""
+    )
+    result = "reached" if event == "PASSED" else "did not reach"
+    body = f"{student_name} {result} the {subject_name} passing threshold.{score}"
     stage_notification(db, NotificationCreate(
         user_id=user_id,
         notification_type=notification_type,
@@ -143,20 +138,12 @@ def _stage_assessment_event(
     return True
 
 
-def stage_intervention_assessment_submitted(
-    db: Session,
-    assignment: ClassworkAssignment,
-    submission: StudentSubmission,
-) -> bool:
-    return _stage_assessment_event(db, assignment, submission, event="SUBMITTED")
-
-
-def stage_intervention_assessment_result_or_submission(
+def stage_intervention_assessment_result(
     db: Session,
     assignment: ClassworkAssignment,
     submission: StudentSubmission,
 ) -> str | None:
-    """Stage one result notification, or one submitted fallback when no result is authoritative."""
+    """Stage a result notification only when the result is authoritative."""
     scope = _assessment_scope(db, assignment, submission)
     if scope is None:
         return None
@@ -185,8 +172,7 @@ def stage_intervention_assessment_result_or_submission(
         event = "PASSED" if reaches else "NOT_PASSED"
         _stage_assessment_event(db, assignment, submission, event=event)
         return event
-    stage_intervention_assessment_submitted(db, assignment, submission)
-    return "SUBMITTED"
+    return None
 
 
 def stage_intervention_notification(db: Session, intervention: Intervention, *, event: str, predicted_grade: float) -> None:
