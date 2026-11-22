@@ -2,6 +2,7 @@ import type { NotificationItem } from "@/lib/notifications-api";
 
 export type StudentNotificationTab = "all" | "classwork" | "study_support";
 export type TeacherNotificationTab = "all" | "repost" | "interventions";
+export type AdminNotificationTab = "all" | "academic" | "alerts";
 
 const STUDENT_STUDY_SUPPORT_TYPES = new Set<NotificationItem["notification_type"]>([
   "risk_alert",
@@ -88,6 +89,31 @@ export function matchesTeacherNotificationTab(
   return true;
 }
 
+export function matchesAdminNotificationTab(
+  notificationType: NotificationItem["notification_type"],
+  tab: AdminNotificationTab,
+): boolean {
+  if (tab === "all") return true;
+  if (tab === "academic") {
+    return (
+      notificationType.startsWith("grade_submission_") ||
+      notificationType === "grade_released" ||
+      notificationType === "submission_graded" ||
+      notificationType.startsWith("classwork_") ||
+      notificationType === "assignment_due" ||
+      notificationType.startsWith("repost_")
+    );
+  }
+  if (tab === "alerts") {
+    return (
+      notificationType === "risk_alert" ||
+      notificationType.startsWith("intervention_") ||
+      notificationType.startsWith("study_support_")
+    );
+  }
+  return true;
+}
+
 export function formatNotificationTitle(title: string): string {
   const cleaned = title.trim();
   if (!cleaned) return "";
@@ -128,4 +154,75 @@ export function formatNotificationBody(body: string | null | undefined): string 
     .replace(/\s+attached to\s*(?=\.$|$)/gi, "")
     .replace(/\s+\./g, ".")
     .trim();
+}
+
+export interface SystemSettingNotificationMeta {
+  summary: string;
+  changedBy?: string;
+  academicYear?: string;
+  changedOn?: string;
+  reason?: string;
+}
+
+export function parseSystemSettingNotification(
+  body: string | null | undefined,
+  createdAt?: string | null,
+): SystemSettingNotificationMeta {
+  if (!body) {
+    return {
+      summary: "",
+      changedOn: createdAt
+        ? new Date(createdAt).toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          })
+        : undefined,
+    };
+  }
+
+  const lines = body.split("\n").map((l) => l.trim()).filter(Boolean);
+  let summary = "";
+  let changedBy: string | undefined;
+  let academicYear: string | undefined;
+  let changedOn: string | undefined;
+  let reason: string | undefined;
+
+  for (const line of lines) {
+    const cleanLine = line.replace(/^[•\-*]\s*/, "");
+    if (/^Changed by:\s*/i.test(cleanLine)) {
+      changedBy = cleanLine.replace(/^Changed by:\s*/i, "").trim();
+    } else if (/^Academic Year:\s*/i.test(cleanLine)) {
+      academicYear = cleanLine.replace(/^Academic Year:\s*/i, "").trim();
+    } else if (/^Changed on:\s*/i.test(cleanLine)) {
+      changedOn = cleanLine.replace(/^Changed on:\s*/i, "").trim();
+    } else if (/^Reason:\s*/i.test(cleanLine)) {
+      reason = cleanLine.replace(/^Reason:\s*/i, "").trim();
+    } else if (!summary) {
+      summary = cleanLine;
+    } else {
+      summary += ` ${cleanLine}`;
+    }
+  }
+
+  if (!changedOn && createdAt) {
+    try {
+      const d = new Date(createdAt);
+      changedOn = d.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      // ignore invalid date
+    }
+  }
+
+  return { summary, changedBy, academicYear, changedOn, reason };
 }
