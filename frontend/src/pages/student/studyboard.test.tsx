@@ -358,4 +358,219 @@ describe("Student StoryBoard Subject Performance and Layout", () => {
       perfScope.getByRole("button", { name: /View Science 9, no released graded scores yet/i }),
     ).toBeTruthy();
   }, 15000);
+
+  it("limits My Priorities to at most 5 items in priority order while keeping full counts and View all navigation", async () => {
+    const subjects = buildSubjects();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const makeIso = (offsetDays: number) => new Date(nowMs + offsetDays * dayMs).toISOString();
+
+    const todos: TodoItem[] = [
+      {
+        assignment_id: 201,
+        class_id: 10,
+        classwork_id: 201,
+        title: "Far Pending B",
+        subject: "Science 9",
+        subject_id: 2,
+        due_date: makeIso(20),
+        deadline: "In 20 days",
+        type: "ASSIGNMENT",
+        category: "WRITTEN_WORK",
+        is_graded: true,
+        total_points: 20,
+        status: "pending",
+        is_submitted: false,
+        submission_status: null,
+        grade: null,
+        allow_late_submissions: true,
+        is_locked: false,
+        is_actionable: true,
+      },
+      {
+        assignment_id: 202,
+        class_id: 10,
+        classwork_id: 202,
+        title: "Far Pending A",
+        subject: "Science 9",
+        subject_id: 2,
+        due_date: makeIso(15),
+        deadline: "In 15 days",
+        type: "ASSIGNMENT",
+        category: "WRITTEN_WORK",
+        is_graded: true,
+        total_points: 20,
+        status: "pending",
+        is_submitted: false,
+        submission_status: null,
+        grade: null,
+        allow_late_submissions: true,
+        is_locked: false,
+        is_actionable: true,
+      },
+      {
+        assignment_id: 203,
+        class_id: 10,
+        classwork_id: 203,
+        title: "Due Soon 2",
+        subject: "Enhanced Mathematics 9",
+        subject_id: 1,
+        due_date: makeIso(3),
+        deadline: "In 3 days",
+        type: "QUIZ",
+        category: "WRITTEN_WORK",
+        is_graded: true,
+        total_points: 20,
+        status: "pending",
+        is_submitted: false,
+        submission_status: null,
+        grade: null,
+        allow_late_submissions: true,
+        is_locked: false,
+        is_actionable: true,
+      },
+      {
+        assignment_id: 204,
+        class_id: 10,
+        classwork_id: 204,
+        title: "Due Soon 1",
+        subject: "Enhanced Mathematics 9",
+        subject_id: 1,
+        due_date: makeIso(1),
+        deadline: "Tomorrow",
+        type: "QUIZ",
+        category: "WRITTEN_WORK",
+        is_graded: true,
+        total_points: 20,
+        status: "pending",
+        is_submitted: false,
+        submission_status: null,
+        grade: null,
+        allow_late_submissions: true,
+        is_locked: false,
+        is_actionable: true,
+      },
+      {
+        assignment_id: 205,
+        class_id: 10,
+        classwork_id: 205,
+        title: "Overdue Task 2",
+        subject: "Enhanced Mathematics 9",
+        subject_id: 1,
+        due_date: makeIso(-1),
+        deadline: "Yesterday",
+        type: "ASSIGNMENT",
+        category: "WRITTEN_WORK",
+        is_graded: true,
+        total_points: 20,
+        status: "pastdue",
+        is_submitted: false,
+        submission_status: null,
+        grade: null,
+        allow_late_submissions: true,
+        is_locked: false,
+        is_actionable: true,
+      },
+      {
+        assignment_id: 206,
+        class_id: 10,
+        classwork_id: 206,
+        title: "Overdue Task 1",
+        subject: "Science 9",
+        subject_id: 2,
+        due_date: makeIso(-2),
+        deadline: "2 days ago",
+        type: "ASSIGNMENT",
+        category: "WRITTEN_WORK",
+        is_graded: true,
+        total_points: 20,
+        status: "pastdue",
+        is_submitted: false,
+        submission_status: null,
+        grade: null,
+        allow_late_submissions: true,
+        is_locked: false,
+        is_actionable: true,
+      },
+      {
+        assignment_id: 207,
+        class_id: 10,
+        classwork_id: 207,
+        title: "Far Pending C",
+        subject: "Science 9",
+        subject_id: 2,
+        due_date: makeIso(25),
+        deadline: "In 25 days",
+        type: "ASSIGNMENT",
+        category: "WRITTEN_WORK",
+        is_graded: true,
+        total_points: 20,
+        status: "pending",
+        is_submitted: false,
+        submission_status: null,
+        grade: null,
+        allow_late_submissions: true,
+        is_locked: false,
+        is_actionable: true,
+      },
+    ];
+
+    mockUseStudentOverviewData.mockReturnValue({
+      subjects,
+      todos,
+      urgentTodos: [],
+      isLoading: false,
+      error: null,
+    });
+    mockGetMyStudyboardMetrics.mockResolvedValue(buildMetrics());
+    mockListMyActiveInterventions.mockResolvedValue({ items: [] });
+
+    render(
+      <MemoryRouter>
+        <StoryBoard />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("My Priorities")).toBeTruthy();
+    });
+
+    const prioritiesCard = screen
+      .getByText("My Priorities")
+      .closest("[data-slot='card']") as HTMLElement;
+    const scope = within(prioritiesCard);
+
+    // Exactly 5 task rows rendered (excluding the header "View all" button)
+    const renderedTitles = [
+      "Overdue Task 1",
+      "Overdue Task 2",
+      "Due Soon 1",
+      "Due Soon 2",
+      "Far Pending A",
+    ];
+    for (const title of renderedTitles) {
+      expect(scope.getByText(title)).toBeTruthy();
+    }
+    expect(scope.queryByText("Far Pending B")).toBeNull();
+    expect(scope.queryByText("Far Pending C")).toBeNull();
+
+    // Verify exact DOM ordering matches priority sorting
+    const taskButtons = scope
+      .getAllByRole("button")
+      .filter((btn) => btn.getAttribute("aria-label") !== "View all to-do items");
+    expect(taskButtons).toHaveLength(5);
+    expect(taskButtons.map((btn) => btn.querySelector("p")?.textContent)).toEqual(
+      renderedTitles,
+    );
+
+    // Status badges & deadline labels preserved
+    expect(scope.getAllByText("Overdue")).toHaveLength(2);
+    expect(scope.getAllByText("Due Soon")).toHaveLength(2);
+    expect(scope.getAllByText("Pending")).toHaveLength(1);
+    expect(scope.getByText(/2 days ago/)).toBeTruthy();
+
+    // Clicking View all navigates to the full To-Do page
+    fireEvent.click(scope.getByRole("button", { name: "View all to-do items" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/student/todo");
+  }, 15000);
 });

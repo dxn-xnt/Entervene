@@ -148,7 +148,7 @@ export function computeAcademicOverview(
 export function prioritizeStudyboardTasks(
   todos: TodoItem[],
   now: Date = new Date(),
-  limit = 6,
+  limit = 5,
 ): PrioritizedTaskItem[] {
   const nowMs = now.getTime();
   const upcomingCutoffMs = nowMs + UPCOMING_WINDOW_MS;

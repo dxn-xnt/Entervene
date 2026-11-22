@@ -51,7 +51,7 @@ import {
 } from "@/lib/studyboard-insights";
 
 const INITIAL_SUBJECTS_LIMIT = 4;
-const PRIORITY_PREVIEW_LIMIT = 6;
+const PRIORITY_PREVIEW_LIMIT = 5;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
 
 const attendanceLabel = {

@@ -146,4 +146,31 @@ describe("studyboard-insights", () => {
     expect(overview.upcomingCount).toBe(2);
     expect(overview.completionRate).toBe(0);
   });
+
+  it("caps prioritized tasks at 5 after sorting overdue actionable, due soon, and other pending", () => {
+    const todos: TodoItem[] = [
+      makeTodo({ assignment_id: 1, title: "Pending C", status: "pending", due_date: "2026-12-25T08:00:00Z" }),
+      makeTodo({ assignment_id: 2, title: "Pending B", status: "pending", due_date: "2026-12-20T08:00:00Z" }),
+      makeTodo({ assignment_id: 3, title: "Pending A", status: "pending", due_date: "2026-12-15T08:00:00Z" }),
+      makeTodo({ assignment_id: 4, title: "Due Soon 2", status: "pending", due_date: "2026-11-26T08:00:00Z" }),
+      makeTodo({ assignment_id: 5, title: "Due Soon 1", status: "pending", due_date: "2026-11-24T08:00:00Z" }),
+      makeTodo({ assignment_id: 6, title: "Overdue 2", status: "pastdue", due_date: "2026-11-22T08:00:00Z", allow_late_submissions: true, is_actionable: true }),
+      makeTodo({ assignment_id: 7, title: "Overdue 1", status: "pastdue", due_date: "2026-11-21T08:00:00Z", allow_late_submissions: true, is_actionable: true }),
+    ];
+
+    const prioritized = prioritizeStudyboardTasks(todos, now);
+    expect(prioritized).toHaveLength(5);
+    expect(prioritized.map((p) => `${p.bucket}:${p.item.title}`)).toEqual([
+      "overdue:Overdue 1",
+      "overdue:Overdue 2",
+      "due_soon:Due Soon 1",
+      "due_soon:Due Soon 2",
+      "pending:Pending A",
+    ]);
+
+    const overview = computeAcademicOverview(todos, now);
+    expect(overview.totalCount).toBe(7);
+    expect(overview.overdueCount).toBe(2);
+    expect(overview.pendingCount).toBe(5);
+  });
 });
