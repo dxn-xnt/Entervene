@@ -156,7 +156,15 @@ const Notifications = () => {
 
     if (item.notification_type === "submission") {
       const sub = item as SubmissionNotificationItem;
-      navigate(sub.action_url || `/teacher/classworks/${sub.classwork.id}`);
+      const targetUrl = sub.action_url || `/teacher/classworks/${sub.classwork.id}`;
+      const separator = targetUrl.includes("?") ? "&" : "?";
+      const currentPath =
+        (window.location.pathname || "/teacher/notifications") + (window.location.search || "");
+      const fromParam = encodeURIComponent(currentPath);
+      const destination = targetUrl.includes("from=")
+        ? targetUrl
+        : `${targetUrl}${separator}from=${fromParam}`;
+      navigate(destination);
       return;
     }
 

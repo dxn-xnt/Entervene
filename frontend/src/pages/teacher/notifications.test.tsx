@@ -219,6 +219,8 @@ describe("Teacher Notifications - Submissions Tab and Lifecycle", () => {
     const cardTitle = screen.getByText("Science 7: Plant and Animal Cells Diagram - 1 new submission");
     fireEvent.click(cardTitle);
 
-    expect(mockNavigate).toHaveBeenCalledWith("/teacher/classworks/cw-102");
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringMatching(/\/teacher\/classworks\/cw-102/),
+    );
   });
 });
