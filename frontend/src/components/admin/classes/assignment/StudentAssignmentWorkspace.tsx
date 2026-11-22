@@ -1,11 +1,16 @@
 import {
   DndContext,
-  type DragEndEvent,
+  DragOverlay,
   PointerSensor,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
-import { useEffect, useState } from "react";
+import { ExternalLink, GripVertical, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { distributeClassStudents, getUnassignedClassStudents } from "@/lib/api";
 import type {
   ClassAssignmentStudent,
@@ -14,16 +19,229 @@ import type {
   ManualClassSetup,
   ManualSectionDraft,
 } from "@/types/adminClasses";
+import { Alert } from "@/components/retroui/Alert";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Select } from "@/components/retroui/Select";
-import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
-import AssignEvenlyConfirmationModal from "./AssignEvenlyConfirmationModal";
-import AvailableStudentsPanel from "./AvailableStudentsPanel";
-import { recommendedTargets } from "./assignmentDistribution";
-import SectionAssignmentCard from "./SectionAssignmentCard";
-import SectionDetailsModal from "./SectionDetailsModal";
+import { Checkbox } from "@/components/retroui/Checkbox";
+import { Card } from "@/components/retroui/Card";
+import { Badge } from "@/components/retroui/Badge";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import { sortAssignmentStudents } from "./studentSorting";
+
+type PreviewAssignment = {
+  student_id: string;
+  localId: string;
+  student_name: string;
+  gender: string | null;
+  gwa: number | null;
+};
+
+type SectionRow = {
+  localId: string;
+  sectionName: string;
+  existingCount: number;
+  toAddCount: number;
+  finalCount: number;
+  maleCount: number;
+  femaleCount: number;
+  unspecifiedCount: number;
+  averageGwa: number | null;
+};
+
+function assignmentGender(
+  gender: string | null,
+): "Male" | "Female" | "Unspecified" {
+  const value = gender?.trim().toLowerCase();
+  if (value === "male" || value === "m" || value === "boy") return "Male";
+  if (value === "female" || value === "f" || value === "girl") return "Female";
+  return "Unspecified";
+}
+
+function groupedAssignments(assignments: PreviewAssignment[]) {
+  return (["Male", "Female", "Unspecified"] as const)
+    .map((gender) => ({
+      gender,
+      students: assignments
+        .filter((student) => assignmentGender(student.gender) === gender)
+        .sort(
+          (left, right) =>
+            (right.gwa ?? 0) - (left.gwa ?? 0) ||
+            left.student_name.localeCompare(right.student_name) ||
+            left.student_id.localeCompare(right.student_id),
+        ),
+    }))
+    .filter((group) => group.students.length > 0);
+}
+
+function computeSectionRows(
+  sections: ManualSectionDraft[],
+  selectedSectionIds: Set<string>,
+  draftAssignments: PreviewAssignment[],
+  mode: DistributionMode,
+): SectionRow[] {
+  return sections
+    .filter((sec) => selectedSectionIds.has(sec.localId))
+    .map((section) => {
+      const assigned = draftAssignments.filter(
+        (item) => item.localId === section.localId,
+      );
+      const maleCount = assigned.filter(
+        (item) => assignmentGender(item.gender) === "Male",
+      ).length;
+      const femaleCount = assigned.filter(
+        (item) => assignmentGender(item.gender) === "Female",
+      ).length;
+      const unspecifiedCount = assigned.filter(
+        (item) => assignmentGender(item.gender) === "Unspecified",
+      ).length;
+      const existingCount = 0;
+      const toAddCount = assigned.length;
+      const finalCount = existingCount + toAddCount;
+      let averageGwa: number | null = null;
+      if (mode === "gwa" && assigned.length > 0) {
+        const withGwa = assigned.filter((item) => item.gwa != null);
+        if (withGwa.length > 0) {
+          const sum = withGwa.reduce((acc, curr) => acc + (curr.gwa ?? 0), 0);
+          averageGwa = Math.round((sum / withGwa.length) * 100) / 100;
+        }
+      }
+      return {
+        localId: section.localId,
+        sectionName: section.sectionName,
+        existingCount,
+        toAddCount,
+        finalCount,
+        maleCount,
+        femaleCount,
+        unspecifiedCount,
+        averageGwa,
+      };
+    });
+}
+
+function AssignmentRow({ item }: { item: PreviewAssignment }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: `assignment:${item.student_id}`,
+      data: { studentId: item.student_id },
+    });
+  return (
+    <li
+      ref={setNodeRef}
+      style={{
+        transform: transform
+          ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+          : undefined,
+      }}
+      className={`group relative flex items-center justify-between gap-2.5 rounded! border px-3 py-2 text-sm select-none transition-all ${
+        isDragging
+          ? "z-30 opacity-30 border-dashed border-2 border-primary bg-muted/60 scale-95"
+          : "border-border/80 bg-background hover:border-black hover:bg-accent hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5"
+      }`}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <button
+          type="button"
+          aria-label={`Drag ${item.student_name}`}
+          className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded! bg-muted/80 text-muted-foreground touch-none transition-colors group-hover:bg-primary group-hover:text-black active:cursor-grabbing"
+          title={`Drag ${item.student_name} to reassign`}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+        <span className="min-w-0 flex-1 break-words font-semibold text-foreground">
+          {item.student_name}
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {item.gwa != null && (
+          <span className="rounded border border-black/20 bg-muted/50 px-2 py-0.5 text-sm font-bold text-foreground">
+            GWA {item.gwa}
+          </span>
+        )}
+        <span className="hidden text-sm font-bold text-muted-foreground group-hover:inline-block">
+          Drag
+        </span>
+      </div>
+    </li>
+  );
+}
+
+function AssignmentSection({
+  section,
+  assignments,
+  isDraggingAny,
+}: {
+  section: SectionRow;
+  assignments: PreviewAssignment[];
+  isDraggingAny: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `section:${section.localId}`,
+    data: { localId: section.localId },
+  });
+  return (
+    <section
+      ref={setNodeRef}
+      aria-label={`${section.sectionName} assignments`}
+      className={`min-w-0 rounded! border-2 overflow-hidden flex flex-col transition-all ${
+        isOver
+          ? "border-black bg-[#dcfce7] ring-4 ring-emerald-500/30 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+          : isDraggingAny
+            ? "border-dashed border-primary/70 bg-card/90"
+            : "border-border bg-card shadow-none"
+      }`}
+    >
+      <h5 className="border-b-2 border-border bg-primary px-3.5 py-2.5 font-bold flex items-center justify-between text-black">
+        <span className="text-base">{section.sectionName}</span>
+        <Badge size="sm" variant="outline">
+          {assignments.length} to add
+        </Badge>
+      </h5>
+      {isOver && (
+        <div className="m-2 rounded-md border-2 border-dashed border-emerald-600 bg-emerald-100 p-2 text-center text-sm font-bold text-emerald-900 animate-pulse">
+          Drop here to assign to {section.sectionName}
+        </div>
+      )}
+      <div className="flex-1 p-2 space-y-3">
+        {assignments.length ? (
+          groupedAssignments(assignments).map(({ gender, students }) => (
+            <div key={gender} className="space-y-1.5">
+              <h6 className="bg-muted/60 px-3 py-1 text-sm font-semibold text-foreground rounded!">
+                {gender} ({students.length})
+              </h6>
+              <ul className="space-y-1.5">
+                {students.map((item) => (
+                  <AssignmentRow key={item.student_id} item={item} />
+                ))}
+              </ul>
+            </div>
+          ))
+        ) : (
+          <EmptyStateCard
+            compact
+            icon={<Users />}
+            title="Section is empty"
+            description={`Drop students here to assign them to ${section.sectionName}.`}
+          />
+        )}
+      </div>
+      <div
+        className={`border-t border-dashed px-3 py-1.5 text-center text-sm font-medium transition-colors ${
+          isOver
+            ? "border-emerald-600 bg-emerald-100/60 text-emerald-950 font-bold"
+            : "border-border/60 bg-muted/20 text-muted-foreground"
+        }`}
+      >
+        {isOver
+          ? `Release to place student in ${section.sectionName}`
+          : `Drop zone for ${section.sectionName}`}
+      </div>
+    </section>
+  );
+}
 
 export default function StudentAssignmentWorkspace({
   setup,
@@ -46,21 +264,52 @@ export default function StudentAssignmentWorkspace({
     !state || state.academicLevelId !== setup.academicLevelId,
   );
   const [loadError, setLoadError] = useState("");
-  const [retryKey, setRetryKey] = useState(0);
-  const [showAssignEvenlyConfirmation, setShowAssignEvenlyConfirmation] =
-    useState(false);
-  const [distributing, setDistributing] = useState(false);
-  const [distributionMode, setDistributionMode] =
-    useState<DistributionMode>("alphabetical");
+  const [rawStudents, setRawStudents] = useState<ClassAssignmentStudent[]>([]);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(
+    () => new Set(setup.sections.map((s) => s.localId)),
+  );
+  const [mode, setMode] = useState<DistributionMode>("alphabetical");
+  const [suggestedAssignments, setSuggestedAssignments] = useState<
+    PreviewAssignment[]
+  >([]);
+  const [draftAssignments, setDraftAssignments] = useState<PreviewAssignment[]>(
+    [],
+  );
+  const [previewCalculated, setPreviewCalculated] = useState(false);
+  const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [distributeError, setDistributeError] = useState("");
-  const [detailsSectionId, setDetailsSectionId] = useState<string | null>(null);
+
+  const gradeLevel =
+    parseInt(setup.academicLevelName.replace(/\D/g, ""), 10) || 7;
+  const requiresPathway = gradeLevel >= 11;
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
+  const initialCalculatedRef = useRef(false);
+
+  // Load available students
   useEffect(() => {
-    if (state?.academicLevelId === setup.academicLevelId) return;
     let cancelled = false;
+
+    // If state already has loaded students for this level, gather all students from state
+    if (state && state.academicLevelId === setup.academicLevelId) {
+      const allExisting: ClassAssignmentStudent[] = [
+        ...state.unassignedStudents,
+        ...Object.values(state.assignmentsBySection).flat(),
+      ];
+      const unique = Array.from(
+        new Map(allExisting.map((s) => [s.student_id, s])).values(),
+      );
+      setRawStudents(unique);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setLoadError("");
     getUnassignedClassStudents(
       setup.academicLevelId,
       undefined,
@@ -68,9 +317,11 @@ export default function StudentAssignmentWorkspace({
     )
       .then((data) => {
         if (cancelled) return;
+        const sorted = sortAssignmentStudents(data.students);
+        setRawStudents(sorted);
         onChange({
           academicLevelId: setup.academicLevelId,
-          unassignedStudents: sortAssignmentStudents(data.students),
+          unassignedStudents: sorted,
           assignmentsBySection: Object.fromEntries(
             setup.sections.map((section) => [section.localId, []]),
           ),
@@ -78,282 +329,466 @@ export default function StudentAssignmentWorkspace({
         });
       })
       .catch((error: unknown) => {
-        if (!cancelled)
+        if (!cancelled) {
           setLoadError(
             error instanceof Error
               ? error.message
               : "Unable to load unassigned students.",
           );
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+
     return () => {
       cancelled = true;
     };
-  }, [onChange, retryKey, setup, state]);
+  }, [onChange, setup.academicLevelId, setup.academicYear.academic_year_id, setup.sections, state]);
 
-  function retryLoading() {
-    setLoading(true);
-    setLoadError("");
-    setRetryKey((value) => value + 1);
-  }
+  const studentMap = useMemo(
+    () => new Map(rawStudents.map((s) => [s.student_id, s])),
+    [rawStudents],
+  );
 
-  function updateSelection(studentId: string, selected: boolean) {
-    if (!state) return;
-    const selectedStudentIds = new Set(state.selectedStudentIds);
-    if (selected) selectedStudentIds.add(studentId);
-    else selectedStudentIds.delete(studentId);
-    onChange({ ...state, selectedStudentIds });
-  }
+  const calculate = useCallback(
+    async (
+      targetMode: DistributionMode = mode,
+      targetSectionIds: Set<string> = selectedSectionIds,
+    ) => {
+      if (!rawStudents.length || !targetSectionIds.size || requiresPathway) {
+        return;
+      }
 
-  function moveStudents(studentIds: string[], target: string) {
-    if (!state || !studentIds.length) return;
-    const movingIds = new Set(studentIds);
-    const allStudents = new Map<string, ClassAssignmentStudent>();
-    state.unassignedStudents.forEach((student) =>
-      allStudents.set(student.student_id, student),
-    );
-    Object.values(state.assignmentsBySection)
-      .flat()
-      .forEach((student) => allStudents.set(student.student_id, student));
-    const moving = studentIds
-      .map((id) => allStudents.get(id))
-      .filter((student): student is ClassAssignmentStudent => Boolean(student));
-    const assignmentsBySection = Object.fromEntries(
-      setup.sections.map((section) => [
-        section.localId,
-        sortAssignmentStudents(
-          (state.assignmentsBySection[section.localId] ?? []).filter(
-            (student) => !movingIds.has(student.student_id),
+      setBusy(true);
+      setDistributeError("");
+      try {
+        const resp = await distributeClassStudents({
+          academic_year_id: setup.academicYear.academic_year_id,
+          academic_level_id: setup.academicLevelId,
+          mode: targetMode,
+          sections: setup.sections
+            .filter((s) => targetSectionIds.has(s.localId))
+            .map((s) => ({
+              local_id: s.localId,
+              section_name: s.sectionName,
+            })),
+          unassigned_student_ids: rawStudents.map((s) => s.student_id),
+          assignments_by_section: Object.fromEntries(
+            setup.sections.map((s) => [s.localId, []]),
           ),
-        ),
-      ]),
-    );
-    let unassignedStudents = sortAssignmentStudents(
-      state.unassignedStudents.filter(
-        (student) => !movingIds.has(student.student_id),
+        });
+
+        const nextAssignments: PreviewAssignment[] = [];
+        for (const [secId, studentIds] of Object.entries(
+          resp.assignments_by_section,
+        )) {
+          for (const sid of studentIds) {
+            const student = studentMap.get(sid);
+            if (student) {
+              nextAssignments.push({
+                student_id: student.student_id,
+                localId: secId,
+                student_name: `${student.last_name}, ${student.first_name}${student.middle_name ? ` ${student.middle_name}` : ""}`,
+                gender: student.gender,
+                gwa: resp.student_gwas?.[student.student_id] ?? null,
+              });
+            }
+          }
+        }
+
+        setSuggestedAssignments(nextAssignments);
+        setDraftAssignments(nextAssignments);
+        setPreviewCalculated(true);
+      } catch (cause: unknown) {
+        setDistributeError(
+          cause instanceof Error
+            ? cause.message
+            : "Unable to calculate distribution.",
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [mode, rawStudents, requiresPathway, selectedSectionIds, setup.academicLevelId, setup.academicYear.academic_year_id, setup.sections, studentMap],
+  );
+
+  // Auto-calculate on initial load once students are available
+  useEffect(() => {
+    if (
+      !initialCalculatedRef.current &&
+      !loading &&
+      rawStudents.length > 0 &&
+      setup.sections.length > 0 &&
+      !requiresPathway
+    ) {
+      initialCalculatedRef.current = true;
+      void calculate(mode, selectedSectionIds);
+    }
+  }, [calculate, loading, mode, rawStudents.length, requiresPathway, selectedSectionIds, setup.sections.length]);
+
+  function toggleSection(localId: string) {
+    setSelectedSectionIds((current) => {
+      const next = new Set(current);
+      if (next.has(localId)) next.delete(localId);
+      else next.add(localId);
+      return next;
+    });
+    setPreviewCalculated(false);
+    setDraftAssignments([]);
+    setDistributeError("");
+  }
+
+  function moveAssignment(studentId: string, targetLocalId: string) {
+    if (!selectedSectionIds.has(targetLocalId)) return;
+    setDraftAssignments((current) =>
+      current.map((item) =>
+        item.student_id === studentId
+          ? { ...item, localId: targetLocalId }
+          : item,
       ),
     );
-    if (target === "unassigned")
-      unassignedStudents = sortAssignmentStudents([
-        ...unassignedStudents,
-        ...moving,
-      ]);
-    else if (target in assignmentsBySection)
-      assignmentsBySection[target] = sortAssignmentStudents([
-        ...assignmentsBySection[target],
-        ...moving,
-      ]);
-    const selectedStudentIds = new Set(state.selectedStudentIds);
-    movingIds.forEach((id) => selectedStudentIds.delete(id));
-    onChange({
-      ...state,
-      unassignedStudents,
-      assignmentsBySection,
-      selectedStudentIds,
-    });
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveStudentId(
+      (event.active.data.current?.studentId as string) ?? null,
+    );
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    const studentId = event.active.data.current?.studentId as
-      | string
-      | undefined;
-    const target = event.over?.data.current?.location as string | undefined;
-    if (!studentId || !target || !state) return;
-    moveStudents(
-      state.selectedStudentIds.has(studentId)
-        ? [...state.selectedStudentIds]
-        : [studentId],
-      target,
-    );
+    setActiveStudentId(null);
+    const studentId = event.active.data.current?.studentId as string | undefined;
+    const targetLocalId = event.over?.data.current?.localId as string | undefined;
+    if (studentId && targetLocalId) {
+      moveAssignment(studentId, targetLocalId);
+    }
   }
 
-  if (loading) return <StatePanel message="Loading unassigned students..." />;
-  if (loadError) {
-    return (
-      <StatePanel
-        message="Unable to load unassigned students."
-        detail={loadError}
-      >
-        <Button onClick={retryLoading}>Retry</Button>
-        <Button variant="outline" onClick={onBack}>
-          Back to Class Details
-        </Button>
-      </StatePanel>
-    );
+  function handleDragCancel() {
+    setActiveStudentId(null);
   }
-  if (!state) return null;
-  // A section can be prepared before enrollment starts. Assignments here are optional.
-  const assignedCount = Object.values(state.assignmentsBySection).reduce(
-    (count, students) => count + students.length,
-    0,
+
+  const activeStudent = activeStudentId
+    ? draftAssignments.find((item) => item.student_id === activeStudentId)
+    : null;
+
+  const classRows = computeSectionRows(
+    setup.sections,
+    selectedSectionIds,
+    draftAssignments,
+    mode,
   );
-  const totalStudentCount = assignedCount + state.unassignedStudents.length;
-  const targets = recommendedTargets(totalStudentCount, setup.sections);
-  const detailsSection = setup.sections.find(
-    (section) => section.localId === detailsSectionId,
-  );
+
+  const finalCounts = classRows.map((item) => item.finalCount);
+  const imbalance = finalCounts.length
+    ? Math.max(...finalCounts) - Math.min(...finalCounts)
+    : 0;
+
+  const customCount = suggestedAssignments.filter(
+    (item) =>
+      draftAssignments.find((draft) => draft.student_id === item.student_id)
+        ?.localId !== item.localId,
+  ).length;
 
   function continueToReview() {
+    const assignmentsBySection: Record<string, ClassAssignmentStudent[]> = {};
+    for (const section of setup.sections) {
+      const sectionDrafts = draftAssignments.filter(
+        (a) => a.localId === section.localId,
+      );
+      assignmentsBySection[section.localId] = sortAssignmentStudents(
+        sectionDrafts
+          .map((a) => studentMap.get(a.student_id))
+          .filter((s): s is ClassAssignmentStudent => Boolean(s)),
+      );
+    }
+    const assignedIds = new Set(draftAssignments.map((a) => a.student_id));
+    const unassignedStudents = sortAssignmentStudents(
+      rawStudents.filter((s) => !assignedIds.has(s.student_id)),
+    );
+
+    onChange({
+      academicLevelId: setup.academicLevelId,
+      unassignedStudents,
+      assignmentsBySection,
+      selectedStudentIds: new Set(),
+    });
     onReview();
   }
 
-  async function assignEvenly(mode: DistributionMode) {
-    if (!state || !state.unassignedStudents.length || !setup.sections.length)
-      return;
+  if (loading) {
+    return (
+      <div className="grid gap-3 rounded border border-black bg-[#fff8d7] p-5 text-sm m-4">
+        <div className="flex items-center gap-2">
+          <span className="inline-block size-4 animate-spin rounded-full border-2 border-black border-t-transparent" />
+          <p className="font-bold">Loading unassigned students...</p>
+        </div>
+      </div>
+    );
+  }
 
-    setShowAssignEvenlyConfirmation(false);
-
-    setDistributing(true);
-    setDistributionMode(mode);
-    setDistributeError("");
-    try {
-      const resp = await distributeClassStudents({
-        academic_year_id: setup.academicYear.academic_year_id,
-        academic_level_id: setup.academicLevelId,
-        mode,
-        sections: setup.sections.map((s) => ({
-          local_id: s.localId,
-          section_name: s.sectionName,
-        })),
-        unassigned_student_ids: state.unassignedStudents.map(
-          (s) => s.student_id,
-        ),
-        assignments_by_section: Object.fromEntries(
-          Object.entries(state.assignmentsBySection).map(
-            ([secId, students]) => [secId, students.map((s) => s.student_id)],
-          ),
-        ),
-      });
-
-      const allStudentsMap = new Map<string, ClassAssignmentStudent>();
-      state.unassignedStudents.forEach((s) =>
-        allStudentsMap.set(s.student_id, s),
-      );
-      Object.values(state.assignmentsBySection)
-        .flat()
-        .forEach((s) => allStudentsMap.set(s.student_id, s));
-
-      const updatedAssignments: Record<string, ClassAssignmentStudent[]> = {};
-      for (const section of setup.sections) {
-        const ids = resp.assignments_by_section[section.localId] || [];
-        updatedAssignments[section.localId] = sortAssignmentStudents(
-          ids
-            .map((id) => allStudentsMap.get(id))
-            .filter((s): s is ClassAssignmentStudent => Boolean(s)),
-        );
-      }
-
-      onChange({
-        ...state,
-        unassignedStudents: [],
-        assignmentsBySection: updatedAssignments,
-        selectedStudentIds: new Set(),
-      });
-    } catch (err) {
-      setDistributeError(
-        err instanceof Error
-          ? err.message
-          : "Failed to distribute students evenly.",
-      );
-    } finally {
-      setDistributing(false);
-    }
+  if (loadError) {
+    return (
+      <div className="grid gap-3 rounded border border-black bg-[#fff8d7] p-5 text-sm m-4">
+        <p className="font-bold">Unable to load unassigned students.</p>
+        <p className="text-xs text-black/70">{loadError}</p>
+        <div className="flex gap-2">
+          <Button onClick={() => window.location.reload()}>Retry</Button>
+          <Button variant="outline" onClick={onBack}>
+            Back to Class Details
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <>
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 p-4">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              Student assignment is optional. You can add students after saving
-              the class.
-            </p>
-          </div>
+      <div className="grid max-h-[70vh] gap-4 overflow-y-auto p-5 text-sm">
+        <p>
+          <b>Academic Year:</b> {setup.academicYear.year_label}{" "}
+          <span className="mx-2">•</span> <b>Grade:</b> {setup.academicLevelName}
+        </p>
+        <p>
+          Unassigned students available when opened: {rawStudents.length}.
+          Preview checks the live, complete grade-level pool.
+        </p>
+        <AdminValidationAlert message={distributeError} />
 
-        </div>
-
-        {distributing && (
-          <div className="flex items-center gap-2 rounded border-2 border-black bg-[#fff8d7] p-2.5 text-xs font-bold">
-            <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-black border-t-transparent" />
-            <span>
-              {distributionMode === "gwa"
-                ? "Balancing students by academic performance (GWA)..."
-                : "Balancing students alphabetically..."}
-            </span>
-          </div>
-        )}
-        <AssignmentToolbar
-          sections={setup.sections}
-          selectedCount={state.selectedStudentIds.size}
-          canAssignEvenly={
-            state.unassignedStudents.length > 0 &&
-            setup.sections.length > 0 &&
-            !distributing
-          }
-          onMove={(target) => moveStudents([...state.selectedStudentIds], target)}
-          onClear={() => onChange({ ...state, selectedStudentIds: new Set() })}
-          onAssignEvenly={() => setShowAssignEvenlyConfirmation(true)}
-        />
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="grid min-h-0 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
-            <AvailableStudentsPanel
-              students={state.unassignedStudents}
-              assignedCount={assignedCount}
-              totalStudentCount={totalStudentCount}
-              selectedIds={state.selectedStudentIds}
-              onSelect={updateSelection}
-              onSelectVisible={(ids, selected) => {
-                const selectedStudentIds = new Set(state.selectedStudentIds);
-                ids.forEach((id) => {
-                  if (selected) selectedStudentIds.add(id);
-                  else selectedStudentIds.delete(id);
-                });
-                onChange({ ...state, selectedStudentIds });
-              }}
-            />
-            <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 rounded! border-2 border-black bg-white p-3">
-              <h3 className="font-bold">Sections</h3>
-              <div className="grid min-h-0 grid-cols-1 content-start gap-3 overflow-y-auto pr-1">
-                {setup.sections.map((section) => (
-                  <SectionAssignmentCard
-                    key={section.localId}
-                    section={section}
-                    students={state.assignmentsBySection[section.localId] ?? []}
-                    selectedIds={state.selectedStudentIds}
-                    recommendedTarget={targets[section.localId]}
-                    showEmptyError={false}
-                    onSelect={updateSelection}
-                    onRemove={(studentId) =>
-                      moveStudents([studentId], "unassigned")
-                    }
-                    onViewDetails={() => setDetailsSectionId(section.localId)}
-                  />
+        {requiresPathway ? (
+          <Alert status="info">
+            Automatic distribution is unavailable for this pathway-based grade
+            because student pathway assignments are not recorded.
+          </Alert>
+        ) : setup.sections.length === 0 ? (
+          <Alert status="info">
+            Add at least one section in the previous step before distributing
+            students.
+          </Alert>
+        ) : rawStudents.length === 0 ? (
+          <Alert status="info">
+            There are no unassigned students available for this academic year
+            and grade level. You can continue to create the classes without
+            student assignments.
+          </Alert>
+        ) : (
+          <>
+            <fieldset className="space-y-2">
+              <legend className="mb-2 font-semibold">
+                Existing classes to include
+              </legend>
+              <Card className="grid w-full gap-3 shadow-none">
+                {setup.sections.map((item) => (
+                  <label key={item.localId} className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedSectionIds.has(item.localId)}
+                      onCheckedChange={() => toggleSection(item.localId)}
+                    />
+                    {item.sectionName}
+                  </label>
                 ))}
-              </div>
-            </div>
-          </div>
-          {distributeError && (
-            <div className="grid gap-1">
-              <AdminValidationAlert message={distributeError} />
-              <button
-                type="button"
-                className="text-sm font-medium text-destructive underline"
-                onClick={() => setDistributeError("")}
+              </Card>
+            </fieldset>
+
+            <fieldset className="space-y-2">
+              <legend className="mb-2 font-semibold">Distribution method</legend>
+              <Card
+                role="radiogroup"
+                aria-label="Distribution method"
+                className="grid w-full gap-3 shadow-none"
               >
-                Dismiss
-              </button>
-            </div>
-          )}
-          {resetWarning && (
-            <p className="text-sm font-normal text-muted-foreground px-2 -mt-1">
-              {resetWarning}
-            </p>
-          )}
-        </DndContext>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    role="radio"
+                    aria-checked={mode === "alphabetical"}
+                    checked={mode === "alphabetical"}
+                    onCheckedChange={() => {
+                      setMode("alphabetical");
+                      setPreviewCalculated(false);
+                      setDistributeError("");
+                    }}
+                  />
+                  Balance alphabetically and by gender
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    role="radio"
+                    aria-checked={mode === "gwa"}
+                    checked={mode === "gwa"}
+                    onCheckedChange={() => {
+                      setMode("gwa");
+                      setPreviewCalculated(false);
+                      setDistributeError("");
+                    }}
+                  />
+                  Balance by prior academic performance (GWA)
+                </label>
+              </Card>
+            </fieldset>
+
+            <Button
+              className="gap-2 w-full justify-center"
+              variant="outline"
+              disabled={busy || selectedSectionIds.size === 0}
+              onClick={() => void calculate(mode, selectedSectionIds)}
+            >
+              <ExternalLink className="size-4" />
+              {busy ? "Working..." : "Preview Distribution"}
+            </Button>
+
+            {selectedSectionIds.size === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Choose at least one class.
+              </p>
+            )}
+
+            {previewCalculated && (
+              <section
+                className="grid gap-3"
+                aria-label="Distribution preview"
+              >
+                <div>
+                  <h3 className="font-bold">Proposed assignments</h3>
+                  <p>
+                    {rawStudents.length} eligible unassigned students. No changes
+                    have been saved.
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto rounded! border-2 border-border">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-primary">
+                      <tr>
+                        <th className="p-2">Class</th>
+                        <th className="p-2">Existing</th>
+                        <th className="p-2">To add</th>
+                        <th className="p-2">Final</th>
+                        <th className="p-2">M / F / U</th>
+                        {mode === "gwa" && <th className="p-2">Avg. GWA</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classRows.map((item) => (
+                        <tr
+                          key={item.localId}
+                          className="border-t border-border"
+                        >
+                          <th className="p-2">{item.sectionName}</th>
+                          <td className="p-2">{item.existingCount}</td>
+                          <td className="p-2">{item.toAddCount}</td>
+                          <td className="p-2">{item.finalCount}</td>
+                          <td className="p-2">
+                            {item.maleCount} / {item.femaleCount} /{" "}
+                            {item.unspecifiedCount}
+                          </td>
+                          {mode === "gwa" && (
+                            <td className="p-2">
+                              {item.averageGwa != null ? item.averageGwa : "—"}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {imbalance > 1 && (
+                  <p className="text-muted-foreground">
+                    Existing rosters limit exact balance. Current assignments
+                    will remain in place.
+                  </p>
+                )}
+
+                {customCount > 0 && (
+                  <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                    <span>
+                      {customCount} manual{" "}
+                      {customCount === 1 ? "adjustment" : "adjustments"} made
+                      to proposed distribution.
+                    </span>
+                    <button
+                      type="button"
+                      className="cursor-pointer font-semibold text-primary underline hover:text-primary-hover"
+                      onClick={() => setDraftAssignments(suggestedAssignments)}
+                    >
+                      Reset to suggested distribution
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid gap-3">
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <p>
+                      Drag and drop students between sections to customize
+                      proposed assignments.
+                    </p>
+                    <p>
+                      Click and hold any student card to drag them into another
+                      section. Section student counts and GWA summaries update
+                      automatically in real-time.
+                    </p>
+                  </div>
+
+                  <DndContext
+                    sensors={sensors}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {classRows.map((classItem) => {
+                        const sectionAssignments = draftAssignments.filter(
+                          (item) => item.localId === classItem.localId,
+                        );
+                        return (
+                          <AssignmentSection
+                            key={classItem.localId}
+                            section={classItem}
+                            assignments={sectionAssignments}
+                            isDraggingAny={Boolean(activeStudentId)}
+                          />
+                        );
+                      })}
+                    </div>
+                    <DragOverlay
+                      dropAnimation={{
+                        duration: 150,
+                        easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+                      }}
+                    >
+                      {activeStudent ? (
+                        <div className="flex items-center justify-between gap-3 rounded-lg border-2 border-black bg-primary px-3.5 py-2.5 text-sm font-bold text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] rotate-1 scale-105 cursor-grabbing z-50 select-none">
+                          <div className="flex items-center gap-2">
+                            <span className="flex size-5 items-center justify-center rounded bg-black text-primary-foreground">
+                              <GripVertical className="size-3.5" />
+                            </span>
+                            <span className="font-bold">
+                              {activeStudent.student_name}
+                            </span>
+                          </div>
+                          {activeStudent.gwa != null && (
+                            <span className="rounded bg-black px-2 py-0.5 text-sm text-white">
+                              GWA {activeStudent.gwa}
+                            </span>
+                          )}
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
+                </div>
+              </section>
+            )}
+          </>
+        )}
+
+        {resetWarning && (
+          <p className="text-sm font-normal text-muted-foreground px-2 -mt-1">
+            {resetWarning}
+          </p>
+        )}
       </div>
+
       <Dialog.Footer className="justify-between">
         <Button variant="outline" autoIcon={false} onClick={onClose}>
           Close
@@ -365,111 +800,6 @@ export default function StudentAssignmentWorkspace({
           <Button onClick={continueToReview}>Continue to Review</Button>
         </div>
       </Dialog.Footer>
-      {showAssignEvenlyConfirmation && (
-        <AssignEvenlyConfirmationModal
-          onCancel={() => setShowAssignEvenlyConfirmation(false)}
-          onConfirm={assignEvenly}
-        />
-      )}
-      {detailsSection && (
-        <SectionDetailsModal
-          section={detailsSection}
-          students={state.assignmentsBySection[detailsSection.localId] ?? []}
-          recommendedTarget={targets[detailsSection.localId]}
-          onClose={() => setDetailsSectionId(null)}
-        />
-      )}
     </>
-  );
-}
-
-function StatePanel({
-  message,
-  detail,
-  children,
-}: {
-  message: string;
-  detail?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-3 rounded border border-black bg-[#fff8d7] p-5 text-sm">
-      <p className="font-bold">{message}</p>
-      {detail && detail !== message && (
-        <p className="text-xs text-black/70">{detail}</p>
-      )}
-      {children && <div className="flex gap-2">{children}</div>}
-    </div>
-  );
-}
-
-function AssignmentToolbar({
-  sections,
-  selectedCount,
-  canAssignEvenly,
-  onMove,
-  onClear,
-  onAssignEvenly,
-}: {
-  sections: ManualSectionDraft[];
-  selectedCount: number;
-  canAssignEvenly: boolean;
-  onMove: (target: string) => void;
-  onClear: () => void;
-  onAssignEvenly: () => void;
-}) {
-  const [moveTarget, setMoveTarget] = useState("");
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          disabled={!selectedCount}
-          value={moveTarget}
-          onValueChange={(value) => {
-            if (!value) return;
-            setMoveTarget(value);
-            onMove(value);
-            setMoveTarget("");
-          }}
-        >
-          <Select.Trigger className="w-auto shadow-none">
-            <Select.Value placeholder="Move Selected To..." />
-          </Select.Trigger>
-          <Select.Content
-            position="item-aligned"
-            className="max-h-72 overflow-y-auto"
-          >
-            <Select.Group>
-              {sections.map((section) => (
-                <Select.Item key={section.localId} value={section.localId}>
-                  {section.sectionName}
-                </Select.Item>
-              ))}
-            </Select.Group>
-          </Select.Content>
-        </Select>
-        <span className="text-xs font-bold">{selectedCount} selected</span>
-      </div>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!selectedCount}
-          onClick={onClear}
-          className="disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Clear
-        </Button>
-        <Button
-          size="sm"
-          disabled={!canAssignEvenly}
-          onClick={onAssignEvenly}
-          className="gap-1.5 bg-[#79bd80] hover:bg-[#79bd80] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Assign Evenly
-        </Button>
-      </div>
-    </div>
   );
 }

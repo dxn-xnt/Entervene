@@ -56,6 +56,11 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
       url: routes.admin.settings,
       icon: <Settings />,
     },
+    {
+      title: "Notifications",
+      url: routes.admin.notifications,
+      icon: <Bell />,
+    },
   ],
   teacher: [
     {

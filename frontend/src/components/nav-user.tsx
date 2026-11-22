@@ -150,21 +150,21 @@ export function NavUser() {
                 <CircleUserRoundIcon />
                 Account
               </DropdownMenuItem>
-              {user?.role !== "admin" && (
-                <DropdownMenuItem
-                  className="p-2"
-                  onClick={() =>
-                    navigate(
-                      user?.role === "teacher"
-                        ? routes.teacher.notifications
-                        : routes.student.notifications,
-                    )
-                  }
-                >
-                  <BellIcon />
-                  Notifications
-                </DropdownMenuItem>
-              )}
+              <DropdownMenuItem
+                className="p-2"
+                onClick={() =>
+                  navigate(
+                    user?.role === "teacher"
+                      ? routes.teacher.notifications
+                      : user?.role === "student"
+                        ? routes.student.notifications
+                        : routes.admin.notifications,
+                  )
+                }
+              >
+                <BellIcon />
+                Notifications
+              </DropdownMenuItem>
             </DropdownMenuGroup>
 
             <DropdownMenuSeparator className="bg-black" />

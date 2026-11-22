@@ -391,7 +391,7 @@ export default function AdminClassDetail() {
                   {!isArchived && (
                     <Button size="header" onClick={() => tab === "students" ? void openEditStudentList() : setShowEditClass(true)} className="w-full whitespace-nowrap md:w-auto">
                       {tab === "students" ? <Users className="size-4" /> : <Pencil className="size-4" />}
-                      {tab === "students" ? "Add / Manage Students" : "Edit Class"}
+                      {tab === "students" ? "Manage Students" : "Edit Class"}
                     </Button>
                   )}
                 </div>
@@ -518,7 +518,8 @@ function OverviewTab({
       setPerformanceError("");
       setPerformance(null);
       try {
-        const data = await getOverviewStats({ scope: "class", class_id: Number(classId),
+        const data = await getOverviewStats({
+          scope: "class", class_id: Number(classId),
           academic_period_id: selectedPeriodId ?? undefined,
           academic_year_id: selectedYearId ?? undefined,
         });
@@ -561,7 +562,7 @@ function OverviewTab({
           {/* Performance chart */}
           <RetroCard className="flex flex-col gap-2 p-4">
             <div>
-            <Text as="h4" className="font-sans text-lg font-bold">
+              <Text as="h4" className="font-sans text-lg font-bold">
                 Period Class Performance
               </Text>
               <Text as="p" className="text-sm text-muted-foreground">

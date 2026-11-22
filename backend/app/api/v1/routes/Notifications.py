@@ -16,6 +16,9 @@ from app.services.intervention.StudySupportReminderService import (
 from app.services.student_record.GradeSubmissionNotificationService import (
     check_and_generate_grade_submission_notifications,
 )
+from app.services.settings.SystemSettingNotificationService import (
+    check_and_generate_system_setting_notifications,
+)
 
 router = APIRouter()
 
@@ -24,7 +27,7 @@ router = APIRouter()
 def list_notifications(
     unread_only: bool = Query(False, description="Return only unread notifications"),
     limit: int = Query(50, ge=1, le=200, description="Max number of notifications to return"),
-    current_user: dict = Depends(require_role("teacher", "student")),
+    current_user: dict = Depends(require_role("admin", "teacher", "student")),
     db: Session = Depends(get_db),
 ):
     """
@@ -36,7 +39,12 @@ def list_notifications(
     user_id = current_user["sub"]
 
     # Lazy generation of grade submission timing alerts for teachers
-    check_and_generate_grade_submission_notifications(db=db, user_id=user_id)
+    if current_user.get("role") == "teacher":
+        check_and_generate_grade_submission_notifications(db=db, user_id=user_id)
+
+    # Idempotent backfill of system setting change notices for admins
+    if current_user.get("role") == "admin":
+        check_and_generate_system_setting_notifications(db=db, user_id=user_id)
 
     # Idempotent backfill for active Study Support records created before activation notices existed
     if current_user.get("role") == "student":
@@ -54,7 +62,7 @@ def list_notifications(
 @router.patch("/{notification_id}/read", response_model=NotificationResponse)
 def read_notification(
     notification_id: str,
-    current_user: dict = Depends(require_role("teacher", "student")),
+    current_user: dict = Depends(require_role("admin", "teacher", "student")),
     db: Session = Depends(get_db),
 ):
     """Mark a single notification as read. Returns 404 if it doesn't belong to the caller."""
@@ -69,7 +77,7 @@ def read_notification(
 
 @router.patch("/read-all", response_model=dict)
 def read_all_notifications(
-    current_user: dict = Depends(require_role("teacher", "student")),
+    current_user: dict = Depends(require_role("admin", "teacher", "student")),
     db: Session = Depends(get_db),
 ):
     """Mark ALL of the authenticated user's unread notifications as read at once."""

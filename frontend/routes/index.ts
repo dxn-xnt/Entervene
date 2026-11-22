@@ -28,6 +28,7 @@ export const routes = {
     subjectSectionPredictions: "/admin/predictions/subject/:subjectId/section/:classId",
     profile: "/admin/profile",
     substitutions: "/admin/substitutions",
+    notifications: "/admin/notifications",
   },
 
   teacher: {

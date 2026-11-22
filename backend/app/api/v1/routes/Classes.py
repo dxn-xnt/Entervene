@@ -185,7 +185,15 @@ def distribute_students(
         mode=payload.mode,
         academic_year_id=payload.academic_year_id,
     )
-    return DistributeStudentsResponse(assignments_by_section=assignments)
+    student_gwas: dict[str, float | None] = {}
+    all_sids = set(payload.unassigned_student_ids)
+    for assignments_list in payload.assignments_by_section.values():
+        all_sids.update(assignments_list)
+    for sid in all_sids:
+        val = resolve_student_gwa(db, sid, payload.academic_year_id)
+        if val is not None:
+            student_gwas[str(sid)] = val
+    return DistributeStudentsResponse(assignments_by_section=assignments, student_gwas=student_gwas)
 
 
 @router.post("/{class_id}/distribution-preview", response_model=ExistingClassDistributionPreview)
