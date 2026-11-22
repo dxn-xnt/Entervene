@@ -36,11 +36,6 @@ from app.services.classwork.ClassworkShared import (
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
-from app.services.grading.PassingThresholdReader import read_passing_threshold_context
-from app.services.grading.PassingThresholdResolver import (
-    PassingThresholdConfigurationError,
-    resolve_passing_threshold,
-)
 from app.services.grading.RemedialExamination import (
     effective_grade_changed,
     ensure_remedial_period_open,
@@ -474,49 +469,12 @@ def _intervention_quiz_passing_threshold(
     assignment: ClassworkAssignment,
     classwork: Classwork,
 ) -> Decimal | None:
-    """Resolve the subject passing threshold for an Intervention/Study Support quiz."""
+    """Resolve the authoritative passing threshold for an Intervention/Study Support quiz."""
     if assignment.source_intervention_id is None or not is_quiz_type(classwork.classwork_type):
         return None
-    academic_year_id: int | None = None
-    if assignment.class_id is not None:
-        class_row = db.get(Class, assignment.class_id)
-        if class_row is not None:
-            academic_year_id = class_row.academic_year_id
-    if academic_year_id is None and assignment.academic_period_id is not None:
-        period_row = db.get(AcademicPeriod, assignment.academic_period_id)
-        if period_row is not None:
-            academic_year_id = period_row.academic_year_id
-    if academic_year_id is None or classwork.subject_id is None:
-        return None
-    try:
-        context = read_passing_threshold_context(
-            db,
-            academic_year_id=academic_year_id,
-            subject_ids=[classwork.subject_id],
-            academic_period_id=assignment.academic_period_id,
-        )
-        resolution = resolve_passing_threshold(
-            context,
-            academic_year_id=academic_year_id,
-            scope="subject",
-            subject_id=classwork.subject_id,
-        )
-        return resolution.threshold
-    except PassingThresholdConfigurationError:
-        return None
+    from app.services.intervention.RemediationAttemptPolicy import remediation_passing_threshold
 
-
-def _quiz_max_points(classwork: Classwork, quiz: Quiz | None) -> Decimal:
-    if classwork.total_points is not None:
-        total = Decimal(str(classwork.total_points))
-        if total > 0:
-            return total
-    if quiz is not None and quiz.questions:
-        return sum(
-            (Decimal(str(link.question.points)) for link in quiz.questions if link.question is not None),
-            Decimal("0"),
-        )
-    return Decimal("0")
+    return remediation_passing_threshold(db, assignment, classwork)
 
 
 def evaluate_intervention_quiz_pass(
@@ -530,14 +488,11 @@ def evaluate_intervention_quiz_pass(
     """Return (is_passed, passing_threshold) for an Intervention/Study Support quiz."""
     if assignment.source_intervention_id is None or not is_quiz_type(classwork.classwork_type):
         return False, None
-    threshold = _intervention_quiz_passing_threshold(db, assignment, classwork)
-    if threshold is None or submission is None or submission.status != "graded" or submission.grade is None:
-        return False, threshold
-    max_points = _quiz_max_points(classwork, quiz)
-    if max_points <= 0:
-        return False, threshold
-    is_passed = Decimal(str(submission.grade)) * Decimal("100") >= threshold * max_points
-    return is_passed, threshold
+    from app.services.intervention.RemediationAttemptPolicy import evaluate_remediation_assessment_pass
+
+    return evaluate_remediation_assessment_pass(
+        db, assignment, classwork, submission, quiz=quiz,
+    )
 
 
 def _submission_for(
