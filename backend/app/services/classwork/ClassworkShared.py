@@ -20,6 +20,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 
 READING_TYPE = "READING"
 QUIZ_TYPE = "QUIZ"
+DEADLINE_FUTURE_ERROR = "The deadline must be later than the current date and time."
 
 
 def normalize_classwork_type(value: str) -> str:
@@ -59,6 +60,27 @@ def validate_schedule(
     # publish_date is kept only for older clients; visibility now uses is_published.
     if due_date and lock_date and lock_date > due_date:
         raise HTTPException(status_code=400, detail="Lock date must be before or equal to due date")
+
+
+def same_instant(left: Optional[datetime], right: Optional[datetime]) -> bool:
+    """Compare two optional datetimes by their UTC instant."""
+    if left is None or right is None:
+        return left is None and right is None
+    return aware_utc(left) == aware_utc(right)
+
+
+def validate_future_deadline(
+    due_date: Optional[datetime],
+    *,
+    now: Optional[datetime] = None,
+) -> None:
+    """Reject a newly configured or modified deadline that is not strictly in the future."""
+    if due_date is None:
+        return
+    normalized_due = aware_utc(due_date)
+    current_time = aware_utc(now) if now is not None else datetime.now(timezone.utc)
+    if normalized_due is not None and current_time is not None and normalized_due <= current_time:
+        raise HTTPException(status_code=400, detail=DEADLINE_FUTURE_ERROR)
 
 
 def dedupe_ids(ids: Optional[list[int]]) -> list[int]:
@@ -241,9 +263,11 @@ def cleanup_saved_files(file_paths: list[str]) -> None:
 
 
 def aware_utc(value: Optional[datetime]) -> Optional[datetime]:
-    if value and value.tzinfo is None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
-    return value
+    return value.astimezone(timezone.utc)
 
 
 def assignment_is_available(ca: ClassworkAssignment, now: Optional[datetime] = None) -> bool:

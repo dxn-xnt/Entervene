@@ -1080,7 +1080,7 @@ def test_atomic_classwork_create_persists_assignments_materials_and_lesson(authz
             "class_ids": f"[{c['allowed_class'].class_id}]",
             "academic_period_id": str(c["period"].academic_period_id),
             "lesson_ids": f"[{lesson.lesson_id}]",
-            "due_date": "2025-10-31T00:00:00",
+            "due_date": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
             "max_attempts": "2",
         },
         files=[("files", ("guide.pdf", b"%PDF", "application/pdf"))],

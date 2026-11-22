@@ -1,4 +1,5 @@
 import type { ActivityRubricLevel, CreateDraft, EditDraft, TeacherClasswork, TrackingStudent } from "@/types/classwork";
+import { formatLocalDateTimeInput } from "@/lib/deadline-validation";
 
 export type SubmissionStatusFilter = "all" | "on_time" | "late" | "missing";
 export type GradingStatusFilter = "all" | "graded" | "not_graded";
@@ -80,7 +81,7 @@ export function toDateTimeLocal(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 16);
+  return formatLocalDateTimeInput(date);
 }
 
 export function formatFileSize(bytes: number) {

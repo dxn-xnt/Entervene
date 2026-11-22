@@ -1,6 +1,11 @@
 "use client";
 
 import { DatePicker } from "@/components/retroui/DatePicker";
+import {
+  DEADLINE_FUTURE_ERROR,
+  getMinFutureDeadlineInput,
+  validateFutureDeadline,
+} from "@/lib/deadline-validation";
 import { useState, useEffect, useMemo } from "react";
 import {
   ArrowLeft,
@@ -636,6 +641,14 @@ export default function CreateClassworkModal({
       setValidationError(msg);
       toast.error({ title: msg });
       return;
+    }
+    if (!isReadingType(selectedType)) {
+      const deadlineError = validateFutureDeadline(draft.due_date);
+      if (deadlineError) {
+        setValidationError(deadlineError);
+        setCreateStep("assign");
+        return;
+      }
     }
     setValidationError("");
 
@@ -1321,16 +1334,34 @@ export default function CreateClassworkModal({
                   <Field label="Due Date">
                     <DatePicker
                       includeTime
+                      min={getMinFutureDeadlineInput()}
                       value={draft.due_date}
-                      onValueChange={(value) =>
+                      onValueChange={(value) => {
+                        const nextDeadlineError = validateFutureDeadline(value);
+                        if (nextDeadlineError) {
+                          setValidationError(nextDeadlineError);
+                        } else if (validationError === DEADLINE_FUTURE_ERROR) {
+                          setValidationError("");
+                        }
                         setDraft((current) => ({
                           ...current,
                           due_date: value,
-                        }))
-                      }
+                        }));
+                      }}
                       disabled={isCreating}
+                      aria-invalid={validationError === DEADLINE_FUTURE_ERROR}
+                      aria-describedby={
+                        validationError === DEADLINE_FUTURE_ERROR
+                          ? "classwork-due-date-error"
+                          : undefined
+                      }
                       className="w-full bg-white border-2 border-black rounded shadow-none"
                     />
+                    {validationError === DEADLINE_FUTURE_ERROR && (
+                      <FormMessage id="classwork-due-date-error">
+                        {validationError}
+                      </FormMessage>
+                    )}
                   </Field>
                 )}
 

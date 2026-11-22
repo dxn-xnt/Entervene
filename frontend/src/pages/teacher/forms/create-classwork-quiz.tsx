@@ -3,6 +3,11 @@
 "use client";
 
 import { DatePicker } from "@/components/retroui/DatePicker";
+import {
+  DEADLINE_FUTURE_ERROR,
+  getMinFutureDeadlineInput,
+  validateFutureDeadline,
+} from "@/lib/deadline-validation";
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ArrowLeft,
@@ -1357,6 +1362,12 @@ export default function CreateClassworkQuizModal({
       const msg = "A due date is required for a Study Support quiz.";
       setCreateError(msg);
       toast.error({ title: msg });
+      return;
+    }
+    const deadlineError = validateFutureDeadline(draft.due_date);
+    if (deadlineError) {
+      setCreateError(deadlineError);
+      setCreateStep("assign");
       return;
     }
     if (
@@ -2987,30 +2998,38 @@ export default function CreateClassworkQuizModal({
                   >
                     <DatePicker
                       includeTime
+                      min={getMinFutureDeadlineInput()}
                       value={draft.due_date}
                       onValueChange={(value) => {
-                        if (
-                          value &&
-                          createError.startsWith("A due date is required")
-                        )
+                        const nextDeadlineError = validateFutureDeadline(value);
+                        if (nextDeadlineError) {
+                          setCreateError(nextDeadlineError);
+                        } else if (
+                          createError === DEADLINE_FUTURE_ERROR ||
+                          (value && createError.startsWith("A due date is required"))
+                        ) {
                           setCreateError("");
+                        }
                         setDraft((current) => ({
                           ...current,
                           due_date: value,
                         }));
                       }}
                       disabled={isCreating}
-                      aria-invalid={createError.startsWith(
-                        "A due date is required",
-                      )}
+                      aria-invalid={
+                        createError === DEADLINE_FUTURE_ERROR ||
+                        createError.startsWith("A due date is required")
+                      }
                       aria-describedby={
+                        createError === DEADLINE_FUTURE_ERROR ||
                         createError.startsWith("A due date is required")
                           ? "quiz-due-date-error"
                           : undefined
                       }
                       className="w-full shadow-none"
                     />
-                    {createError.startsWith("A due date is required") && (
+                    {(createError === DEADLINE_FUTURE_ERROR ||
+                      createError.startsWith("A due date is required")) && (
                       <FormMessage id="quiz-due-date-error">
                         {createError}
                       </FormMessage>
