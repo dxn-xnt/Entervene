@@ -396,7 +396,7 @@ export default function ExistingClassDistribution({
         <div className="grid max-h-[70vh] gap-4 overflow-y-auto p-5 text-sm">
           <p>
             <b>Academic Year:</b> {academicYear}{" "}
-            <span className="mx-2">Ã¢â‚¬Â¢</span> <b>Grade:</b> {academicLevel}
+            <span className="mx-2">•</span> <b>Grade:</b> {academicLevel}
           </p>
           <p>
             Unassigned students available when opened: {initialAvailableCount}.

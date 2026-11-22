@@ -140,7 +140,7 @@ export default function AddClassModal({
     if (
       assignmentState.academicLevelId !== setup.academicLevelId ||
       manualSetup?.academicYear.academic_year_id !==
-        setup.academicYear.academic_year_id
+      setup.academicYear.academic_year_id
     ) {
       setAssignmentState(null);
       setResetWarning(
@@ -229,7 +229,7 @@ export default function AddClassModal({
 
   if (mode === "choice") {
     return (
-      <Dialog.Content size="2xl">
+      <Dialog.Content size="lg">
         <Dialog.Header asChild>
           <div className="flex items-center justify-between w-full">
             <Text as="h5" className="font-sans text-xl font-bold">
@@ -312,7 +312,7 @@ export default function AddClassModal({
           : `Step ${stepIndex} of 3`;
 
   return (
-    <Dialog.Content size="xl">
+    <Dialog.Content size="2xl">
       <Dialog.Header asChild>
         <div className="flex items-center justify-between w-full">
           <Text as="h5" className="font-sans text-xl font-bold">
@@ -354,9 +354,7 @@ export default function AddClassModal({
             onClassesCreated={onClassesCreated}
           />
         ) : mode === "manual" ? (
-          <div
-            className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}
-          >
+          <div className="grid gap-4">
             {manualStep === "details" ? (
               <ManualClassWizard
                 initialSetup={manualSetup}
@@ -396,9 +394,7 @@ export default function AddClassModal({
             ) : null}
           </div>
         ) : (
-          <div
-            className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}
-          >
+          <div className="grid gap-4">
             <div className={manualStep === "details" ? "" : "hidden"}>
               <ImportClassWizard
                 existingClasses={classes}
@@ -448,7 +444,7 @@ function sameImportedSetup(current: ManualClassSetup, next: ManualClassSetup) {
   return (
     current.academicLevelId === next.academicLevelId &&
     current.academicYear.academic_year_id ===
-      next.academicYear.academic_year_id &&
+    next.academicYear.academic_year_id &&
     current.sections.length === next.sections.length &&
     current.sections.every((section, index) => {
       const nextSection = next.sections[index];
@@ -523,9 +519,7 @@ function ManualReview({
         attempt={validationAttempt}
       />
 
-      <div
-        className={`grid gap-3 ${setup.sections.length > 1 ? "sm:grid-cols-2" : "grid-cols-1"}`}
-      >
+      <div className="flex flex-wrap gap-3 items-start">
         {setup.sections.map((section) => {
           const students =
             assignmentState.assignmentsBySection[section.localId] ?? [];
@@ -557,22 +551,22 @@ function ManualReview({
             pathway:
               section.pathway && section.pathway !== "general"
                 ? {
-                    id: 0,
-                    code: section.pathway,
-                    name: section.pathway,
-                    is_enabled: true,
-                    sort_order: 1,
-                  }
+                  id: 0,
+                  code: section.pathway,
+                  name: section.pathway,
+                  is_enabled: true,
+                  sort_order: 1,
+                }
                 : null,
             adviser: section.adviserName
               ? {
-                  staff_id: section.adviserStaffId,
-                  first_name: section.adviserName,
-                  middle_name: null,
-                  last_name: "",
-                  suffix: null,
-                  avatar: null,
-                }
+                staff_id: section.adviserStaffId,
+                first_name: section.adviserName,
+                middle_name: null,
+                last_name: "",
+                suffix: null,
+                avatar: null,
+              }
               : null,
             student_count: students.length,
             female_count: femaleCount,

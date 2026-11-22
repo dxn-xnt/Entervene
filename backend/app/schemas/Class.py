@@ -351,6 +351,7 @@ class DistributeStudentsRequest(BaseModel):
 
 class DistributeStudentsResponse(BaseModel):
     assignments_by_section: dict[str, list[str]]
+    student_gwas: dict[str, float | None] | None = None
 
 
 class ExistingClassDistributionRequest(BaseModel):

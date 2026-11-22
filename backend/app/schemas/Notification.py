@@ -38,6 +38,7 @@ NotificationType = Literal[
     "repost_request_declined",
     "repost_package_declined",
     "repost_accepted",
+    "system_setting_updated",
 ]
 
 
