@@ -1249,6 +1249,7 @@ export default function CreateClassworkQuizModal({
     loads,
     contextLesson,
     initialLessonId,
+    initialQuizMode,
     remediationFocus,
   ]);
 
@@ -3059,30 +3060,6 @@ export default function CreateClassworkQuizModal({
 
                 <div className="grid grid-cols-2 gap-x-5 gap-y-1 mt-2">
                   <ClassworkSettingRow
-                    label="Shuffle questions"
-                    tooltip="Randomizes question order for each student during the quiz attempt."
-                    checked={quizSettings.is_shuffle_questions}
-                    onCheckedChange={(checked) =>
-                      setQuizSettings((current) => ({
-                        ...current,
-                        is_shuffle_questions: checked,
-                      }))
-                    }
-                    disabled={isCreating}
-                  />
-                  <ClassworkSettingRow
-                    label="Shuffle answer choices"
-                    tooltip="Randomizes multiple-choice answer options for each student during the quiz attempt."
-                    checked={quizSettings.is_shuffle_options}
-                    onCheckedChange={(checked) =>
-                      setQuizSettings((current) => ({
-                        ...current,
-                        is_shuffle_options: checked,
-                      }))
-                    }
-                    disabled={isCreating}
-                  />
-                  <ClassworkSettingRow
                     label="Enable per-question scoring"
                     tooltip="Allows setting custom point values individually for each question."
                     checked={quizSettings.enable_per_question_scoring}
@@ -3165,7 +3142,7 @@ export default function CreateClassworkQuizModal({
                             selectedSubjectLoads.map((load) => load.class_id),
                           );
                         }}
-                        disabled={isCreating || isSubjectLocked}
+                        disabled={isCreating || Boolean(remediationTarget)}
                       >
                         <CheckCheck className="size-4 mr-2" />
                         Select All
@@ -3220,7 +3197,8 @@ export default function CreateClassworkQuizModal({
                             key={load.subject_load_id}
                             type="button"
                             onClick={() => toggleClass(load.class_id)}
-                            disabled={isCreating || isSubjectLocked}
+                            disabled={isCreating || Boolean(remediationTarget)}
+                            aria-pressed={isSelected}
                             className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
                               ? "bg-primary text-black"
                               : "bg-white text-black hover:bg-accent"
