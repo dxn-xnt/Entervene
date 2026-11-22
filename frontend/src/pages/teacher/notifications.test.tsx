@@ -131,7 +131,7 @@ describe("Teacher Notifications - Submissions Tab and Lifecycle", () => {
     expect(screen.getByText("3 new student classwork submissions needs to be graded as of Nov 22, 2026")).toBeDefined();
   });
 
-  it("renders accessible progress bar with role='progressbar' and proper aria attributes", async () => {
+  it("renders clean default notification cards without progressbar or grading progress elements", async () => {
     render(
       <MemoryRouter>
         <Notifications />
@@ -145,12 +145,9 @@ describe("Teacher Notifications - Submissions Tab and Lifecycle", () => {
     const submissionsTab = screen.getByRole("tab", { name: /Submissions/i });
     fireEvent.click(submissionsTab);
 
-    const progressBars = screen.getAllByRole("progressbar");
-    expect(progressBars.length).toBeGreaterThan(0);
-
-    const firstPb = progressBars[0];
-    expect(firstPb.getAttribute("aria-valuenow")).toBeDefined();
-    expect(firstPb.getAttribute("aria-label")).toContain("Grading progress for");
+    // Default notification cards should NOT have progress bars or "Grading progress" text
+    expect(screen.queryAllByRole("progressbar")).toHaveLength(0);
+    expect(screen.queryByText(/Grading progress:/i)).toBeNull();
   });
 
   it("updates existing notification instead of creating duplicates on new submission arrival", async () => {
@@ -178,8 +175,8 @@ describe("Teacher Notifications - Submissions Tab and Lifecycle", () => {
     expect(screen.getByText("Science 7: Plant and Animal Cells Diagram - 2 new submissions")).toBeDefined();
 
     // Ensure there are still exactly 3 submission cards (no duplicate card was added!)
-    const progressBars = screen.getAllByRole("progressbar");
-    expect(progressBars.length).toBe(3);
+    const cards = screen.getAllByText(/new submission/i);
+    expect(cards.length).toBe(3);
   });
 
   it("marks all notifications as read and clears badges", async () => {

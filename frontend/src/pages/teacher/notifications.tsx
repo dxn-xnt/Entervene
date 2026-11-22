@@ -379,11 +379,6 @@ const Notifications = () => {
                     const subItem = isSubmission
                       ? (card as SubmissionNotificationItem)
                       : null;
-                    const gradedPercent =
-                      subItem && subItem.submittedCount > 0
-                        ? Math.round((subItem.gradedCount / subItem.submittedCount) * 100)
-                        : 0;
-
                     return (
                       <div
                         key={card.notification_id}
@@ -420,46 +415,7 @@ const Notifications = () => {
                           }
                           badge={card.is_read ? undefined : "Unread"}
                           isRead={card.is_read}
-                        >
-                          {isSubmission && subItem && (
-                            <div className="mt-2 flex flex-col gap-1.5 pt-1">
-                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                                <span>
-                                  Grading progress:{" "}
-                                  <strong className="text-foreground">
-                                    {subItem.gradedCount}
-                                  </strong>{" "}
-                                  of{" "}
-                                  <strong className="text-foreground">
-                                    {subItem.submittedCount}
-                                  </strong>{" "}
-                                  graded ({gradedPercent}%)
-                                </span>
-                                {subItem.lateCount > 0 && (
-                                  <span className="font-semibold text-amber-700">
-                                    {subItem.lateCount} late
-                                  </span>
-                                )}
-                                <span>
-                                  {subItem.totalStudents} students enrolled
-                                </span>
-                              </div>
-                              <div
-                                role="progressbar"
-                                aria-label={`Grading progress for ${subItem.classwork.title}: ${subItem.gradedCount} of ${subItem.submittedCount} graded`}
-                                aria-valuenow={gradedPercent}
-                                aria-valuemin={0}
-                                aria-valuemax={100}
-                                className="relative h-2 w-full overflow-hidden rounded-full border border-black bg-muted"
-                              >
-                                <div
-                                  className="h-full bg-primary transition-all duration-300"
-                                  style={{ width: `${gradedPercent}%` }}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </NotificationCard>
+                        />
                       </div>
                     );
                   })}
