@@ -3363,14 +3363,26 @@ export interface TeacherDashboardAttendanceSection extends TeacherDashboardAtten
   section: string;
 }
 
+export interface TeacherDashboardInterventionResolution {
+  candidate_count: number;
+  active_count: number;
+  resolved_improved_count: number;
+  resolved_other_count: number;
+  resolved_total_count: number;
+  eligible_count: number;
+  total_count: number;
+  improved_prediction_resolution_rate_percent: number | null;
+}
+
 export interface TeacherDashboardPhaseTwo {
   grades: TeacherDashboardGradeSummary;
-  attendance_today: TeacherDashboardAttendanceSummary;
   month_window: { start_date: string; end_date: string; today: string; label: string } | null;
   late_submissions: {
     late_rate_percent: number | null;
     late_count: number;
     eligible_count: number;
+    evaluable_count: number;
+    unevaluable_count: number;
     excused_excluded_count: number;
     completed_count: number;
     warnings: TeacherDashboardWarning[];
@@ -3379,6 +3391,8 @@ export interface TeacherDashboardPhaseTwo {
     days: Array<{ label: string; day_index: number; count: number }>;
     sunday_count: number;
     total_count: number;
+    completed_count: number;
+    unevaluable_count: number;
     warnings: TeacherDashboardWarning[];
   };
   term_progress: {
@@ -3389,6 +3403,7 @@ export interface TeacherDashboardPhaseTwo {
     total_weeks: number;
     warnings: TeacherDashboardWarning[];
   } | null;
+  intervention_resolution?: TeacherDashboardInterventionResolution;
   require_subject_match: boolean;
 }
 
@@ -3404,6 +3419,7 @@ export interface SectionHealthItem extends Partial<TeacherDashboardGradeSummary>
   passing_rate_percent: number | null;
   completion_rate_percent: number | null;
   attendance_rate_percent: number | null;
+  attendance_record_count?: number;
   engagement?: TeacherDashboardEngagementSummary;
 }
 
@@ -3429,17 +3445,6 @@ export interface ActionQueueDeadlineItem {
   warnings?: TeacherDashboardWarning[];
 }
 
-export interface TeacherDashboardPerformer {
-  student_id: string;
-  class_id: number;
-  subject_id: number;
-  academic_period_id: number;
-  name: string;
-  section_name: string | null;
-  subject_name: string | null;
-  current_grade: number;
-}
-
 export interface TeacherDashboardGradeBand {
   band: "90-100" | "85-89" | "80-84" | "75-79" | "Below 75";
   count: number;
@@ -3449,8 +3454,8 @@ export interface TeacherDashboardGradeDetails {
   total_grade_count: number;
   available_grade_count: number;
   unavailable_grade_count: number;
-  top_performer_limit: number;
-  cutoff_tie_omitted_count: number;
+  top_performer_limit?: number;
+  cutoff_tie_omitted_count?: number;
   warnings: TeacherDashboardWarning[];
 }
 
@@ -3481,38 +3486,6 @@ export interface TeacherDashboardLessonPerformance {
     };
     warnings: TeacherDashboardWarning[];
   }>;
-}
-
-export interface TeacherDashboardSupportSummary {
-  policy: {
-    min_overdue_tasks: number;
-    min_late_submissions: number;
-    min_recorded_attendance_days: number;
-    min_unexcused_absence_days: number;
-    limit: number;
-  };
-  items: Array<{
-    student_id: string;
-    class_id: number;
-    subject_id: number;
-    academic_period_id: number;
-    name: string;
-    section_name: string | null;
-    subject_name: string | null;
-    current_grade: number | null;
-    reasons: Array<{
-      code: "below_passing" | "overdue_work" | "unexcused_absences" | "late_submissions";
-      message: string;
-      count: number | null;
-      passing_threshold: number | null;
-      recorded_day_count: number | null;
-    }>;
-  }>;
-  total_entry_count: number;
-  qualifying_entry_count: number;
-  omitted_entry_count: number;
-  unavailable_grade_count: number;
-  warnings: TeacherDashboardWarning[];
 }
 
 export interface TeacherDashboardHealthResponse {
@@ -3550,13 +3523,12 @@ export interface TeacherDashboardHealthResponse {
     pending_grading: ActionQueuePendingItem[];
     upcoming_deadlines: ActionQueueDeadlineItem[];
   };
-  details?: Record<string, any> & {
+  details?: Record<string, unknown> & {
     attendance_by_section?: TeacherDashboardAttendanceSection[];
-    top_performers?: TeacherDashboardPerformer[];
     grade_distribution?: TeacherDashboardGradeBand[];
     grade_details?: TeacherDashboardGradeDetails;
     lesson_performance?: TeacherDashboardLessonPerformance;
-    students_to_check_in_with?: TeacherDashboardSupportSummary;
+    intervention_resolution?: TeacherDashboardInterventionResolution;
   };
 }
 
@@ -3578,7 +3550,7 @@ export async function getTeacherDashboardHealth(params: {
 
   const res = await apiFetch(`/api/v1/analytics/teacher/dashboard-health${query.toString() ? `?${query.toString()}` : ""}`);
   if (!res.ok) {
-    const data: any = await res.json().catch(() => null);
+    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
     throw new ApiRequestError(data?.detail || "Failed to fetch dashboard health metrics", res.status, data);
   }
   return (await res.json()) as TeacherDashboardHealthResponse;

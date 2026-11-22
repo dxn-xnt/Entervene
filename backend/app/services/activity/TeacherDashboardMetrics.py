@@ -19,10 +19,11 @@ from fastapi import HTTPException
 
 from app.schemas.TeacherDashboard import (
     AttendanceSummary,
-    DashboardGrade,
     DashboardEngagementSummary,
+    DashboardGrade,
     DashboardGradeBand,
     DashboardGradeDistribution,
+    DashboardInterventionResolutionSummary,
     DashboardLessonCoverage,
     DashboardLessonPerformanceItem,
     DashboardLessonPerformanceSummary,
@@ -35,9 +36,9 @@ from app.schemas.TeacherDashboard import (
     DashboardSupportPolicy,
     DashboardSupportReason,
     DashboardSupportSummary,
-    DashboardWindow,
-    DashboardWarning,
     DashboardTrendPoint,
+    DashboardWarning,
+    DashboardWindow,
     GradeSummary,
     LateSubmissionSummary,
     TermProgress,
@@ -58,6 +59,7 @@ from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
+from app.services.grading.GradeabilityService import is_manual_activity
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -121,6 +123,7 @@ def resolve_dashboard_passing_threshold(
                 message=PASSING_CONFIGURATION_WARNING, subject_id=subject_id))
     return ThresholdResolution(subject_id=subject_id, grading_template_id=resolved_template_id,
                                passing_threshold=float(value))
+
 
 def read_dashboard_current_grades(
     db: Session, staff_id: str, scopes: Sequence[DashboardScope]
@@ -245,11 +248,7 @@ def summarize_dashboard_grades(
 def read_dashboard_student_names(
     db: Session, student_ids: Collection[str]
 ) -> dict[str, str]:
-    """One name-only SELECT for the authorized dashboard roster, never autoflush.
-
-    The caller includes learners with unavailable grades so confirmed work or
-    attendance indicators never require a second lookup or invented names.
-    """
+    """One name-only SELECT for the authorized dashboard roster, never autoflush."""
     ids = {UUID(student_id) for student_id in student_ids}
     if not ids:
         return {}
@@ -322,7 +321,8 @@ def summarize_dashboard_grade_distribution(
         counts[index] += 1
         available += 1
     return DashboardGradeDistribution(
-        bands=[DashboardGradeBand(band=label, count=count) for label, count in zip(labels, counts)],
+        bands=[DashboardGradeBand(band=label, count=count)
+               for label, count in zip(labels, counts)],
         total_grade_count=len(grades), available_grade_count=available,
         unavailable_grade_count=len(grades) - available,
     )
@@ -459,6 +459,61 @@ class DashboardEngagementSnapshot:
     eligible_submissions: Sequence[StudentSubmission]
 
 
+def is_submission_eligible_classwork(
+    classwork: Classwork | object | None,
+    assignment: ClassworkAssignment | object | None = None,
+) -> bool:
+    """Return True only for classwork that requires an online student deliverable submission.
+
+    Excludes:
+    - Reading Materials (classwork_type == 'READING' or intervention support materials)
+    - Teacher-entered offline/manual activities (activity_mode == 'MANUAL')
+    - Ungraded practice-only intervention tasks (source_intervention_id set and is_graded is False)
+    """
+    if classwork is None or getattr(classwork, "is_archived", False):
+        return False
+    if assignment is not None and getattr(assignment, "is_published", True) is False:
+        return False
+    cw_type = (getattr(classwork, "classwork_type", None) or "").strip().upper()
+    if cw_type == "READING" or getattr(classwork, "intervention_resource_origin_id", None) is not None:
+        return False
+    if is_manual_activity(classwork):
+        return False
+    if (
+        assignment is not None
+        and getattr(assignment, "source_intervention_id", None) is not None
+        and getattr(classwork, "is_graded", True) is False
+    ):
+        return False
+    return True
+
+
+def is_reviewable_submission(
+    submission: StudentSubmission | object,
+    assignment: ClassworkAssignment | object,
+) -> bool:
+    """Return True only when a latest completed submission awaits teacher grading review.
+
+    - Excludes non-submission classworks (Reading Materials, Manual Activities, ungraded practice).
+    - Excludes ungraded classworks (is_graded is False).
+    - Excludes already-graded submissions (status == 'graded', including auto-graded quizzes).
+    - Includes ungraded submitted/late assignments and online activities (grade is None).
+    - Includes quizzes with ungraded manual/essay questions (status in {'submitted', 'late'}
+      and either grade is None or graded_at is None, even when a partial auto-score is stored).
+    """
+    classwork = getattr(assignment, "classwork", None)
+    if not is_submission_eligible_classwork(classwork, assignment):
+        return False
+    if getattr(classwork, "is_graded", True) is False:
+        return False
+    if getattr(submission, "status", None) not in {"submitted", "late"}:
+        return False
+    cw_type = (getattr(classwork, "classwork_type", None) or "").strip().upper()
+    if cw_type == "QUIZ":
+        return getattr(submission, "grade", None) is None or getattr(submission, "graded_at", None) is None
+    return getattr(submission, "grade", None) is None
+
+
 def dashboard_assignment_student_ids(
     assignment: ClassworkAssignment, enrolled_student_ids: Collection[object]
 ) -> frozenset[str]:
@@ -479,10 +534,16 @@ def build_dashboard_engagement(
     submission after that period's end. Excuses never remove an obligation.
     Future timestamps are filtered before selecting, without falling back to
     an older graded attempt when the newest completed attempt is ungraded.
+    Non-submission classwork (Reading Materials, Manual Activities, and ungraded
+    practice-only intervention tasks) are excluded from submission engagement.
     """
+    eligible_assignments = {
+        aid: a for aid, a in assignments.items()
+        if is_submission_eligible_classwork(getattr(a, "classwork", None), a)
+    }
     eligible = {aid: dashboard_assignment_student_ids(a, enrolled_by_class.get(a.class_id, ()))
-                for aid, a in assignments.items()}
-    candidates = {aid: [] for aid in assignments}
+                for aid, a in eligible_assignments.items()}
+    candidates = {aid: [] for aid in eligible_assignments}
     scoped = []
     cutoff = _dashboard_aware_timestamp(now)
     for row in submissions:
@@ -494,7 +555,7 @@ def build_dashboard_engagement(
         scoped.append(row)
         candidates[aid].append(row)
     selected, warnings = {}, {}
-    for aid, assignment in assignments.items():
+    for aid, assignment in eligible_assignments.items():
         selected[aid], attempt_warnings = select_dashboard_submissions(candidates[aid])
         warnings[aid] = [warning.model_copy(update={
             "assignment_id": aid, "class_id": assignment.class_id,
@@ -514,7 +575,7 @@ def build_dashboard_engagement(
                 assignment_id=aid, class_id=assignment.class_id,
                 subject_id=assignment.classwork.subject_id,
             ))
-    return DashboardEngagementSnapshot(assignments, eligible, selected, warnings, scoped)
+    return DashboardEngagementSnapshot(eligible_assignments, eligible, selected, warnings, scoped)
 
 
 def _dashboard_task_percent(submission: StudentSubmission, assignment: ClassworkAssignment) -> float | None:
@@ -530,13 +591,20 @@ def summarize_dashboard_engagement(
     snapshot: DashboardEngagementSnapshot, assignment_ids: Collection[int] | None = None
 ) -> DashboardEngagementSummary:
     """Python aggregation, equal weight per scored learner-task, no ORM reads."""
-    ids = sorted(snapshot.assignments if assignment_ids is None else set(assignment_ids))
+    ids = sorted(
+        snapshot.assignments
+        if assignment_ids is None
+        else (set(assignment_ids) & set(snapshot.assignments))
+    )
     warnings = [warning for aid in ids for warning in snapshot.warnings_by_assignment[aid]]
     ambiguous = any(warning.code == "ambiguous_submission_attempts" for warning in warnings)
     expected = sum(len(snapshot.eligible_by_assignment[aid]) for aid in ids)
     completed = sum(len(snapshot.selected_by_assignment[aid]) for aid in ids)
-    pending = sum(row.status in {"submitted", "late"} and row.grade is None
-                  for aid in ids for row in snapshot.selected_by_assignment[aid])
+    pending = sum(
+        is_reviewable_submission(row, snapshot.assignments[aid])
+        for aid in ids
+        for row in snapshot.selected_by_assignment[aid]
+    )
     scores = []
     graded_tasks = 0
     for aid in ids:
@@ -544,16 +612,15 @@ def summarize_dashboard_engagement(
                        if (score := _dashboard_task_percent(row, snapshot.assignments[aid])) is not None]
         scores.extend(task_scores)
         graded_tasks += bool(task_scores)
-    no_eligible_target = expected == 0 and any(
-        warning.code == "targeted_recipient_outside_active_roster" for warning in warnings
-    )
     return DashboardEngagementSummary(
         expected_count=expected,
         completed_count=None if ambiguous else completed,
         pending_grading_count=None if ambiguous else pending,
         resolved_completed_count=completed, resolved_pending_grading_count=pending,
-        completion_rate_percent=(None if ambiguous or no_eligible_target else
-                                 round(float(completed) / float(expected) * 100.0, 1) if expected else 0.0),
+        completion_rate_percent=(
+            None if ambiguous or expected == 0 else
+            round(float(completed) / float(expected) * 100.0, 1)
+        ),
         avg_score_percent=(round(sum(scores) / float(len(scores)), 1) if scores and not ambiguous else None),
         scored_count=len(scores), graded_task_count=graded_tasks, warnings=warnings,
     )
@@ -565,6 +632,8 @@ def build_dashboard_performance_trend(
     """One point per Manila deadline day (publish/creation fallback), not per task."""
     groups: dict[date, list[ClassworkAssignment]] = {}
     for assignment in assignments:
+        if assignment.classwork_assignment_id not in snapshot.assignments:
+            continue
         timestamp = assignment.due_date or assignment.publish_date or assignment.classwork.created_at
         if timestamp is not None:
             groups.setdefault(dashboard_manila_date(timestamp), []).append(assignment)
@@ -590,6 +659,26 @@ def build_dashboard_performance_trend(
     return points
 
 
+def _deduplicate_dashboard_warnings(
+    warnings: Sequence[DashboardWarning],
+) -> list[DashboardWarning]:
+    """Return one warning per reason while preserving distinct diagnostics."""
+    grouped: dict[tuple[str, str], list[DashboardWarning]] = {}
+    for warning in warnings:
+        grouped.setdefault((warning.code, warning.message), []).append(warning)
+    result = []
+    for matches in grouped.values():
+        warning = matches[0]
+        if len(matches) > 1:
+            warning = warning.model_copy(update={
+                "class_id": None,
+                "subject_id": None,
+                "assignment_id": None,
+            })
+        result.append(warning)
+    return result
+
+
 def summarize_dashboard_submissions(
     assignments: Mapping[int, ClassworkAssignment],
     submissions: Sequence[StudentSubmission],
@@ -600,16 +689,25 @@ def summarize_dashboard_submissions(
     *,
     require_subject_match: bool = False,
 ) -> tuple[LateSubmissionSummary, WeekdaySummary]:
-    """Dashboard-only lateness and weekdays, without touching eligibility.
+    """Dashboard-only lateness and weekdays for actual submission events.
 
     Select existing completed rows, constrain actual submission dates to the
-    chosen period through now, and exclude deadline-date excuses from both late
-    numerator and denominator. Dates/weekday conversion happens in Python.
+    chosen period through now, omit non-submission classwork rows (Reading
+    Materials, manual offline activities, ungraded practice), and exclude
+    deadline-date excuses from both the late numerator and denominator.
+    Dates/weekday conversion happens in Python.
     """
     cutoff = _dashboard_aware_timestamp(now)
     today = dashboard_manila_date(cutoff)
     in_window = []
     for submission in submissions:
+        assignment = assignments.get(submission.classwork_assignment_id)
+        # Non-submission classwork (Reading Materials and manual gradebook-only rows)
+        # have no student deliverable submission event for calendar submission metrics.
+        if assignment is not None and not is_submission_eligible_classwork(
+            getattr(assignment, "classwork", None), assignment
+        ):
+            continue
         timestamp = submission.submitted_at
         if timestamp is None:
             # Unknown dates cannot be silently classified as outside this scope.
@@ -622,13 +720,14 @@ def summarize_dashboard_submissions(
     late_warnings = list(duplicate_warnings)
     weekday_warnings = list(duplicate_warnings)
     bins = [0] * 7
-    late_count = eligible_count = excluded_count = completed_count = 0
+    late_count = eligible_count = evaluable_count = unevaluable_count = 0
+    excluded_count = completed_count = weekday_unevaluable_count = 0
     for submission in selected:
         assignment = assignments.get(submission.classwork_assignment_id)
         if assignment is None:
             warning = DashboardWarning(
                 code="missing_submission_assignment",
-                message="Submission metrics unavailable: assignment scope is missing.",
+                message="Some submission records have no assignment scope and are excluded.",
             )
             late_warnings.append(warning)
             weekday_warnings.append(warning)
@@ -641,9 +740,10 @@ def summarize_dashboard_submissions(
                 continue
             bins[submitted_date.weekday()] += 1
         else:
+            weekday_unevaluable_count += 1
             warning = DashboardWarning(
                 code="missing_submission_timestamp",
-                message="Submission metrics unavailable: submission timestamp is missing.",
+                message="Some historical online submissions have no submission timestamp.",
                 class_id=assignment.class_id,
                 subject_id=assignment.classwork.subject_id,
             )
@@ -658,22 +758,29 @@ def summarize_dashboard_submissions(
         eligible_count += 1
         late = dashboard_submission_is_late(timestamp, assignment.due_date)
         if late is None:
+            unevaluable_count += 1
             if timestamp is None:
                 late_warnings.append(warning)
             else:
                 late_warnings.append(DashboardWarning(
                     code="missing_deadline_timestamp",
-                    message="Late submissions unavailable: a deadline is missing.",
+                    message="Some submissions have no deadline and are excluded from lateness calculations.",
                     class_id=assignment.class_id,
                     subject_id=assignment.classwork.subject_id,
                 ))
         else:
+            evaluable_count += 1
             late_count += int(late)
+    late_warnings = _deduplicate_dashboard_warnings(late_warnings)
+    weekday_warnings = _deduplicate_dashboard_warnings(weekday_warnings)
+    weekday_total = sum(bins)
     late_summary = LateSubmissionSummary(
-        late_rate_percent=(round(float(late_count) / float(eligible_count) * 100.0, 1)
-                           if eligible_count and not late_warnings else None),
+        late_rate_percent=(round(float(late_count) / float(evaluable_count) * 100.0, 1)
+                           if evaluable_count else None),
         late_count=late_count,
         eligible_count=eligible_count,
+        evaluable_count=evaluable_count,
+        unevaluable_count=unevaluable_count,
         excused_excluded_count=excluded_count,
         completed_count=completed_count,
         warnings=late_warnings,
@@ -682,7 +789,9 @@ def summarize_dashboard_submissions(
         days=[WeekdayCount(label=label, day_index=index, count=bins[index])
               for index, label in enumerate(("Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))],
         sunday_count=bins[6],
-        total_count=sum(bins),
+        total_count=weekday_total,
+        completed_count=completed_count,
+        unevaluable_count=weekday_unevaluable_count,
         warnings=weekday_warnings,
     )
     return late_summary, weekday_summary
@@ -704,12 +813,7 @@ def summarize_dashboard_support(
     policy: DashboardSupportPolicy | None = None,
     require_subject_match: bool = False,
 ) -> DashboardSupportSummary:
-    """Confirmed, observed indicators only; no queries, predictions or risk score.
-
-    The grade population is the authoritative active student/class/subject scope.
-    Excuses suppress deadline indicators and absence dates, not obligations or
-    completion totals. Attendance evidence is DISTINCT recorded calendar dates.
-    """
+    """Confirmed, observed indicators only; no queries, predictions or risk score."""
     policy = policy or DashboardSupportPolicy()
     cutoff = _dashboard_aware_timestamp(now)
     today = dashboard_manila_date(cutoff)
@@ -733,7 +837,6 @@ def summarize_dashboard_support(
         for warning in assignment_warnings:
             if warning.code in {"ambiguous_submission_attempts", "targeted_recipient_outside_active_roster"}:
                 warn(warning)
-        # A duplicate-attempt ambiguity must not be misreported as missing work.
         if any(w.code == "ambiguous_submission_attempts" for w in assignment_warnings):
             continue
         if assignment.due_date is None or _dashboard_aware_timestamp(assignment.due_date) >= cutoff:
@@ -748,7 +851,6 @@ def summarize_dashboard_support(
             key = (student_id, assignment.class_id, assignment.classwork.subject_id)
             overdue[key] = overdue.get(key, 0) + 1
 
-    # Match Phase 2/4 calendar lateness: filter by period before canonical selection.
     in_period = [row for row in engagement.eligible_submissions if row.submitted_at is None or (
         _dashboard_aware_timestamp(row.submitted_at) <= cutoff
         and period_start <= dashboard_manila_date(row.submitted_at) <= min(today, period_end)
@@ -905,6 +1007,20 @@ class DashboardLessonEvidence:
     manual_assignment_counts: Mapping[int, int]
 
 
+def _is_official_graded_lesson_assignment(assignment: ClassworkAssignment) -> bool:
+    """Exclude ungraded assessments and intervention support materials from lesson mastery."""
+    cw = getattr(assignment, "classwork", None)
+    if cw is None:
+        return False
+    if getattr(cw, "is_graded", True) is False:
+        return False
+    if getattr(cw, "intervention_resource_origin_id", None) is not None:
+        return False
+    if getattr(assignment, "source_intervention_id", None) is not None and getattr(cw, "is_graded", True) is False:
+        return False
+    return True
+
+
 def read_dashboard_lesson_evidence(
     db: Session, snapshot: DashboardEngagementSnapshot, *,
     subjects: Mapping[int, tuple[str, tuple[int, ...]]],
@@ -913,9 +1029,14 @@ def read_dashboard_lesson_evidence(
 
     The snapshot chose latest completed attempts before scores are read. READY
     and PUBLISHED are the quiz states the student attempt service accepts.
+    Ungraded classworks and Practice Assessments are strictly excluded.
     No answer/question text, options, student names or lazy relationships read.
     """
-    work_subjects = {a.classwork_id: a.classwork.subject_id for a in snapshot.assignments.values()}
+    work_subjects = {
+        a.classwork_id: a.classwork.subject_id
+        for a in snapshot.assignments.values()
+        if _is_official_graded_lesson_assignment(a)
+    }
     with db.no_autoflush:
         rows = db.query(
             Quiz.classwork_id, QuizQuestion.quiz_question_id, Question.question_id,
@@ -934,6 +1055,7 @@ def read_dashboard_lesson_evidence(
                 snapshot.assignments[aid].classwork_id, snapshot.assignments[aid].classwork.subject_id)
             for aid, selected in snapshot.selected_by_assignment.items()
             if snapshot.assignments[aid].classwork_id in quiz_works
+            and _is_official_graded_lesson_assignment(snapshot.assignments[aid])
             for row in selected
         }
         answers = [DashboardLessonAnswer(row.submission_id, row.quiz_question_id, row.points_awarded)
@@ -1065,3 +1187,123 @@ def summarize_dashboard_lesson_performance(
                 message="A lesson title is unavailable.", subject_id=sid))
     return DashboardLessonPerformanceSummary(policy=policy, subjects=sorted(summaries.values(),
         key=lambda summary: (normalize("NFC", summary.subject_name).casefold(), summary.subject_id)))
+
+
+def summarize_dashboard_intervention_resolution(
+    rows: Sequence[object],
+    enrolled_by_class: Mapping[int, Collection[object]],
+) -> DashboardInterventionResolutionSummary:
+    """Pure aggregation for Improved Prediction Resolution Rate (%).
+
+    Definition:
+        (Improved-prediction resolutions) / (Active + Resolved interventions) * 100
+
+    - Excludes unactivated CANDIDATE interventions from numerator and denominator.
+    - Excludes rows whose source prediction is missing/invalid or student is not actively enrolled.
+    - Deduplicates by intervention_id.
+    - Ordinary completions / other resolution reasons count in the denominator, not the numerator.
+    """
+    seen_ids: set[int] = set()
+    candidate_count = 0
+    active_count = 0
+    resolved_improved_count = 0
+    resolved_other_count = 0
+
+    for row in rows:
+        intervention_id = getattr(row, "intervention_id", None)
+        if intervention_id is not None:
+            if intervention_id in seen_ids:
+                continue
+            seen_ids.add(intervention_id)
+        class_id = getattr(row, "class_id", None)
+        student_id = getattr(row, "student_id", None)
+        enrolled = enrolled_by_class.get(class_id, ())
+        if student_id not in enrolled and str(student_id) not in {str(s) for s in enrolled}:
+            continue
+        predicted_grade = getattr(row, "predicted_period_grade", True)
+        if predicted_grade is None or (
+            predicted_grade is not True and _finite_grade_number(predicted_grade) is None
+        ):
+            continue
+
+        status = getattr(row, "status", None)
+        resolution_reason = getattr(row, "resolution_reason", None)
+        resolved_at = getattr(row, "resolved_at", None)
+
+        if status == "CANDIDATE":
+            candidate_count += 1
+        elif status == "ACTIVE":
+            active_count += 1
+        elif status == "RESOLVED" and resolved_at is not None and resolution_reason is not None:
+            if resolution_reason == "IMPROVED_PREDICTION":
+                resolved_improved_count += 1
+            else:
+                resolved_other_count += 1
+
+    resolved_total = resolved_improved_count + resolved_other_count
+    eligible_count = active_count + resolved_total
+    total_count = candidate_count + eligible_count
+    rate = (
+        round(float(resolved_improved_count) / float(eligible_count) * 100.0, 1)
+        if eligible_count > 0
+        else None
+    )
+    return DashboardInterventionResolutionSummary(
+        candidate_count=candidate_count,
+        active_count=active_count,
+        resolved_improved_count=resolved_improved_count,
+        resolved_other_count=resolved_other_count,
+        resolved_total_count=resolved_total,
+        eligible_count=eligible_count,
+        total_count=total_count,
+        improved_prediction_resolution_rate_percent=rate,
+    )
+
+
+def read_and_summarize_dashboard_intervention_resolution(
+    db: Session,
+    seen_combos: Collection[tuple[int, int]],
+    enrolled_by_class: Mapping[int, Collection[object]],
+    target_period: object | None,
+) -> DashboardInterventionResolutionSummary:
+    """One constant-size SELECT joining Intervention with its authoritative source prediction."""
+    from sqlalchemy import and_, or_
+    from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
+    from app.models.intervention.Intervention import Intervention
+
+    if not seen_combos or target_period is None:
+        return DashboardInterventionResolutionSummary()
+
+    with db.no_autoflush:
+        rows = (
+            db.query(
+                Intervention.intervention_id,
+                Intervention.student_id,
+                Intervention.class_id,
+                Intervention.subject_id,
+                Intervention.status,
+                Intervention.resolution_reason,
+                Intervention.resolved_at,
+                DevelopmentCurrentTermPrediction.predicted_period_grade,
+            )
+            .join(
+                DevelopmentCurrentTermPrediction,
+                and_(
+                    DevelopmentCurrentTermPrediction.prediction_id == Intervention.source_prediction_id,
+                    DevelopmentCurrentTermPrediction.student_id == Intervention.student_id,
+                    DevelopmentCurrentTermPrediction.class_id == Intervention.class_id,
+                    DevelopmentCurrentTermPrediction.subject_id == Intervention.subject_id,
+                    DevelopmentCurrentTermPrediction.source_period_id == Intervention.academic_period_id,
+                    DevelopmentCurrentTermPrediction.target_period_id == Intervention.academic_period_id,
+                ),
+            )
+            .filter(
+                Intervention.academic_period_id == target_period.academic_period_id,
+                or_(*(
+                    and_(Intervention.class_id == cid, Intervention.subject_id == sid)
+                    for cid, sid in sorted(seen_combos)
+                )),
+            )
+            .all()
+        )
+    return summarize_dashboard_intervention_resolution(rows, enrolled_by_class)

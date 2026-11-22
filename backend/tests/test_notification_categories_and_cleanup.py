@@ -111,7 +111,19 @@ def test_student_deadline_notifications_are_visible_and_keep_unread_counts_consi
         notification_id=uuid.uuid4(), user_id=teacher_id,
         notification_type="assignment_due", title="Deadline Summary", is_read=False,
     )
-    db.add_all([student_deadline, student_classwork, teacher_deadline])
+    historical_late_submission = Notification(
+        notification_id=uuid.uuid4(), user_id=teacher_id,
+        notification_type="assignment_due", title="Late Submission: Math - Quiz", is_read=False,
+    )
+    historical_intervention_submission = Notification(
+        notification_id=uuid.uuid4(), user_id=teacher_id,
+        notification_type="intervention_assessment_submitted",
+        title="Intervention Assessment Submitted", is_read=False,
+    )
+    db.add_all([
+        student_deadline, student_classwork, teacher_deadline,
+        historical_late_submission, historical_intervention_submission,
+    ])
     db.commit()
 
     student_feed = get_notifications_for_user(db, student_id, user_role="student")
@@ -129,6 +141,15 @@ def test_student_deadline_notifications_are_visible_and_keep_unread_counts_consi
     teacher_feed = get_notifications_for_user(db, teacher_id, user_role="teacher")
     assert teacher_feed.unread_count == 1
     assert [item.notification_id for item in teacher_feed.notifications] == [teacher_deadline.notification_id]
+
+    for hidden in (historical_late_submission, historical_intervention_submission):
+        with pytest.raises(HTTPException) as exc:
+            mark_notification_read(db, str(hidden.notification_id), teacher_id, user_role="teacher")
+        assert exc.value.status_code == 404
+
+    assert mark_all_notifications_read(db, teacher_id, user_role="teacher") == {"marked_read": 1}
+    assert db.get(Notification, historical_late_submission.notification_id).is_read is False
+    assert db.get(Notification, historical_intervention_submission.notification_id).is_read is False
 
 
 def test_classwork_notification_details_prevent_duplicate_subject_and_redundant_phrasing():

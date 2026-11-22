@@ -144,6 +144,8 @@ class LateSubmissionSummary(BaseModel):
     late_rate_percent: float | None = None
     late_count: int = 0
     eligible_count: int = 0
+    evaluable_count: int = 0
+    unevaluable_count: int = 0
     excused_excluded_count: int = 0
     completed_count: int = 0
     warnings: list[DashboardWarning] = Field(default_factory=list)
@@ -159,6 +161,8 @@ class WeekdaySummary(BaseModel):
     days: list[WeekdayCount] = Field(default_factory=list)
     sunday_count: int = 0
     total_count: int = 0
+    completed_count: int = 0
+    unevaluable_count: int = 0
     warnings: list[DashboardWarning] = Field(default_factory=list)
 
 
@@ -250,3 +254,14 @@ class DashboardSupportSummary(BaseModel):
     omitted_entry_count: int = Field(default=0, ge=0)
     unavailable_grade_count: int = Field(default=0, ge=0)
     warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardInterventionResolutionSummary(BaseModel):
+    candidate_count: int = Field(default=0, ge=0)
+    active_count: int = Field(default=0, ge=0)
+    resolved_improved_count: int = Field(default=0, ge=0)
+    resolved_other_count: int = Field(default=0, ge=0)
+    resolved_total_count: int = Field(default=0, ge=0)
+    eligible_count: int = Field(default=0, ge=0)
+    total_count: int = Field(default=0, ge=0)
+    improved_prediction_resolution_rate_percent: float | None = None

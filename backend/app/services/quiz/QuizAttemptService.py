@@ -341,17 +341,13 @@ def submit_student_quiz_attempt(
 
     if assignment.source_intervention_id is not None:
         from app.services.intervention.InterventionNotificationService import (
-            stage_intervention_assessment_result_or_submission,
-            stage_intervention_assessment_submitted,
+            stage_intervention_assessment_result,
             stage_remediation_needs_teacher_review_if_exhausted,
         )
         db.flush()
-        if classwork.is_graded:
-            if has_manual:
-                stage_intervention_assessment_submitted(db, assignment, submission)
-            else:
-                stage_intervention_assessment_result_or_submission(db, assignment, submission)
         if not has_manual:
+            if classwork.is_graded:
+                stage_intervention_assessment_result(db, assignment, submission)
             stage_remediation_needs_teacher_review_if_exhausted(
                 db, assignment, submission, quiz=quiz,
             )

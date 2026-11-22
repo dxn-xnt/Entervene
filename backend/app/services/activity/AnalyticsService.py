@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, distinct, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -28,25 +28,26 @@ from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.schemas.TeacherDashboard import DashboardGrade, DashboardGradeDetails, DashboardScopeLabel, DashboardSupportSummary
+from app.schemas.TeacherDashboard import DashboardGrade, DashboardGradeDetails, DashboardWarning
 from app.services.activity.TeacherDashboardMetrics import (
     DashboardScope,
     build_dashboard_engagement,
     build_dashboard_performance_trend,
+    dashboard_assignment_student_ids,
     dashboard_month_window,
     dashboard_term_progress,
+    is_reviewable_submission,
+    read_and_summarize_dashboard_intervention_resolution,
     read_dashboard_current_grades,
     read_dashboard_lesson_evidence,
-    read_dashboard_student_names,
-    rank_dashboard_performers,
     resolve_dashboard_passing_threshold,
+    select_dashboard_submissions,
     summarize_dashboard_attendance,
     summarize_dashboard_submissions,
     summarize_dashboard_grades,
     summarize_dashboard_grade_distribution,
     summarize_dashboard_engagement,
     summarize_dashboard_lesson_performance,
-    summarize_dashboard_support,
 )
 from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
@@ -1201,7 +1202,10 @@ def build_teacher_dashboard_health(
         all_assignments = (
             db.query(ClassworkAssignment)
             .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
-            .options(joinedload(ClassworkAssignment.classwork))
+            .options(
+                joinedload(ClassworkAssignment.classwork),
+                selectinload(ClassworkAssignment.recipients),
+            )
             .filter(
                 (Classwork.created_by_staff_id == staff_id) | (ClassworkAssignment.assigned_by_staff_id == staff_id),
                 ClassworkAssignment.is_published.is_(True),
@@ -1252,25 +1256,17 @@ def build_teacher_dashboard_health(
         for f in available_filters
     ])
     grade_summary = summarize_dashboard_grades(current_grades, thresholds)
-    student_names = read_dashboard_student_names(db, {
-        grade.student_id for grade in current_grades
-    })
-    scope_labels = {
-        (item["class_id"], item["subject_id"]): DashboardScopeLabel(
-            section_name=item["section_name"], subject_name=item["subject_name"],
-        )
-        for item in available_filters
-    }
-    performers = rank_dashboard_performers(current_grades, student_names, scope_labels)
     distribution = summarize_dashboard_grade_distribution(current_grades)
     grade_details = DashboardGradeDetails(
         total_grade_count=distribution.total_grade_count,
         available_grade_count=distribution.available_grade_count,
         unavailable_grade_count=distribution.unavailable_grade_count,
-        top_performer_limit=performers.limit,
-        cutoff_tie_omitted_count=performers.cutoff_tie_omitted_count,
-        warnings=[*grade_summary.warnings, *performers.warnings],
+        warnings=list(grade_summary.warnings),
     )
+    intervention_resolution = read_and_summarize_dashboard_intervention_resolution(
+        db, seen_combos, enrolled_by_class, target_period,
+    )
+
     attendance_by_class = {cid: [] for cid in unique_class_ids}
     if unique_class_ids:
         for record in db.query(AttendanceRecord).filter(
@@ -1294,10 +1290,6 @@ def build_teacher_dashboard_health(
         }
         for cid in sorted(unique_class_ids)
     ]
-    attendance_today = summarize_dashboard_attendance([
-        record for records in attendance_by_class.values() for record in records
-        if record.date == school_now.date()
-    ])
     # Excuses match the DEADLINE date, not the submission date or monthly window.
     # Fetch all relevant deadline dates even when they precede this month.
     deadline_dates = {
@@ -1322,12 +1314,6 @@ def build_teacher_dashboard_health(
         target_period.end_date if target_period else school_now.date(),
         require_subject_match=False,
     )
-    support = summarize_dashboard_support(
-        current_grades, thresholds, engagement,
-        [record for records in attendance_by_class.values() for record in records],
-        excuses, now, month_window, target_period.start_date, target_period.end_date,
-        student_names, scope_labels, require_subject_match=False,
-    ) if target_period is not None and month_window is not None else DashboardSupportSummary()
     term_progress = dashboard_term_progress(
         target_period.start_date, target_period.end_date, school_now.date(),
     ) if target_period else None
@@ -1338,8 +1324,8 @@ def build_teacher_dashboard_health(
 
     # Ungraded count
     pending_subs = [
-        s for subs in engagement.selected_by_assignment.values() for s in subs
-        if s.status in {"submitted", "late"} and s.grade is None
+        s for aid, subs in engagement.selected_by_assignment.items() for s in subs
+        if is_reviewable_submission(s, engagement.assignments[aid])
     ]
     ungraded_count = engagement_summary.pending_grading_count
 
@@ -1471,17 +1457,53 @@ def build_teacher_dashboard_health(
     for ua in upcoming_asgns:
         cw_obj = ua.classwork
         cls_obj = classes_by_id.get(ua.class_id)
-        deadline_engagement = summarize_dashboard_engagement(engagement, [ua.classwork_assignment_id])
+        if ua.classwork_assignment_id in engagement.assignments:
+            deadline_engagement = summarize_dashboard_engagement(engagement, [ua.classwork_assignment_id])
+            deadline_submitted_count = deadline_engagement.completed_count
+            deadline_expected_count = deadline_engagement.expected_count
+            deadline_warnings = [warning.model_dump(mode="json") for warning in deadline_engagement.warnings]
+        else:
+            eligible_ids = dashboard_assignment_student_ids(ua, enrolled_by_class.get(ua.class_id, ()))
+            ua_candidates = [
+                row for row in submissions
+                if row.classwork_assignment_id == ua.classwork_assignment_id
+                and str(row.student_id) in eligible_ids
+                and (row.submitted_at is None or _dashboard_aware_datetime(row.submitted_at) <= now)
+            ]
+            ua_selected, ua_attempt_warnings = select_dashboard_submissions(ua_candidates)
+            ua_warnings = [
+                warning.model_copy(update={
+                    "assignment_id": ua.classwork_assignment_id,
+                    "class_id": ua.class_id,
+                    "subject_id": cw_obj.subject_id if cw_obj else None,
+                })
+                for warning in ua_attempt_warnings
+            ]
+            if ua.recipient_student_id is not None and not eligible_ids:
+                ua_warnings.append(DashboardWarning(
+                    code="targeted_recipient_outside_active_roster",
+                    message="Assignment configuration: targeted recipient is outside the active roster.",
+                    assignment_id=ua.classwork_assignment_id,
+                    class_id=ua.class_id,
+                    subject_id=cw_obj.subject_id if cw_obj else None,
+                ))
+            deadline_submitted_count = (
+                None
+                if any(w.code == "ambiguous_submission_attempts" for w in ua_warnings)
+                else len(ua_selected)
+            )
+            deadline_expected_count = len(eligible_ids)
+            deadline_warnings = [warning.model_dump(mode="json") for warning in ua_warnings]
         upcoming_deadlines_list.append({
             "classwork_id": cw_obj.classwork_id if cw_obj else None,
             "title": cw_obj.title if cw_obj else "Assignment",
             "section_name": cls_obj.section_name if cls_obj else "",
             "due_date": ua.due_date.isoformat() if ua.due_date else None,
             "assignment_id": ua.classwork_assignment_id,
-            "submitted_count": deadline_engagement.completed_count,
-            "total_students": deadline_engagement.expected_count,
-            "eligible_count": deadline_engagement.expected_count,
-            "warnings": [warning.model_dump(mode="json") for warning in deadline_engagement.warnings],
+            "submitted_count": deadline_submitted_count,
+            "total_students": deadline_expected_count,
+            "eligible_count": deadline_expected_count,
+            "warnings": deadline_warnings,
         })
 
     cw_count = len([a for a in all_assignments if a.classwork and (a.classwork.classwork_type or "").upper() != "QUIZ"])
@@ -1496,17 +1518,31 @@ def build_teacher_dashboard_health(
             "statDescription": f"in {period_name}",
         },
         {
+            "title": "Improved Prediction Resolution Rate",
+            "count": (
+                f"{intervention_resolution.improved_prediction_resolution_rate_percent}%"
+                if intervention_resolution.improved_prediction_resolution_rate_percent is not None
+                else "—"
+            ),
+            "stat": (
+                f"{intervention_resolution.resolved_improved_count} of {intervention_resolution.eligible_count} active & resolved"
+                if intervention_resolution.eligible_count > 0
+                else "No active or resolved interventions"
+            ),
+            "statDescription": "Interventions resolved via improved prediction in the selected period.",
+        },
+        {
             "title": "Enrolled Students",
             "count": str(total_students),
             "stat": f"{total_students} learners",
             "statDescription": "total across sections",
         },
         {
-            "title": "Overall Completion",
+            "title": "Submission Rate",
             "count": f"{int(overall_completion_rate)}%" if overall_completion_rate is not None else "—",
             "stat": (f"{total_submitted} of {total_expected} submitted" if total_submitted is not None else
                      f"{engagement_summary.resolved_completed_count} resolved of {total_expected} expected"),
-            "statDescription": "Selected-period eligible student-task requirements; unique latest completed attempts.",
+            "statDescription": "Selected-period eligible student-task submission requirements; unique latest completed attempts.",
         },
         {
             "title": "Ungraded Queue",
@@ -1537,31 +1573,17 @@ def build_teacher_dashboard_health(
         {
             "title": "Late Submissions",
             "count": f"{late_summary.late_rate_percent}%" if late_summary.late_rate_percent is not None else "—",
-            "stat": f"{late_summary.late_count} of {late_summary.eligible_count} assessed submissions · {late_summary.excused_excluded_count} excused excluded",
+            "stat": (
+                f"{late_summary.late_count} of {late_summary.evaluable_count} evaluable submissions"
+                if late_summary.evaluable_count else
+                "No submissions have complete lateness data"
+            ),
             "statDescription": (
-                late_summary.warnings[0].message if late_summary.warnings else
-                "Late submissions, excluding excused submissions."
+                f"{late_summary.excused_excluded_count} excused excluded. "
+                f"{late_summary.unevaluable_count} omitted because required dates are missing. "
+                + (late_summary.warnings[0].message if late_summary.warnings else
+                   "Late submissions use recorded submission and deadline timestamps.")
             ),
-        },
-        {
-            "title": "Grading Turnaround",
-            "count": "—",
-            "statDescription": "Not calculated",
-        },
-        {
-            "title": "Attendance Today",
-            "count": (
-                f"{attendance_today.present_count + attendance_today.late_count} / {attendance_today.record_count}"
-                if attendance_today.record_count else "—"
-            ),
-            "stat": f"{attendance_today.late_count} late · {attendance_today.absent_count} absent · {attendance_today.excused_count} excused",
-            "statDescription": "Present + late / recorded entries today.",
-        },
-        {
-            "title": "Feedback Coverage",
-            "count": "—",
-            "stat": "Not calculated",
-            "statDescription": "No aggregate available",
         },
         {
             "title": "Term Progress",
@@ -1618,11 +1640,11 @@ def build_teacher_dashboard_health(
         "section_matrix": section_matrix,
         "phase_two": {
             "grades": grade_summary.model_dump(mode="json"),
-            "attendance_today": attendance_today.model_dump(mode="json"),
             "month_window": month_window.model_dump(mode="json") if month_window else None,
             "late_submissions": late_summary.model_dump(mode="json"),
             "weekdays": weekdays.model_dump(mode="json"),
             "term_progress": term_progress.model_dump(mode="json") if term_progress else None,
+            "intervention_resolution": intervention_resolution.model_dump(mode="json"),
             "require_subject_match": False,
         },
         "action_queue": {
@@ -1630,11 +1652,10 @@ def build_teacher_dashboard_health(
             "upcoming_deadlines": upcoming_deadlines_list,
         },
         "details": {
-            "students_to_check_in_with": support.model_dump(mode="json"),
-            "top_performers": [item.model_dump(mode="json") for item in performers.items],
             "grade_details": grade_details.model_dump(mode="json"),
             "due_this_week": [],
             "lesson_performance": lesson_performance.model_dump(mode="json"),
+            "intervention_resolution": intervention_resolution.model_dump(mode="json"),
             "submissions_by_weekday": [
                 {"day": day.label, "count": day.count}
                 for day in weekdays.days
@@ -1644,4 +1665,3 @@ def build_teacher_dashboard_health(
             "attendance_by_section": month_attendance,
         },
     }
-
