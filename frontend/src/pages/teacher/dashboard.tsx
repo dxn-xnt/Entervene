@@ -46,9 +46,9 @@ const defaultTeacherCards: OverviewCardData[] = [
     statDescription: "Interventions resolved via improved prediction in the selected period.",
   },
   {
-    title: "Overall Completion",
+    title: "Submission Rate",
     count: "—",
-    statDescription: "across all published work",
+    statDescription: "across eligible submission-requiring work",
   },
   {
     title: "Ungraded Queue",
@@ -69,11 +69,6 @@ const defaultTeacherCards: OverviewCardData[] = [
     title: "Late Submissions",
     count: "—",
     statDescription: "Late submissions, excluding excused submissions.",
-  },
-  {
-    title: "Attendance Today",
-    count: "—",
-    statDescription: "Present + late / recorded entries today.",
   },
   {
     title: "Term Progress",
@@ -290,7 +285,7 @@ export default function Dashboard() {
     (selectedPeriodId == null || data.term_info?.period_id === selectedPeriodId) &&
     (selectedYearId == null || data.term_info?.academic_year_id == null || data.term_info.academic_year_id === selectedYearId);
 
-  // Derived 9 Stat Cards (Original 8 + Improved Prediction Resolution Rate directly below Active Classes)
+  // Derived 8 Stat Cards (Original right-sidebar metrics with Improved Prediction Resolution Rate and Submission Rate, without Attendance Today)
   const statCards = useMemo<OverviewCardData[]>(() => {
     if (!data || isLoading || isPeriodLoading || error || !isDataMatchingPeriod) return defaultTeacherCards;
 
@@ -315,9 +310,9 @@ export default function Dashboard() {
         statDescription: "Interventions resolved via improved prediction in the selected period.",
       },
       {
-        title: "Overall Completion",
+        title: "Submission Rate",
         count: data.kpis?.overall_completion_rate != null ? formatPercent(Math.round(data.kpis.overall_completion_rate)) : "—",
-        statDescription: "across all published work",
+        statDescription: "across eligible submission-requiring work",
       },
       {
         title: "Ungraded Queue",
@@ -329,7 +324,6 @@ export default function Dashboard() {
     const phaseTwo = data.phase_two;
     const grades = phaseTwo?.grades;
     const late = phaseTwo?.late_submissions;
-    const attendance = phaseTwo?.attendance_today;
     const progress = phaseTwo?.term_progress;
     const gradeCoverage = grades
       ? `${grades.available_grade_count} of ${grades.total_grade_count} student-subject grades available.`
@@ -366,16 +360,6 @@ export default function Dashboard() {
           : undefined,
       },
       {
-        title: "Attendance Today",
-        count: attendance?.record_count
-          ? `${attendance.present_count + attendance.late_count} / ${attendance.record_count}`
-          : "—",
-        stat: attendance
-          ? `${attendance.late_count} late · ${attendance.absent_count} absent · ${attendance.excused_count} excused`
-          : undefined,
-        statDescription: "Present + late / recorded entries today.",
-      },
-      {
         title: "Term Progress",
         count: !progress || progress.warnings.length ? "—" : progress.week_number === 0 ? "Not started" : `Week ${progress.week_number}`,
         stat: progress ? `of ${progress.total_weeks}` : undefined,
@@ -391,20 +375,20 @@ export default function Dashboard() {
       if (card.title === "Improved Prediction Resolution Rate") {
         return phaseOneCards[1];
       }
-      if (data.engagement && ["Overall Completion", "Ungraded Queue"].includes(card.title)) {
+      if (data.engagement && ["Submission Rate", "Ungraded Queue"].includes(card.title)) {
         const summary = data.engagement;
-        const isCompletion = card.title === "Overall Completion";
+        const isSubmissionRate = card.title === "Submission Rate";
         return {
           ...card,
-          count: isCompletion ? formatPercent(summary.completion_rate_percent == null ? null : Math.round(summary.completion_rate_percent))
+          count: isSubmissionRate ? formatPercent(summary.completion_rate_percent == null ? null : Math.round(summary.completion_rate_percent))
             : summary.pending_grading_count == null ? "—" : String(summary.pending_grading_count),
-          stat: isCompletion
+          stat: isSubmissionRate
             ? summary.completed_count == null ? `${summary.resolved_completed_count} resolved of ${summary.expected_count} expected.`
               : `${summary.completed_count} of ${summary.expected_count} submitted.`
             : summary.pending_grading_count == null ? `${summary.resolved_pending_grading_count} resolved submissions.`
               : `${summary.pending_grading_count} submissions.`,
-          statDescription: `${isCompletion
-            ? "Selected-period eligible student-task requirements; unique latest completed attempts."
+          statDescription: `${isSubmissionRate
+            ? "Selected-period eligible student-task submission requirements; unique latest completed attempts."
             : "Latest completed attempts pending teacher grading."} ${summary.warnings.map((warning) => warning.message).join(" ")}`.trim(),
         };
       }

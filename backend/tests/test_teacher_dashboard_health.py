@@ -568,11 +568,14 @@ def test_empty_scope_has_honest_phase_one_zeros_and_empty_data(db, data, empty_k
     result = AnalyticsService.build_teacher_dashboard_health(db, teacher.staff_id, period)
     assert result["kpis"] == {
         "active_classes": 0, "enrolled_students": 0,
-        "overall_completion_rate": 0.0, "ungraded_count": 0,
+        "overall_completion_rate": None, "ungraded_count": 0,
     }
     cards = {card["title"]: card for card in result["cards"]}
+    assert "Overall Completion" not in cards
+    assert "Attendance Today" not in cards
+    assert "attendance_today" not in result["phase_two"]
     assert (cards["Active Classes"]["count"], cards["Active Classes"]["stat"]) == ("0", "0 sections")
-    assert (cards["Overall Completion"]["count"], cards["Overall Completion"]["stat"]) == ("0%", "0 of 0 submitted")
+    assert (cards["Submission Rate"]["count"], cards["Submission Rate"]["stat"]) == ("—", "0 of 0 submitted")
     assert (cards["Ungraded Queue"]["count"], cards["Ungraded Queue"]["stat"]) == ("0", "0 submissions")
     assert cards["Current grade"]["count"] == "—"
     assert result["trend_chart"]["available_filters"] == result["trend_chart"]["points"] == []
@@ -639,8 +642,9 @@ def test_missing_enrollments_and_no_submissions_remain_zero_not_null(db, data):
     db.flush()
     empty = dashboard(db, data)
     assert empty["kpis"]["enrolled_students"] == 0
+    assert empty["kpis"]["overall_completion_rate"] is None
     assert empty["section_matrix"][0]["attendance_rate_percent"] is None
-    assert all(p["total_enrolled"] == 0 and p["completion_rate_percent"] == 0.0 for p in empty["trend_chart"]["points"])
+    assert all(p["total_enrolled"] == 0 and p["completion_rate_percent"] is None for p in empty["trend_chart"]["points"])
 
 
 @pytest.mark.parametrize("total_points,expected", [(None, None), (Decimal("0.00"), None), (Decimal("100.00"), 0.0)])
@@ -772,7 +776,7 @@ def test_active_substitute_does_not_inherit_primary_teacher_dashboard_data(db, d
     body = response.json()
     assert body["kpis"] == {
         "active_classes": 0, "enrolled_students": 0,
-        "overall_completion_rate": 0.0, "ungraded_count": 0,
+        "overall_completion_rate": None, "ungraded_count": 0,
     }
     assert body["trend_chart"]["available_filters"] == body["trend_chart"]["points"] == []
     assert body["section_matrix"] == []
@@ -825,7 +829,8 @@ def test_month_attendance_uses_all_recorded_rows_and_active_roster(db, data):
     assert monthly["rate"] == 50.0
     assert result["section_matrix"][0]["attendance_rate_percent"] == monthly["rate"]
     assert result["section_matrix"][0]["attendance_record_count"] == monthly["record_count"]
-    assert result["phase_two"]["attendance_today"]["record_count"] == 1
+    assert "attendance_today" not in result["phase_two"]
+    assert all(card["title"] != "Attendance Today" for card in result["cards"])
     previous = dashboard(db, data, period=data["previous_period"])
     assert all(row["record_count"] == 0 and row["rate"] is None for row in previous["details"]["attendance_by_section"])
 
@@ -841,7 +846,7 @@ def test_month_boundaries_and_today_use_the_same_manila_clock(db, data, monkeypa
     result = dashboard(db, data)
     assert result["details"]["attendance_by_section"][0]["record_count"] == 1
     assert result["details"]["attendance_by_section"][0]["rate"] == 100.0
-    assert result["phase_two"]["attendance_today"]["late_count"] == 1
+    assert "attendance_today" not in result["phase_two"]
     assert result["phase_two"]["month_window"]["start_date"] == "2026-10-01"
 
 
@@ -1177,7 +1182,7 @@ def test_phase_four_ambiguous_attempts_flag_totals_and_keep_valid_review_rows(db
     assert result["action_queue"]["upcoming_deadlines"][0]["submitted_count"] is None
     assert result["engagement"]["warnings"][0]["code"] == "ambiguous_submission_attempts"
     assert [row["submission_id"] for row in result["action_queue"]["pending_grading"]] == [data["submissions"]["pending_active"].submission_id]
-    assert next(card for card in result["cards"] if card["title"] == "Overall Completion")["count"] == "—"
+    assert next(card for card in result["cards"] if card["title"] == "Submission Rate")["count"] == "—"
 
 
 def test_phase_four_future_attempts_are_not_dashboard_evidence(db, data):
@@ -1527,3 +1532,93 @@ def test_dashboard_scope_route_preserves_teacher_authorization(db, data):
     assert response.json()['kpis']['active_classes'] == 0
     assert response.json()['action_queue']['pending_grading'] == []
     assert client.get('/analytics/teacher/dashboard-health', params={'dashboard_class_id': 0}).status_code == 422
+
+
+def test_reading_materials_and_manual_activities_never_enter_submission_rate_or_review_queue(db, data):
+    """Regression: Reading Materials (even marked done) and manual offline activities are excluded from Submission Rate and Submissions to Review, while upcoming Reading Material deadlines remain in Upcoming Deadlines."""
+    reading = add_assignment(db, data, "reading_material", due_date=NOW + timedelta(hours=2))
+    reading.classwork.classwork_type = "READING"
+    reading.classwork.is_graded = False
+    reading.classwork.total_points = None
+    # Simulate SubmissionService.complete_reading_assignment creating status='submitted', grade=None
+    add_submission(db, data, "reading_done_one", reading, data["students"]["active_one"], status="submitted", grade=None)
+    add_submission(db, data, "reading_done_two", reading, data["students"]["active_two"], status="submitted", grade=None)
+
+    manual_act = add_assignment(db, data, "manual_offline_activity")
+    manual_act.classwork.classwork_type = "ACTIVITY"
+    manual_act.classwork.activity_mode = "MANUAL"
+    manual_act.classwork.is_graded = True
+    add_submission(db, data, "manual_unscored", manual_act, data["students"]["active_one"], status="submitted", grade=None)
+
+    practice_only = make_targeted_assignment(db, data, "practice_only_intervention", data["students"]["active_one"])
+    practice_only.classwork.classwork_type = "QUIZ"
+    practice_only.classwork.is_graded = False
+    add_submission(db, data, "practice_sub", practice_only, data["students"]["active_one"], status="submitted", grade=None)
+
+    db.flush()
+    result = dashboard(db, data)
+
+    # Baseline fixture has 2 eligible assignments (main_graded, main_pending) x 2 students = 4 expected, 3 completed (75.0%), 1 ungraded
+    assert result["engagement"]["expected_count"] == 4
+    assert result["engagement"]["completed_count"] == 3
+    assert result["kpis"]["overall_completion_rate"] == 75.0
+    assert result["kpis"]["ungraded_count"] == 1
+    assert [item["submission_id"] for item in result["action_queue"]["pending_grading"]] == [
+        data["submissions"]["pending_active"].submission_id,
+    ]
+    # Reading Material with an upcoming due_date still appears in upcoming_deadlines
+    reading_deadline = next(
+        item for item in result["action_queue"]["upcoming_deadlines"]
+        if item["assignment_id"] == reading.classwork_assignment_id
+    )
+    assert reading_deadline["classwork_id"] == reading.classwork_id
+    assert reading_deadline["total_students"] == 2
+    assert reading_deadline["submitted_count"] == 2
+    cards = {c["title"]: c for c in result["cards"]}
+    assert cards["Submission Rate"]["count"] == "75%"
+    assert cards["Submission Rate"]["stat"] == "3 of 4 submitted"
+
+
+def test_auto_graded_and_manual_review_quizzes_in_submission_rate_and_submissions_to_review(db, data):
+    """Regression: auto-graded quizzes count in Submission Rate but not Submissions to Review; quizzes awaiting manual grading appear in both."""
+    auto_quiz = make_targeted_assignment(db, data, "auto_graded_quiz", data["students"]["active_one"])
+    auto_quiz.classwork.classwork_type = "QUIZ"
+    auto_quiz.classwork.is_graded = True
+    auto_sub = add_submission(
+        db, data, "auto_quiz_sub", auto_quiz, data["students"]["active_one"],
+        status="graded", grade=Decimal("45.00"),
+    )
+    auto_sub.graded_at = NOW
+
+    manual_quiz = make_targeted_assignment(db, data, "manual_essay_quiz", data["students"]["active_two"])
+    manual_quiz.classwork.classwork_type = "QUIZ"
+    manual_quiz.classwork.is_graded = True
+    # QuizAttemptService sets status='submitted', graded_at=None, grade=<partial auto points> when manual questions exist
+    manual_quiz_sub = add_submission(
+        db, data, "manual_quiz_sub", manual_quiz, data["students"]["active_two"],
+        status="submitted", grade=Decimal("20.00"),
+    )
+    manual_quiz_sub.graded_at = None
+    db.flush()
+
+    result = dashboard(db, data)
+    # 4 baseline + 1 auto_quiz + 1 manual_quiz = 6 expected; 3 baseline + 2 quizzes = 5 completed
+    assert result["engagement"]["expected_count"] == 6
+    assert result["engagement"]["completed_count"] == 5
+    assert result["kpis"]["overall_completion_rate"] == 83.3
+    # Pending grading includes baseline pending_active AND manual_quiz_sub, but NOT auto_quiz_sub
+    pending_ids = {item["submission_id"] for item in result["action_queue"]["pending_grading"]}
+    assert manual_quiz_sub.submission_id in pending_ids
+    assert auto_sub.submission_id not in pending_ids
+    assert result["kpis"]["ungraded_count"] == 2
+
+    # Once teacher finishes grading the manual quiz question, it leaves Submissions to Review
+    manual_quiz_sub.status = "graded"
+    manual_quiz_sub.grade = Decimal("40.00")
+    manual_quiz_sub.graded_at = NOW
+    db.flush()
+    after_grading = dashboard(db, data)
+    assert after_grading["kpis"]["ungraded_count"] == 1
+    assert manual_quiz_sub.submission_id not in {
+        item["submission_id"] for item in after_grading["action_queue"]["pending_grading"]
+    }

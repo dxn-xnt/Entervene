@@ -40,7 +40,10 @@ def support_assignment(aid=1, *, due=None, recipient=None, class_id=1, subject_i
     return SimpleNamespace(
         classwork_assignment_id=aid, class_id=class_id, due_date=due,
         recipient_student_id=recipient, publish_date=None,
-        classwork=SimpleNamespace(subject_id=subject_id, created_at=None),
+        classwork=SimpleNamespace(
+            subject_id=subject_id, created_at=None,
+            classwork_type="ASSIGNMENT", activity_mode=None,
+        ),
     )
 
 
@@ -693,8 +696,13 @@ def test_optional_subject_matching_can_be_explicitly_enabled(record_subject, exp
 
 
 def assignment(identifier=1, *, due=None, class_id=1, subject_id=1):
-    return SimpleNamespace(classwork_assignment_id=identifier, class_id=class_id,
-                           classwork=SimpleNamespace(subject_id=subject_id), due_date=due)
+    return SimpleNamespace(
+        classwork_assignment_id=identifier, class_id=class_id,
+        classwork=SimpleNamespace(
+            subject_id=subject_id, classwork_type="ASSIGNMENT", activity_mode=None,
+        ),
+        due_date=due,
+    )
 
 
 def submission(identifier=1, *, learner="learner", submitted=None, status="submitted"):
@@ -1282,3 +1290,57 @@ def test_lesson_empty_and_partial_summaries_contain_only_aggregate_metadata():
         assert forbidden not in encoded
     assert lesson_summary(replace(evidence, attempts={}, answers=[])).items == []
     assert metrics.summarize_dashboard_lesson_performance(replace(evidence, subjects={})).subjects == []
+
+
+@pytest.mark.parametrize(
+    "classwork_type,activity_mode,is_graded,source_intervention_id,resource_origin_id,expected",
+    [
+        ("ASSIGNMENT", None, True, None, None, True),
+        ("ACTIVITY", "ONLINE", True, None, None, True),
+        ("QUIZ", None, True, None, None, True),
+        ("READING", None, False, None, None, False),
+        ("READING", None, True, None, None, False),
+        ("ACTIVITY", "MANUAL", True, None, None, False),
+        ("QUIZ", None, False, 10, None, False),  # ungraded practice-only intervention task
+        ("QUIZ", None, True, 10, None, True),  # graded remedial intervention quiz
+        ("ASSIGNMENT", None, False, None, 99, False),  # intervention resource material
+    ],
+)
+def test_is_submission_eligible_classwork_excludes_non_deliverable_work(
+    classwork_type, activity_mode, is_graded, source_intervention_id, resource_origin_id, expected,
+):
+    """Validator-unit: only online deliverable-requiring classwork enters Submission Rate."""
+    work = engagement_assignment(1)
+    work.classwork.classwork_type = classwork_type
+    work.classwork.activity_mode = activity_mode
+    work.classwork.is_graded = is_graded
+    work.classwork.intervention_resource_origin_id = resource_origin_id
+    work.source_intervention_id = source_intervention_id
+    assert metrics.is_submission_eligible_classwork(work.classwork, work) is expected
+
+
+def test_is_reviewable_submission_distinguishes_auto_graded_and_manual_review_quizzes():
+    """Validator-unit: auto-graded quizzes never enter pending review; manual-question quizzes do."""
+    quiz_work = engagement_assignment(1)
+    quiz_work.classwork.classwork_type = "QUIZ"
+    quiz_work.classwork.is_graded = True
+
+    auto_graded_quiz = engagement_row(1, status="graded", score=40)
+    auto_graded_quiz.graded_at = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    assert metrics.is_reviewable_submission(auto_graded_quiz, quiz_work) is False
+
+    manual_question_quiz = engagement_row(1, status="submitted", score=20)
+    manual_question_quiz.graded_at = None
+    assert metrics.is_reviewable_submission(manual_question_quiz, quiz_work) is True
+
+    reading_work = engagement_assignment(2)
+    reading_work.classwork.classwork_type = "READING"
+    reading_work.classwork.is_graded = False
+    reading_done = engagement_row(2, status="submitted", score=None)
+    assert metrics.is_reviewable_submission(reading_done, reading_work) is False
+
+    ungraded_assignment = engagement_assignment(3)
+    ungraded_assignment.classwork.classwork_type = "ASSIGNMENT"
+    ungraded_assignment.classwork.is_graded = False
+    ungraded_sub = engagement_row(3, status="submitted", score=None)
+    assert metrics.is_reviewable_submission(ungraded_sub, ungraded_assignment) is False

@@ -3376,7 +3376,6 @@ export interface TeacherDashboardInterventionResolution {
 
 export interface TeacherDashboardPhaseTwo {
   grades: TeacherDashboardGradeSummary;
-  attendance_today: TeacherDashboardAttendanceSummary;
   month_window: { start_date: string; end_date: string; today: string; label: string } | null;
   late_submissions: {
     late_rate_percent: number | null;

@@ -143,14 +143,6 @@ function buildSampleResponse(overrides: Partial<TeacherDashboardHealthResponse> 
         current_grade_meets_threshold: true,
         warnings: [],
       },
-      attendance_today: {
-        rate: 92.0,
-        record_count: 25,
-        present_count: 21,
-        late_count: 2,
-        excused_count: 1,
-        absent_count: 1,
-      },
       month_window: {
         start_date: "2026-10-01",
         end_date: "2026-10-08",
@@ -330,16 +322,22 @@ describe("TeacherDashboard (Restored & Refined Original Dashboard)", () => {
       expect(screen.getByText("40%")).toBeTruthy();
     });
 
-    // Verify Improved Prediction Resolution Rate is positioned immediately below Active Classes
+    // Verify Improved Prediction Resolution Rate is positioned immediately below Active Classes, followed by Submission Rate
     const html = container.innerHTML;
     const activeClassesIdx = html.indexOf("Active Classes");
     const improvedRateIdx = html.indexOf("Improved Prediction Resolution Rate");
-    const overallCompletionIdx = html.indexOf("Overall Completion");
+    const submissionRateIdx = html.indexOf("Submission Rate");
     expect(activeClassesIdx).toBeGreaterThan(-1);
     expect(improvedRateIdx).toBeGreaterThan(activeClassesIdx);
-    expect(overallCompletionIdx).toBeGreaterThan(improvedRateIdx);
+    expect(submissionRateIdx).toBeGreaterThan(improvedRateIdx);
 
     expect(screen.getByText(/2 of 5 active & resolved/)).toBeTruthy();
+    expect(screen.getByText("Submission Rate")).toBeTruthy();
+    expect(screen.getByText("33 of 40 submitted.")).toBeTruthy();
+
+    // Verify Overall Completion and Attendance Today are removed from the dashboard
+    expect(screen.queryByText("Overall Completion")).toBeNull();
+    expect(screen.queryByText("Attendance Today")).toBeNull();
 
     // Verify Lowest Mastery Lessons Graph renders with coverage details
     expect(screen.getByText("Lowest Mastery Lessons")).toBeTruthy();

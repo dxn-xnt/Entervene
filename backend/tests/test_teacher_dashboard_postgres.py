@@ -540,7 +540,6 @@ def _numeric_snapshot(result, data):
         "grade_summary": {key: value for key, value in grades.items() if key != "warnings"},
         "grade_warnings": [warning["code"] for warning in grades["warnings"]],
         "month_window": phase_two["month_window"],
-        "attendance_today": phase_two["attendance_today"],
         "monthly_attendance": sorted((
             class_keys[row["class_id"]], row["rate"], row["record_count"],
             row["present_count"], row["late_count"], row["excused_count"], row["absent_count"],
@@ -589,7 +588,7 @@ def _collect_numeric_scenarios(db, data, current_result):
         }, "selected previous-period KPI values")
         _expect_equal(samples["previous_period"]["matrix"], [
             ("class_", "subject", 2, 1, None, None, 50.0, 0.0),
-            ("previous_class", "subject", 1, 0, None, None, 0.0, None),
+            ("previous_class", "subject", 1, 0, None, None, None, None),
         ], "selected previous-period matrix values")
 
         work = data["assignments"]["main_graded"].classwork
@@ -716,7 +715,6 @@ def _collect_phase_two_scenarios(db, data):
         _expect_equal(samples["four_status_month"]["monthly_attendance"], [
             ("class_", 50.0, 6, 2, 1, 1, 2),
         ], "inclusive month/current-day record denominator")
-        _expect_equal(samples["four_status_month"]["attendance_today"]["record_count"], 0, "missing-today records are not inferred")
 
         with patch.object(AnalyticsService, "_teacher_dashboard_now", return_value=datetime(2026, 9, 30, 16, 0, tzinfo=timezone.utc)):
             samples["manila_midnight"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
@@ -879,7 +877,7 @@ def test_teacher_dashboard_empty_queries_execute_on_guarded_postgres(postgres_da
         result = _dashboard(postgres_dashboard_session, identity, period)
         _expect_equal(result["kpis"], {
             "active_classes": 0, "enrolled_students": 0,
-            "overall_completion_rate": 0.0, "ungraded_count": 0,
+            "overall_completion_rate": None, "ungraded_count": 0,
         }, "empty-scope KPI zeros")
         _expect_equal(result["trend_chart"]["available_filters"], [], "empty-scope filters")
         _expect_equal(result["trend_chart"]["points"], [], "empty-scope trend points")

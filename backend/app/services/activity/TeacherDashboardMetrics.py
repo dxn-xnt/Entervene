@@ -459,6 +459,61 @@ class DashboardEngagementSnapshot:
     eligible_submissions: Sequence[StudentSubmission]
 
 
+def is_submission_eligible_classwork(
+    classwork: Classwork | object | None,
+    assignment: ClassworkAssignment | object | None = None,
+) -> bool:
+    """Return True only for classwork that requires an online student deliverable submission.
+
+    Excludes:
+    - Reading Materials (classwork_type == 'READING' or intervention support materials)
+    - Teacher-entered offline/manual activities (activity_mode == 'MANUAL')
+    - Ungraded practice-only intervention tasks (source_intervention_id set and is_graded is False)
+    """
+    if classwork is None or getattr(classwork, "is_archived", False):
+        return False
+    if assignment is not None and getattr(assignment, "is_published", True) is False:
+        return False
+    cw_type = (getattr(classwork, "classwork_type", None) or "").strip().upper()
+    if cw_type == "READING" or getattr(classwork, "intervention_resource_origin_id", None) is not None:
+        return False
+    if is_manual_activity(classwork):
+        return False
+    if (
+        assignment is not None
+        and getattr(assignment, "source_intervention_id", None) is not None
+        and getattr(classwork, "is_graded", True) is False
+    ):
+        return False
+    return True
+
+
+def is_reviewable_submission(
+    submission: StudentSubmission | object,
+    assignment: ClassworkAssignment | object,
+) -> bool:
+    """Return True only when a latest completed submission awaits teacher grading review.
+
+    - Excludes non-submission classworks (Reading Materials, Manual Activities, ungraded practice).
+    - Excludes ungraded classworks (is_graded is False).
+    - Excludes already-graded submissions (status == 'graded', including auto-graded quizzes).
+    - Includes ungraded submitted/late assignments and online activities (grade is None).
+    - Includes quizzes with ungraded manual/essay questions (status in {'submitted', 'late'}
+      and either grade is None or graded_at is None, even when a partial auto-score is stored).
+    """
+    classwork = getattr(assignment, "classwork", None)
+    if not is_submission_eligible_classwork(classwork, assignment):
+        return False
+    if getattr(classwork, "is_graded", True) is False:
+        return False
+    if getattr(submission, "status", None) not in {"submitted", "late"}:
+        return False
+    cw_type = (getattr(classwork, "classwork_type", None) or "").strip().upper()
+    if cw_type == "QUIZ":
+        return getattr(submission, "grade", None) is None or getattr(submission, "graded_at", None) is None
+    return getattr(submission, "grade", None) is None
+
+
 def dashboard_assignment_student_ids(
     assignment: ClassworkAssignment, enrolled_student_ids: Collection[object]
 ) -> frozenset[str]:
@@ -479,10 +534,16 @@ def build_dashboard_engagement(
     submission after that period's end. Excuses never remove an obligation.
     Future timestamps are filtered before selecting, without falling back to
     an older graded attempt when the newest completed attempt is ungraded.
+    Non-submission classwork (Reading Materials, Manual Activities, and ungraded
+    practice-only intervention tasks) are excluded from submission engagement.
     """
+    eligible_assignments = {
+        aid: a for aid, a in assignments.items()
+        if is_submission_eligible_classwork(getattr(a, "classwork", None), a)
+    }
     eligible = {aid: dashboard_assignment_student_ids(a, enrolled_by_class.get(a.class_id, ()))
-                for aid, a in assignments.items()}
-    candidates = {aid: [] for aid in assignments}
+                for aid, a in eligible_assignments.items()}
+    candidates = {aid: [] for aid in eligible_assignments}
     scoped = []
     cutoff = _dashboard_aware_timestamp(now)
     for row in submissions:
@@ -494,7 +555,7 @@ def build_dashboard_engagement(
         scoped.append(row)
         candidates[aid].append(row)
     selected, warnings = {}, {}
-    for aid, assignment in assignments.items():
+    for aid, assignment in eligible_assignments.items():
         selected[aid], attempt_warnings = select_dashboard_submissions(candidates[aid])
         warnings[aid] = [warning.model_copy(update={
             "assignment_id": aid, "class_id": assignment.class_id,
@@ -514,7 +575,7 @@ def build_dashboard_engagement(
                 assignment_id=aid, class_id=assignment.class_id,
                 subject_id=assignment.classwork.subject_id,
             ))
-    return DashboardEngagementSnapshot(assignments, eligible, selected, warnings, scoped)
+    return DashboardEngagementSnapshot(eligible_assignments, eligible, selected, warnings, scoped)
 
 
 def _dashboard_task_percent(submission: StudentSubmission, assignment: ClassworkAssignment) -> float | None:
@@ -530,13 +591,20 @@ def summarize_dashboard_engagement(
     snapshot: DashboardEngagementSnapshot, assignment_ids: Collection[int] | None = None
 ) -> DashboardEngagementSummary:
     """Python aggregation, equal weight per scored learner-task, no ORM reads."""
-    ids = sorted(snapshot.assignments if assignment_ids is None else set(assignment_ids))
+    ids = sorted(
+        snapshot.assignments
+        if assignment_ids is None
+        else (set(assignment_ids) & set(snapshot.assignments))
+    )
     warnings = [warning for aid in ids for warning in snapshot.warnings_by_assignment[aid]]
     ambiguous = any(warning.code == "ambiguous_submission_attempts" for warning in warnings)
     expected = sum(len(snapshot.eligible_by_assignment[aid]) for aid in ids)
     completed = sum(len(snapshot.selected_by_assignment[aid]) for aid in ids)
-    pending = sum(row.status in {"submitted", "late"} and row.grade is None
-                  for aid in ids for row in snapshot.selected_by_assignment[aid])
+    pending = sum(
+        is_reviewable_submission(row, snapshot.assignments[aid])
+        for aid in ids
+        for row in snapshot.selected_by_assignment[aid]
+    )
     scores = []
     graded_tasks = 0
     for aid in ids:
@@ -544,16 +612,15 @@ def summarize_dashboard_engagement(
                        if (score := _dashboard_task_percent(row, snapshot.assignments[aid])) is not None]
         scores.extend(task_scores)
         graded_tasks += bool(task_scores)
-    no_eligible_target = expected == 0 and any(
-        warning.code == "targeted_recipient_outside_active_roster" for warning in warnings
-    )
     return DashboardEngagementSummary(
         expected_count=expected,
         completed_count=None if ambiguous else completed,
         pending_grading_count=None if ambiguous else pending,
         resolved_completed_count=completed, resolved_pending_grading_count=pending,
-        completion_rate_percent=(None if ambiguous or no_eligible_target else
-                                 round(float(completed) / float(expected) * 100.0, 1) if expected else 0.0),
+        completion_rate_percent=(
+            None if ambiguous or expected == 0 else
+            round(float(completed) / float(expected) * 100.0, 1)
+        ),
         avg_score_percent=(round(sum(scores) / float(len(scores)), 1) if scores and not ambiguous else None),
         scored_count=len(scores), graded_task_count=graded_tasks, warnings=warnings,
     )
@@ -565,6 +632,8 @@ def build_dashboard_performance_trend(
     """One point per Manila deadline day (publish/creation fallback), not per task."""
     groups: dict[date, list[ClassworkAssignment]] = {}
     for assignment in assignments:
+        if assignment.classwork_assignment_id not in snapshot.assignments:
+            continue
         timestamp = assignment.due_date or assignment.publish_date or assignment.classwork.created_at
         if timestamp is not None:
             groups.setdefault(dashboard_manila_date(timestamp), []).append(assignment)
@@ -623,7 +692,8 @@ def summarize_dashboard_submissions(
     """Dashboard-only lateness and weekdays for actual submission events.
 
     Select existing completed rows, constrain actual submission dates to the
-    chosen period through now, omit manual gradebook-only rows, and exclude
+    chosen period through now, omit non-submission classwork rows (Reading
+    Materials, manual offline activities, ungraded practice), and exclude
     deadline-date excuses from both the late numerator and denominator.
     Dates/weekday conversion happens in Python.
     """
@@ -632,9 +702,11 @@ def summarize_dashboard_submissions(
     in_window = []
     for submission in submissions:
         assignment = assignments.get(submission.classwork_assignment_id)
-        # Manual activities create gradebook rows without a student submission
-        # event. They belong in grade metrics, not calendar submission metrics.
-        if assignment is not None and is_manual_activity(assignment.classwork):
+        # Non-submission classwork (Reading Materials and manual gradebook-only rows)
+        # have no student deliverable submission event for calendar submission metrics.
+        if assignment is not None and not is_submission_eligible_classwork(
+            getattr(assignment, "classwork", None), assignment
+        ):
             continue
         timestamp = submission.submitted_at
         if timestamp is None:
