@@ -959,6 +959,69 @@ def build_subject_overview(
         ClassworkLesson.classwork_id.in_(db.query(scoped_classwork_ids.c.classwork_id)),
     ).scalar() or 0
 
+    # Calculate Students Average Grade from finalized period grades or graded submissions
+    grade_q = db.query(func.avg(StudentPeriodGrade.final_period_grade)).filter(
+        StudentPeriodGrade.subject_id == subject_id,
+        *((StudentPeriodGrade.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+    )
+    avg_grade_val = grade_q.scalar()
+
+    if avg_grade_val is None:
+        sub_grade_q = (
+            db.query(
+                func.sum(StudentSubmission.grade),
+                func.sum(Classwork.total_points),
+            )
+            .join(ClassworkAssignment, ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id)
+            .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+            .join(Class, Class.class_id == ClassworkAssignment.class_id)
+            .filter(
+                Classwork.subject_id == subject_id,
+                Classwork.is_archived.is_(False),
+                StudentSubmission.status == "graded",
+                StudentSubmission.grade.isnot(None),
+                Classwork.total_points > 0,
+                *((ClassworkAssignment.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+                *((Class.academic_year_id == target_period.academic_year_id,) if target_period else ()),
+            )
+        )
+        earned_sum, total_sum = sub_grade_q.first() or (None, None)
+        if earned_sum is not None and total_sum and float(total_sum) > 0:
+            avg_grade_val = round((float(earned_sum) / float(total_sum)) * 100, 1)
+
+    avg_grade_num = round(float(avg_grade_val), 1) if avg_grade_val is not None else None
+    avg_grade_str = f"{avg_grade_num}%" if avg_grade_num is not None else "--"
+
+    # Calculate Overall Class Mastery from graded submissions
+    mastery_q = (
+        db.query(
+            func.sum(StudentSubmission.grade),
+            func.sum(Classwork.total_points),
+        )
+        .join(ClassworkAssignment, ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id)
+        .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+        .join(Class, Class.class_id == ClassworkAssignment.class_id)
+        .filter(
+            Classwork.subject_id == subject_id,
+            Classwork.is_archived.is_(False),
+            StudentSubmission.status == "graded",
+            StudentSubmission.grade.isnot(None),
+            Classwork.total_points > 0,
+            *((ClassworkAssignment.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+            *((Class.academic_year_id == target_period.academic_year_id,) if target_period else ()),
+        )
+    )
+    m_earned, m_possible = mastery_q.first() or (None, None)
+    if m_earned is not None and m_possible and float(m_possible) > 0:
+        mastery_pct = round((float(m_earned) / float(m_possible)) * 100)
+        mastery_str = f"{mastery_pct}%"
+    elif avg_grade_num is not None:
+        mastery_pct = round(avg_grade_num)
+        mastery_str = f"{mastery_pct}%"
+    else:
+        mastery_pct = None
+        mastery_str = "--"
+
     cards = [
         {
             "title": "Total Classes",
@@ -968,25 +1031,25 @@ def build_subject_overview(
             "rawCount": subj_classes,
         },
         {
-            "title": "Teachers",
-            "count": format_count(subj_teachers),
-            "stat": str(subj_teachers),
-            "statDescription": f"assigned faculty in {period_name}",
-            "rawCount": subj_teachers,
+            "title": "Active Classes",
+            "count": format_count(subj_classes),
+            "stat": str(subj_classes),
+            "statDescription": f"active sections in {period_name}",
+            "rawCount": subj_classes,
         },
         {
-            "title": "Lessons",
-            "count": format_count(lessons_count),
-            "stat": str(lessons_count),
-            "statDescription": f"learning modules in {period_name}",
-            "rawCount": lessons_count,
+            "title": "Overall Class Mastery",
+            "count": mastery_str,
+            "stat": mastery_str,
+            "statDescription": "Average performance across lessons",
+            "rawCount": mastery_pct,
         },
         {
-            "title": "Classworks",
-            "count": format_count(classworks_count),
-            "stat": str(classworks_count),
-            "statDescription": f"activities & quizzes in {period_name}",
-            "rawCount": classworks_count,
+            "title": "Students Average Grade",
+            "count": avg_grade_str,
+            "stat": avg_grade_str,
+            "statDescription": "Average recorded student grade",
+            "rawCount": avg_grade_num,
         },
     ]
 
@@ -1006,6 +1069,8 @@ def build_subject_overview(
             "teachers_count": subj_teachers,
             "lessons_count": lessons_count,
             "classworks_count": classworks_count,
+            "overall_class_mastery": mastery_pct,
+            "students_average_grade": avg_grade_num,
         },
     }
 

@@ -390,7 +390,7 @@ export default function AdminClasses() {
                 </div>
               </div>
 
-              <section className="grid gap-4">
+              <section className="grid gap-4 min-w-0">
                 {isLoading || isContextLoading ? (
                   <LoadingPanel label="Loading classes..." />
                 ) : loadError ? (
@@ -413,13 +413,13 @@ export default function AdminClasses() {
                   <Accordion
                     multiple
                     defaultValue={grouped.map((group) => group.levelName)}
-                    className="flex flex-col gap-4"
+                    className="flex flex-col gap-4 min-w-0 max-w-full"
                   >
                     {grouped.map((group) => (
                       <Accordion.Item
                         key={group.levelName}
                         value={group.levelName}
-                        className="border-2 border-border bg-background shadow-md overflow-hidden rounded"
+                        className="border-2 border-border bg-background shadow-md overflow-hidden rounded min-w-0 max-w-full"
                       >
                         <Accordion.Header className="items-center px-4 py-3 bg-primary text-foreground">
                           <div className="flex items-center justify-between w-full mr-2">
@@ -433,8 +433,15 @@ export default function AdminClasses() {
                           </div>
                         </Accordion.Header>
 
-                        <Accordion.Content className="p-4 pt-3 border-t-2 border-border bg-background">
-                          <div className="pt-1 flex gap-3 overflow-x-auto pb-2 w-full min-w-0">
+                        <Accordion.Content className="p-4 pt-3 border-t-2 border-border bg-background min-w-0 max-w-full overflow-hidden">
+                          <div
+                            className="pt-1 flex gap-3 overflow-x-auto overscroll-x-contain pb-2 w-full max-w-full min-w-0 retro-scrollbar"
+                            onWheel={(e) => {
+                              if (e.deltaY !== 0 && e.currentTarget.scrollWidth > e.currentTarget.clientWidth) {
+                                e.currentTarget.scrollLeft += e.deltaY;
+                              }
+                            }}
+                          >
                             {group.classes.map((item) => (
                               <ClassCard
                                 key={item.class_id}

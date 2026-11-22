@@ -12,10 +12,11 @@ import type {
   DistributionMode,
   ManualAssignmentWorkspaceState,
   ManualClassSetup,
+  ManualSectionDraft,
 } from "@/types/adminClasses";
-import AssignmentToolbar from "./AssignmentToolbar";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Select } from "@/components/retroui/Select";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import AssignEvenlyConfirmationModal from "./AssignEvenlyConfirmationModal";
 import AvailableStudentsPanel from "./AvailableStudentsPanel";
@@ -264,98 +265,94 @@ export default function StudentAssignmentWorkspace({
   return (
     <>
       <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 p-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-bold">
-            Assign Students - {setup.academicLevelName}
-          </h2>
-          <p className="text-sm">
-            Academic Year: {setup.academicYear.year_label}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Student assignment is optional. You can add students after saving
-            the class.
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              Student assignment is optional. You can add students after saving
+              the class.
+            </p>
+          </div>
+
         </div>
-        {resetWarning && (
-          <p className="rounded border border-black bg-[#fff0a8] px-3 py-2 text-xs font-semibold">
-            {resetWarning}
-          </p>
+
+        {distributing && (
+          <div className="flex items-center gap-2 rounded border-2 border-black bg-[#fff8d7] p-2.5 text-xs font-bold">
+            <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-black border-t-transparent" />
+            <span>
+              {distributionMode === "gwa"
+                ? "Balancing students by academic performance (GWA)..."
+                : "Balancing students alphabetically..."}
+            </span>
+          </div>
         )}
-      </div>
-      {distributeError && (
-        <div className="grid gap-1">
-          <AdminValidationAlert message={distributeError} />
-          <button
-            type="button"
-            className="text-sm font-medium text-destructive underline"
-            onClick={() => setDistributeError("")}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-      {distributing && (
-        <div className="flex items-center gap-2 rounded border-2 border-black bg-[#fff8d7] p-2.5 text-xs font-bold">
-          <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-black border-t-transparent" />
-          <span>
-            {distributionMode === "gwa"
-              ? "Balancing students by academic performance (GWA)..."
-              : "Balancing students alphabetically..."}
-          </span>
-        </div>
-      )}
-      <AssignmentToolbar
-        sections={setup.sections}
-        selectedCount={state.selectedStudentIds.size}
-        canAssignEvenly={
-          state.unassignedStudents.length > 0 &&
-          setup.sections.length > 0 &&
-          !distributing
-        }
-        onMove={(target) => moveStudents([...state.selectedStudentIds], target)}
-        onClear={() => onChange({ ...state, selectedStudentIds: new Set() })}
-        onAssignEvenly={() => setShowAssignEvenlyConfirmation(true)}
-      />
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="grid min-h-0 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
-          <AvailableStudentsPanel
-            students={state.unassignedStudents}
-            assignedCount={assignedCount}
-            totalStudentCount={totalStudentCount}
-            selectedIds={state.selectedStudentIds}
-            onSelect={updateSelection}
-            onSelectVisible={(ids, selected) => {
-              const selectedStudentIds = new Set(state.selectedStudentIds);
-              ids.forEach((id) => {
-                if (selected) selectedStudentIds.add(id);
-                else selectedStudentIds.delete(id);
-              });
-              onChange({ ...state, selectedStudentIds });
-            }}
-          />
-          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 rounded! border-2 border-black bg-white p-3">
-            <h3 className="font-bold">Sections</h3>
-            <div className="grid min-h-0 grid-cols-1 content-start gap-3 overflow-y-auto pr-1">
-              {setup.sections.map((section) => (
-                <SectionAssignmentCard
-                  key={section.localId}
-                  section={section}
-                  students={state.assignmentsBySection[section.localId] ?? []}
-                  selectedIds={state.selectedStudentIds}
-                  recommendedTarget={targets[section.localId]}
-                  showEmptyError={false}
-                  onSelect={updateSelection}
-                  onRemove={(studentId) =>
-                    moveStudents([studentId], "unassigned")
-                  }
-                  onViewDetails={() => setDetailsSectionId(section.localId)}
-                />
-              ))}
+        <AssignmentToolbar
+          sections={setup.sections}
+          selectedCount={state.selectedStudentIds.size}
+          canAssignEvenly={
+            state.unassignedStudents.length > 0 &&
+            setup.sections.length > 0 &&
+            !distributing
+          }
+          onMove={(target) => moveStudents([...state.selectedStudentIds], target)}
+          onClear={() => onChange({ ...state, selectedStudentIds: new Set() })}
+          onAssignEvenly={() => setShowAssignEvenlyConfirmation(true)}
+        />
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <div className="grid min-h-0 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
+            <AvailableStudentsPanel
+              students={state.unassignedStudents}
+              assignedCount={assignedCount}
+              totalStudentCount={totalStudentCount}
+              selectedIds={state.selectedStudentIds}
+              onSelect={updateSelection}
+              onSelectVisible={(ids, selected) => {
+                const selectedStudentIds = new Set(state.selectedStudentIds);
+                ids.forEach((id) => {
+                  if (selected) selectedStudentIds.add(id);
+                  else selectedStudentIds.delete(id);
+                });
+                onChange({ ...state, selectedStudentIds });
+              }}
+            />
+            <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 rounded! border-2 border-black bg-white p-3">
+              <h3 className="font-bold">Sections</h3>
+              <div className="grid min-h-0 grid-cols-1 content-start gap-3 overflow-y-auto pr-1">
+                {setup.sections.map((section) => (
+                  <SectionAssignmentCard
+                    key={section.localId}
+                    section={section}
+                    students={state.assignmentsBySection[section.localId] ?? []}
+                    selectedIds={state.selectedStudentIds}
+                    recommendedTarget={targets[section.localId]}
+                    showEmptyError={false}
+                    onSelect={updateSelection}
+                    onRemove={(studentId) =>
+                      moveStudents([studentId], "unassigned")
+                    }
+                    onViewDetails={() => setDetailsSectionId(section.localId)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </DndContext>
+          {distributeError && (
+            <div className="grid gap-1">
+              <AdminValidationAlert message={distributeError} />
+              <button
+                type="button"
+                className="text-sm font-medium text-destructive underline"
+                onClick={() => setDistributeError("")}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+          {resetWarning && (
+            <p className="text-sm font-normal text-muted-foreground px-2 -mt-1">
+              {resetWarning}
+            </p>
+          )}
+        </DndContext>
       </div>
       <Dialog.Footer className="justify-between">
         <Button variant="outline" autoIcon={false} onClick={onClose}>
@@ -402,6 +399,77 @@ function StatePanel({
         <p className="text-xs text-black/70">{detail}</p>
       )}
       {children && <div className="flex gap-2">{children}</div>}
+    </div>
+  );
+}
+
+function AssignmentToolbar({
+  sections,
+  selectedCount,
+  canAssignEvenly,
+  onMove,
+  onClear,
+  onAssignEvenly,
+}: {
+  sections: ManualSectionDraft[];
+  selectedCount: number;
+  canAssignEvenly: boolean;
+  onMove: (target: string) => void;
+  onClear: () => void;
+  onAssignEvenly: () => void;
+}) {
+  const [moveTarget, setMoveTarget] = useState("");
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          disabled={!selectedCount}
+          value={moveTarget}
+          onValueChange={(value) => {
+            if (!value) return;
+            setMoveTarget(value);
+            onMove(value);
+            setMoveTarget("");
+          }}
+        >
+          <Select.Trigger className="w-auto shadow-none">
+            <Select.Value placeholder="Move Selected To..." />
+          </Select.Trigger>
+          <Select.Content
+            position="item-aligned"
+            className="max-h-72 overflow-y-auto"
+          >
+            <Select.Group>
+              {sections.map((section) => (
+                <Select.Item key={section.localId} value={section.localId}>
+                  {section.sectionName}
+                </Select.Item>
+              ))}
+            </Select.Group>
+          </Select.Content>
+        </Select>
+        <span className="text-xs font-bold">{selectedCount} selected</span>
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!selectedCount}
+          onClick={onClear}
+          className="disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Clear
+        </Button>
+        <Button
+          size="sm"
+          disabled={!canAssignEvenly}
+          onClick={onAssignEvenly}
+          className="gap-1.5 bg-[#79bd80] hover:bg-[#79bd80] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Assign Evenly
+        </Button>
+      </div>
     </div>
   );
 }
