@@ -15,7 +15,7 @@ from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTer
 from app.models.intervention.Intervention import Intervention
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.intervention.InterventionCandidateService import (
-    AUTOMATIC_CANDIDATE_LEVEL,
+    AUTOMATIC_CANDIDATE_LEVELS,
     OPEN_STATUSES,
     sync_intervention_for_persisted_prediction,
 )
@@ -142,8 +142,8 @@ def reconcile_existing_candidate(db: Session, prediction_id: int, *, apply: bool
     readiness = snapshot.get("readiness")
     if not isinstance(readiness, dict) or readiness.get("status") != "READY":
         return "not_ready"
-    if row.intervention_level != AUTOMATIC_CANDIDATE_LEVEL:
-        return "not_moderate_risk"
+    if row.intervention_level not in AUTOMATIC_CANDIDATE_LEVELS:
+        return "not_eligible_risk"
     raw = snapshot.get("projected_final_term_grade_raw")
     try:
         grade = float(raw) if not isinstance(raw, bool) else math.nan
@@ -158,6 +158,7 @@ def reconcile_existing_candidate(db: Session, prediction_id: int, *, apply: bool
             db,
             academic_year_id=period.academic_year_id,
             subject_id=row.subject_id,
+            academic_period_id=row.source_period_id,
         )
         threshold_val = float(res.threshold)
     except Exception:

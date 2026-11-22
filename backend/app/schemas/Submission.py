@@ -24,6 +24,18 @@ class SubmissionLinkResponse(SubmissionLinkInput):
     position: int
 
 
+class SubmissionAttemptSummary(BaseModel):
+    submission_id: int
+    attempt_count: int
+    status: str
+    submitted_at: Optional[datetime] = None
+    graded_at: Optional[datetime] = None
+    grade: Optional[float] = None
+    feedback: Optional[str] = None
+    attachments: list[SubmissionAttachmentResponse] = Field(default_factory=list)
+    links: list[SubmissionLinkResponse] = Field(default_factory=list)
+
+
 class SubmissionResponse(BaseModel):
     submission_id: int
     student_id: str
@@ -44,6 +56,15 @@ class SubmissionResponse(BaseModel):
     total_points: Optional[float] = None
     created_at: Optional[datetime] = None
     feedback_focus_points: Optional[list[str]] = None
+    is_intervention_assessment: bool = False
+    max_attempts: Optional[int] = None
+    attempts_used: Optional[int] = None
+    attempts_remaining: Optional[int] = None
+    is_passed: bool = False
+    passing_threshold: Optional[float] = None
+    needs_teacher_review: bool = False
+    can_retry: bool = False
+    attempt_history: list[SubmissionAttemptSummary] = Field(default_factory=list)
 
 
 class GradeRequest(BaseModel):

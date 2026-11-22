@@ -199,14 +199,11 @@ def create_remediation_assignment_link(
     if remediation_component != expected_component:
         raise HTTPException(400, "Remediation assignment grading category does not match the saved treatment")
     if (
-        is_quiz_type(remediation_assignment.classwork.classwork_type)
-        and (
-            remediation_assignment.max_attempts is None
-            or remediation_assignment.max_attempts < 1
-            or remediation_assignment.max_attempts > 3
-        )
+        remediation_assignment.max_attempts is None
+        or remediation_assignment.max_attempts < 1
+        or remediation_assignment.max_attempts > 3
     ):
-        raise HTTPException(400, "Study Support quizzes allow between 1 and 3 attempts")
+        raise HTTPException(400, "Study Support assessments allow between 1 and 3 attempts")
 
     plan_targets = (intervention.remediation_plan or {}).get("target_assignment_ids") or []
     if not plan_targets:

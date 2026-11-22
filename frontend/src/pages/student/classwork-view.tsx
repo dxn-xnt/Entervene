@@ -44,6 +44,7 @@ import { useToast } from "@/components/retroui/Toast";
 import { API_URL, apiFetch } from "@/lib/api";
 import {
   getQuizAttempt,
+  STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE,
   STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
   type QuizAttemptResponse,
 } from "@/lib/quiz-api";
@@ -921,6 +922,17 @@ export default function StudentClassworkView() {
                               {STUDY_SUPPORT_QUIZ_PASSED_MESSAGE}
                             </Alert.Description>
                           </Alert>
+                        ) : quiz.needs_teacher_review ||
+                          (quiz.is_intervention_quiz &&
+                            quiz.status === "graded" &&
+                            !quiz.can_submit &&
+                            (quiz.attempts_remaining ?? 0) === 0) ? (
+                          <Alert status="error">
+                            <Alert.Title>Needs Teacher Review</Alert.Title>
+                            <Alert.Description>
+                              {STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE}
+                            </Alert.Description>
+                          </Alert>
                         ) : quiz.can_submit && isWritableContext ? (
                           <div className="space-y-2">
                             {quiz.is_intervention_quiz && quiz.status === "graded" && (
@@ -956,6 +968,7 @@ export default function StudentClassworkView() {
                     )
                   ) : submission ? (
                     <SubmissionViewer
+                      assignmentId={assignmentId}
                       submission={submission}
                       dueDate={detail.due_date ?? undefined}
                       isLocked={closed}
@@ -968,7 +981,9 @@ export default function StudentClassworkView() {
                       }
                       hideGrade
                       isDeleting={actionLoading}
+                      isRetrying={actionLoading}
                       onDeleteSubmission={deleteSubmission}
+                      onSubmitRetry={isWritableContext ? submitFiles : undefined}
                     />
                   ) : closed ? (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">

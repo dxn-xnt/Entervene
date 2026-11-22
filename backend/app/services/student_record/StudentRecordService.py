@@ -2100,9 +2100,13 @@ def _submissions_by_student(
         elif submission.grade is not None and existing.grade is None:
             grouped[sid][asgn_id] = submission
         elif submission.grade is not None and existing.grade is not None:
-            sub_ts = submission.graded_at or submission.submitted_at or submission.created_at
-            ex_ts = existing.graded_at or existing.submitted_at or existing.created_at
-            if sub_ts and ex_ts and sub_ts > ex_ts:
+            from app.services.classwork.ClassworkShared import aware_utc
+            sub_ts = aware_utc(submission.graded_at or submission.submitted_at or submission.created_at)
+            ex_ts = aware_utc(existing.graded_at or existing.submitted_at or existing.created_at)
+            if sub_ts and ex_ts and (
+                sub_ts > ex_ts
+                or (sub_ts == ex_ts and submission.submission_id > existing.submission_id)
+            ):
                 grouped[sid][asgn_id] = submission
     return grouped
 

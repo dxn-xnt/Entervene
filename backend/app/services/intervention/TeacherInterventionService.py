@@ -13,7 +13,10 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.StudentCLass import StudentClass
 from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
+from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
+from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.classwork.ClassworkShared import is_reading_type
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.schemas.TeacherIntervention import (
     TeacherInterventionDetail, TeacherInterventionList, TeacherInterventionSummary, TeacherResolvedInterventionDetail,
@@ -21,7 +24,7 @@ from app.schemas.TeacherIntervention import (
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.academic.SubstitutionService import SubstitutionService
 from app.services.intervention.InterventionCandidateService import (
-    AUTOMATIC_CANDIDATE_LEVEL,
+    IMPROVED_PREDICTION,
     sync_intervention_for_persisted_prediction,
 )
 from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
@@ -101,9 +104,92 @@ def _current_candidate_status(
         return latest, current_grade_value, False, "PASSING_THRESHOLD_UNAVAILABLE"
     if current_grade_value >= passing_threshold:
         return latest, current_grade_value, False, "PASSING_THRESHOLD_REACHED"
-    if latest.intervention_level != AUTOMATIC_CANDIDATE_LEVEL:
-        return latest, current_grade_value, False, "CURRENT_RISK_NOT_MODERATE"
     return latest, current_grade_value, True, None
+
+
+def _unfinished_remediation_summary(db: Session, row: Intervention) -> tuple[int, bool]:
+    if row.status != "ACTIVE":
+        return 0, False
+    assignments = db.query(ClassworkAssignment).filter_by(
+        source_intervention_id=row.intervention_id,
+        recipient_student_id=row.student_id,
+        is_published=True,
+    ).all()
+    unfinished = 0
+    has_in_progress = False
+    for assignment in assignments:
+        work = assignment.classwork
+        if work is None or work.is_archived or not work.is_published or is_reading_type(work.classwork_type):
+            continue
+        submission = db.query(StudentSubmission).filter_by(
+            classwork_assignment_id=assignment.classwork_assignment_id,
+            student_id=row.student_id,
+        ).order_by(StudentSubmission.submission_id.desc()).first()
+        if submission is None:
+            unfinished += 1
+            continue
+        norm_status = (submission.status or "").lower()
+        if norm_status == "pending":
+            unfinished += 1
+            has_in_progress = True
+        elif norm_status in {"submitted", "late"}:
+            unfinished += 1
+    return unfinished, has_in_progress
+
+
+def _active_resolution_status(
+    row: Intervention,
+    latest: DevelopmentCurrentTermPrediction,
+    current_grade: float | None,
+    passing_threshold: float | None,
+) -> dict:
+    if row.status != "ACTIVE":
+        return {
+            "resolution_recommended": False,
+            "resolution_recommendation_reason": None,
+            "can_confirm_resolution": False,
+            "resolution_continued_at": None,
+            "resolution_continued_by_staff_id": None,
+        }
+    snapshot = latest.evidence_snapshot if isinstance(latest.evidence_snapshot, dict) else {}
+    readiness = snapshot.get("readiness")
+    is_ready = isinstance(readiness, dict) and readiness.get("status") == "READY"
+    reaches_target = bool(
+        is_ready
+        and current_grade is not None
+        and 0 <= current_grade <= 100
+        and passing_threshold is not None
+        and current_grade >= passing_threshold
+    )
+    plan = row.remediation_plan if isinstance(row.remediation_plan, dict) else {}
+    review = plan.get("resolution_review") if isinstance(plan.get("resolution_review"), dict) else {}
+    continued_at = None
+    continued_by = None
+    if review.get("decision") == "CONTINUE_SUPPORT":
+        raw_dt = review.get("decided_at")
+        if isinstance(raw_dt, str):
+            try:
+                continued_at = datetime.fromisoformat(raw_dt)
+            except ValueError:
+                continued_at = None
+        continued_by = review.get("decided_by_staff_id")
+    continued_for_latest = bool(
+        review.get("decision") == "CONTINUE_SUPPORT"
+        and review.get("continued_prediction_id") == latest.prediction_id
+    )
+    resolution_recommended = bool(reaches_target and not continued_for_latest)
+    reason = (
+        "TARGET_REACHED"
+        if resolution_recommended
+        else ("CONTINUED_BY_TEACHER" if reaches_target and continued_for_latest else None)
+    )
+    return {
+        "resolution_recommended": resolution_recommended,
+        "resolution_recommendation_reason": reason,
+        "can_confirm_resolution": reaches_target,
+        "resolution_continued_at": continued_at,
+        "resolution_continued_by_staff_id": continued_by,
+    }
 
 
 def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
@@ -118,6 +204,7 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
                 db,
                 academic_year_id=period.academic_year_id,
                 subject_id=row.subject_id,
+                academic_period_id=row.academic_period_id,
             )
             threshold_val = float(res.threshold)
     except Exception:
@@ -132,6 +219,8 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
     latest, current_grade, activation_eligible, activation_reason = _current_candidate_status(
         db, row, source, threshold_val,
     )
+    active_resolution = _active_resolution_status(row, latest, current_grade, threshold_val)
+    unfinished_count, has_in_progress = _unfinished_remediation_summary(db, row)
 
     return TeacherInterventionSummary(
         grade_level=grade_level_val,
@@ -152,6 +241,13 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
         current_intervention_level=latest.intervention_level,
         candidate_activation_eligible=activation_eligible,
         candidate_activation_reason=activation_reason,
+        resolution_recommended=active_resolution["resolution_recommended"],
+        resolution_recommendation_reason=active_resolution["resolution_recommendation_reason"],
+        can_confirm_resolution=active_resolution["can_confirm_resolution"],
+        resolution_continued_at=active_resolution["resolution_continued_at"],
+        resolution_continued_by_staff_id=active_resolution["resolution_continued_by_staff_id"],
+        unfinished_remediation_count=unfinished_count,
+        has_in_progress_remediation=has_in_progress,
         created_at=row.created_at,
         activated_at=row.activated_at,
         resolved_at=row.resolved_at, resolution_reason=row.resolution_reason,
@@ -297,7 +393,7 @@ def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int)
             grade = float(raw_grade) if not isinstance(raw_grade, bool) else math.nan
         except (TypeError, ValueError, OverflowError):
             grade = math.nan
-        if not math.isfinite(grade):
+        if not math.isfinite(grade) or not 0 <= grade <= 100:
             outcome["error"] = "Current corrected prediction grade is invalid"
             return
         period = transaction.get(AcademicPeriod, scope[3])
@@ -305,6 +401,7 @@ def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int)
             transaction,
             academic_year_id=period.academic_year_id if period else None,
             subject_id=scope[2],
+            academic_period_id=scope[3],
         )
         passing_threshold = float(threshold_resolution.threshold)
         if grade >= passing_threshold:
@@ -313,9 +410,6 @@ def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int)
                 subject_id=scope[2], academic_period_id=scope[3],
             )
             outcome["error"] = f"Current prediction improved to at least {passing_threshold:g}"
-            return
-        if latest.intervention_level != AUTOMATIC_CANDIDATE_LEVEL:
-            outcome["error"] = "Current prediction is not Moderate Risk"
             return
         row.status = "ACTIVE"
         row.activated_at = datetime.now(timezone.utc)
@@ -339,3 +433,190 @@ def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int)
     if active is None or active.status != "ACTIVE":
         raise HTTPException(status_code=409, detail="Intervention activation did not complete")
     return _detail(db, active)
+
+
+def _require_active_resolution_scope(db: Session, staff_id: str, intervention_id: int):
+    if (
+        settings.app_environment.lower() not in {"development", "test"}
+        or not settings.development_prediction_api_enabled
+        or settings.development_current_term_model_name != CORRECTED_MODEL_NAME
+    ):
+        raise HTTPException(status_code=404, detail="Not found")
+    active = db.get(Intervention, intervention_id)
+    if active is None:
+        raise HTTPException(status_code=404, detail="Active intervention not found")
+    _require_scope(db, staff_id, active)
+    if active.status != "ACTIVE":
+        raise HTTPException(status_code=409, detail="Intervention is no longer active")
+    source = _source(db, active)
+    model_version_id = source.model_version_id
+    version = db.get(AIModelVersion, model_version_id)
+    if version is None or version.model_name != CORRECTED_MODEL_NAME:
+        raise HTTPException(status_code=409, detail="Intervention source is not the corrected development model")
+    scope = (active.student_id, active.class_id, active.subject_id, active.academic_period_id)
+    return active, source, scope, model_version_id
+
+
+def _validate_revalidated_active_prediction(
+    transaction: Session,
+    *,
+    staff_id: str,
+    intervention_id: int,
+    scope: tuple,
+    model_version_id: int,
+    result: dict,
+):
+    row = transaction.query(Intervention).filter_by(intervention_id=intervention_id).with_for_update().one_or_none()
+    if row is None:
+        return None, None, None, None, "Intervention no longer exists"
+    if not _eligible_scope(transaction, staff_id, row):
+        return None, None, None, None, "Teacher no longer handles this intervention scope"
+    if row.status != "ACTIVE":
+        return None, None, None, None, "Intervention is no longer active"
+    versions = transaction.query(AIModelVersion).filter(
+        AIModelVersion.model_name == CORRECTED_MODEL_NAME,
+        AIModelVersion.model_purpose == ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value,
+        AIModelVersion.lifecycle_status == "DEVELOPMENT",
+        AIModelVersion.is_active.is_(False),
+    ).all()
+    if len(versions) != 1 or versions[0].model_version_id != model_version_id:
+        return None, None, None, None, "Current corrected model differs from the intervention source"
+    if result.get("readiness_status") != "READY" or result.get("prediction_status") != "DEVELOPMENT_PREDICTION_AVAILABLE":
+        return None, None, None, None, "Current prediction evidence is not READY"
+    latest = transaction.query(DevelopmentCurrentTermPrediction).filter_by(
+        student_id=scope[0], class_id=scope[1], subject_id=scope[2],
+        source_period_id=scope[3], target_period_id=scope[3], model_version_id=model_version_id,
+    ).order_by(DevelopmentCurrentTermPrediction.revision.desc()).first()
+    if latest is None or latest.prediction_id != result.get("prediction_id") or (
+        not isinstance(latest.evidence_snapshot, dict)
+        or latest.evidence_snapshot.get("readiness", {}).get("status") != "READY"
+    ):
+        return None, None, None, None, "Current corrected prediction is unavailable"
+    raw_grade = latest.evidence_snapshot.get("projected_final_term_grade_raw")
+    try:
+        grade = float(raw_grade) if not isinstance(raw_grade, bool) else math.nan
+    except (TypeError, ValueError, OverflowError):
+        grade = math.nan
+    if not math.isfinite(grade) or not 0 <= grade <= 100:
+        return None, None, None, None, "Current corrected prediction grade is invalid"
+    period = transaction.get(AcademicPeriod, scope[3])
+    threshold_resolution = require_subject_passing_threshold(
+        transaction,
+        academic_year_id=period.academic_year_id if period else None,
+        subject_id=scope[2],
+        academic_period_id=scope[3],
+    )
+    passing_threshold = float(threshold_resolution.threshold)
+    return row, latest, grade, passing_threshold, None
+
+
+def continue_teacher_active_intervention(
+    db: Session,
+    staff_id: str,
+    intervention_id: int,
+) -> TeacherInterventionDetail:
+    """Revalidate latest prediction and record teacher decision to continue ACTIVE support."""
+    _active, _source_pred, scope, model_version_id = _require_active_resolution_scope(
+        db, staff_id, intervention_id,
+    )
+    outcome: dict[str, str] = {}
+
+    def record_continue(transaction: Session, result: dict) -> None:
+        outcome.clear()
+        row, latest, grade, _threshold, error = _validate_revalidated_active_prediction(
+            transaction,
+            staff_id=staff_id,
+            intervention_id=intervention_id,
+            scope=scope,
+            model_version_id=model_version_id,
+            result=result,
+        )
+        if error or row is None or latest is None or grade is None:
+            outcome["error"] = error or "Unable to continue support"
+            return
+        now = datetime.now(timezone.utc)
+        plan = dict(row.remediation_plan or {})
+        plan["resolution_review"] = {
+            "decision": "CONTINUE_SUPPORT",
+            "decided_by_staff_id": staff_id,
+            "decided_at": now.isoformat(),
+            "continued_prediction_id": latest.prediction_id,
+            "continued_prediction_revision": latest.revision,
+            "predicted_grade": grade,
+        }
+        row.remediation_plan = plan
+        transaction.flush()
+
+    try:
+        generate_and_persist_development_current_term(
+            *scope, model_version_id=model_version_id, bind=db.get_bind(), after_result=record_continue,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if "error" in outcome:
+        raise HTTPException(status_code=409, detail=outcome["error"])
+    db.expire_all()
+    active = db.get(Intervention, intervention_id)
+    if active is None or active.status != "ACTIVE":
+        raise HTTPException(status_code=409, detail="Intervention is no longer active")
+    return _detail(db, active)
+
+
+def resolve_teacher_active_intervention(
+    db: Session,
+    staff_id: str,
+    intervention_id: int,
+) -> TeacherResolvedInterventionDetail:
+    """Revalidate latest prediction and confirm ACTIVE -> RESOLVED when target is met."""
+    _active, _source_pred, scope, model_version_id = _require_active_resolution_scope(
+        db, staff_id, intervention_id,
+    )
+    outcome: dict[str, str] = {}
+
+    def confirm_resolution(transaction: Session, result: dict) -> None:
+        outcome.clear()
+        row, latest, grade, passing_threshold, error = _validate_revalidated_active_prediction(
+            transaction,
+            staff_id=staff_id,
+            intervention_id=intervention_id,
+            scope=scope,
+            model_version_id=model_version_id,
+            result=result,
+        )
+        if error or row is None or latest is None or grade is None or passing_threshold is None:
+            outcome["error"] = error or "Unable to resolve intervention"
+            return
+        if grade < passing_threshold:
+            outcome["error"] = (
+                f"Current prediction ({grade:.2f}) is below the passing threshold ({passing_threshold:g})"
+            )
+            return
+        now = datetime.now(timezone.utc)
+        plan = dict(row.remediation_plan or {})
+        plan["resolution_review"] = {
+            "decision": "RESOLVED",
+            "decided_by_staff_id": staff_id,
+            "decided_at": now.isoformat(),
+            "prediction_id": latest.prediction_id,
+            "prediction_revision": latest.revision,
+            "predicted_grade": grade,
+        }
+        row.remediation_plan = plan
+        row.status = "RESOLVED"
+        row.resolution_reason = IMPROVED_PREDICTION
+        row.resolved_at = now
+        transaction.flush()
+
+    try:
+        generate_and_persist_development_current_term(
+            *scope, model_version_id=model_version_id, bind=db.get_bind(), after_result=confirm_resolution,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if "error" in outcome:
+        raise HTTPException(status_code=409, detail=outcome["error"])
+    db.expire_all()
+    resolved = db.get(Intervention, intervention_id)
+    if resolved is None or resolved.status != "RESOLVED":
+        raise HTTPException(status_code=409, detail="Intervention resolution did not complete")
+    return get_teacher_resolved(db, staff_id, intervention_id)

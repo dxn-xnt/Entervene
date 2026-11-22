@@ -4124,7 +4124,7 @@ const InterventionSupportMaterials = forwardRef<
                               <Label className="mt-2 text-base font-bold font-sans -mb-1">
                                 Student's Submission
                               </Label>
-                              <Card className="grid gap-2 shadow-none border-2! px-3 pb-3 pt-2 text-sm sm:grid-cols-3">
+                              <Card className="grid gap-2 shadow-none border-2! px-3 pb-3 pt-2 text-sm sm:grid-cols-4">
                                 <div>
                                   <span className="text-muted-foreground">Original score</span>
                                   <strong className="block">
@@ -4142,27 +4142,54 @@ const InterventionSupportMaterials = forwardRef<
                                   </strong>
                                 </div>
                                 <div>
+                                  <span className="text-muted-foreground">Attempts</span>
+                                  <strong className="block">
+                                    {item.attempt_count ?? 0}/{item.max_attempts ?? 3}
+                                  </strong>
+                                </div>
+                                <div>
                                   <span className="text-muted-foreground">Status</span>
                                   <div className="mt-0.5">
                                     <Badge
                                       variant={
-                                        item.submission_status === "graded" || (item.grade != null && item.submission_status !== "draft")
-                                          ? "solid"
-                                          : item.submission_status === "submitted" || item.submission_status === "late"
-                                            ? "surface"
-                                            : "default"
+                                        item.needs_teacher_review
+                                          ? "destructive"
+                                          : item.is_passed
+                                            ? "success"
+                                            : item.submission_status === "graded" || (item.grade != null && item.submission_status !== "draft")
+                                              ? "solid"
+                                              : item.submission_status === "submitted" || item.submission_status === "late"
+                                                ? "surface"
+                                                : "default"
                                       }
                                       size="sm"
                                     >
-                                      {item.submission_status === "graded" || (item.grade != null && item.submission_status !== "draft")
-                                        ? "Completed"
-                                        : item.submission_status === "submitted" || item.submission_status === "late"
-                                          ? "Submitted"
-                                          : "Pending"}
+                                      {item.needs_teacher_review
+                                        ? "Needs Teacher Review"
+                                        : item.is_passed
+                                          ? "Passed"
+                                          : item.submission_status === "graded" || (item.grade != null && item.submission_status !== "draft")
+                                            ? "Completed"
+                                            : item.submission_status === "submitted" || item.submission_status === "late"
+                                              ? "Submitted"
+                                              : "Pending"}
                                     </Badge>
                                   </div>
                                 </div>
                               </Card>
+                              {item.attempt_history && item.attempt_history.length > 1 && (
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground px-1">
+                                  <span className="font-semibold text-foreground">Attempt History:</span>
+                                  {item.attempt_history.map((att) => (
+                                    <Badge key={att.submission_id} variant="outline" size="sm">
+                                      Attempt {att.attempt_count}:{" "}
+                                      {att.grade != null && item.total_points != null
+                                        ? `${att.grade}/${item.total_points}`
+                                        : att.status}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
                             </Card>
                           );
                         })}

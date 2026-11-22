@@ -32,9 +32,20 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
 from app.models.submissions.SubmissionFeedbackDraft import SubmissionFeedbackDraft
 from app.models.submissions.SubmissionLink import SubmissionLink
-from app.schemas.Submission import GradeRequest, SubmissionAttachmentResponse, SubmissionLinkInput, SubmissionLinkResponse, SubmissionResponse
+from app.schemas.Submission import (
+    GradeRequest,
+    SubmissionAttachmentResponse,
+    SubmissionAttemptSummary,
+    SubmissionLinkInput,
+    SubmissionLinkResponse,
+    SubmissionResponse,
+)
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
-from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
+from app.services.grading.RemedialExamination import (
+    effective_grade_changed,
+    ensure_remedial_period_open,
+    latest_graded_submission_score,
+)
 from app.services.classwork.ClassworkShared import (
     assignment_is_available,
     assignment_is_locked,
@@ -273,6 +284,40 @@ def build_submission_response(submission, db: Session, *, for_student: bool = Fa
             submission_status=submission.status,
         )
     hide_student_results = hide_non_quiz_results or hide_quiz_results
+    from app.services.intervention.RemediationAttemptPolicy import (
+        evaluate_remediation_attempt_state,
+        list_remediation_attempt_history,
+    )
+
+    attempt_state = evaluate_remediation_attempt_state(db, assignment, classwork, submission)
+    is_remediation = bool(attempt_state["is_remediation"])
+    attempt_history: list[SubmissionAttemptSummary] = []
+    if is_remediation and assignment is not None:
+        history_rows = list_remediation_attempt_history(
+            db, assignment.classwork_assignment_id, submission.student_id,
+        )
+        attempt_history = [
+            SubmissionAttemptSummary(
+                submission_id=row.submission_id,
+                attempt_count=row.attempt_count,
+                status=row.status,
+                submitted_at=row.submitted_at,
+                graded_at=row.graded_at,
+                grade=float(row.grade) if row.grade is not None and not hide_student_results else None,
+                feedback=None if hide_student_results else row.feedback,
+                attachments=[build_attachment_response(att) for att in row.attachments],
+                links=[
+                    SubmissionLinkResponse(
+                        submission_link_id=link.submission_link_id,
+                        url=link.url,
+                        title=link.title,
+                        position=link.position,
+                    )
+                    for link in row.links
+                ],
+            )
+            for row in history_rows
+        ]
     return SubmissionResponse(
         submission_id=submission.submission_id,
         student_id=str(submission.student_id),
@@ -298,6 +343,27 @@ def build_submission_response(submission, db: Session, *, for_student: bool = Fa
         total_points=float(classwork.total_points) if classwork and classwork.total_points is not None else None,
         created_at=submission.created_at,
         feedback_focus_points=None if for_student else getattr(submission, "feedback_focus_points", None),
+        is_intervention_assessment=is_remediation,
+        max_attempts=(
+            attempt_state["max_attempts"]
+            if is_remediation
+            else (
+                assignment.max_attempts
+                if assignment and classwork and classwork_uses_attempt_limit(classwork, assignment)
+                else None
+            )
+        ),
+        attempts_used=attempt_state["attempts_used"] if is_remediation else None,
+        attempts_remaining=attempt_state["attempts_remaining"] if is_remediation else None,
+        is_passed=bool(attempt_state["is_passed"]) if is_remediation else False,
+        passing_threshold=(
+            float(attempt_state["passing_threshold"])
+            if is_remediation and attempt_state["passing_threshold"] is not None and not hide_student_results
+            else None
+        ),
+        needs_teacher_review=bool(attempt_state["needs_teacher_review"]) if is_remediation else False,
+        can_retry=bool(attempt_state["can_retry"]) if is_remediation else False,
+        attempt_history=attempt_history,
     )
 
 
@@ -306,7 +372,7 @@ def student_submissions(student: Student, db: Session) -> list[SubmissionRespons
         db.query(StudentSubmission)
         .options(selectinload(StudentSubmission.links))
         .filter(StudentSubmission.student_id == student.student_id)
-        .order_by(StudentSubmission.created_at.desc())
+        .order_by(StudentSubmission.created_at.desc(), StudentSubmission.submission_id.desc())
         .all()
     )
     return [build_submission_response(submission, db, for_student=True) for submission in submissions]
@@ -340,7 +406,7 @@ def assert_student_can_modify_submission(
     submission = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id == assignment_id,
         StudentSubmission.student_id == student.student_id,
-    ).first()
+    ).order_by(StudentSubmission.submission_id.desc()).first()
     if not submission:
         raise HTTPException(status_code=404, detail="No submission found")
     return assignment, submission
@@ -398,7 +464,7 @@ async def submit_student_work(
     existing = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id == assignment_id,
         StudentSubmission.student_id == student.student_id,
-    ).first()
+    ).order_by(StudentSubmission.submission_id.desc()).first()
 
     upload_files: list[StarletteUploadFile] = [
         cast(StarletteUploadFile, file) for file in (files or []) if file and file.filename
@@ -417,30 +483,64 @@ async def submit_student_work(
 
     if is_late and not assignment.allow_late_submissions:
         raise HTTPException(status_code=403, detail="Cannot submit after due date")
-    enforce_attempt_limit = classwork_uses_attempt_limit(classwork)
+    enforce_attempt_limit = classwork_uses_attempt_limit(classwork, assignment)
+    from app.services.intervention.RemediationAttemptPolicy import (
+        REMEDIATION_MAX_ATTEMPTS_LOCKED_MESSAGE,
+        REMEDIATION_PASSED_MESSAGE,
+        evaluate_remediation_attempt_state,
+        is_remediation_assessment,
+    )
+
+    is_remediation = is_remediation_assessment(assignment, classwork)
 
     saved_paths: list[str] = []
     if existing:
         if existing.status == "graded":
-            raise HTTPException(status_code=403, detail="Cannot modify a graded submission")
-        is_draft = existing.status == "pending"
-        if is_draft:
-            retained_links = existing.links if incoming_links is None else incoming_links
-            if not upload_files and not existing.attachments and not retained_links:
-                raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
-            if upload_files or incoming_links:
-                if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
-                    raise HTTPException(status_code=403, detail="Maximum attempts reached")
-                existing.attempt_count += 1
-        else:
+            if not is_remediation:
+                raise HTTPException(status_code=403, detail="Cannot modify a graded submission")
+            attempt_state = evaluate_remediation_attempt_state(db, assignment, classwork, existing)
+            if attempt_state["is_passed"]:
+                raise HTTPException(status_code=403, detail=REMEDIATION_PASSED_MESSAGE)
+            if (
+                attempt_state["needs_teacher_review"]
+                or attempt_state["attempts_used"] >= (attempt_state["max_attempts"] or 3)
+            ):
+                raise HTTPException(status_code=403, detail=REMEDIATION_MAX_ATTEMPTS_LOCKED_MESSAGE)
             if not upload_files and not incoming_links:
-                raise HTTPException(status_code=400, detail="Use Unsubmit first, then upload a file or link and submit again.")
-            if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
-                raise HTTPException(status_code=403, detail="Maximum attempts reached")
-            existing.attempt_count += 1
-        existing.submitted_at = now
-        existing.status = "late" if is_late else "submitted"
-        submission = existing
+                raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
+            # Preserve prior graded attempt history by creating a new submission row.
+            submission = StudentSubmission(
+                student_id=student.student_id,
+                classwork_assignment_id=assignment_id,
+                submitted_at=now,
+                status="late" if is_late else "submitted",
+                attempt_count=existing.attempt_count + 1,
+            )
+            db.add(submission)
+        else:
+            is_draft = existing.status == "pending"
+            if is_draft:
+                retained_links = existing.links if incoming_links is None else incoming_links
+                if not upload_files and not existing.attachments and not retained_links:
+                    raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
+                if upload_files or incoming_links:
+                    if is_remediation:
+                        if existing.attempt_count == 0:
+                            existing.attempt_count = 1
+                    else:
+                        if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
+                            raise HTTPException(status_code=403, detail="Maximum attempts reached")
+                        existing.attempt_count += 1
+            else:
+                if not upload_files and not incoming_links:
+                    raise HTTPException(status_code=400, detail="Use Unsubmit first, then upload a file or link and submit again.")
+                if not is_remediation:
+                    if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
+                        raise HTTPException(status_code=403, detail="Maximum attempts reached")
+                    existing.attempt_count += 1
+            existing.submitted_at = now
+            existing.status = "late" if is_late else "submitted"
+            submission = existing
     else:
         if not upload_files and not incoming_links:
             raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
@@ -738,7 +838,7 @@ def assignment_tracking(assignment_id: int, staff_id: str, db: Session) -> dict:
     ) if roster_rows else {}
     submissions = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id == assignment_id
-    ).all()
+    ).order_by(StudentSubmission.submission_id.asc()).all()
     subs_by_student = {str(submission.student_id): submission for submission in submissions}
     submitted, missing = [], []
     for student in roster_rows:
@@ -817,7 +917,7 @@ def classwork_tracking(classwork_id: int, staff_id: str, db: Session) -> dict:
     class_ids = list({assignment.class_id for assignment in assignments})
     all_submissions = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id.in_(assignment_ids)
-    ).all()
+    ).order_by(StudentSubmission.submission_id.asc()).all()
     assignment_by_id = {assignment.classwork_assignment_id: assignment for assignment in assignments}
     all_submissions = [submission for submission in all_submissions if assignment_allows_student(
         assignment_by_id[submission.classwork_assignment_id], submission.student_id,
@@ -1038,6 +1138,9 @@ def grade_student_submission(
         validated_focus_points = validate_focus_points(body.focus_points)
 
     previous_grade = submission.grade
+    previous_effective_raw = latest_graded_submission_score(
+        db, assignment.classwork_assignment_id, submission.student_id,
+    )
     previous_focus_points = submission.feedback_focus_points
     submission.grade = Decimal(str(body.grade))
     submission.feedback = body.feedback
@@ -1062,14 +1165,23 @@ def grade_student_submission(
         focus_points=validated_focus_points,
     )
 
-    if assignment.source_intervention_id is not None and classwork and classwork.is_graded:
+    if assignment.source_intervention_id is not None and classwork:
         from app.services.intervention.InterventionNotificationService import (
             stage_intervention_assessment_result_or_submission,
+            stage_remediation_needs_teacher_review_if_exhausted,
         )
         db.flush()
-        stage_intervention_assessment_result_or_submission(db, assignment, submission)
+        if classwork.is_graded:
+            stage_intervention_assessment_result_or_submission(db, assignment, submission)
+        stage_remediation_needs_teacher_review_if_exhausted(db, assignment, submission)
 
-    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
+    db.flush()
+    current_effective_raw = latest_graded_submission_score(
+        db, assignment.classwork_assignment_id, submission.student_id,
+    )
+    refresh_needed = classwork.is_graded and effective_grade_changed(
+        db, assignment, submission.student_id, previous_effective_raw, current_effective_raw,
+    )
     db.commit()
     db.refresh(submission)
     dispatch_background_draft_processing()

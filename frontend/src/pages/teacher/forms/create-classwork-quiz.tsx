@@ -963,9 +963,11 @@ export default function CreateClassworkQuizModal({
       (!remediationOriginalExam ||
         draft.exam_subtype !== remediationOriginalExam.subtype ||
         Number(draft.total_points) !== remediationOriginalExam.total_points ||
-        Number(draft.max_attempts) !== 1)
+        !Number.isInteger(Number(draft.max_attempts)) ||
+        Number(draft.max_attempts) < 1 ||
+        Number(draft.max_attempts) > 3)
     )
-      return "Remedial Examination must match the original subtype and maximum points, with one quiz attempt.";
+      return "Remedial Examination must match the original subtype and maximum points, with up to 3 quiz attempts.";
     if (isGradedWWPT) {
       if (!selectedOriginalTarget)
         return "Select the original classwork to link this remediation activity.";
@@ -2873,10 +2875,7 @@ export default function CreateClassworkQuizModal({
                           max_attempts: event.target.value,
                         }));
                       }}
-                      disabled={
-                        isCreating ||
-                        remediationGradeTreatment === "EXAMINATION"
-                      }
+                      disabled={isCreating}
                       className="w-full bg-white border-2 border-black rounded shadow-none"
                     />
                   </Field>

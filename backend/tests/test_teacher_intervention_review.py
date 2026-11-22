@@ -307,28 +307,31 @@ def test_latest_improved_prediction_resolves_instead_of_activating(candidate_con
     assert row.activated_at is None
 
 
-def test_later_high_risk_revision_blocks_activation_and_preserves_candidate(candidate_context, monkeypatch):
+def test_later_high_risk_revision_retains_eligibility_and_activates_candidate(candidate_context, monkeypatch):
     ctx = candidate_context
     original_prediction_id = ctx["candidate"].source_prediction_id
+    frozen_snapshot = deepcopy(ctx["candidate"].diagnosis_snapshot)
     submission = ctx["db"].query(StudentSubmission).first()
     submission.grade = Decimal("1")
     ctx["db"].commit()
     monkeypatch.setattr(scorer, "score_development_current_term", lambda _features, model_name=None: 74)
-    with pytest.raises(HTTPException) as exc:
-        activate_teacher_candidate(ctx["db"], _staff(ctx), _id(ctx))
-    assert exc.value.status_code == 409
-    assert "not Moderate Risk" in str(exc.value.detail)
-    ctx["db"].expire_all()
-    candidate = ctx["db"].get(Intervention, _id(ctx))
-    assert candidate.status == "CANDIDATE"
-    assert candidate.source_prediction_id == original_prediction_id
-    assert candidate.resolution_reason is None
+    _run(ctx, ctx["model_id"])
     current = get_teacher_candidate(ctx["db"], _staff(ctx), _id(ctx))
     assert current.current_prediction_revision == 2
     assert current.current_intervention_level == "HIGH_RISK"
     assert current.current_predicted_grade == 74
-    assert current.candidate_activation_eligible is False
-    assert current.candidate_activation_reason == "CURRENT_RISK_NOT_MODERATE"
+    assert current.candidate_activation_eligible is True
+    assert current.candidate_activation_reason is None
+
+    activated = activate_teacher_candidate(ctx["db"], _staff(ctx), _id(ctx))
+    assert activated.status == "ACTIVE"
+    assert activated.source_prediction_id == original_prediction_id
+    assert activated.diagnosis_snapshot == frozen_snapshot
+    ctx["db"].expire_all()
+    row = ctx["db"].get(Intervention, _id(ctx))
+    assert row.status == "ACTIVE"
+    assert row.source_prediction_id == original_prediction_id
+    assert row.resolution_reason is None
 
 
 def test_ungrading_blocks_activation_without_improvement(candidate_context):

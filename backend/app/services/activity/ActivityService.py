@@ -22,7 +22,11 @@ from app.schemas.Activity import (
 )
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
-from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
+from app.services.grading.RemedialExamination import (
+    effective_grade_changed,
+    ensure_remedial_period_open,
+    latest_graded_submission_score,
+)
 from app.services.grading.GradeabilityService import (
     ONLINE_SUBMISSION_REQUIRED,
     can_enter_grade,
@@ -291,6 +295,7 @@ def bulk_update_activity_scores(
     existing_subs = (
         db.query(StudentSubmission)
         .filter(StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id)
+        .order_by(StudentSubmission.submission_id.asc())
         .all()
     )
     sub_map = {str(sub.student_id): sub for sub in existing_subs}
@@ -317,7 +322,9 @@ def bulk_update_activity_scores(
             require_gradeable_submission(classwork, sub)
             changed_student_ids.add(str(item.student_id))
     original_grades = {
-        str(item.student_id): sub_map[str(item.student_id)].grade if str(item.student_id) in sub_map else None
+        str(item.student_id): latest_graded_submission_score(
+            db, assignment.classwork_assignment_id, item.student_id,
+        )
         for item in payload.scores
     }
 
@@ -351,14 +358,29 @@ def bulk_update_activity_scores(
             # Manual/offline rows have no submitted lifecycle to preserve.
             sub.status = "pending" if is_manual_activity(classwork) else "submitted"
 
+    if assignment.source_intervention_id is not None and changed_student_ids:
+        from app.services.intervention.InterventionNotificationService import (
+            stage_remediation_needs_teacher_review_if_exhausted,
+        )
+        db.flush()
+        for sid_str in changed_student_ids:
+            sub = sub_map.get(sid_str)
+            if sub is not None and sub.status == "graded":
+                stage_remediation_needs_teacher_review_if_exhausted(db, assignment, sub)
+
     db.commit()
 
     changed_students = {
         UUID(student_id)
         for student_id, original in original_grades.items()
         if effective_grade_changed(
-            db, assignment, UUID(student_id), original,
-            sub_map[student_id].grade if student_id in sub_map else None,
+            db,
+            assignment,
+            UUID(student_id),
+            original,
+            latest_graded_submission_score(
+                db, assignment.classwork_assignment_id, UUID(student_id),
+            ),
         )
     }
     if classwork.is_graded:

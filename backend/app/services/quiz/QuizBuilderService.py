@@ -393,25 +393,14 @@ def update_quiz_configuration(
         .with_for_update()
         .first()
     )
-    has_exam_remediation = (
-        db.query(ClassworkAssignment.classwork_assignment_id)
-        .filter(
-            ClassworkAssignment.classwork_id == locked_classwork.classwork_id,
-            ClassworkAssignment.original_exam_assignment_id.isnot(None),
-        )
-        .first()
-        is not None
-    )
-    if has_exam_remediation and payload.max_attempts != 1:
-        raise HTTPException(
-            status_code=400,
-            detail="Remedial Examination quiz permits one attempt per activity",
-        )
     has_intervention_remediation = (
         db.query(ClassworkAssignment.classwork_assignment_id)
         .filter(
             ClassworkAssignment.classwork_id == locked_classwork.classwork_id,
-            ClassworkAssignment.source_intervention_id.isnot(None),
+            (
+                ClassworkAssignment.source_intervention_id.isnot(None)
+                | ClassworkAssignment.original_exam_assignment_id.isnot(None)
+            ),
         )
         .first()
         is not None

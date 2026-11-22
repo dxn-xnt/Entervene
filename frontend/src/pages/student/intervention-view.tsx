@@ -725,19 +725,34 @@ export default function StudentInterventionView() {
                                           Score: {act.grade}/{act.total_points}
                                         </Badge>
                                       )}
+                                      {act.max_attempts != null && (act.attempt_count ?? 0) > 0 && (
+                                        <Badge variant="outline" size="sm">
+                                          Attempt {act.attempt_count}/{act.max_attempts}
+                                        </Badge>
+                                      )}
                                       {act.submission_status && (
                                         <Badge
-                                          variant={act.is_passed ? "success" : finished ? "solid" : "outline"}
+                                          variant={
+                                            act.is_passed
+                                              ? "success"
+                                              : act.needs_teacher_review
+                                                ? "destructive"
+                                                : finished
+                                                  ? "solid"
+                                                  : "outline"
+                                          }
                                           size="sm"
-                                          className="capitalize"
+                                          className={act.needs_teacher_review ? undefined : "capitalize"}
                                         >
                                           {act.is_passed
                                             ? "Passed"
-                                            : act.submission_status === "graded"
-                                              ? "Completed"
-                                              : act.submission_status === "submitted"
-                                                ? "Submitted"
-                                                : act.submission_status}
+                                            : act.needs_teacher_review
+                                              ? "Needs Teacher Review"
+                                              : act.submission_status === "graded"
+                                                ? "Completed"
+                                                : act.submission_status === "submitted"
+                                                  ? "Submitted"
+                                                  : act.submission_status}
                                         </Badge>
                                       )}
                                       <Badge

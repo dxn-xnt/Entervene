@@ -258,10 +258,13 @@ def _summary(db: Session, row: Intervention, student_id) -> StudentPersistentInt
             prereq_message = decision.message
             activity_prep = decision.preparation
 
-        from app.services.quiz.QuizAttemptService import evaluate_intervention_quiz_pass
-        activity_passed, _threshold = evaluate_intervention_quiz_pass(
+        from app.services.intervention.RemediationAttemptPolicy import (
+            evaluate_remediation_attempt_state,
+        )
+        attempt_state = evaluate_remediation_attempt_state(
             db, assignment, work, submission,
         )
+        activity_passed = bool(attempt_state["is_passed"])
         score_visible = bool(work.show_scores)
         if work.classwork_type.upper() == "QUIZ":
             score_visible = quiz_results_are_visible(
@@ -275,6 +278,10 @@ def _summary(db: Session, row: Intervention, student_id) -> StudentPersistentInt
             title=work.title, classwork_type=work.classwork_type,
             submission_status=submission.status if submission else None,
             is_passed=activity_passed if score_visible else False,
+            attempt_count=attempt_state["attempts_used"],
+            max_attempts=attempt_state["max_attempts"],
+            attempts_remaining=attempt_state["attempts_remaining"],
+            needs_teacher_review=attempt_state["needs_teacher_review"],
             grade=float(submission.grade) if submission and submission.grade is not None and score_visible else None,
             total_points=float(work.total_points) if work.total_points is not None and score_visible else None,
             access_state=access_state,

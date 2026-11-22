@@ -51,9 +51,9 @@ def _interventions(ctx):
 
 @pytest.mark.parametrize(
     "grade,expected",
-    [(74.0, 0), (84.65, 1), (85.44, 0), (86.999, 0), (87.0, 0), (88.84, 0), (92.0, 0)],
+    [(74.0, 1), (84.65, 1), (85.44, 0), (86.999, 0), (87.0, 0), (88.84, 0), (92.0, 0)],
 )
-def test_candidate_requires_moderate_risk_below_passing_threshold(current_period_context, monkeypatch, grade, expected):
+def test_candidate_requires_high_or_moderate_risk_below_passing_threshold(current_period_context, monkeypatch, grade, expected):
     ctx = current_period_context
     model_id = _setup(ctx, monkeypatch, [grade])
     result = _run(ctx, model_id)
@@ -154,15 +154,19 @@ def test_template_threshold_change_reconciles_open_intervention_and_preserves_tr
         actor=ctx["staff"].user_id,
     )
 
-    resolved = _interventions(ctx)[0]
-    assert resolved.status == "RESOLVED"
-    assert resolved.resolution_reason == "IMPROVED_PREDICTION"
-    assert resolved.resolved_at is not None
-    assert resolved.source_prediction_id == first["prediction_id"]
-    if activated_at is None:
-        assert resolved.activated_at is None
+    result = _interventions(ctx)[0]
+    if starting_status == "CANDIDATE":
+        assert result.status == "RESOLVED"
+        assert result.resolution_reason == "IMPROVED_PREDICTION"
+        assert result.resolved_at is not None
+        assert result.activated_at is None
     else:
-        assert resolved.activated_at.replace(tzinfo=timezone.utc) == activated_at
+        # Task 4: ACTIVE interventions require teacher confirmation before resolving.
+        assert result.status == "ACTIVE"
+        assert result.resolution_reason is None
+        assert result.resolved_at is None
+        assert result.activated_at.replace(tzinfo=timezone.utc) == activated_at
+    assert result.source_prediction_id == first["prediction_id"]
     source = ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"])
     assert float(source.predicted_period_grade) == 82.69
     assert source.intervention_level == "MODERATE_RISK"
@@ -309,7 +313,7 @@ def test_threshold_reconciliation_is_idempotent_and_notifies_once(
     ]
 
 
-def test_active_intervention_resolves_and_later_high_risk_revision_does_not_create_candidate(current_period_context, monkeypatch):
+def test_active_intervention_stays_active_on_improvement_until_teacher_confirms_then_later_high_risk_creates_new_candidate(current_period_context, monkeypatch):
     ctx = current_period_context
     model_id = _setup(ctx, monkeypatch, [84, 88, 74])
     first = _run(ctx, model_id)
@@ -321,13 +325,22 @@ def test_active_intervention_resolves_and_later_high_risk_revision_does_not_crea
     ctx["db"].commit()
     add_activity(ctx, "PERFORMANCE_TASK", 15, 20)
     _run(ctx, model_id)
-    assert _interventions(ctx)[0].status == "RESOLVED"
+    # Task 4: ACTIVE intervention does NOT auto-resolve on improved prediction.
+    still_active = _interventions(ctx)[0]
+    assert still_active.status == "ACTIVE"
+    assert still_active.resolved_at is None
+
+    # After explicit resolution, a later HIGH_RISK revision creates a new CANDIDATE preserving history.
+    still_active.status = "RESOLVED"
+    still_active.resolution_reason = "IMPROVED_PREDICTION"
+    still_active.resolved_at = datetime.now(timezone.utc)
+    ctx["db"].commit()
     add_activity(ctx, "WRITTEN_WORK", 6, 10)
     third = _run(ctx, model_id)
     rows = _interventions(ctx)
-    assert [row.status for row in rows] == ["RESOLVED"]
+    assert [row.status for row in rows] == ["RESOLVED", "CANDIDATE"]
     assert rows[0].source_prediction_id == first["prediction_id"]
-    assert rows[0].source_prediction_id != third["prediction_id"]
+    assert rows[1].source_prediction_id == third["prediction_id"]
 
 
 def test_low_revision_and_unchanged_evidence_do_not_duplicate(current_period_context, monkeypatch):

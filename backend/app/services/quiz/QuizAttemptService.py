@@ -41,7 +41,11 @@ from app.services.grading.PassingThresholdResolver import (
     PassingThresholdConfigurationError,
     resolve_passing_threshold,
 )
-from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
+from app.services.grading.RemedialExamination import (
+    effective_grade_changed,
+    ensure_remedial_period_open,
+    latest_graded_submission_score,
+)
 from app.services.intervention.RemediationPrerequisiteService import require_remediation_prerequisite
 from app.services.quiz.quiz_normalization import is_identification_correct
 from app.services.quiz.QuizResultsReleasePolicy import (
@@ -106,7 +110,7 @@ def start_student_quiz_attempt(
     ensure_remedial_period_open(db, assignment, student.student_id)
     _lock_assignment_row(db, assignment_id)
     submission = _submission_for(db, student, assignment_id, lock_for_update=True)
-    previous_grade = submission.grade if submission else None
+    previous_grade = latest_graded_submission_score(db, assignment_id, student.student_id)
     has_passed, _threshold = evaluate_intervention_quiz_pass(
         db, assignment, classwork, submission, quiz=quiz,
     )
@@ -114,6 +118,11 @@ def start_student_quiz_attempt(
         raise HTTPException(status_code=403, detail=STUDY_SUPPORT_QUIZ_PASSED_MESSAGE)
     max_attempts = _max_attempts(db, assignment, classwork)
     if submission and submission.status != "pending" and submission.attempt_count >= max_attempts:
+        if assignment.source_intervention_id is not None:
+            from app.services.intervention.RemediationAttemptPolicy import (
+                REMEDIATION_MAX_ATTEMPTS_LOCKED_MESSAGE,
+            )
+            raise HTTPException(status_code=403, detail=REMEDIATION_MAX_ATTEMPTS_LOCKED_MESSAGE)
         raise HTTPException(status_code=403, detail="Maximum attempts reached")
 
     if not submission:
@@ -144,7 +153,9 @@ def start_student_quiz_attempt(
             submission.feedback = None
             submission.graded_at = None
             submission.graded_by_staff_id = None
-    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, student.student_id, previous_grade, submission.grade)
+    db.flush()
+    current_grade = latest_graded_submission_score(db, assignment_id, student.student_id)
+    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, student.student_id, previous_grade, current_grade)
     db.commit()
     db.refresh(submission)
     if refresh_needed:
@@ -177,7 +188,7 @@ def submit_student_quiz_attempt(
     ensure_remedial_period_open(db, assignment, student.student_id)
     _lock_assignment_row(db, assignment_id)
     submission = _submission_for(db, student, assignment_id, lock_for_update=True)
-    previous_grade = submission.grade if submission else None
+    previous_grade = latest_graded_submission_score(db, assignment_id, student.student_id)
     has_passed, _threshold = evaluate_intervention_quiz_pass(
         db, assignment, classwork, submission, quiz=quiz,
     )
@@ -328,18 +339,26 @@ def submit_student_quiz_attempt(
         )
         enqueue_automatic_feedback_draft(db, submission.submission_id, None)
 
-    if assignment.source_intervention_id is not None and classwork.is_graded:
+    if assignment.source_intervention_id is not None:
         from app.services.intervention.InterventionNotificationService import (
             stage_intervention_assessment_result_or_submission,
             stage_intervention_assessment_submitted,
+            stage_remediation_needs_teacher_review_if_exhausted,
         )
         db.flush()
-        if has_manual:
-            stage_intervention_assessment_submitted(db, assignment, submission)
-        else:
-            stage_intervention_assessment_result_or_submission(db, assignment, submission)
+        if classwork.is_graded:
+            if has_manual:
+                stage_intervention_assessment_submitted(db, assignment, submission)
+            else:
+                stage_intervention_assessment_result_or_submission(db, assignment, submission)
+        if not has_manual:
+            stage_remediation_needs_teacher_review_if_exhausted(
+                db, assignment, submission, quiz=quiz,
+            )
 
-    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, student.student_id, previous_grade, submission.grade)
+    db.flush()
+    current_grade = latest_graded_submission_score(db, assignment_id, student.student_id)
+    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, student.student_id, previous_grade, current_grade)
     db.commit()
     db.refresh(submission)
     if not has_manual:
@@ -542,8 +561,10 @@ def _submission_for(
 
 
 def _max_attempts(db: Session, assignment: ClassworkAssignment, classwork: Classwork) -> int:
-    if assignment.original_exam_assignment_id is not None:
-        return 1
+    if assignment.source_intervention_id is not None:
+        from app.services.intervention.RemediationAttemptPolicy import remediation_max_attempts
+
+        return remediation_max_attempts(db, assignment, classwork)
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
     return assignment.max_attempts or (setting.max_attempts if setting else None) or 1
 
@@ -670,6 +691,13 @@ def _attempt_response(
         can_submit=can_submit,
         is_intervention_quiz=is_intervention_quiz,
         is_passed=is_passed,
+        needs_teacher_review=bool(
+            is_intervention_quiz
+            and submission is not None
+            and submission.status == "graded"
+            and not is_passed
+            and attempt_count >= max_attempts
+        ),
         passing_threshold=(
             float(passing_threshold)
             if passing_threshold is not None and show_scores
