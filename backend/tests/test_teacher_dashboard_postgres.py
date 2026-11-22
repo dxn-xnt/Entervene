@@ -540,7 +540,6 @@ def _numeric_snapshot(result, data):
         "grade_summary": {key: value for key, value in grades.items() if key != "warnings"},
         "grade_warnings": [warning["code"] for warning in grades["warnings"]],
         "month_window": phase_two["month_window"],
-        "attendance_today": phase_two["attendance_today"],
         "monthly_attendance": sorted((
             class_keys[row["class_id"]], row["rate"], row["record_count"],
             row["present_count"], row["late_count"], row["excused_count"], row["absent_count"],
@@ -589,7 +588,7 @@ def _collect_numeric_scenarios(db, data, current_result):
         }, "selected previous-period KPI values")
         _expect_equal(samples["previous_period"]["matrix"], [
             ("class_", "subject", 2, 1, None, None, 50.0, 0.0),
-            ("previous_class", "subject", 1, 0, None, None, 0.0, None),
+            ("previous_class", "subject", 1, 0, None, None, None, None),
         ], "selected previous-period matrix values")
 
         work = data["assignments"]["main_graded"].classwork
@@ -716,7 +715,6 @@ def _collect_phase_two_scenarios(db, data):
         _expect_equal(samples["four_status_month"]["monthly_attendance"], [
             ("class_", 50.0, 6, 2, 1, 1, 2),
         ], "inclusive month/current-day record denominator")
-        _expect_equal(samples["four_status_month"]["attendance_today"]["record_count"], 0, "missing-today records are not inferred")
 
         with patch.object(AnalyticsService, "_teacher_dashboard_now", return_value=datetime(2026, 9, 30, 16, 0, tzinfo=timezone.utc)):
             samples["manila_midnight"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
@@ -747,11 +745,14 @@ def _collect_phase_two_scenarios(db, data):
         _expect_equal(submitted["require_subject_match"], False, "subject matching stays disabled")
         _expect_equal(submitted["late_submissions"], {
             "late_rate_percent": 33.3, "late_count": 2, "eligible_count": 6,
+            "evaluable_count": 6, "unevaluable_count": 0,
             "excused_excluded_count": 2, "completed_count": 8,
         }, "excuse exclusion from numerator and denominator")
         _expect_equal(submitted["late_warnings"], [], "complete timestamp availability")
         _expect_equal(submitted["weekdays"]["sunday_count"], 1, "Sunday disclosed separately")
         _expect_equal(submitted["weekdays"]["total_count"], 8, "excused completion still counted")
+        _expect_equal(submitted["weekdays"]["completed_count"], 8, "weekday coverage includes every completed submission")
+        _expect_equal(submitted["weekdays"]["unevaluable_count"], 0, "complete weekday timestamp coverage")
         _expect_equal([row["count"] for row in submitted["weekdays"]["days"]], [0, 0, 0, 7, 0, 0], "six Monday-Saturday Manila buckets")
 
         previous = _dashboard(db, data["teacher"].staff_id, data["previous_period"])
@@ -876,7 +877,7 @@ def test_teacher_dashboard_empty_queries_execute_on_guarded_postgres(postgres_da
         result = _dashboard(postgres_dashboard_session, identity, period)
         _expect_equal(result["kpis"], {
             "active_classes": 0, "enrolled_students": 0,
-            "overall_completion_rate": 0.0, "ungraded_count": 0,
+            "overall_completion_rate": None, "ungraded_count": 0,
         }, "empty-scope KPI zeros")
         _expect_equal(result["trend_chart"]["available_filters"], [], "empty-scope filters")
         _expect_equal(result["trend_chart"]["points"], [], "empty-scope trend points")
@@ -893,13 +894,11 @@ def _collect_phase_three_scenarios(db, data):
         transmuted_grade=Decimal("95"), is_finalized=True,
     ) for key in ("active_one", "active_two")]
     db.add_all(records)
-    aliases = {str(student.student_id): key for key, student in data["students"].items()}
     samples = {}
     def snapshot(result):
         details = result["details"]
+        assert "top_performers" not in details
         return {
-            "performers": [(aliases[row["student_id"]], row["name"], row["section_name"],
-                row["subject_name"], row["current_grade"]) for row in details["top_performers"]],
             "bands": [(band["band"], band["count"]) for band in details["grade_distribution"]],
             "coverage": {key: value for key, value in details["grade_details"].items() if key != "warnings"},
             "warnings": [warning["code"] for warning in details["grade_details"]["warnings"]],
@@ -914,15 +913,8 @@ def _collect_phase_three_scenarios(db, data):
     with _missing_policy_adapter():
         samples["missing_threshold"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
     _expect_equal(samples["missing_threshold"]["warnings"], ["invalid_passing_threshold"], "Phase 3 threshold warnings retained")
-    learner = data["students"]["active_one"]
-    learner.first_name = learner.last_name = ""
-    db.commit()
-    with _missing_policy_adapter():
-        samples["missing_name"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
-    _expect_equal(samples["missing_name"]["performers"][0][1], "Name unavailable", "Phase 3 missing name retained")
-    assert "student_name_unavailable" in samples["missing_name"]["warnings"]
     samples["empty"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["empty_period"]))
-    _expect_equal(samples["empty"]["performers"], [], "Phase 3 empty scope")
+    _expect_equal(samples["empty"]["coverage"]["total_grade_count"], 0, "Phase 3 empty scope")
     return samples
 
 
@@ -936,7 +928,7 @@ def test_teacher_dashboard_phase_three_scenarios_execute_on_isolated_sqlite(dash
             samples = _collect_phase_three_scenarios(db, data)
     finally:
         engine.dispose()
-    assert len(samples) == 13
+    assert len(samples) == 12
 
 
 def test_phase_three_name_projection_compiles_for_postgres_without_connecting():
@@ -1373,20 +1365,23 @@ def _phase_six_support_snapshot(db):
     db.commit()
 
     def capture():
-        summary = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])["details"]["students_to_check_in_with"]
+        result = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])
+        assert "students_to_check_in_with" not in result["details"]
+        assert "top_performers" not in result["details"]
+        grades = result["phase_two"]["grades"]
+        engagement = result["engagement"]
         return {
-            **{key: value for key, value in summary.items() if key not in {"items", "warnings"}},
-            "items": [{**{key: value for key, value in item.items()
-                         if key not in {"student_id", "class_id", "subject_id", "academic_period_id"}},
-                       "student_alias": aliases[item["student_id"]]} for item in summary["items"]],
-            "warning_codes": sorted(warning["code"] for warning in summary["warnings"]),
+            "passing_count": grades["passing_count"],
+            "available_grade_count": grades["available_grade_count"],
+            "total_grade_count": grades["total_grade_count"],
+            "pending_grading_count": engagement["pending_grading_count"],
+            "completed_count": engagement["completed_count"],
+            "warning_codes": sorted(warning["code"] for warning in grades["warnings"]),
         }
     samples = {"initial": capture()}
     data["subject"].grading_template.passing_threshold = Decimal("83.25")
     db.commit()
     samples["changed_threshold"] = capture()
-    # UTC Oct 7 16:00 is Manila Oct 8: an unrelated-subject excuse suppresses
-    # overdue work for the ungraded learner, without hiding completion evidence.
     records[1].transmuted_grade = None
     data["submissions"]["graded_two"].grade = None
     data["submissions"]["graded_two"].status = "submitted"
@@ -1409,13 +1404,11 @@ def test_phase_six_parity_fixture_runs_on_isolated_sqlite(dashboard_clock):
         Base.metadata.create_all(bind=engine)
         with Session(engine) as session:
             samples = _phase_six_support_snapshot(session)
-        assert [item["student_alias"] for item in samples["initial"]["items"]] == ["active_one", "active_two"]
-        assert [reason["code"] for reason in samples["initial"]["items"][0]["reasons"]] == ["below_passing"]
-        assert [reason["code"] for reason in samples["initial"]["items"][1]["reasons"]] == ["overdue_work", "unexcused_absences"]
-        assert samples["changed_threshold"]["qualifying_entry_count"] == 1
-        assert samples["ungraded_excused"]["unavailable_grade_count"] == 1
-        assert [reason["code"] for reason in samples["ungraded_excused"]["items"][0]["reasons"]] == ["unexcused_absences"]
-        assert samples["ungraded_excused"]["items"][0]["name"] == "Student, active_two"
+        assert samples["initial"]["passing_count"] == 1
+        assert samples["changed_threshold"]["passing_count"] == 2
+        assert samples["ungraded_excused"]["available_grade_count"] == 1
+        assert samples["ungraded_excused"]["pending_grading_count"] == 2
+        assert samples["completed"]["pending_grading_count"] == 3
     finally:
         engine.dispose()
 

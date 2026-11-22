@@ -1,5 +1,6 @@
 import { DatePicker } from "@/components/retroui/DatePicker";
 import { useEffect, useState, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
@@ -157,6 +158,8 @@ type RecentScanItem = {
 };
 
 export default function TeacherAttendancePage() {
+  const [searchParams] = useSearchParams();
+  const initialClassIdParam = searchParams.get("class_id");
   const {
     classes: teachingClasses,
     advisoryClasses,
@@ -315,7 +318,7 @@ export default function TeacherAttendancePage() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
 
-  // Keep selectedTargetKey valid whenever targets change
+  // Keep selectedTargetKey valid whenever targets change; honor optional ?class_id= drill-down
   useEffect(() => {
     if (targets.length === 0) {
       setSelectedTargetKey("");
@@ -323,9 +326,14 @@ export default function TeacherAttendancePage() {
     }
     const stillExists = targets.some((t) => t.key === selectedTargetKey);
     if (!stillExists) {
-      setSelectedTargetKey(targets[0].key);
+      const requestedClassId = initialClassIdParam ? Number(initialClassIdParam) : null;
+      const matched =
+        requestedClassId && Number.isFinite(requestedClassId)
+          ? targets.find((t) => t.class_id === requestedClassId)
+          : undefined;
+      setSelectedTargetKey((matched ?? targets[0]).key);
     }
-  }, [targets, selectedTargetKey]);
+  }, [targets, selectedTargetKey, initialClassIdParam]);
 
   const handleTargetChange = (newKey: string) => {
     if (newKey === selectedTargetKey) return;

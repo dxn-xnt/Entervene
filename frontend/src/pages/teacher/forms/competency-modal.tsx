@@ -24,6 +24,20 @@ interface CompetencyModalProps {
   initialData?: CompetencyItem | null;
 }
 
+function formatApiError(data: unknown, fallback: string): string {
+  const detail = data && typeof data === "object" && "detail" in data
+    ? (data as { detail?: unknown }).detail
+    : undefined;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => (
+      item && typeof item === "object" && "msg" in item
+        ? String((item as { msg: unknown }).msg)
+        : JSON.stringify(item)
+    )).join(", ");
+  }
+  return typeof detail === "string" && detail ? detail : fallback;
+}
+
 export default function CompetencyModal({
   open,
   isOpen,
@@ -102,10 +116,7 @@ export default function CompetencyModal({
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
-          const errorMsg = Array.isArray(errData?.detail)
-            ? errData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
-            : (errData?.detail || "Failed to update competency.");
-          throw new Error(errorMsg);
+          throw new Error(formatApiError(errData, "Failed to update competency."));
         }
         const updated = (await res.json()) as CompetencyItem;
         if (onSaved) onSaved(updated);
@@ -128,7 +139,6 @@ export default function CompetencyModal({
             subject_id: parsedSubjectId,
             academic_period_id: parsedAcademicPeriodId,
             statement: statement.trim(),
-            competency_code: competencyCode.trim() || null,
             description: description.trim() || null,
             target_hours: Number(targetHours) || 0,
             order_index: Number(orderIndex) || 1,
@@ -136,10 +146,7 @@ export default function CompetencyModal({
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
-          const errorMsg = Array.isArray(errData?.detail)
-            ? errData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
-            : (errData?.detail || "Failed to create competency.");
-          throw new Error(errorMsg);
+          throw new Error(formatApiError(errData, "Failed to create competency."));
         }
         const created = (await res.json()) as CompetencyItem;
         if (onSaved) onSaved(created);
@@ -176,16 +183,18 @@ export default function CompetencyModal({
             </p>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <div className="sm:col-span-3">
-                <Field label="Competency Code">
-                  <Input
-                    value={competencyCode}
-                    onChange={(e) => setCompetencyCode(e.target.value)}
-                    placeholder="MELC Code (e.g. M7AL-IIa-1)"
-                    className="w-full font-mono"
-                  />
-                </Field>
-              </div>
+              {targetCompetency && (
+                <div className="sm:col-span-3">
+                  <Field label="Competency Code">
+                    <Input
+                      value={competencyCode}
+                      onChange={(e) => setCompetencyCode(e.target.value)}
+                      placeholder="MELC Code (e.g. M7AL-IIa-1)"
+                      className="w-full font-mono"
+                    />
+                  </Field>
+                </div>
+              )}
 
               <Field label="Target Hours">
                 <Input

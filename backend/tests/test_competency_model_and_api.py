@@ -191,6 +191,29 @@ def test_competency_lifecycle():
     assert resp.json()["is_archived"] is True
 
 
+def test_competency_can_be_created_without_code():
+    db, ctx = setup_test_db()
+    client = create_client(db, {
+        "sub": str(ctx["user_a_id"]),
+        "user_id": str(ctx["user_a_id"]),
+        "role": "teacher",
+    })
+
+    response = client.post("/api/v1/competencies/", json={
+        "statement": "Models linear relationships.",
+        "description": "Quarter 1",
+        "subject_id": ctx["subject_id"],
+        "academic_period_id": 1,
+        "target_hours": 4,
+    })
+
+    assert response.status_code == 201, response.text
+    assert response.json()["competency_code"] is None
+    stored = db.get(Competency, response.json()["competency_id"])
+    assert stored is not None
+    assert stored.competency_code is None
+
+
 def test_competency_per_teacher_scoping_and_cross_teacher_isolation():
     db, ctx = setup_test_db()
     assign_teacher_b_to_subject(db, ctx)

@@ -31,6 +31,15 @@ export function isExcludedNotification(item: Pick<NotificationItem, "notificatio
   return item.notification_type === "announcement";
 }
 
+export function isTeacherSubmissionNotification(
+  item: Pick<NotificationItem, "notification_type" | "title">,
+): boolean {
+  return item.notification_type === "intervention_assessment_submitted" || (
+    item.notification_type === "assignment_due" &&
+    item.title.trimStart().toLowerCase().startsWith("late submission:")
+  );
+}
+
 export function isStudentStudySupportType(
   notificationType: NotificationItem["notification_type"],
 ): boolean {

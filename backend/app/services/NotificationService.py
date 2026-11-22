@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import and_, func, not_, or_
 from sqlalchemy.orm import Session
 
 from app.models.auth.Role import Role
@@ -27,6 +27,34 @@ INTERVENTION_NOTIFICATION_TYPES = (
     "intervention_assessment_not_passed", "intervention_needs_teacher_review",
 )
 EXCLUDED_FEED_NOTIFICATION_TYPES = ("announcement",)
+TEACHER_SUBMISSION_NOTIFICATION_TYPES = ("intervention_assessment_submitted",)
+LATE_SUBMISSION_TITLE_PREFIX = "late submission:"
+
+
+def _is_teacher_role(user_role: str | None) -> bool:
+    return (user_role or "").lower() == "teacher"
+
+
+def _teacher_submission_notification_clause():
+    """Match historical alerts caused solely by a student's submission action."""
+    return or_(
+        Notification.notification_type.in_(TEACHER_SUBMISSION_NOTIFICATION_TYPES),
+        and_(
+            Notification.notification_type == "assignment_due",
+            func.lower(Notification.title).like(f"{LATE_SUBMISSION_TITLE_PREFIX}%"),
+        ),
+    )
+
+
+def _is_hidden_teacher_submission_notification(record: Notification, user_role: str | None) -> bool:
+    if not _is_teacher_role(user_role):
+        return False
+    if record.notification_type in TEACHER_SUBMISSION_NOTIFICATION_TYPES:
+        return True
+    return (
+        record.notification_type == "assignment_due"
+        and record.title.lower().startswith(LATE_SUBMISSION_TITLE_PREFIX)
+    )
 
 
 def _admin_account(db: Session, user_id: uuid.UUID) -> bool:
@@ -97,6 +125,9 @@ def get_notifications_for_user(
         Notification.user_id == uid,
         Notification.notification_type.notin_(EXCLUDED_FEED_NOTIFICATION_TYPES),
     )
+    if _is_teacher_role(user_role):
+        query = query.filter(not_(_teacher_submission_notification_clause()))
+        unread_query = unread_query.filter(not_(_teacher_submission_notification_clause()))
     if _has_intervention_notifications(db, uid) and _admin_account(db, uid):
         query = query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
         unread_query = unread_query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
@@ -136,6 +167,7 @@ def mark_notification_read(
     if (
         not record
         or record.notification_type in EXCLUDED_FEED_NOTIFICATION_TYPES
+        or (record is not None and _is_hidden_teacher_submission_notification(record, user_role))
         or (record.notification_type in INTERVENTION_NOTIFICATION_TYPES and _admin_account(db, uid))
     ):
         raise HTTPException(status_code=404, detail="Notification not found")
@@ -159,6 +191,8 @@ def mark_all_notifications_read(
         Notification.is_read == False,  # noqa: E712
         Notification.notification_type.notin_(EXCLUDED_FEED_NOTIFICATION_TYPES),
     )
+    if _is_teacher_role(user_role):
+        query = query.filter(not_(_teacher_submission_notification_clause()))
     if _has_intervention_notifications(db, uid) and _admin_account(db, uid):
         query = query.filter(Notification.notification_type.notin_(INTERVENTION_NOTIFICATION_TYPES))
     updated = query.all()

@@ -1194,6 +1194,10 @@ def test_late_resubmission_is_marked_late_when_allowed(authz_context):
     assert resubmit.json()["status"] == "late"
     c["db"].refresh(c["submission"])
     assert c["submission"].status == "late"
+    assert c["db"].query(Notification).filter(
+        Notification.user_id == c["accounts"]["owner"].user_id,
+        Notification.title.like("Late Submission:%"),
+    ).count() == 0
 
 
 def test_quiz_resubmit_respects_attempt_limit(authz_context):
