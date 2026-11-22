@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
-import { type HTMLAttributes } from "react";
+import { forwardRef, type HTMLAttributes } from "react";
 
 export const cardVariants = cva(
   "inline-block gap-2 rounded! border-2 border-border p-4 shadow-md transition-all hover:shadow-none",
@@ -64,15 +64,19 @@ const CardHeader = ({ className, ...props }: ICardProps) => {
   );
 };
 
-const CardTitle = ({ className, ...props }: ICardProps) => {
-  return (
-    <h3
-      data-slot="card-title"
-      className={cn("text-3xl font-bold", className)}
-      {...props}
-    />
-  );
-};
+const CardTitle = forwardRef<HTMLHeadingElement, ICardProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <h3
+        ref={ref}
+        data-slot="card-title"
+        className={cn("text-3xl font-bold", className)}
+        {...props}
+      />
+    );
+  },
+);
+CardTitle.displayName = "CardTitle";
 
 const CardDescription = ({ className, ...props }: ICardProps) => (
   <p
