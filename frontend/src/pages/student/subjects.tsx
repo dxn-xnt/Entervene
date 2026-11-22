@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 
 import { routes } from "@/../routes";
@@ -60,6 +60,52 @@ const Subjects = () => {
       .replace(":classId", String(subject.class_id))
       .replace(":subjectId", String(subject.subject_id));
 
+  const sortedSubjects = useMemo(() => {
+    if (!subjects.length) return [];
+    if (!classworks) return subjects;
+
+    return [...subjects].sort((a, b) => {
+      const aTodos = classworks.filter(
+        (t) => t.class_id === a.class_id && t.subject_id === a.subject_id,
+      );
+      const bTodos = classworks.filter(
+        (t) => t.class_id === b.class_id && t.subject_id === b.subject_id,
+      );
+
+      const aPending = aTodos.filter(
+        (t) => !t.is_submitted && t.status !== "completed",
+      );
+      const bPending = bTodos.filter(
+        (t) => !t.is_submitted && t.status !== "completed",
+      );
+
+      // Primary: Subject with most pending activities first
+      if (bPending.length !== aPending.length) {
+        return bPending.length - aPending.length;
+      }
+
+      // Secondary: Due time of the classworks (soonest due first)
+      const getEarliestDue = (pendingList: typeof aPending) => {
+        const dates = pendingList
+          .map((t) =>
+            t.due_date ? new Date(t.due_date).getTime() : Number.MAX_SAFE_INTEGER,
+          )
+          .filter((d) => !isNaN(d));
+        return dates.length ? Math.min(...dates) : Number.MAX_SAFE_INTEGER;
+      };
+
+      const aDue = getEarliestDue(aPending);
+      const bDue = getEarliestDue(bPending);
+
+      if (aDue !== bDue) {
+        return aDue - bDue;
+      }
+
+      // Tertiary: Alphabetical tie-breaker
+      return a.subject_name.localeCompare(b.subject_name);
+    });
+  }, [subjects, classworks]);
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-clip">
@@ -91,7 +137,7 @@ const Subjects = () => {
                 <StudentEmptyState icon={<BookOpen />} title="No subjects yet" description="Your assigned subjects will appear here once your enrollment is available." />
               ) : (
                 <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {subjects.map((subject) => (
+                  {sortedSubjects.map((subject) => (
                     <SubjectCard
                       variant="student"
                       className="shadow-md rounded"

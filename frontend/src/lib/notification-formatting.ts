@@ -1,7 +1,7 @@
 import type { NotificationItem } from "@/lib/notifications-api";
 
 export type StudentNotificationTab = "all" | "classwork" | "study_support";
-export type TeacherNotificationTab = "all" | "repost" | "interventions";
+export type TeacherNotificationTab = "all" | "repost" | "interventions" | "submissions";
 export type AdminNotificationTab = "all" | "academic" | "alerts";
 
 const STUDENT_STUDY_SUPPORT_TYPES = new Set<NotificationItem["notification_type"]>([
@@ -87,13 +87,16 @@ export function getStudentNotificationBadgeLabel(
 }
 
 export function matchesTeacherNotificationTab(
-  notificationType: NotificationItem["notification_type"],
+  notificationType: NotificationItem["notification_type"] | "submission",
   tab: TeacherNotificationTab,
 ): boolean {
   if (tab === "all") return true;
   if (tab === "repost") return notificationType.startsWith("repost_");
   if (tab === "interventions") {
     return notificationType === "risk_alert" || notificationType.startsWith("intervention_");
+  }
+  if (tab === "submissions") {
+    return notificationType === "submission";
   }
   return true;
 }

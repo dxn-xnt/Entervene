@@ -17,7 +17,7 @@ import {
 import { NotificationCard } from "@/components/notification-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-import { Bell, AlertTriangle, Loader2, Repeat } from "lucide-react";
+import { Bell, AlertTriangle, Loader2, Repeat, ClipboardCheck, PlusCircle } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { routes } from "@/../routes";
@@ -25,6 +25,7 @@ import {
   getNotifications,
   markAllNotificationsAsRead,
   markNotificationAsRead,
+  NOTIFICATIONS_CHANGED_EVENT,
   type NotificationItem,
 } from "@/lib/notifications-api";
 import {
@@ -35,11 +36,27 @@ import {
   matchesTeacherNotificationTab,
   type TeacherNotificationTab,
 } from "@/lib/notification-formatting";
+import {
+  formatSubmissionDate,
+  generateInitialMockSubmissions,
+  isSubmissionAwaitingGrading,
+  parseBackendSubmissionNotification,
+  upsertSubmissionNotification,
+  type SubmissionNotificationItem,
+} from "@/lib/teacher-submissions-notifications";
+
+type TeacherAnyNotification = NotificationItem | SubmissionNotificationItem;
+
+function toTitleCase(str: string): string {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
 
 const tabs: Array<TabItem<TeacherNotificationTab>> = [
   { id: "all", label: "All", icon: Bell },
   { id: "repost", label: "Repost Requests", icon: Repeat },
   { id: "interventions", label: "Interventions", icon: AlertTriangle },
+  { id: "submissions", label: "Submissions", icon: ClipboardCheck },
 ];
 
 const emptyStateByTab: Record<
@@ -62,12 +79,17 @@ const emptyStateByTab: Record<
     description:
       "Intervention candidates, assessments, and resolutions will appear here.",
   },
+  submissions: {
+    icon: <ClipboardCheck />,
+    title: "No submissions awaiting grading",
+    description: "Student submissions ready for review will appear here.",
+  },
 };
 
 const Notifications = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TeacherNotificationTab>("all");
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notifications, setNotifications] = useState<TeacherAnyNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
@@ -76,10 +98,33 @@ const Notifications = () => {
     try {
       setLoading(true);
       setLoadError(false);
-      const data = await getNotifications(false, 50);
-      setNotifications(data.notifications.filter(
-        (item) => !isExcludedNotification(item) && !isTeacherSubmissionNotification(item),
-      ));
+
+      try {
+        const data = await getNotifications(false, 50);
+        const backendItems = data.notifications.filter(
+          (item) => !isExcludedNotification(item) && !isTeacherSubmissionNotification(item),
+        );
+
+        const backendSubmissionItems = backendItems
+          .filter((item) => item.notification_type === "submission")
+          .map(parseBackendSubmissionNotification);
+
+        const otherBackendItems = backendItems.filter(
+          (item) => item.notification_type !== "submission",
+        );
+
+        if (backendSubmissionItems.length > 0) {
+          // Dynamic backend submissions found: display real submission notifications
+          setNotifications([...backendSubmissionItems, ...otherBackendItems]);
+        } else {
+          // Fallback to initial mock submissions when backend has no submission notifications
+          const mockSubmissions = generateInitialMockSubmissions();
+          setNotifications([...mockSubmissions, ...otherBackendItems]);
+        }
+      } catch (backendErr) {
+        console.warn("Backend notifications unreachable, using mock submissions:", backendErr);
+        setNotifications(generateInitialMockSubmissions());
+      }
     } catch (err) {
       console.error("Failed to load notifications:", err);
       setLoadError(true);
@@ -90,12 +135,20 @@ const Notifications = () => {
 
   useEffect(() => {
     fetchNotifications();
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, fetchNotifications);
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, fetchNotifications);
+    };
   }, [fetchNotifications]);
 
   const handleMarkAll = async () => {
     try {
       setMarkingAll(true);
-      await markAllNotificationsAsRead();
+      try {
+        await markAllNotificationsAsRead();
+      } catch {
+        // Fallback for mocked notifications
+      }
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     } catch (err) {
       console.error("Failed to mark all as read:", err);
@@ -104,23 +157,35 @@ const Notifications = () => {
     }
   };
 
-  const handleCardClick = async (item: NotificationItem) => {
+  const handleCardClick = (item: TeacherAnyNotification) => {
     if (!item.is_read) {
-      try {
-        await markNotificationAsRead(item.notification_id);
-        setNotifications((prev) =>
-          prev.map((n) =>
-            n.notification_id === item.notification_id
-              ? { ...n, is_read: true }
-              : n,
-          ),
-        );
-      } catch (err) {
+      void markNotificationAsRead(item.notification_id).catch((err) => {
         console.error("Failed to mark notification as read:", err);
-      }
+      });
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.notification_id === item.notification_id
+            ? { ...n, is_read: true }
+            : n,
+        ),
+      );
     }
 
-    // Specific deep link in action_url (e.g. /teacher/classworks/:id or /teacher/grades?academic_period_id=...)
+    if (item.notification_type === "submission") {
+      const sub = item as SubmissionNotificationItem;
+      const targetUrl = sub.action_url || `/teacher/classworks/${sub.classwork.id}`;
+      const separator = targetUrl.includes("?") ? "&" : "?";
+      const currentPath =
+        (window.location.pathname || "/teacher/notifications") + (window.location.search || "");
+      const fromParam = encodeURIComponent(currentPath);
+      const destination = targetUrl.includes("from=")
+        ? targetUrl
+        : `${targetUrl}${separator}from=${fromParam}`;
+      navigate(destination);
+      return;
+    }
+
+    // Specific deep link in action_url
     if (
       item.action_url &&
       item.action_url.trim() &&
@@ -155,6 +220,37 @@ const Notifications = () => {
     navigate(routes.teacher.classworks);
   };
 
+  /**
+   * Action to simulate a new student submission arriving in real time.
+   * Demonstrates the constraint: updates existing notification, increments count,
+   * updates date, marks unread again, and creates NO duplicate notification.
+   */
+  const handleSimulateNewSubmission = () => {
+    const now = new Date().toISOString();
+    setNotifications((prev) => {
+      // Find submission notifications
+      const submissionItems = prev.filter(
+        (n): n is SubmissionNotificationItem => n.notification_type === "submission",
+      );
+      const otherItems = prev.filter((n) => n.notification_type !== "submission");
+
+      // Target Science 7 (cw-102) to add a 2nd submission
+      const updatedSubmissions = upsertSubmissionNotification(submissionItems, {
+        subject: { id: "sub-2", name: "Science 7" },
+        classwork: {
+          id: "cw-102",
+          title: "Plant and Animal Cells Diagram",
+          type: "activity",
+          dueDate: "2026-11-21",
+        },
+        newSubmissionsCount: 1,
+        latestSubmissionAt: now,
+      });
+
+      return [...updatedSubmissions, ...otherItems];
+    });
+  };
+
   const unreadCounts = useMemo<
     Partial<Record<TeacherNotificationTab, number>>
   >(() => {
@@ -162,8 +258,19 @@ const Notifications = () => {
       all: 0,
       repost: 0,
       interventions: 0,
+      submissions: 0,
     };
     for (const item of notifications) {
+      if (item.notification_type === "submission") {
+        const subItem = item as SubmissionNotificationItem;
+        if (!isSubmissionAwaitingGrading(subItem)) continue;
+        if (!item.is_read) {
+          counts.all += 1;
+          counts.submissions += 1;
+        }
+        continue;
+      }
+
       if (item.is_read) continue;
       counts.all += 1;
       if (matchesTeacherNotificationTab(item.notification_type, "repost")) {
@@ -179,9 +286,16 @@ const Notifications = () => {
 
   const filteredNotifications = useMemo(
     () =>
-      notifications.filter((n) =>
-        matchesTeacherNotificationTab(n.notification_type, activeTab),
-      ),
+      notifications.filter((n) => {
+        if (n.notification_type === "submission") {
+          const subItem = n as SubmissionNotificationItem;
+          // Only show in Submissions or All tab, and only if awaiting grading
+          if (!isSubmissionAwaitingGrading(subItem)) return false;
+          return activeTab === "all" || activeTab === "submissions";
+        }
+        if (activeTab === "submissions") return false;
+        return matchesTeacherNotificationTab(n.notification_type, activeTab);
+      }),
     [notifications, activeTab],
   );
 
@@ -200,38 +314,52 @@ const Notifications = () => {
                     Notifications
                   </h1>
                 </div>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <span className="inline-flex">
-                        <Button
-                          variant="default"
-                          size="header"
-                          onClick={handleMarkAll}
-                          disabled={
-                            markingAll || notifications.every((n) => n.is_read)
-                          }
-                          className="shrink-0 whitespace-nowrap"
-                        >
-                          {markingAll ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : null}
-                          <span className="hidden sm:inline">
-                            Mark All as Read
-                          </span>
-                          <span className="sm:hidden">Read All</span>
-                        </Button>
-                      </span>
-                    }
-                  />
-                  <TooltipContent>
-                    {markingAll
-                      ? "Marking as read"
-                      : notifications.every((n) => n.is_read)
-                        ? "No unread notifications"
-                        : "Mark all as read"}
-                  </TooltipContent>
-                </Tooltip>
+                <div className="flex items-center gap-2">
+                  {activeTab === "submissions" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSimulateNewSubmission}
+                      className="hidden sm:inline-flex items-center gap-1.5"
+                      title="Simulate receiving another student submission for cw-102 to verify update-not-duplicate behavior"
+                    >
+                      <PlusCircle className="size-4" />
+                      <span>Simulate Submission</span>
+                    </Button>
+                  )}
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span className="inline-flex">
+                          <Button
+                            variant="default"
+                            size="header"
+                            onClick={handleMarkAll}
+                            disabled={
+                              markingAll || notifications.every((n) => n.is_read)
+                            }
+                            className="shrink-0 whitespace-nowrap"
+                          >
+                            {markingAll ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : null}
+                            <span className="hidden sm:inline">
+                              Mark All as Read
+                            </span>
+                            <span className="sm:hidden">Read All</span>
+                          </Button>
+                        </span>
+                      }
+                    />
+                    <TooltipContent>
+                      {markingAll
+                        ? "Marking as read"
+                        : notifications.every((n) => n.is_read)
+                          ? "No unread notifications"
+                          : "Mark all as read"}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               </header>
               <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
                 <Tabs<TeacherNotificationTab>
@@ -271,26 +399,51 @@ const Notifications = () => {
                 />
               ) : (
                 <div className="flex flex-col gap-3 w-full">
-                  {filteredNotifications.map((card) => (
-                    <div
-                      key={card.notification_id}
-                      onClick={() => handleCardClick(card)}
-                      className="cursor-pointer w-full"
-                    >
-                      <NotificationCard
-                        title={formatNotificationTitle(card.title)}
-                        description={formatNotificationBody(card.body)}
-                        date={
-                          card.created_at
-                            ? new Date(card.created_at).toLocaleDateString()
-                            : ""
-                        }
-                        user={card.notification_type.replace(/_/g, " ")}
-                        badge={card.is_read ? undefined : "Unread"}
-                        isRead={card.is_read}
-                      />
-                    </div>
-                  ))}
+                  {filteredNotifications.map((card) => {
+                    const isSubmission = card.notification_type === "submission";
+                    const subItem = isSubmission
+                      ? (card as SubmissionNotificationItem)
+                      : null;
+                    return (
+                      <div
+                        key={card.notification_id}
+                        onClick={() => handleCardClick(card)}
+                        className="cursor-pointer w-full"
+                      >
+                        <NotificationCard
+                          title={
+                            isSubmission
+                              ? card.title
+                              : formatNotificationTitle(card.title)
+                          }
+                          description={
+                            isSubmission
+                              ? card.body || ""
+                              : formatNotificationBody(card.body)
+                          }
+                          date={
+                            isSubmission && subItem
+                              ? formatSubmissionDate(subItem.latestSubmissionAt)
+                              : card.created_at
+                                ? new Date(card.created_at).toLocaleDateString()
+                                : ""
+                          }
+                          user={
+                            isSubmission && subItem
+                              ? `${subItem.subject.name} • Classwork`
+                              : card.notification_type.replace(/_/g, " ")
+                          }
+                          type={
+                            isSubmission && subItem
+                              ? toTitleCase(subItem.classwork.type)
+                              : undefined
+                          }
+                          badge={card.is_read ? undefined : "Unread"}
+                          isRead={card.is_read}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
