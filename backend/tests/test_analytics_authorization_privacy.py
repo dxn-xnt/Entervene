@@ -336,12 +336,20 @@ def test_admin_system_empty_period_returns_genuine_zero_and_empty_data(db, data)
     })
     assert response.status_code == 200
     body = response.json()
+    # Term-specific metrics stay genuinely zero/empty for upcoming Term 3
+    assert body["details"]["period_state"] == "FUTURE"
     assert body["details"]["teachers"]["active_loads"] == 0
     assert body["details"]["subjects"]["active"] == 0
-    assert body["details"]["enrollment_trend"] == []
+    assert body["details"]["attendance_by_grade"] == []
+    assert body["details"]["completion_by_grade"] == []
+    # School-year enrollment & engagement trend remains visible across terms up to today
+    assert body["details"]["enrollment_trend_scope"] == "academic_year"
+    assert len(body["details"]["enrollment_trend"]) > 0
     cards = {card["title"]: card for card in body["cards"]}
     assert cards["Ungraded Backlog"]["count"] == "0"
     assert cards["Assessments Published"]["count"] == "0"
+    assert cards["School Passing Rate"]["stat"] == "Upcoming"
+    assert cards["School Attendance"]["stat"] == "Upcoming"
 
 
 def test_admin_grade_health_uses_selected_period_roster_and_real_evidence(db, data):
@@ -485,3 +493,188 @@ def test_explicit_invalid_period_and_partial_dashboard_filter_are_rejected(db, d
         "class_id": data["class_"].class_id,
     })
     assert partial.status_code == 400
+
+
+def test_admin_system_enrollment_trend_is_dynamic_per_week(db, data):
+    from datetime import datetime, timezone
+    from app.models.academic.SubjectOffering import SubjectOffering
+    from app.models.attendance.Attendance import AttendanceRecord
+    from app.models.classwork.Classwork import Classwork
+    from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+    from app.models.submissions.StudentSubmission import StudentSubmission
+
+    # Ensure enrolled_at timestamps are on/before year start so all enrolled students appear from Wk 1
+    db.query(StudentClass).update({"enrolled_at": datetime(2026, 8, 1, 8, 0, tzinfo=timezone.utc)})
+    # Add a planned SubjectOffering in upcoming Term 3 (empty_period) with no SubjectLoad assigned yet
+    db.add(SubjectOffering(
+        academic_year_id=data["year"].academic_year_id,
+        academic_period_id=data["empty_period"].academic_period_id,
+        academic_level_id=data["class_"].academic_level_id,
+        subject_id=data["subject"].subject_id,
+    ))
+    db.commit()
+
+    client = create_client(db, {"sub": str(uuid.uuid4()), "role": "admin"})
+    before_active = client.get("/analytics/overview", params={
+        "scope": "system",
+        "academic_period_id": data["period"].academic_period_id,
+    }).json()
+    before_by_week = {item["week"]: item for item in before_active["details"]["enrollment_trend"]}
+    # Current mock clock is Oct 8, 2026 -> latest week ends on 2026-10-08 (no future weeks fabricated)
+    assert max(item["end_date"] for item in before_active["details"]["enrollment_trend"]) == "2026-10-08"
+
+    cw = Classwork(
+        title="Active Term Quiz",
+        classwork_type="QUIZ",
+        subject_id=data["subject"].subject_id,
+        created_by_staff_id=data["teacher"].staff_id,
+        is_published=True,
+        is_archived=False,
+    )
+    db.add(cw)
+    db.flush()
+    asgn = ClassworkAssignment(
+        classwork_id=cw.classwork_id,
+        class_id=data["class_"].class_id,
+        academic_period_id=data["period"].academic_period_id,
+        assigned_by_staff_id=data["teacher"].staff_id,
+        is_published=True,
+    )
+    db.add(asgn)
+    db.flush()
+    # Add both a submission and attendance for active_two in an earlier week (Sep 25-26) -> distinct count +1
+    db.add_all([
+        StudentSubmission(
+            student_id=data["students"]["active_two"].student_id,
+            classwork_assignment_id=asgn.classwork_assignment_id,
+            status="submitted",
+            attempt_count=1,
+            submitted_at=datetime(2026, 9, 25, 10, 0, tzinfo=timezone.utc),
+        ),
+        AttendanceRecord(
+            student_id=data["students"]["active_two"].student_id,
+            class_id=data["class_"].class_id,
+            subject_id=data["subject"].subject_id,
+            date=date(2026, 9, 25),
+            status="present",
+            recorded_by_staff_id=data["teacher"].staff_id,
+        ),
+    ])
+    db.commit()
+
+    prev_body = client.get("/analytics/overview", params={
+        "scope": "system", "academic_period_id": data["previous_period"].academic_period_id,
+    }).json()
+    active_body = client.get("/analytics/overview", params={
+        "scope": "system", "academic_period_id": data["period"].academic_period_id,
+    }).json()
+    upcoming_body = client.get("/analytics/overview", params={
+        "scope": "system", "academic_period_id": data["empty_period"].academic_period_id,
+    }).json()
+
+    # School-year enrollment trend is consistent across previous, active, and upcoming terms
+    assert prev_body["details"]["enrollment_trend"] == active_body["details"]["enrollment_trend"]
+    assert upcoming_body["details"]["enrollment_trend"] == active_body["details"]["enrollment_trend"]
+    assert len(active_body["details"]["enrollment_trend"]) > 0
+    # Verify the new active_two participation incremented the bucket containing 2026-09-25 by 1
+    sep25_bucket = next(
+        item for item in active_body["details"]["enrollment_trend"]
+        if item["start_date"] <= "2026-09-25" <= item["end_date"]
+    )
+    assert sep25_bucket["count"] == 4
+    assert sep25_bucket["active"] == before_by_week[sep25_bucket["week"]]["active"] + 1
+
+    # Term-specific metrics stay strictly isolated per selected term (no Term 1/2 leak into Term 3)
+    assert prev_body["details"]["period_state"] == "HISTORICAL"
+    assert active_body["details"]["period_state"] == "CURRENT"
+    assert upcoming_body["details"]["period_state"] == "FUTURE"
+    assert upcoming_body["details"]["attendance_by_grade"] == []
+    assert upcoming_body["details"]["completion_by_grade"] == []
+
+    # Cards distinguish academic-year totals from term-specific assignments/offerings
+    upcoming_cards = {c["title"]: c for c in upcoming_body["cards"]}
+    assert upcoming_cards["Students"]["count"] == "4"
+    assert "2026-2027" in upcoming_cards["Students"]["statDescription"]
+    assert upcoming_cards["Teachers"]["count"] == "2"
+    assert upcoming_cards["Teachers"]["stat"] == "0"
+    assert upcoming_cards["Teachers"]["statDescription"] == "assigned in Term 3"
+    assert upcoming_cards["Classes"]["count"] == "3"
+    assert "2026-2027" in upcoming_cards["Classes"]["statDescription"]
+    assert upcoming_cards["Subjects"]["count"] == "2"
+    assert upcoming_cards["Subjects"]["stat"] == "1"
+    assert upcoming_cards["Subjects"]["statDescription"] == "offered in Term 3"
+    assert upcoming_cards["School Passing Rate"]["stat"] == "Upcoming"
+    assert upcoming_cards["School Attendance"]["stat"] == "Upcoming"
+
+
+def test_admin_system_enrollment_trend_respects_academic_year_switching(db, data):
+    from datetime import datetime, timezone
+
+    client = create_client(db, {"sub": str(uuid.uuid4()), "role": "admin"})
+
+    # 1. Future academic year (2027-2028) has not started -> empty enrollment_trend, no fabrication
+    future_year, future_period = _add_year_period(
+        db,
+        year_label="2027-2028",
+        start_date=date(2027, 6, 1),
+        end_date=date(2028, 3, 31),
+    )
+    future_cls = Class(
+        section_name="Future-A",
+        academic_year_id=future_year.academic_year_id,
+        academic_level_id=data["class_"].academic_level_id,
+        class_status="active",
+    )
+    db.add(future_cls)
+    db.flush()
+    db.add(StudentClass(
+        student_id=data["students"]["active_one"].student_id,
+        class_id=future_cls.class_id,
+        academic_year_id=future_year.academic_year_id,
+        enrollment_status="enrolled",
+        enrolled_at=datetime(2026, 10, 1, 8, 0, tzinfo=timezone.utc),
+    ))
+    db.commit()
+
+    future_resp = client.get("/analytics/overview", params={
+        "scope": "system", "academic_period_id": future_period.academic_period_id,
+    })
+    assert future_resp.status_code == 200
+    assert future_resp.json()["details"]["enrollment_trend"] == []
+    assert future_resp.json()["details"]["period_state"] == "FUTURE"
+
+    # 2. Historical academic year (2025-2026) shows ONLY 2025-2026's own enrollment/trend
+    hist_year, hist_period = _add_year_period(
+        db,
+        year_label="2025-2026",
+        start_date=date(2025, 6, 1),
+        end_date=date(2026, 3, 31),
+    )
+    hist_cls = Class(
+        section_name="Hist-A",
+        academic_year_id=hist_year.academic_year_id,
+        academic_level_id=data["class_"].academic_level_id,
+        class_status="active",
+    )
+    db.add(hist_cls)
+    db.flush()
+    db.add(StudentClass(
+        student_id=data["students"]["active_one"].student_id,
+        class_id=hist_cls.class_id,
+        academic_year_id=hist_year.academic_year_id,
+        enrollment_status="enrolled",
+        enrolled_at=datetime(2025, 6, 1, 8, 0, tzinfo=timezone.utc),
+    ))
+    db.commit()
+
+    hist_resp = client.get("/analytics/overview", params={
+        "scope": "system", "academic_period_id": hist_period.academic_period_id,
+    })
+    assert hist_resp.status_code == 200
+    hist_trend = hist_resp.json()["details"]["enrollment_trend"]
+    assert len(hist_trend) > 0
+    assert all(item["count"] == 1 for item in hist_trend)
+    assert max(item["end_date"] for item in hist_trend) == "2026-03-31"
+    assert hist_resp.json()["details"]["period_state"] == "HISTORICAL"
+
+
