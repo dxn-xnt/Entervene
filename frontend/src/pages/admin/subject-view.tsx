@@ -11,6 +11,7 @@ import ClassItemLine from "@/components/item-line/class";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
   getClasses,
+  getOverviewStats,
   getSubjectDetail,
   getSubjectLoadStudioData,
   getSubjects,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/api";
 import type { ClassListItem } from "@/types/adminClasses";
 import { OverviewCard } from "@/components/overview-cards";
+import { SubjectClassHeader } from "@/components/subject-class-header";
 
 function formatDate(value: string | null) {
   if (!value) return "Unknown";
@@ -37,21 +39,6 @@ function formatClock12(hhmm?: string | null): string {
   return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
-function loadWeeklyHours(load: SubjectLoadItem): number {
-  if (!load.start_time || !load.end_time) return 0;
-  const [sh, sm] = load.start_time.split(":").map(Number);
-  const [eh, em] = load.end_time.split(":").map(Number);
-  if (!Number.isFinite(sh) || !Number.isFinite(sm) || !Number.isFinite(eh) || !Number.isFinite(em)) {
-    return 0;
-  }
-  const minutes = eh * 60 + em - (sh * 60 + sm);
-  if (minutes <= 0) return 0;
-  const daysCount = Array.isArray(load.days_of_week) && load.days_of_week.length > 0
-    ? load.days_of_week.length
-    : 5;
-  return (minutes * daysCount) / 60;
-}
-
 export default function AdminSubjectView() {
   const { grade, subject } = useParams<{ grade: string; subject: string }>();
   const { selectedPeriodId, selectedYearId } = useAcademicPeriod();
@@ -61,7 +48,8 @@ export default function AdminSubjectView() {
   const [classesList, setClassesList] = useState<ClassListItem[]>([]);
   const [archivedClassesCount, setArchivedClassesCount] = useState<number>(0);
   const [subjectLoadsByClass, setSubjectLoadsByClass] = useState<Record<number, SubjectLoadItem>>({});
-  const [totalHours, setTotalHours] = useState<number>(0);
+  const [overallMastery, setOverallMastery] = useState<string | null>(null);
+  const [averageGrade, setAverageGrade] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,14 +93,12 @@ export default function AdminSubjectView() {
         const matchingArchivedClasses = archivedClassesData.classes.filter(matchesLevel);
 
         const loadsForSubject: Record<number, SubjectLoadItem> = {};
-        let computedHours = 0;
 
         if (studioData) {
           for (const load of studioData.existing_loads) {
             if (load.is_active_version === false) continue;
             if (load.subject_id === loadedSubject.subject_id) {
               loadsForSubject[load.class_id] = load;
-              computedHours += loadWeeklyHours(load);
             }
           }
         }
@@ -122,7 +108,38 @@ export default function AdminSubjectView() {
           setClassesList(matchingActiveClasses);
           setArchivedClassesCount(matchingArchivedClasses.length);
           setSubjectLoadsByClass(loadsForSubject);
-          setTotalHours(Math.round(computedHours * 10) / 10);
+        }
+
+        try {
+          const stats = await getOverviewStats({
+            scope: "subject",
+            subject_id: loadedSubject.subject_id,
+            academic_period_id: selectedPeriodId ?? undefined,
+            academic_year_id: selectedYearId ?? undefined,
+          });
+          const masteryCard = stats?.cards?.find((c) => c.title.toLowerCase().includes("mastery"));
+          const gradeCard = stats?.cards?.find((c) => c.title.toLowerCase().includes("grade"));
+          const resolvedMastery =
+            masteryCard?.count && masteryCard.count !== "0"
+              ? masteryCard.count
+              : stats?.details?.overall_class_mastery != null
+                ? `${stats.details.overall_class_mastery}%`
+                : null;
+          const resolvedGrade =
+            gradeCard?.count && gradeCard.count !== "0"
+              ? gradeCard.count
+              : stats?.details?.students_average_grade != null
+                ? `${stats.details.students_average_grade}%`
+                : null;
+          if (isMounted) {
+            setOverallMastery(resolvedMastery);
+            setAverageGrade(resolvedGrade);
+          }
+        } catch {
+          if (isMounted) {
+            setOverallMastery(null);
+            setAverageGrade(null);
+          }
         }
       } catch (err) {
         if (isMounted) {
@@ -131,7 +148,8 @@ export default function AdminSubjectView() {
           setClassesList([]);
           setArchivedClassesCount(0);
           setSubjectLoadsByClass({});
-          setTotalHours(0);
+          setOverallMastery(null);
+          setAverageGrade(null);
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -192,38 +210,57 @@ export default function AdminSubjectView() {
               </RetroCard>
             ) : subjectDetail ? (
               <>
-                <RetroCard className="bg-accent">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex flex-row flex-wrap gap-3 items-start justify-between">
-                      <div className="flex flex-row gap-2 items-end">
-                        <Text as="h2" className="font-sans font-bold">
-                          {subjectDetail.subject_name}
-                        </Text>
-                        <Text as="p" className="font-sans text-xl font-medium pb-1">
-                          ( {subjectDetail.subject_codename} )
-                        </Text>
-                      </div>
-                      <div className="flex flex-row gap-2">
-                        <Badge size="sm" variant="solid" className="capitalize">
-                          {subjectDetail.grading_template.template_name}
-                        </Badge>
-                        <Badge size="sm" variant={subjectDetail.status === "active" ? "secondary" : "default"} className="capitalize">
-                          {subjectDetail.status.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}
-                        </Badge>
-                      </div>
+                <SubjectClassHeader
+                  detail={{
+                    class_id: subjectDetail.subject_id,
+                    academic_level: decodedGrade,
+                    is_archived: subjectDetail.status === "archived",
+                  }}
+                  currentSubject={{
+                    subject_id: subjectDetail.subject_id,
+                    subject_name: subjectDetail.subject_codename
+                      ? `${subjectDetail.subject_name} ( ${subjectDetail.subject_codename} )`
+                      : subjectDetail.subject_name,
+                  }}
+                  statusLabel={subjectDetail.status === "active" ? "Active" : "Archived"}
+                  showViewSubjectButton={false}
+                  badges={
+                    <Badge size="sm" variant="solid" className="capitalize">
+                      {subjectDetail.grading_template.template_name}
+                    </Badge>
+                  }
+                  subtitle={
+                    <div className="flex flex-row flex-wrap justify-between items-center text-xs sm:text-sm text-foreground/80 mt-1">
+                      <span>Created since {formatDate(subjectDetail.created_at)}</span>
+                      <span>Passing threshold: {subjectDetail.grading_template.passing_threshold}%</span>
                     </div>
-                    <div className="flex flex-row justify-between">
-                      <Text as="p" className="text-sm font-normal">
-                        Created since {formatDate(subjectDetail.created_at)}
-                      </Text>
-                      <Text as="p" className="text-sm font-normal">
-                        Passing threshold: {subjectDetail.grading_template.passing_threshold}%
-                      </Text>
-                    </div>
-                  </div>
-                </RetroCard>
+                  }
+                />
 
-                <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="flex min-w-0 flex-col gap-4">
+                  {/* Overview Cards at the top of classes, not on the right side */}
+                  <section
+                    className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                    aria-label="Subject overview"
+                  >
+                    <OverviewCard
+                      title="Total Classes"
+                      count={String(totalClassesCount)}
+                    />
+                    <OverviewCard
+                      title="Active Classes"
+                      count={String(activeClassesCount)}
+                    />
+                    <OverviewCard
+                      title="Overall Class Mastery"
+                      count={overallMastery || "--"}
+                    />
+                    <OverviewCard
+                      title="Students Average Grade"
+                      count={averageGrade || "--"}
+                    />
+                  </section>
+
                   <section className="flex min-w-0 flex-col gap-2">
                     <Text as="h3" className="font-sans text-xl font-bold">
                       Classes
@@ -254,17 +291,6 @@ export default function AdminSubjectView() {
                       )}
                     </div>
                   </section>
-
-                  <aside className="flex min-w-0 flex-col gap-3" aria-label="Subject summary">
-                    <OverviewCard title="Total Classes" count={String(totalClassesCount)} />
-                    <OverviewCard title="Active Classes" count={String(activeClassesCount)} />
-                    <OverviewCard title="Archived Classes" count={String(archivedClassesCount)} />
-                    <OverviewCard
-                      title="Total Hours"
-                      count={String(totalHours)}
-                      statDescription="Recorded hours across these classes"
-                    />
-                  </aside>
                 </div>
               </>
             ) : null}

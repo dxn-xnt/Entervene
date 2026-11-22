@@ -214,16 +214,6 @@ export default function PredictionDetailSheet({
               candidateId={candidateId}
               activeInterventionId={activeInterventionId}
             />
-
-            {isTeacher && candidateId !== undefined && (
-              <div className="px-4 pb-5 pt-3">
-                <Button asChild>
-                  <Link to={`${routes.teacher.interventions}?candidate=${candidateId}`}>
-                    Review Intervention
-                  </Link>
-                </Button>
-              </div>
-            )}
           </div>
         ) : loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
@@ -1083,11 +1073,20 @@ function CurrentTermTeacherDetail({
           </dd>
         </dl>
       </section>
-      {isTeacher && activeInterventionId !== undefined && (
+      {isTeacher && candidateId !== undefined && activeInterventionId === undefined && (
         <div className="pb-5">
           <Button asChild>
-            <Link to={`${routes.teacher.interventions}?active=${activeInterventionId}&setup=1`}>
+            <Link to={`${routes.teacher.interventions}?candidate=${candidateId}`}>
               Proceed With Intervention
+            </Link>
+          </Button>
+        </div>
+      )}
+      {isTeacher && activeInterventionId !== undefined && candidateId === undefined && (
+        <div className="pb-5">
+          <Button asChild>
+            <Link to={`${routes.teacher.interventions}?active=${activeInterventionId}`}>
+              Review Intervention
             </Link>
           </Button>
         </div>

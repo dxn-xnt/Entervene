@@ -151,12 +151,13 @@ export function SubjectCard({
       >
         <div className="flex flex-col items-start justify-between gap-2.5">
           {/* Header */}
-          <div className="flex flex-row w-full items-center justify-between gap-2">
+          <div className="flex flex-row w-full min-w-0 items-center justify-between gap-2">
             <Tooltip>
               <TooltipTrigger
                 render={
                   <p
-                    className="text-2xl font-bold truncate min-w-0"
+                    className="text-2xl font-bold truncate min-w-0 flex-1"
+                    title={displayTitle}
                     tabIndex={0}
                   >
                     {displayTitle}
@@ -370,10 +371,20 @@ export function SubjectCard({
           </Avatar.Fallback>
         </Avatar>
         <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-          <div className="flex w-full flex-row gap-2 items-center justify-between">
-            <Card.Title className="min-w-0 break-words text-2xl font-bold leading-tight">
-              {subjectDisplayName}
-            </Card.Title>
+          <div className="flex w-full min-w-0 flex-row gap-2 items-center justify-between">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Card.Title
+                    className="min-w-0 flex-1 truncate text-2xl font-bold leading-tight"
+                    title={subjectDisplayName}
+                  >
+                    {subjectDisplayName}
+                  </Card.Title>
+                }
+              />
+              <TooltipContent>{subjectDisplayName}</TooltipContent>
+            </Tooltip>
             {effectivePendingCount > 0 && (
               <Badge size="sm" variant="default" className="shrink-0">
                 {effectivePendingCount} Pending
@@ -381,7 +392,10 @@ export function SubjectCard({
             )}
           </div>
           {teacherDisplayName && (
-            <span className="min-w-0 break-words text-sm text-muted-foreground">
+            <span
+              className="min-w-0 max-w-full truncate text-sm text-muted-foreground"
+              title={teacherDisplayName}
+            >
               {teacherDisplayName}
             </span>
           )}

@@ -51,10 +51,10 @@ const AccordionContent = ({
 }: BaseAccordion.Panel.Props) => (
   <BaseAccordion.Panel
     ref={ref}
-    className="overflow-hidden bg-background font-body text-foreground data-[open]:animate-accordion-down data-[closed]:animate-accordion-up"
+    className="overflow-hidden min-w-0 max-w-full bg-background font-body text-foreground data-[open]:animate-accordion-down data-[closed]:animate-accordion-up"
     {...props}
   >
-    <div className={cn("px-4 pt-2 pb-4", className)}>{children}</div>
+    <div className={cn("px-4 pt-2 pb-4 min-w-0 max-w-full", className)}>{children}</div>
   </BaseAccordion.Panel>
 );
 

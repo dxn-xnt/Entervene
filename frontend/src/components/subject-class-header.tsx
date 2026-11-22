@@ -18,6 +18,8 @@ export interface SubjectClassHeaderProps {
   } | null;
   statusLabel?: string;
   teacherName?: string | null;
+  subtitle?: React.ReactNode;
+  badges?: React.ReactNode;
   className?: string;
   showViewSubjectButton?: boolean;
 }
@@ -27,13 +29,16 @@ export function SubjectClassHeader({
   currentSubject,
   statusLabel,
   teacherName,
+  subtitle,
+  badges,
   className,
   showViewSubjectButton = true,
 }: SubjectClassHeaderProps) {
   const navigate = useNavigate();
   const computedStatus = statusLabel ?? (detail.is_archived ? "Archived" : "Active");
   const title = currentSubject?.subject_name || detail.section_name || "Subject";
-  const subtitle = teacherName || [detail.section_name, detail.academic_level].filter(Boolean).join(" | ");
+  const defaultSubtitle = teacherName || [detail.section_name, detail.academic_level].filter(Boolean).join(" | ");
+  const displaySubtitle = subtitle !== undefined ? subtitle : defaultSubtitle;
 
   return (
     <Card className={`block w-full border-black bg-primary transition-none hover:shadow-md pt-3 pb-4 ${className || ""}`}>
@@ -55,6 +60,7 @@ export function SubjectClassHeader({
             </Tooltip>
           </div>
           <div className="flex shrink-0 flex-row items-center gap-2">
+            {badges}
             <Badge
               variant="outline"
               size="sm"
@@ -90,11 +96,13 @@ export function SubjectClassHeader({
             )}
           </div>
         </div>
-        {subtitle && (
+        {typeof displaySubtitle === "string" ? (
           <p className="text-sm mt-1">
-            {subtitle}
+            {displaySubtitle}
           </p>
-        )}
+        ) : displaySubtitle ? (
+          <div className="mt-1">{displaySubtitle}</div>
+        ) : null}
       </Card.Content>
     </Card>
   );
