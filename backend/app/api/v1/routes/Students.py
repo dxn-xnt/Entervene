@@ -95,6 +95,8 @@ def get_my_studyboard_metrics(
     attended = sum(day["status"] in {"present", "late", "excused"} for day in recorded)
     attendance_rate = round(attended / len(recorded) * 100) if recorded else None
 
+    from app.services.classwork.ClassworkAccessService import student_assignment_visibility_filter
+
     submission_query = (
         db.query(StudentSubmission, ClassworkAssignment, Classwork, Subject)
         .join(ClassworkAssignment, StudentSubmission.classwork_assignment_id == ClassworkAssignment.classwork_assignment_id)
@@ -102,6 +104,10 @@ def get_my_studyboard_metrics(
         .join(Subject, Classwork.subject_id == Subject.subject_id)
         .filter(StudentSubmission.student_id == student.student_id)
         .filter(ClassworkAssignment.class_id == class_id)
+        .filter(student_assignment_visibility_filter(student.student_id))
+        .filter(ClassworkAssignment.is_published == True)
+        .filter(Classwork.is_published == True)
+        .filter(Classwork.is_archived == False)
     )
     if academic_period_id is not None:
         submission_query = submission_query.filter(ClassworkAssignment.academic_period_id == academic_period_id)
@@ -119,9 +125,30 @@ def get_my_studyboard_metrics(
     daily_seconds = {i: 0 for i in range(7)}
     subject_seconds: dict[int, dict] = {}
     trend_buckets: dict[int, list[float]] = {i: [] for i in range(6)}
-    on_time = late = 0
+    on_time = late = without_deadline = 0
     visible_quiz_submission_ids = []
+
+    # Sum reading time across all attempt rows, but deduplicate to the latest
+    # submission per assignment for timeliness and grade metrics so retakes are
+    # never double-counted.
+    latest_by_assignment: dict[int, tuple[StudentSubmission, ClassworkAssignment, Classwork, Subject]] = {}
     for submission, assignment, classwork, subject in submission_rows:
+        activity_at = submission.submitted_at or submission.created_at
+        if activity_at and monday <= _manila_date(activity_at) < monday + timedelta(days=7):
+            seconds = max(0, submission.reading_focused_seconds or 0)
+            daily_seconds[_manila_date(activity_at).weekday()] += seconds
+            if seconds:
+                bucket = subject_seconds.setdefault(subject.subject_id, {"subject": subject.subject_name, "seconds": 0})
+                bucket["seconds"] += seconds
+        aid = assignment.classwork_assignment_id
+        prev = latest_by_assignment.get(aid)
+        if prev is None or (submission.attempt_count or 0, submission.submission_id) > (
+            prev[0].attempt_count or 0,
+            prev[0].submission_id,
+        ):
+            latest_by_assignment[aid] = (submission, assignment, classwork, subject)
+
+    for submission, assignment, classwork, subject in latest_by_assignment.values():
         score_visible = bool(classwork.show_scores)
         if classwork.classwork_type.upper() == "QUIZ":
             score_visible = quiz_results_are_visible(
@@ -130,20 +157,19 @@ def get_my_studyboard_metrics(
                 assignment,
                 submission_status=submission.status,
             )
-        activity_at = submission.submitted_at or submission.created_at
-        if activity_at and monday <= _manila_date(activity_at) < monday + timedelta(days=7):
-            seconds = max(0, submission.reading_focused_seconds or 0)
-            daily_seconds[_manila_date(activity_at).weekday()] += seconds
-            if seconds:
-                bucket = subject_seconds.setdefault(subject.subject_id, {"subject": subject.subject_name, "seconds": 0})
-                bucket["seconds"] += seconds
-        if submission.submitted_at and assignment.due_date:
-            submitted_at = submission.submitted_at if submission.submitted_at.tzinfo else submission.submitted_at.replace(tzinfo=timezone.utc)
-            due_at = assignment.due_date if assignment.due_date.tzinfo else assignment.due_date.replace(tzinfo=timezone.utc)
-            if submitted_at <= due_at:
-                on_time += 1
+        is_submitted = (submission.status in ("submitted", "graded", "late", "completed")) or (
+            submission.submitted_at is not None
+        )
+        if is_submitted:
+            if submission.submitted_at and assignment.due_date:
+                submitted_at = submission.submitted_at if submission.submitted_at.tzinfo else submission.submitted_at.replace(tzinfo=timezone.utc)
+                due_at = assignment.due_date if assignment.due_date.tzinfo else assignment.due_date.replace(tzinfo=timezone.utc)
+                if submitted_at <= due_at:
+                    on_time += 1
+                else:
+                    late += 1
             else:
-                late += 1
+                without_deadline += 1
         if (submission.grade is not None and classwork.total_points and score_visible
                 and submission.graded_at and _manila_date(submission.graded_at) >= six_weeks_ago):
             week = (_manila_date(submission.graded_at) - six_weeks_ago).days // 7
@@ -160,6 +186,7 @@ def get_my_studyboard_metrics(
     ) if visible_quiz_submission_ids else []
     quiz_correct = sum(answer.is_correct is True for answer in quiz_answers)
     quiz_wrong = len(quiz_answers) - quiz_correct
+    on_time_eligible = on_time + late
     return {
         "week_start": monday.isoformat(),
         "attendance": attendance,
@@ -173,6 +200,8 @@ def get_my_studyboard_metrics(
         ],
         "on_time_count": on_time,
         "late_submission_count": late,
+        "on_time_rate": round(on_time / on_time_eligible * 100) if on_time_eligible > 0 else None,
+        "submitted_without_deadline_count": without_deadline,
         "quiz_correct": quiz_correct,
         "quiz_wrong": quiz_wrong,
     }
@@ -533,6 +562,7 @@ def get_my_todos(
     now = datetime.now(timezone.utc)
 
     from app.services.classwork.ClassworkAccessService import student_assignment_visibility_filter
+    from app.services.classwork.ClassworkShared import assignment_is_locked
 
     results = (
         db.query(
@@ -540,6 +570,10 @@ def get_my_todos(
             ClassworkAssignment.class_id,
             ClassworkAssignment.due_date,
             ClassworkAssignment.publish_date,
+            ClassworkAssignment.allow_late_submissions,
+            ClassworkAssignment.is_locked,
+            ClassworkAssignment.lock_date,
+            ClassworkAssignment.source_intervention_id,
             Classwork.classwork_id,
             Classwork.title,
             Classwork.classwork_type,
@@ -550,6 +584,7 @@ def get_my_todos(
             Subject.subject_name,
             Subject.subject_id,
             StudentSubmission.submission_id,
+            StudentSubmission.attempt_count,
             StudentSubmission.status.label("submission_status"),
             StudentSubmission.submitted_at,
             StudentSubmission.grade,
@@ -565,6 +600,7 @@ def get_my_todos(
             ClassworkAssignment.class_id.in_(class_ids),
             student_assignment_visibility_filter(student.student_id),
             ClassworkAssignment.is_published == True,
+            Classwork.is_published == True,
             Classwork.is_archived == False,
         )
     )
@@ -583,7 +619,23 @@ def get_my_todos(
             )
         )
 
-    results = results.order_by(ClassworkAssignment.due_date.asc().nulls_last()).all()
+    raw_results = results.order_by(ClassworkAssignment.due_date.asc().nulls_last()).all()
+    # Deduplicate multi-attempt submissions (e.g., Study Support retakes) to the latest attempt per assignment.
+    deduped_map = {}
+    ordered_assignment_ids = []
+    for row in raw_results:
+        aid = row.classwork_assignment_id
+        if aid not in deduped_map:
+            deduped_map[aid] = row
+            ordered_assignment_ids.append(aid)
+        else:
+            prev = deduped_map[aid]
+            if ((row.attempt_count or 0), (row.submission_id or 0)) > (
+                (prev.attempt_count or 0),
+                (prev.submission_id or 0),
+            ):
+                deduped_map[aid] = row
+    results = [deduped_map[aid] for aid in ordered_assignment_ids]
     result_classworks = {
         classwork.classwork_id: classwork
         for classwork in db.query(Classwork).filter(
@@ -633,6 +685,10 @@ def get_my_todos(
             else None
         )
 
+        locked = assignment_is_locked(row, now=now)
+        allow_late = bool(row.allow_late_submissions)
+        is_actionable = (not is_submitted) and (not locked) and ((not is_past_due) or allow_late)
+
         item = {
             "assignment_id": row.classwork_assignment_id,
             "class_id": row.class_id,
@@ -651,6 +707,10 @@ def get_my_todos(
             "submission_status": row.submission_status,
             "show_scores": score_visible,
             "grade": visible_grade,
+            "allow_late_submissions": allow_late,
+            "is_locked": locked,
+            "is_actionable": is_actionable,
+            "is_study_support": row.source_intervention_id is not None,
         }
 
         all_items.append(item)
