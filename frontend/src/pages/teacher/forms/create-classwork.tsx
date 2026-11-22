@@ -208,6 +208,9 @@ export default function CreateClassworkModal({
   const isInterventionResourceMode = Boolean(
     interventionResourceContext && isReadingType(selectedType),
   );
+  const isRemediationActivityCreation = Boolean(
+    (remediationDraft || remediationTarget) && !isReadingType(selectedType),
+  );
   const [recipientScope, setRecipientScope] =
     useState<ResourceRecipientScope>("THIS_STUDENT");
   const isSubjectLocked =
@@ -437,8 +440,10 @@ export default function CreateClassworkModal({
   };
 
   const validateDetails = () => {
-    const linksError = validateReferenceLinks(referenceLinks);
-    if (linksError) return linksError;
+    if (!isRemediationActivityCreation) {
+      const linksError = validateReferenceLinks(referenceLinks);
+      if (linksError) return linksError;
+    }
     if (!draft.subject_id) return "Choose a subject.";
     if (isInterventionResourceMode && selectedLessonIds.length === 0) {
       return "Choose a lesson for this reading.";
@@ -740,10 +745,12 @@ export default function CreateClassworkModal({
       formData.append(
         "reference_links",
         JSON.stringify(
-          referenceLinks.map((link) => ({
-            url: link.url.trim(),
-            title: link.title.trim() || null,
-          })),
+          isRemediationActivityCreation
+            ? []
+            : referenceLinks.map((link) => ({
+                url: link.url.trim(),
+                title: link.title.trim() || null,
+              })),
         ),
       );
       if (draft.due_date) {
@@ -774,7 +781,9 @@ export default function CreateClassworkModal({
         );
       }
 
-      materials.forEach((material) => formData.append("files", material));
+      if (!isRemediationActivityCreation) {
+        materials.forEach((material) => formData.append("files", material));
+      }
 
       const createResponse = await apiFetch(
         "/api/v1/classwork-assignments/with-assignments",
@@ -1194,45 +1203,88 @@ export default function CreateClassworkModal({
                 </div>
               )}
 
-              <ReferenceLinkEditor
-                links={referenceLinks}
-                onChange={setReferenceLinks}
-                disabled={isCreating}
-              />
+              {!isRemediationActivityCreation && (
+                <>
+                  <ReferenceLinkEditor
+                    links={referenceLinks}
+                    onChange={setReferenceLinks}
+                    disabled={isCreating}
+                  />
 
-              <Field
-                label={
-                  remediationDraft
-                    ? "Upload Material (Optional)"
-                    : "Upload Material"
-                }
-              >
-                {materials.length === 0 ? (
-                  <Empty className="shadow-md rounded! hover:shadow-none transition-shadow">
-                    <EmptyHeader>
-                      <EmptyTitle>
-                        {remediationDraft
-                          ? "No Additional Files Attached"
-                          : "No Materials Added"}
-                      </EmptyTitle>
-                      <EmptyDescription className="flex flex-col -gap-3 text-center whitespace-nowrap">
-                        <span className="font-semibold">Max 10mb</span>
-                        <span>(pdf, docx, pptx, jpg & png)</span>
-                      </EmptyDescription>
-                    </EmptyHeader>
-                    <EmptyContent>
-                      <Button
-                        asChild
-                        size="sm"
-                        variant="default"
-                        className="cursor-pointer rounded!"
-                        disabled={isCreating}
-                      >
-                        <label>
-                          <Plus size={14} className="mr-1" />
-                          {remediationDraft
-                            ? "Attach Optional Files"
-                            : "Add Materials"}
+                  <Field label="Upload Material">
+                    {materials.length === 0 ? (
+                      <Empty className="shadow-md rounded! hover:shadow-none transition-shadow">
+                        <EmptyHeader>
+                          <EmptyTitle>No Materials Added</EmptyTitle>
+                          <EmptyDescription className="flex flex-col -gap-3 text-center whitespace-nowrap">
+                            <span className="font-semibold">Max 10mb</span>
+                            <span>(pdf, docx, pptx, jpg & png)</span>
+                          </EmptyDescription>
+                        </EmptyHeader>
+                        <EmptyContent>
+                          <Button
+                            asChild
+                            size="sm"
+                            variant="default"
+                            className="cursor-pointer rounded!"
+                            disabled={isCreating}
+                          >
+                            <label>
+                              <Plus size={14} className="mr-1" />
+                              Add Materials
+                              <input
+                                type="file"
+                                multiple
+                                accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
+                                onChange={(event) => {
+                                  addMaterials(event.target.files);
+                                  event.target.value = "";
+                                }}
+                                disabled={isCreating}
+                                className="hidden"
+                              />
+                            </label>
+                          </Button>
+                        </EmptyContent>
+                      </Empty>
+                    ) : (
+                      <div className="w-full flex flex-wrap gap-3">
+                        {materials.map((material, index) => (
+                          <div
+                            key={`${material.name}-${material.size}`}
+                            className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
+                          >
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <span className="absolute right-1 top-1 inline-flex">
+                                    <button
+                                      type="button"
+                                      onClick={() => removeMaterial(index)}
+                                      disabled={isCreating}
+                                      className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                      aria-label={`Remove ${material.name}`}
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </span>
+                                }
+                              />
+                              <TooltipContent>Remove file</TooltipContent>
+                            </Tooltip>
+                            <FileText className="mx-auto mt-5" size={22} />
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold">
+                                {material.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(material.size)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                        <label className="flex h-32 w-28 cursor-pointer items-center justify-center border-2 border-dashed border-black bg-[#F6E9B2] text-sm font-bold shadow-md hover:bg-[#7ABA78] hover:shadow-none transition-all">
+                          <Plus size={20} />
                           <input
                             type="file"
                             multiple
@@ -1245,68 +1297,11 @@ export default function CreateClassworkModal({
                             className="hidden"
                           />
                         </label>
-                      </Button>
-                    </EmptyContent>
-                  </Empty>
-                ) : (
-                  <div className="w-full flex flex-wrap gap-3">
-                    {materials.map((material, index) => (
-                      <div
-                        key={`${material.name}-${material.size}`}
-                        className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
-                      >
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <span className="absolute right-1 top-1 inline-flex">
-                                <button
-                                  type="button"
-                                  onClick={() => removeMaterial(index)}
-                                  disabled={isCreating}
-                                  className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                  aria-label={`Remove ${material.name}`}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </span>
-                            }
-                          />
-                          <TooltipContent>Remove file</TooltipContent>
-                        </Tooltip>
-                        <FileText className="mx-auto mt-5" size={22} />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-semibold">
-                            {material.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatFileSize(material.size)}
-                          </p>
-                        </div>
                       </div>
-                    ))}
-                    <label className="flex h-32 w-28 cursor-pointer items-center justify-center border-2 border-dashed border-black bg-[#F6E9B2] text-sm font-bold shadow-md hover:bg-[#7ABA78] hover:shadow-none transition-all">
-                      <Plus size={20} />
-                      <input
-                        type="file"
-                        multiple
-                        accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
-                        onChange={(event) => {
-                          addMaterials(event.target.files);
-                          event.target.value = "";
-                        }}
-                        disabled={isCreating}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                )}
-                {remediationDraft && (
-                  <p className="text-sm font-normal text-muted-foreground mb-2">
-                    Selected materials from plan are already available to the
-                    student. Attach files only when you have new worksheets.
-                  </p>
-                )}
-              </Field>
+                    )}
+                  </Field>
+                </>
+              )}
 
               {(selectedType === "ACTIVITY" ||
                 selectedType === "ASSIGNMENT") && (

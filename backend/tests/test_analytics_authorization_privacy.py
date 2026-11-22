@@ -678,3 +678,165 @@ def test_admin_system_enrollment_trend_respects_academic_year_switching(db, data
     assert hist_resp.json()["details"]["period_state"] == "HISTORICAL"
 
 
+def test_admin_system_dynamic_widgets_populate_and_respect_period_isolation(db, data):
+    from datetime import datetime, timezone
+    from app.models.auth.Role import Role
+    from app.models.auth.UserLoginLog import UserLoginLog
+    from app.models.auth.UserRoles import UserRoles
+    from app.models.classwork.Classwork import Classwork
+    from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+    from app.models.submissions.StudentSubmission import StudentSubmission
+
+    # Assign empty_teacher an active load in Term 2 with 0 published tasks so they appear in teachers_no_work
+    db.add(SubjectLoad(
+        staff_id=data["empty_teacher"].staff_id,
+        class_id=data["previous_class"].class_id,
+        subject_id=data["off_load_subject"].subject_id,
+        academic_period_id=data["period"].academic_period_id,
+        status="published",
+        is_active_version=True,
+    ))
+
+    # Add recorded period grades for Mathematics (avg 85.0, passing 50.0% against 85 threshold -> Low attention)
+    db.add_all([
+        StudentPeriodGrade(
+            student_id=data["students"]["active_one"].student_id,
+            class_id=data["class_"].class_id,
+            subject_id=data["subject"].subject_id,
+            academic_period_id=data["period"].academic_period_id,
+            final_period_grade=90,
+        ),
+        StudentPeriodGrade(
+            student_id=data["students"]["active_two"].student_id,
+            class_id=data["class_"].class_id,
+            subject_id=data["subject"].subject_id,
+            academic_period_id=data["period"].academic_period_id,
+            final_period_grade=80,
+        ),
+    ])
+
+    # Add a graded submission for History (other_subject, no period grades -> mastery fallback 96.0%)
+    hist_cw = Classwork(
+        title="History Essay",
+        classwork_type="ASSIGNMENT",
+        total_points=50,
+        subject_id=data["other_subject"].subject_id,
+        created_by_staff_id=data["other_teacher"].staff_id,
+        is_published=True,
+        is_archived=False,
+    )
+    db.add(hist_cw)
+    db.flush()
+    hist_asgn = ClassworkAssignment(
+        classwork_id=hist_cw.classwork_id,
+        class_id=data["other_class"].class_id,
+        academic_period_id=data["period"].academic_period_id,
+        assigned_by_staff_id=data["other_teacher"].staff_id,
+        is_published=True,
+    )
+    db.add(hist_asgn)
+    db.flush()
+    db.add(StudentSubmission(
+        student_id=data["students"]["other"].student_id,
+        classwork_assignment_id=hist_asgn.classwork_assignment_id,
+        status="graded",
+        grade=48,
+        submitted_at=datetime(2026, 10, 6, 4, 0, tzinfo=timezone.utc),
+    ))
+
+    # Seed roles + login logs in current week (NOW = Thu 2026-10-08 09:00 Manila; Mon = 2026-10-05)
+    role_student = Role(role_id=1, role_name="student")
+    role_teacher = Role(role_id=2, role_name="teacher")
+    role_admin = Role(role_id=3, role_name="admin")
+    admin_account = UserAccount(user_id=uuid.uuid4(), email="admin-login@dashboard.test")
+    student_account = UserAccount(
+        user_id=uuid.uuid4(),
+        email="student-login@dashboard.test",
+        last_login=datetime(2026, 10, 6, 3, 0, tzinfo=timezone.utc),  # Tue Manila
+    )
+    db.add_all([role_student, role_teacher, role_admin, admin_account, student_account])
+    db.flush()
+    db.add_all([
+        UserRoles(user_id=student_account.user_id, role_id=1),
+        UserRoles(user_id=data["teacher"].user_id, role_id=2),
+        UserRoles(user_id=admin_account.user_id, role_id=3),
+        # Duplicate teacher logins on Mon should count as 1 distinct user
+        UserLoginLog(user_id=data["teacher"].user_id, login_at=datetime(2026, 10, 5, 1, 0, tzinfo=timezone.utc)),
+        UserLoginLog(user_id=data["teacher"].user_id, login_at=datetime(2026, 10, 5, 5, 0, tzinfo=timezone.utc)),
+        # Admin login on Mon must be excluded from student/teacher login counts
+        UserLoginLog(user_id=admin_account.user_id, login_at=datetime(2026, 10, 5, 2, 0, tzinfo=timezone.utc)),
+        # Teacher login on Tue alongside student_account.last_login -> 2 users on Tue
+        UserLoginLog(user_id=data["teacher"].user_id, login_at=datetime(2026, 10, 6, 2, 0, tzinfo=timezone.utc)),
+    ])
+    db.commit()
+
+    client = create_client(db, {"sub": str(admin_account.user_id), "role": "admin"})
+    resp = client.get("/analytics/overview", params={
+        "scope": "system",
+        "academic_period_id": data["period"].academic_period_id,
+    })
+    assert resp.status_code == 200, resp.text
+    details = resp.json()["details"]
+
+    # 1. Classes needing attention: Newton has 50.0% passing rate (<75% -> Low / destructive)
+    attention = details["classes_needing_attention"]
+    assert len(attention) >= 1
+    newton_alert = next(item for item in attention if item["class_id"] == data["class_"].class_id)
+    assert newton_alert["status"] == "Low"
+    assert newton_alert["variant"] == "destructive"
+    assert "50.0%" in newton_alert["issue"]
+
+    # 2. Teachers with no work: only Empty Teacher (English) has 0 published tasks in Term 2
+    no_work = details["teachers_no_work"]
+    assert [t["staff_id"] for t in no_work] == [data["empty_teacher"].staff_id]
+    assert no_work[0]["name"] == "Empty Teacher"
+    assert no_work[0]["subject"] == "English"
+    assert no_work[0]["status"] == "0 tasks"
+
+    # 3. Teacher workload: Grace Teacher teaches 2 classes (3 enrolled students), Ada teaches 1 class (2 students)
+    workload = details["teacher_workload"]
+    assert [t["staff_id"] for t in workload[:2]] == [
+        data["other_teacher"].staff_id,
+        data["teacher"].staff_id,
+    ]
+    assert workload[0]["students"] == 3
+    assert workload[0]["classes"] == "2 classes"
+    assert workload[1]["students"] == 2
+    assert workload[1]["classes"] == "1 class"
+
+    # 4. Top performing subjects: History (Mastery 96.0%) ranked 1st, Mathematics (Avg Grade 85.0%) ranked 2nd
+    top_subjects = details["top_performing_subjects"]
+    assert [s["subject_id"] for s in top_subjects] == [
+        data["other_subject"].subject_id,
+        data["subject"].subject_id,
+    ]
+    assert top_subjects[0]["rank"] == "1st"
+    assert top_subjects[0]["metric"] == "Mastery 96.0%"
+    assert top_subjects[1]["rank"] == "2nd"
+    assert top_subjects[1]["metric"] == "Avg Grade 85.0%"
+
+    # 5. Active users this week: Mon = 1 teacher (admin excluded, deduped), Tue = 1 teacher + 1 student = 2
+    weekly = details["active_users_weekly"]
+    assert len(weekly) == 7
+    by_day = {item["day"]: item for item in weekly}
+    assert by_day["Mon"]["count"] == 1
+    assert by_day["Mon"]["teachers"] == 1
+    assert by_day["Mon"]["students"] == 0
+    assert by_day["Tue"]["count"] == 2
+    assert by_day["Tue"]["teachers"] == 1
+    assert by_day["Tue"]["students"] == 1
+    assert by_day["Wed"]["count"] == 0
+
+    # 6. Upcoming period (Term 3) must NOT fabricate alerts, no-work flags, logins, or subject rankings
+    upcoming = client.get("/analytics/overview", params={
+        "scope": "system",
+        "academic_period_id": data["empty_period"].academic_period_id,
+    }).json()["details"]
+    assert upcoming["classes_needing_attention"] == []
+    assert upcoming["teachers_no_work"] == []
+    assert upcoming["active_users_weekly"] == []
+    assert upcoming["top_performing_subjects"] == []
+    assert upcoming["teacher_workload"] == []
+
+
+

@@ -1369,6 +1369,7 @@ def update_classwork_record(
             db.query(ClassworkLesson).filter(ClassworkLesson.classwork_id == classwork_id).delete()
             for lesson_id in lesson_ids:
                 db.add(ClassworkLesson(classwork_id=classwork_id, lesson_id=lesson_id))
+            db.flush()
         if replacement_links is not None:
             _replace_reference_links(db, classwork, replacement_links)
         if recipient_scope is not None:
