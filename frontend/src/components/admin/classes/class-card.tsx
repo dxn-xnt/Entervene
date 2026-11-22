@@ -61,37 +61,37 @@ export default function ClassCard({
     <>
       {/* Stats */}
       <div className="mt-1 flex w-full flex-row gap-2">
-        <Card className="p-2 px-4 shadow-none gap-3 w-full flex flex-row items-center">
+        <Card className="p-2 px-3 border-2! min-w-40! shadow-none gap-2 flex-1 min-w-0 flex flex-row items-center">
           <Progress
             variant="circular"
             value={item.student_count > 0 ? (item.female_count / item.student_count) * 100 : 0}
-            className="size-20"
+            className="size-18 shrink-0 text-sm"
           />
-          <div className="flex flex-row items-baseline gap-1.5">
-            <span className="font-head text-3xl font-black text-foreground">{item.female_count}</span>
-            <span className="text-md font-medium text-foreground">{item.female_count === 1 ? "Girl" : "Girls"}</span>
+          <div className="flex flex-row items-baseline gap-1 whitespace-nowrap">
+            <span className="font-head text-2xl font-black text-foreground">{item.female_count}</span>
+            <span className="text-sm font-medium text-foreground whitespace-nowrap">{item.female_count === 1 ? "Girl" : "Girls"}</span>
           </div>
         </Card>
-        <Card className="p-2 px-4 w-full shadow-none gap-3 flex flex-row items-center">
+        <Card className="p-2 px-3 border-2! min-w-40! shadow-none gap-2 flex-1 min-w-0 flex flex-row items-center">
           <Progress
             variant="circular"
             value={item.student_count > 0 ? (item.male_count / item.student_count) * 100 : 0}
-            className="size-20"
+            className="size-18 shrink-0 text-sm"
           />
-          <div className="flex flex-row items-baseline gap-1.5">
-            <span className="font-head text-3xl font-black text-foreground">{item.male_count}</span>
-            <span className="text-md font-medium text-foreground">{item.male_count === 1 ? "Boy" : "Boys"}</span>
+          <div className="flex flex-row items-baseline gap-1 shrink-0 whitespace-nowrap">
+            <span className="font-head text-2xl font-black text-foreground">{item.male_count}</span>
+            <span className="text-sm font-medium text-foreground whitespace-nowrap">{item.male_count === 1 ? "Boy" : "Boys"}</span>
           </div>
         </Card>
-        <Card className="p-2 px-4 bg-primary shadow-none flex flex-col items-center justify-center">
-          <span className="font-head text-3xl font-black text-foreground">{item.student_count}</span>
-          <span className="text-md font-medium text-foreground">{item.student_count === 1 ? "Student" : "Students"}</span>
+        <Card className="p-2 px-3 bg-primary border-2! shadow-none shrink-0 flex flex-col items-center justify-center min-w-[76px]">
+          <span className="font-head text-2xl font-black text-foreground">{item.student_count}</span>
+          <span className="text-xs font-medium text-foreground">{item.student_count === 1 ? "Student" : "Students"}</span>
         </Card>
       </div>
 
       {/* Adviser */}
       <div className="flex items-center gap-2 pt-3">
-        <Avatar variant="teacher" className="size-10">
+        <Avatar variant="teacher" className="size-10 rounded-full!">
           <Avatar.Image src={item.adviser?.avatar || "/avatars/teacher-avatars/12.svg"} alt={adviserName} />
           <Avatar.Fallback className="bg-amber-200 text-amber-900 font-semibold rounded-full">
             {item.adviser ? adviserName.charAt(0) : "-"}
@@ -109,7 +109,7 @@ export default function ClassCard({
     <Card
       className={cn(
         "group relative flex flex-col justify-between shadow-none p-3",
-        preview ? "min-w-0 shrink w-full" : "min-w-[340px] shrink-0 hover:-translate-y-1",
+        preview ? "w-fit min-w-0 shrink-0" : "min-w-[340px] sm:min-w-[380px] shrink-0 hover:-translate-y-1",
         isArchived ? "opacity-60" : "",
         className
       )}

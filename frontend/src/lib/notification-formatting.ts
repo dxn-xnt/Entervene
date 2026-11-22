@@ -226,3 +226,80 @@ export function parseSystemSettingNotification(
 
   return { summary, changedBy, academicYear, changedOn, reason };
 }
+
+export function formatSystemSettingSentence(
+  meta: SystemSettingNotificationMeta,
+): string {
+  const { summary, changedBy, academicYear, changedOn, reason } = meta;
+  if (!summary && !changedBy) return "";
+
+  const actionText = summary.trim().replace(/\.+$/, "");
+
+  let sentence = "";
+  if (changedBy) {
+    if (/^general average passing grade\s+adjusted\s+from/i.test(actionText)) {
+      const rest = actionText.replace(
+        /^general average passing grade\s+adjusted\s+/i,
+        "",
+      );
+      sentence = `${changedBy} adjusted the General Average Passing Grade ${rest}`;
+    } else if (/^general average passing grade\s+set\s+to/i.test(actionText)) {
+      const rest = actionText.replace(
+        /^general average passing grade\s+set\s+/i,
+        "",
+      );
+      sentence = `${changedBy} set the General Average Passing Grade ${rest}`;
+    } else if (/^passing threshold\s+adjusted\s+from/i.test(actionText)) {
+      const rest = actionText.replace(/^passing threshold\s+adjusted\s+/i, "");
+      sentence = `${changedBy} adjusted the template passing threshold ${rest}`;
+    } else if (/^passing threshold\s+set\s+to/i.test(actionText)) {
+      const rest = actionText.replace(/^passing threshold\s+set\s+/i, "");
+      sentence = `${changedBy} set the template passing threshold ${rest}`;
+    } else if (
+      /^template passing threshold\s+adjusted\s+from/i.test(actionText)
+    ) {
+      const rest = actionText.replace(
+        /^template passing threshold\s+adjusted\s+/i,
+        "",
+      );
+      sentence = `${changedBy} adjusted the template passing threshold ${rest}`;
+    } else if (/^template passing threshold\s+set\s+to/i.test(actionText)) {
+      const rest = actionText.replace(
+        /^template passing threshold\s+set\s+/i,
+        "",
+      );
+      sentence = `${changedBy} set the template passing threshold ${rest}`;
+    } else if (actionText) {
+      sentence = `${changedBy} updated ${actionText.charAt(0).toLowerCase() + actionText.slice(1)}`;
+    } else {
+      sentence = `${changedBy} updated system settings`;
+    }
+  } else {
+    sentence = actionText;
+  }
+
+  if (academicYear) {
+    const yearPrefix = /academic year/i.test(academicYear)
+      ? ""
+      : "Academic Year ";
+    sentence += ` for ${yearPrefix}${academicYear}`;
+  }
+
+  if (changedOn) {
+    sentence += ` on ${changedOn}`;
+  }
+
+  if (!sentence.endsWith(".")) {
+    sentence += ".";
+  }
+
+  if (reason && reason.trim().toLowerCase() !== "no reason provided") {
+    sentence += ` Reason: ${reason.trim()}`;
+    if (!sentence.endsWith(".")) {
+      sentence += ".";
+    }
+  }
+
+  return sentence;
+}
+

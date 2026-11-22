@@ -7,9 +7,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/retroui/Button";
 import { Alert } from "@/components/retroui/Alert";
-import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { Text } from "@/components/retroui/Text";
 import {
   Tooltip,
   TooltipContent,
@@ -17,18 +15,11 @@ import {
 } from "@/components/retroui/Tooltip";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-import {
-  Settings,
-  Calendar,
-  Clock,
-  User,
-  Loader2,
-  FileText,
-} from "lucide-react";
+import { Settings, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { AdminEmptyState } from "@/components/admin/admin-empty-state";
+import { NotificationCard } from "@/components/notification-card";
 import { routes } from "@/../routes";
-import { cn } from "@/lib/utils";
 import {
   getNotifications,
   markAllNotificationsAsRead,
@@ -36,7 +27,9 @@ import {
   type NotificationItem,
 } from "@/lib/notifications-api";
 import {
+  formatNotificationBody,
   formatNotificationTitle,
+  formatSystemSettingSentence,
   isExcludedNotification,
   parseSystemSettingNotification,
 } from "@/lib/notification-formatting";
@@ -202,106 +195,37 @@ const AdminNotifications = () => {
                       card.title.toLowerCase().includes("general average") ||
                       (meta.summary &&
                         meta.summary.toLowerCase().includes("general average"));
+                    const badgeType = isGeneralAverage
+                      ? "General Average"
+                      : "System Setting";
+
+                    const sentenceDescription =
+                      formatSystemSettingSentence(meta);
+                    const description =
+                      sentenceDescription || formatNotificationBody(card.body);
 
                     return (
-                      <Card
+                      <div
                         key={card.notification_id}
                         onClick={() => handleCardClick(card)}
-                        className={cn(
-                          "@container/card p-4 w-full flex flex-col gap-2 cursor-pointer transition-colors hover:border-black",
-                          card.is_read ? "bg-background" : "bg-accent",
-                        )}
+                        className="cursor-pointer w-full"
                       >
-                        <Card.Header className="mb-0 p-0">
-                          <div className="flex flex-row justify-between items-start gap-4">
-                            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-                              <Card.Description className="text-base sm:text-lg font-bold leading-snug text-foreground break-words">
-                                {formatNotificationTitle(card.title)}
-                              </Card.Description>
-                              <Badge
-                                variant="solid"
-                                size="sm"
-                                className="shrink-0 font-bold"
-                              >
-                                {isGeneralAverage
-                                  ? "General Average"
-                                  : "System Setting"}
-                              </Badge>
-                            </div>
-                            {!card.is_read && (
-                              <Badge
-                                variant="surface"
-                                size="sm"
-                                className="shrink-0 font-bold"
-                              >
-                                Unread
-                              </Badge>
-                            )}
-                          </div>
-                        </Card.Header>
-
-                        <Card.Content className="flex flex-col gap-2.5 p-0">
-                          {meta.summary && (
-                            <Text
-                              as="p"
-                              className="text-sm font-semibold text-foreground break-words"
-                            >
-                              {meta.summary}
-                            </Text>
-                          )}
-
-                          {/* Metadata row: Who changed it, academic year, time and date */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 rounded border border-border/80 bg-background/60 p-2.5 text-xs text-foreground">
-                            {meta.changedBy && (
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <User className="size-3.5 shrink-0 text-muted-foreground" />
-                                <span className="text-muted-foreground">
-                                  Changed by:
-                                </span>
-                                <span className="font-bold truncate">
-                                  {meta.changedBy}
-                                </span>
-                              </div>
-                            )}
-
-                            {meta.academicYear && (
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <Calendar className="size-3.5 shrink-0 text-muted-foreground" />
-                                <span className="text-muted-foreground">
-                                  Academic Year:
-                                </span>
-                                <span className="font-bold truncate">
-                                  {meta.academicYear}
-                                </span>
-                              </div>
-                            )}
-
-                            {meta.changedOn && (
-                              <div className="flex items-center gap-1.5 min-w-0 col-span-1 sm:col-span-2 md:col-span-1">
-                                <Clock className="size-3.5 shrink-0 text-muted-foreground" />
-                                <span className="text-muted-foreground">
-                                  Changed on:
-                                </span>
-                                <span className="font-bold truncate">
-                                  {meta.changedOn}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {meta.reason && (
-                            <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                              <FileText className="size-3.5 shrink-0 mt-0.5" />
-                              <span>
-                                <span className="font-semibold text-foreground">
-                                  Audit Reason:
-                                </span>{" "}
-                                {meta.reason}
-                              </span>
-                            </div>
-                          )}
-                        </Card.Content>
-                      </Card>
+                        <NotificationCard
+                          title={formatNotificationTitle(card.title)}
+                          description={description}
+                          date={
+                            card.created_at
+                              ? new Date(card.created_at).toLocaleString([], {
+                                  dateStyle: "medium",
+                                  timeStyle: "short",
+                                })
+                              : ""
+                          }
+                          type={badgeType}
+                          badge={card.is_read ? undefined : "Unread"}
+                          isRead={card.is_read}
+                        />
+                      </div>
                     );
                   })}
                 </div>
