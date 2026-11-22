@@ -31,7 +31,8 @@ export type NotificationItem = {
     | "repost_package_ready"
     | "repost_request_declined"
     | "repost_package_declined"
-    | "repost_accepted";
+    | "repost_accepted"
+    | "system_setting_updated";
   title: string;
   body: string | null;
   action_url: string | null;

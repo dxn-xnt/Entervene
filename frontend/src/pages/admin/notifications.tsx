@@ -132,9 +132,6 @@ const AdminNotifications = () => {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground sm:text-sm">
-                    System setting adjustments and policy change history
-                  </p>
                 </div>
               </div>
               <Tooltip>
@@ -192,7 +189,7 @@ const AdminNotifications = () => {
                 <AdminEmptyState
                   icon={<Settings />}
                   title="No system setting notifications"
-                  description="Notifications for changes to system settings, such as General Average Passing Grade adjustments, will appear here."
+                  description="New system setting changes and policy adjustments will appear here."
                 />
               ) : (
                 <div className="flex flex-col gap-3 w-full">

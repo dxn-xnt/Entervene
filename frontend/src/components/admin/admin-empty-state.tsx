@@ -1,13 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/retroui/Button";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { Card } from "@/components/retroui/Card";
 import { cn } from "@/lib/utils";
 
 type AdminEmptyStateProps = {
@@ -22,6 +15,8 @@ type AdminEmptyStateProps = {
     disabled?: boolean;
   };
   className?: string;
+  embedded?: boolean;
+  cardless?: boolean;
   compact?: boolean;
 };
 
@@ -32,48 +27,70 @@ export function AdminEmptyState({
   description,
   action,
   className,
+  embedded = false,
+  cardless = false,
   compact = false,
 }: AdminEmptyStateProps) {
-  return (
-    <Empty
+  const content = (
+    <Card.Content
       className={cn(
-        "shadow-md hover:shadow-none transition-shadow",
-        compact && "flex-none px-4 py-6",
-        className,
+        "mx-auto flex w-full max-w-sm items-center gap-2 text-balance",
+        compact ? "flex-row justify-start text-left" : "flex-col text-center",
       )}
     >
-      <EmptyHeader>
-        <EmptyMedia>
-          {illustration ?? (
-            <div
-              className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black [&_svg]:size-5"
-              aria-hidden="true"
-            >
-              {icon}
-            </div>
+      {illustration ?? (
+        <div
+          className={cn(
+            "grid size-10 shrink-0 place-items-center border-2 border-border bg-primary text-foreground [&_svg]:size-5 [&_svg]:stroke-2",
+            compact && "rounded-lg",
+            !compact && "mb-2",
           )}
-        </EmptyMedia>
-        <EmptyTitle>{title}</EmptyTitle>
+        >
+          {icon}
+        </div>
+      )}
+      <div className={cn("min-w-0", !compact && "contents")}>
+        <Card.Title className="text-base font-bold tracking-tight">
+          {title}
+        </Card.Title>
         {description && (
-          <EmptyDescription className="text-center">
+          <p className="text-sm/relaxed font-normal text-muted-foreground">
             {description}
-          </EmptyDescription>
+          </p>
         )}
-      </EmptyHeader>
-      {action && (
-        <EmptyContent>
+        {action && (
           <Button
-            type="button"
             size="sm"
+            className="mt-2"
             disabled={action.disabled}
             onClick={action.onClick}
-            className="shadow-none"
           >
             {action.icon}
             {action.label}
           </Button>
-        </EmptyContent>
+        )}
+      </div>
+    </Card.Content>
+  );
+
+  if (cardless) {
+    return (
+      <div className={cn("w-full min-w-0 py-4 text-center", className)}>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Card
+      className={cn(
+        "block w-full min-w-0 rounded! border-border bg-card px-6 py-12 text-center text-balance shadow-md",
+        embedded && "p-4 shadow-none hover:shadow-none",
+        compact && "flex items-center",
+        className,
       )}
-    </Empty>
+    >
+      {content}
+    </Card>
   );
 }
