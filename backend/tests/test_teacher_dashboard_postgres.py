@@ -747,11 +747,14 @@ def _collect_phase_two_scenarios(db, data):
         _expect_equal(submitted["require_subject_match"], False, "subject matching stays disabled")
         _expect_equal(submitted["late_submissions"], {
             "late_rate_percent": 33.3, "late_count": 2, "eligible_count": 6,
+            "evaluable_count": 6, "unevaluable_count": 0,
             "excused_excluded_count": 2, "completed_count": 8,
         }, "excuse exclusion from numerator and denominator")
         _expect_equal(submitted["late_warnings"], [], "complete timestamp availability")
         _expect_equal(submitted["weekdays"]["sunday_count"], 1, "Sunday disclosed separately")
         _expect_equal(submitted["weekdays"]["total_count"], 8, "excused completion still counted")
+        _expect_equal(submitted["weekdays"]["completed_count"], 8, "weekday coverage includes every completed submission")
+        _expect_equal(submitted["weekdays"]["unevaluable_count"], 0, "complete weekday timestamp coverage")
         _expect_equal([row["count"] for row in submitted["weekdays"]["days"]], [0, 0, 0, 7, 0, 0], "six Monday-Saturday Manila buckets")
 
         previous = _dashboard(db, data["teacher"].staff_id, data["previous_period"])

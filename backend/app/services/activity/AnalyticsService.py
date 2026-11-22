@@ -1247,10 +1247,16 @@ def build_teacher_dashboard_health(
         {
             "title": "Late Submissions",
             "count": f"{late_summary.late_rate_percent}%" if late_summary.late_rate_percent is not None else "—",
-            "stat": f"{late_summary.late_count} of {late_summary.eligible_count} assessed submissions · {late_summary.excused_excluded_count} excused excluded",
+            "stat": (
+                f"{late_summary.late_count} of {late_summary.evaluable_count} evaluable submissions"
+                if late_summary.evaluable_count else
+                "No submissions have complete lateness data"
+            ),
             "statDescription": (
-                late_summary.warnings[0].message if late_summary.warnings else
-                "Late submissions, excluding excused submissions."
+                f"{late_summary.excused_excluded_count} excused excluded. "
+                f"{late_summary.unevaluable_count} omitted because required dates are missing. "
+                + (late_summary.warnings[0].message if late_summary.warnings else
+                   "Late submissions use recorded submission and deadline timestamps.")
             ),
         },
         {

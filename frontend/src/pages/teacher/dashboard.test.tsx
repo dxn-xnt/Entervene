@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import TeacherDashboard from "./dashboard";
 import type { TeacherDashboardHealthResponse } from "@/lib/api";
@@ -161,6 +161,8 @@ function buildSampleResponse(overrides: Partial<TeacherDashboardHealthResponse> 
         late_rate_percent: 9.1,
         late_count: 3,
         eligible_count: 33,
+        evaluable_count: 33,
+        unevaluable_count: 0,
         excused_excluded_count: 1,
         completed_count: 34,
         warnings: [],
@@ -176,6 +178,8 @@ function buildSampleResponse(overrides: Partial<TeacherDashboardHealthResponse> 
         ],
         sunday_count: 1,
         total_count: 34,
+        completed_count: 34,
+        unevaluable_count: 0,
         warnings: [],
       },
       term_progress: {
@@ -302,6 +306,7 @@ describe("TeacherDashboard (Restored & Refined Original Dashboard)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockReset();
     mockAcademicContext = {
       selectedYearId: 101,
       selectedPeriodId: 201,
@@ -322,7 +327,7 @@ describe("TeacherDashboard (Restored & Refined Original Dashboard)", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Improved Prediction Resolution Rate")).toBeTruthy();
+      expect(screen.getByText("40%")).toBeTruthy();
     });
 
     // Verify Improved Prediction Resolution Rate is positioned immediately below Active Classes
@@ -334,7 +339,6 @@ describe("TeacherDashboard (Restored & Refined Original Dashboard)", () => {
     expect(improvedRateIdx).toBeGreaterThan(activeClassesIdx);
     expect(overallCompletionIdx).toBeGreaterThan(improvedRateIdx);
 
-    expect(screen.getByText("40%")).toBeTruthy();
     expect(screen.getByText(/2 of 5 active & resolved/)).toBeTruthy();
 
     // Verify Lowest Mastery Lessons Graph renders with coverage details
@@ -348,18 +352,18 @@ describe("TeacherDashboard (Restored & Refined Original Dashboard)", () => {
 
     // Verify retained original sections render in their swapped positions:
     // Submissions to Review is alongside Lowest Mastery Lessons (above Section-by-Section Health),
-    // and Attendance By Section is below Section-by-Section Health (before Submissions by weekday).
+    // and monthly attendance is below Section-by-Section Health (before Submissions by weekday).
     expect(screen.getByText("Classwork Performance & Completion Trend")).toBeTruthy();
     expect(screen.getByText("Submissions to Review")).toBeTruthy();
     expect(screen.getByText("Section-by-Section Health")).toBeTruthy();
-    expect(screen.getByText("Attendance By Section")).toBeTruthy();
+    expect(screen.getByText("Attendance This Month by Section")).toBeTruthy();
     expect(screen.getByText("Submissions by weekday")).toBeTruthy();
     expect(screen.getByText("Grade distribution")).toBeTruthy();
 
     const lowestMasteryIdx = html.indexOf("Lowest Mastery Lessons");
     const submissionsToReviewIdx = html.indexOf("Submissions to Review");
     const sectionHealthIdx = html.indexOf("Section-by-Section Health");
-    const attendanceBySectionIdx = html.indexOf("Attendance By Section");
+    const attendanceBySectionIdx = html.indexOf("Attendance This Month by Section");
     const weekdayIdx = html.indexOf("Submissions by weekday");
     expect(lowestMasteryIdx).toBeGreaterThan(-1);
     expect(submissionsToReviewIdx).toBeGreaterThan(lowestMasteryIdx);
@@ -370,6 +374,90 @@ describe("TeacherDashboard (Restored & Refined Original Dashboard)", () => {
     // Verify removed sections do NOT render anywhere
     expect(screen.queryByText(/Students to Check In With/i)).toBeNull();
     expect(screen.queryByText(/Top Performers?/i)).toBeNull();
+  });
+
+  it("labels full-period and current-month attendance windows distinctly", async () => {
+    mockGetTeacherDashboardHealth.mockResolvedValue(buildSampleResponse());
+    render(<MemoryRouter><TeacherDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(
+      screen.getByText(/Attendance uses all recorded entries in the selected period/),
+    ).toBeTruthy());
+    expect(screen.getByText("Attendance This Month by Section")).toBeTruthy();
+    expect(await screen.findByText((text) => (
+      text.includes("This month") && text.includes("Oct 1") && text.includes("Oct 8")
+    ))).toBeTruthy();
+  });
+
+  it("consolidates repeated timestamp warnings and discloses partial submission coverage", async () => {
+    const sample = buildSampleResponse();
+    const warning = {
+      code: "missing_submission_timestamp",
+      message: "Some historical online submissions have no submission timestamp.",
+    };
+    sample.phase_two!.late_submissions = {
+      ...sample.phase_two!.late_submissions,
+      late_rate_percent: 25,
+      late_count: 1,
+      eligible_count: 6,
+      evaluable_count: 4,
+      unevaluable_count: 2,
+      warnings: [warning, warning],
+    };
+    sample.phase_two!.weekdays = {
+      ...sample.phase_two!.weekdays,
+      total_count: 4,
+      completed_count: 6,
+      unevaluable_count: 2,
+      warnings: [warning, warning],
+    };
+    mockGetTeacherDashboardHealth.mockResolvedValue(sample);
+    render(<MemoryRouter><TeacherDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByText("1 of 4 evaluable submissions are late.")).toBeTruthy());
+    expect(screen.getByText(/2 submissions were omitted because required dates are missing/)).toBeTruthy();
+    expect(screen.getByText(/4 of 6 submissions have recorded timestamps/)).toBeTruthy();
+    expect(screen.getAllByText(/Some historical online submissions have no submission timestamp/)).toHaveLength(2);
+  });
+
+  it("shows unavailable calendar metrics instead of definitive zeros", async () => {
+    const sample = buildSampleResponse();
+    sample.phase_two!.month_window = {
+      start_date: "2026-11-01",
+      end_date: "2026-10-31",
+      today: "2026-11-22",
+      label: "This month",
+    };
+    sample.phase_two!.weekdays = {
+      ...sample.phase_two!.weekdays,
+      days: sample.phase_two!.weekdays.days.map((day) => ({ ...day, count: 0 })),
+      sunday_count: 0,
+      total_count: 0,
+      completed_count: 2,
+      unevaluable_count: 2,
+      warnings: [{
+        code: "missing_submission_timestamp",
+        message: "Some historical online submissions have no submission timestamp.",
+      }],
+    };
+    mockGetTeacherDashboardHealth.mockResolvedValue(sample);
+    render(<MemoryRouter><TeacherDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(
+      screen.getByText("The current Manila month does not overlap the selected period."),
+    ).toBeTruthy());
+    expect(screen.getByText(/Sunday: —/)).toBeTruthy();
+    expect(screen.getByText(/0 of 2 submissions have recorded timestamps/)).toBeTruthy();
+  });
+
+  it("keeps submissions to review actionable without duplicating the KPI count", async () => {
+    mockGetTeacherDashboardHealth.mockResolvedValue(buildSampleResponse());
+    render(<MemoryRouter><TeacherDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByText("Linear Equations Quiz")).toBeTruthy());
+    expect(screen.getByText("Ungraded")).toBeTruthy();
+    fireEvent.click(screen.getByText("Linear Equations Quiz"));
+    expect(mockNavigate).toHaveBeenCalledWith("/teacher/classworks/501");
   });
 
   it("displays insufficient lesson mastery data empty state rather than zero mastery when evidence is below threshold", async () => {

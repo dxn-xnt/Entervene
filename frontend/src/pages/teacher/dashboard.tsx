@@ -19,6 +19,7 @@ import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
   type TeacherDashboardHealthFilter,
+  type TeacherDashboardWarning,
   type OverviewCardData,
 } from "@/lib/api";
 import {
@@ -94,6 +95,22 @@ function formatPercent(value: number | null | undefined): string {
 
 function formatGrade(value: number | null | undefined): string {
   return value != null && Number.isFinite(value) ? String(value) : "—";
+}
+
+function uniqueDashboardWarnings(
+  warnings: TeacherDashboardWarning[] | undefined,
+): TeacherDashboardWarning[] {
+  return [...new Map(
+    (warnings ?? []).map((warning) => [`${warning.code}:${warning.message}`, warning]),
+  ).values()];
+}
+
+function formatDashboardDate(value: string): string {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function DashboardQueueSkeleton({ label }: { label: string }) {
@@ -339,11 +356,13 @@ export default function Dashboard() {
       {
         title: "Late Submissions",
         count: formatPercent(late?.late_rate_percent),
-        stat: late
-          ? `${late.late_count} of ${late.eligible_count} assessed submissions are late.`
-          : undefined,
+        stat: late?.evaluable_count
+          ? `${late.late_count} of ${late.evaluable_count} evaluable submissions are late.`
+          : late?.eligible_count
+            ? "No submissions have complete lateness data."
+            : "No eligible submissions in the selected period.",
         statDescription: late
-          ? `${late.excused_excluded_count} excused ${late.excused_excluded_count === 1 ? "submission" : "submissions"} excluded. ${late.warnings.map((warning) => warning.message).join(" ")}`.trim()
+          ? `${late.excused_excluded_count} excused ${late.excused_excluded_count === 1 ? "submission" : "submissions"} excluded.${late.unevaluable_count ? ` ${late.unevaluable_count} ${late.unevaluable_count === 1 ? "submission was" : "submissions were"} omitted because required dates are missing.` : ""} ${uniqueDashboardWarnings(late.warnings).map((warning) => warning.message).join(" ") || "Lateness uses recorded submission and deadline timestamps."}`.trim()
           : undefined,
       },
       {
@@ -429,32 +448,29 @@ export default function Dashboard() {
   const trendPoints = !isDataMatchingPeriod ? [] : data?.trend_chart.points ?? [];
   const visiblePhaseTwo = !isDataMatchingPeriod ? undefined : data?.phase_two;
   const visibleEngagement = !isDataMatchingPeriod ? undefined : data?.engagement;
-  const reviewWarnings = visibleEngagement?.warnings.filter((warning) => warning.code === "ambiguous_submission_attempts") ?? [];
+  const reviewWarnings = uniqueDashboardWarnings(
+    visibleEngagement?.warnings.filter((warning) => warning.code === "ambiguous_submission_attempts"),
+  );
+  const weekdayWarnings = uniqueDashboardWarnings(visiblePhaseTwo?.weekdays.warnings);
+  const weekdayUnavailable = Boolean(
+    visiblePhaseTwo?.weekdays.unevaluable_count && !visiblePhaseTwo.weekdays.total_count,
+  );
   const submissionsWeekday = weekdayLabels.map((day, dayIndex) => ({
     day,
-    count: visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
+    count: weekdayUnavailable
+      ? null
+      : visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
   }));
   const pendingGrading = useMemo(
     () => !isDataMatchingPeriod ? [] : data?.action_queue?.pending_grading ?? [],
     [data, isDataMatchingPeriod]
   );
-  const classworkUngradedCounts = useMemo(() => {
-    const counts = new Map<number | string, number>();
-    for (const item of pendingGrading) {
-      const key = item.classwork_id != null ? item.classwork_id : (item.classwork_title || item.submission_id);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return counts;
-  }, [pendingGrading]);
-
   const reviewSubmissions = pendingGrading.map((item) => {
-    const key = item.classwork_id != null ? item.classwork_id : (item.classwork_title || item.submission_id);
-    const count = classworkUngradedCounts.get(key) ?? 1;
     return {
       ...item,
       title: item.classwork_title,
       section: [item.student_name, item.section_name].filter(Boolean).join(" · "),
-      badge: isHistorical ? `${count} historical` : `${count} ungraded`,
+      badge: isHistorical ? "Historical" : "Ungraded",
       variant: isHistorical ? "default" : "destructive",
     };
   });
@@ -1074,7 +1090,7 @@ export default function Dashboard() {
                             ))}
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
                               <Card.Description className="text-xs text-muted-foreground">
-                                Performance, completion, and attendance across your classes
+                                Performance and completion across your classes. Attendance uses all recorded entries in the selected period.
                               </Card.Description>
                               {sections.length > 2 && (
                                 <Button
@@ -1094,13 +1110,13 @@ export default function Dashboard() {
                     </Card.Content>
                   </Card>
 
-                  {/* 4. Remaining Existing Dashboard Functions: Attendance By Section, Weekday Submissions, Grade Distribution */}
+                  {/* 4. Remaining Existing Dashboard Functions: Monthly Attendance, Weekday Submissions, Grade Distribution */}
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {/* Attendance by Section */}
+                    {/* Monthly attendance by section */}
                     <Card className="flex flex-col p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0">
                         <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
-                          Attendance By Section
+                          Attendance This Month by Section
                         </Card.Title>
                       </Card.Header>
 
@@ -1130,7 +1146,11 @@ export default function Dashboard() {
                         )}
                       </Card.Content>
                       <Card.Description className="mt-3 text-[11px] text-muted-foreground mt-auto">
-                        {/* This month · Present + late / recorded entries. Excused and absent do not count as present. */}
+                        {visiblePhaseTwo?.month_window && visiblePhaseTwo.month_window.start_date <= visiblePhaseTwo.month_window.end_date
+                          ? `${visiblePhaseTwo.month_window.label} (${formatDashboardDate(visiblePhaseTwo.month_window.start_date)}–${formatDashboardDate(visiblePhaseTwo.month_window.end_date)}) · Present + late / recorded entries.`
+                          : visiblePhaseTwo?.month_window
+                            ? "The current Manila month does not overlap the selected period."
+                            : "Current Manila month within the selected period · Present + late / recorded entries."}
                       </Card.Description>
                     </Card>
 
@@ -1141,8 +1161,11 @@ export default function Dashboard() {
                           Submissions by weekday
                         </Card.Title>
                         <Card.Description className="mt-0.5 text-xs text-muted-foreground">
-                          Selected period · Manila time · Sunday: {visiblePhaseTwo?.weekdays.sunday_count ?? "—"}.
-                          {visiblePhaseTwo?.weekdays.warnings.map((warning) => <span key={warning.code}> {warning.message}</span>)}
+                          Selected period · Manila time · Sunday: {weekdayUnavailable ? "—" : visiblePhaseTwo?.weekdays.sunday_count ?? "—"}.
+                          {visiblePhaseTwo?.weekdays && (
+                            <span> {visiblePhaseTwo.weekdays.total_count} of {visiblePhaseTwo.weekdays.completed_count} submissions have recorded timestamps.</span>
+                          )}
+                          {weekdayWarnings.map((warning) => <span key={`${warning.code}:${warning.message}`}> {warning.message}</span>)}
                         </Card.Description>
                       </Card.Header>
 

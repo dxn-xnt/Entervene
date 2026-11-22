@@ -59,6 +59,7 @@ from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
+from app.services.grading.GradeabilityService import is_manual_activity
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -589,6 +590,26 @@ def build_dashboard_performance_trend(
     return points
 
 
+def _deduplicate_dashboard_warnings(
+    warnings: Sequence[DashboardWarning],
+) -> list[DashboardWarning]:
+    """Return one warning per reason while preserving distinct diagnostics."""
+    grouped: dict[tuple[str, str], list[DashboardWarning]] = {}
+    for warning in warnings:
+        grouped.setdefault((warning.code, warning.message), []).append(warning)
+    result = []
+    for matches in grouped.values():
+        warning = matches[0]
+        if len(matches) > 1:
+            warning = warning.model_copy(update={
+                "class_id": None,
+                "subject_id": None,
+                "assignment_id": None,
+            })
+        result.append(warning)
+    return result
+
+
 def summarize_dashboard_submissions(
     assignments: Mapping[int, ClassworkAssignment],
     submissions: Sequence[StudentSubmission],
@@ -599,16 +620,22 @@ def summarize_dashboard_submissions(
     *,
     require_subject_match: bool = False,
 ) -> tuple[LateSubmissionSummary, WeekdaySummary]:
-    """Dashboard-only lateness and weekdays, without touching eligibility.
+    """Dashboard-only lateness and weekdays for actual submission events.
 
     Select existing completed rows, constrain actual submission dates to the
-    chosen period through now, and exclude deadline-date excuses from both late
-    numerator and denominator. Dates/weekday conversion happens in Python.
+    chosen period through now, omit manual gradebook-only rows, and exclude
+    deadline-date excuses from both the late numerator and denominator.
+    Dates/weekday conversion happens in Python.
     """
     cutoff = _dashboard_aware_timestamp(now)
     today = dashboard_manila_date(cutoff)
     in_window = []
     for submission in submissions:
+        assignment = assignments.get(submission.classwork_assignment_id)
+        # Manual activities create gradebook rows without a student submission
+        # event. They belong in grade metrics, not calendar submission metrics.
+        if assignment is not None and is_manual_activity(assignment.classwork):
+            continue
         timestamp = submission.submitted_at
         if timestamp is None:
             # Unknown dates cannot be silently classified as outside this scope.
@@ -621,13 +648,14 @@ def summarize_dashboard_submissions(
     late_warnings = list(duplicate_warnings)
     weekday_warnings = list(duplicate_warnings)
     bins = [0] * 7
-    late_count = eligible_count = excluded_count = completed_count = 0
+    late_count = eligible_count = evaluable_count = unevaluable_count = 0
+    excluded_count = completed_count = weekday_unevaluable_count = 0
     for submission in selected:
         assignment = assignments.get(submission.classwork_assignment_id)
         if assignment is None:
             warning = DashboardWarning(
                 code="missing_submission_assignment",
-                message="Submission metrics unavailable: assignment scope is missing.",
+                message="Some submission records have no assignment scope and are excluded.",
             )
             late_warnings.append(warning)
             weekday_warnings.append(warning)
@@ -640,9 +668,10 @@ def summarize_dashboard_submissions(
                 continue
             bins[submitted_date.weekday()] += 1
         else:
+            weekday_unevaluable_count += 1
             warning = DashboardWarning(
                 code="missing_submission_timestamp",
-                message="Submission metrics unavailable: submission timestamp is missing.",
+                message="Some historical online submissions have no submission timestamp.",
                 class_id=assignment.class_id,
                 subject_id=assignment.classwork.subject_id,
             )
@@ -657,22 +686,29 @@ def summarize_dashboard_submissions(
         eligible_count += 1
         late = dashboard_submission_is_late(timestamp, assignment.due_date)
         if late is None:
+            unevaluable_count += 1
             if timestamp is None:
                 late_warnings.append(warning)
             else:
                 late_warnings.append(DashboardWarning(
                     code="missing_deadline_timestamp",
-                    message="Late submissions unavailable: a deadline is missing.",
+                    message="Some submissions have no deadline and are excluded from lateness calculations.",
                     class_id=assignment.class_id,
                     subject_id=assignment.classwork.subject_id,
                 ))
         else:
+            evaluable_count += 1
             late_count += int(late)
+    late_warnings = _deduplicate_dashboard_warnings(late_warnings)
+    weekday_warnings = _deduplicate_dashboard_warnings(weekday_warnings)
+    weekday_total = sum(bins)
     late_summary = LateSubmissionSummary(
-        late_rate_percent=(round(float(late_count) / float(eligible_count) * 100.0, 1)
-                           if eligible_count and not late_warnings else None),
+        late_rate_percent=(round(float(late_count) / float(evaluable_count) * 100.0, 1)
+                           if evaluable_count else None),
         late_count=late_count,
         eligible_count=eligible_count,
+        evaluable_count=evaluable_count,
+        unevaluable_count=unevaluable_count,
         excused_excluded_count=excluded_count,
         completed_count=completed_count,
         warnings=late_warnings,
@@ -681,7 +717,9 @@ def summarize_dashboard_submissions(
         days=[WeekdayCount(label=label, day_index=index, count=bins[index])
               for index, label in enumerate(("Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))],
         sunday_count=bins[6],
-        total_count=sum(bins),
+        total_count=weekday_total,
+        completed_count=completed_count,
+        unevaluable_count=weekday_unevaluable_count,
         warnings=weekday_warnings,
     )
     return late_summary, weekday_summary

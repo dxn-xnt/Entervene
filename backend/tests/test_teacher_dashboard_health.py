@@ -823,6 +823,8 @@ def test_month_attendance_uses_all_recorded_rows_and_active_roster(db, data):
     assert monthly["present_count"] == 2 and monthly["late_count"] == 1
     assert monthly["excused_count"] == 1 and monthly["absent_count"] == 2
     assert monthly["rate"] == 50.0
+    assert result["section_matrix"][0]["attendance_rate_percent"] == monthly["rate"]
+    assert result["section_matrix"][0]["attendance_record_count"] == monthly["record_count"]
     assert result["phase_two"]["attendance_today"]["record_count"] == 1
     previous = dashboard(db, data, period=data["previous_period"])
     assert all(row["record_count"] == 0 and row["rate"] is None for row in previous["details"]["attendance_by_section"])
@@ -921,6 +923,61 @@ def test_weekday_counts_are_manila_six_rows_plus_sunday(db, data):
     assert [row["count"] for row in result["details"]["submissions_by_weekday"]] == [0, 0, 0, 2, 0, 0]
     previous = dashboard(db, data, period=data["previous_period"])
     assert previous["phase_two"]["weekdays"]["total_count"] == 0
+
+
+def test_submission_calendar_metrics_consolidate_missing_timestamp_warnings(db, data):
+    """Legacy online gaps remain disclosed once per widget and do not erase valid coverage."""
+    for key in ("legacy_missing_one", "legacy_missing_two"):
+        assignment = add_assignment(db, data, key, due_date=NOW - timedelta(hours=1))
+        submission = add_submission(db, data, key, assignment, data["students"]["active_one"])
+        submission.submitted_at = None
+
+    result = dashboard(db, data)["phase_two"]
+    late = result["late_submissions"]
+    weekdays = result["weekdays"]
+
+    assert late["eligible_count"] == 5
+    assert late["evaluable_count"] == 3
+    assert late["unevaluable_count"] == 2
+    assert late["late_rate_percent"] == 0.0
+    assert [warning["code"] for warning in late["warnings"]] == ["missing_submission_timestamp"]
+    assert weekdays["completed_count"] == 5
+    assert weekdays["total_count"] == 3
+    assert weekdays["unevaluable_count"] == 2
+    assert [warning["code"] for warning in weekdays["warnings"]] == ["missing_submission_timestamp"]
+
+
+def test_manual_grade_rows_are_not_treated_as_timestampless_submissions(db, data):
+    """Offline gradebook evidence has no submission event and belongs only to grade metrics."""
+    baseline = dashboard(db, data)["phase_two"]
+    assignment = add_assignment(db, data, "manual_activity", due_date=NOW - timedelta(hours=1))
+    assignment.classwork.classwork_type = "ACTIVITY"
+    assignment.classwork.activity_mode = "MANUAL"
+    submission = add_submission(
+        db, data, "manual_activity", assignment, data["students"]["active_one"],
+        status="graded", grade=Decimal("40"),
+    )
+    submission.submitted_at = None
+
+    result = dashboard(db, data)["phase_two"]
+    assert result["late_submissions"] == baseline["late_submissions"]
+    assert result["weekdays"] == baseline["weekdays"]
+
+
+def test_missing_deadlines_are_distinct_and_consolidated_for_lateness_only(db, data):
+    for key in ("missing_deadline_one", "missing_deadline_two"):
+        assignment = add_assignment(db, data, key, due_date=None)
+        add_submission(db, data, key, assignment, data["students"]["active_one"])
+
+    result = dashboard(db, data)["phase_two"]
+    late = result["late_submissions"]
+    weekdays = result["weekdays"]
+    assert late["eligible_count"] == 5
+    assert late["evaluable_count"] == 3
+    assert late["unevaluable_count"] == 2
+    assert [warning["code"] for warning in late["warnings"]] == ["missing_deadline_timestamp"]
+    assert weekdays["total_count"] == weekdays["completed_count"] == 5
+    assert weekdays["warnings"] == []
 
 
 @pytest.mark.parametrize("explicit_period", [True, False])

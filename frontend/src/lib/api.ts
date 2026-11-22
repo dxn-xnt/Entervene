@@ -3382,6 +3382,8 @@ export interface TeacherDashboardPhaseTwo {
     late_rate_percent: number | null;
     late_count: number;
     eligible_count: number;
+    evaluable_count: number;
+    unevaluable_count: number;
     excused_excluded_count: number;
     completed_count: number;
     warnings: TeacherDashboardWarning[];
@@ -3390,6 +3392,8 @@ export interface TeacherDashboardPhaseTwo {
     days: Array<{ label: string; day_index: number; count: number }>;
     sunday_count: number;
     total_count: number;
+    completed_count: number;
+    unevaluable_count: number;
     warnings: TeacherDashboardWarning[];
   };
   term_progress: {
