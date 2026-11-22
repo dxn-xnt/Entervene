@@ -24,6 +24,13 @@ export interface TeacherInterventionSummary {
   current_intervention_level?: string | null;
   candidate_activation_eligible?: boolean | null;
   candidate_activation_reason?: string | null;
+  resolution_recommended?: boolean;
+  resolution_recommendation_reason?: string | null;
+  can_confirm_resolution?: boolean;
+  resolution_continued_at?: string | null;
+  resolution_continued_by_staff_id?: string | null;
+  unfinished_remediation_count?: number;
+  has_in_progress_remediation?: boolean;
   created_at: string;
   activated_at?: string | null;
   resolved_at?: string | null;
@@ -74,12 +81,7 @@ export class InterventionApiError extends Error {
 
 export function candidateActivationExplanation(candidate: TeacherInterventionSummary): string | null {
   if (candidate.candidate_activation_eligible !== false) return null;
-  const currentLevel = candidate.current_intervention_level
-    ? candidate.current_intervention_level.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
-    : "Not Assessed";
   switch (candidate.candidate_activation_reason) {
-    case "CURRENT_RISK_NOT_MODERATE":
-      return `Latest saved prediction is ${currentLevel}. This preserved candidate is review-only and cannot be approved under the Moderate Risk policy.`;
     case "PASSING_THRESHOLD_REACHED":
       return "The latest saved projection has reached the subject passing threshold. This candidate cannot be approved.";
     case "CURRENT_PREDICTION_NOT_READY":
@@ -150,6 +152,10 @@ export const activateTeacherCandidate = (id: number) => read<TeacherIntervention
 export const listTeacherActive = (academicPeriodId?: number | null) =>
   readTeacherInterventionList(`${base}/active${periodQuery(academicPeriodId)}`);
 export const getTeacherActive = (id: number) => read<TeacherInterventionDetail>(`${base}/active/${id}`);
+export const continueTeacherActive = (id: number) =>
+  read<TeacherInterventionDetail>(`${base}/active/${id}/continue`, "POST");
+export const resolveTeacherActive = (id: number) =>
+  read<TeacherResolvedInterventionDetail>(`${base}/active/${id}/resolve`, "POST");
 export const listTeacherResolved = (academicPeriodId?: number | null) =>
   readTeacherInterventionList(`${base}/resolved${periodQuery(academicPeriodId)}`);
 export const getTeacherResolved = (id: number) => read<TeacherResolvedInterventionDetail>(`${base}/resolved/${id}`);
@@ -258,7 +264,36 @@ export interface RemediationProgress {
   passing_threshold?: number | null;
   remediation_status?: RemediationActivityLifecycleStatus;
   completed_remediation: Array<{ title: string; assignment_id: number; grade: number | null; total_points: number | null }>;
-  assigned_remediation?: Array<{ title: string; assignment_id: number; classwork_id?: number; classwork_type?: string; is_published?: boolean; component: string | null; is_graded: boolean; submission_status: string | null; grade: number | null; total_points: number | null; original_assignment_id?: number | null; original_title?: string | null; original_grade?: number | null; effective_grade?: number | null; exam_subtype?: string | null }>;
+  assigned_remediation?: Array<{
+    title: string;
+    assignment_id: number;
+    classwork_id?: number;
+    classwork_type?: string;
+    is_published?: boolean;
+    component: string | null;
+    is_graded: boolean;
+    submission_status: string | null;
+    attempt_count?: number;
+    max_attempts?: number | null;
+    attempts_remaining?: number | null;
+    is_passed?: boolean;
+    needs_teacher_review?: boolean;
+    attempt_history?: Array<{
+      submission_id: number;
+      attempt_count: number;
+      status: string;
+      grade: number | null;
+      submitted_at: string | null;
+      graded_at: string | null;
+    }>;
+    grade: number | null;
+    total_points: number | null;
+    original_assignment_id?: number | null;
+    original_title?: string | null;
+    original_grade?: number | null;
+    effective_grade?: number | null;
+    exam_subtype?: string | null;
+  }>;
   status: string; status_reason: string;
 }
 
@@ -362,7 +397,16 @@ export interface RemediationGenerationEligibility {
 }
 export const eligibleRemediationLessonIds = (eligibility: RemediationGenerationEligibility | null | undefined): number[] =>
   eligibility?.eligible_taught_lessons.map((lesson) => lesson.lesson_id) ?? [];
-export const getRemediationWorkspace = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation`);
+export const getRemediationWorkspace = (
+  id: number,
+  targetAssignmentId?: number | null,
+) =>
+  read<RemediationWorkspace>(
+    `${base}/${id}/remediation${targetAssignmentId && targetAssignmentId > 0
+      ? `?target_assignment_id=${encodeURIComponent(String(targetAssignmentId))}`
+      : ""
+    }`,
+  );
 export const refreshRemediationEvidence = (id: number) => read<RemediationGenerationEligibility>(`${base}/${id}/remediation/evidence/refresh`, "POST");
 export interface SaveRemediationResourceRef {
   kind: "LESSON" | "CLASSWORK";
@@ -497,6 +541,13 @@ export function matchingActiveIntervention(prediction: DevelopmentCurrentTermLis
     && intervention.academic_period_id === prediction.academic_period_id);
 }
 
+export interface RemediationQuizTestPartRequest {
+  question_type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "IDENTIFICATION" | "SHORT_ANSWER";
+  count: number;
+  points_per_item: number;
+  difficulty_breakdown?: Partial<Record<"EASY" | "MEDIUM" | "HARD", number>>;
+}
+
 export interface RemediationDraftGenerationRequest {
   draft_format: "QUIZ" | "CLASSWORK";
   target_component: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
@@ -506,6 +557,7 @@ export interface RemediationDraftGenerationRequest {
   item_count?: number;
   total_points?: number;
   activity_mode?: "ONLINE" | "MANUAL";
+  quiz_test_parts?: RemediationQuizTestPartRequest[];
   selected_lesson_ids?: number[] | null;
   selected_competency_ids?: number[] | null;
   selected_quiz_question_ids?: number[] | null;

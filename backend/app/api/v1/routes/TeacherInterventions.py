@@ -14,8 +14,15 @@ from app.schemas.TeacherIntervention import TeacherInterventionDetail, TeacherIn
 from app.schemas.SubjectGradeProjection import SubjectGradeProjectionRequest, SubjectGradeProjectionResponse
 from app.schemas.InterventionSupportMaterial import MaterialCreate, MaterialList, MaterialRead, MaterialUpdate
 from app.services.intervention.TeacherInterventionService import (
-    activate_teacher_candidate, get_teacher_active, get_teacher_candidate,
-    list_teacher_active, list_teacher_candidates, list_teacher_resolved, get_teacher_resolved,
+    activate_teacher_candidate,
+    continue_teacher_active_intervention,
+    get_teacher_active,
+    get_teacher_candidate,
+    get_teacher_resolved,
+    list_teacher_active,
+    list_teacher_candidates,
+    list_teacher_resolved,
+    resolve_teacher_active_intervention,
 )
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
 from app.services.intervention.InterventionSupportMaterialService import (
@@ -80,10 +87,17 @@ router = APIRouter(dependencies=[Depends(require_development_intervention_api)])
 
 @router.get("/{intervention_id}/remediation")
 def get_remediation_endpoint(
-    intervention_id: int, _teacher: dict = Depends(require_intervention_teacher),
+    intervention_id: int,
+    target_assignment_id: int | None = Query(None, gt=0),
+    _teacher: dict = Depends(require_intervention_teacher),
     staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db),
 ):
-    return get_workspace(db, staff_id, intervention_id)
+    return get_workspace(
+        db,
+        staff_id,
+        intervention_id,
+        target_assignment_id=target_assignment_id,
+    )
 
 
 @router.put("/{intervention_id}/remediation")
@@ -389,3 +403,23 @@ def activate_candidate_endpoint(
     db: Session = Depends(get_db),
 ):
     return activate_teacher_candidate(db, staff_id, intervention_id)
+
+
+@router.post("/active/{intervention_id}/continue", response_model=TeacherInterventionDetail)
+def continue_active_intervention_endpoint(
+    intervention_id: int,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return continue_teacher_active_intervention(db, staff_id, intervention_id)
+
+
+@router.post("/active/{intervention_id}/resolve", response_model=TeacherResolvedInterventionDetail)
+def resolve_active_intervention_endpoint(
+    intervention_id: int,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return resolve_teacher_active_intervention(db, staff_id, intervention_id)

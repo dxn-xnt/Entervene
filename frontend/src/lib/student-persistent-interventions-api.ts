@@ -47,6 +47,10 @@ export interface StudentSupportActivity {
   classwork_type: string;
   submission_status: string | null;
   is_passed?: boolean;
+  attempt_count?: number;
+  max_attempts?: number | null;
+  attempts_remaining?: number | null;
+  needs_teacher_review?: boolean;
   grade: number | null;
   total_points: number | null;
   access_state: "HISTORICAL" | "PREPARATION_REQUIRED" | "READY";

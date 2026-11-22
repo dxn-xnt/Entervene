@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Eye, FileText, Sparkles, Trash2 } from "lucide-react";
 import AttachmentDisplay from "@/components/attachment-display";
-import SubmissionLinkList from "@/components/submission-link-list";
+import { SubmissionLinkList } from "@/components/submission-viewer";
 import { API_URL } from "@/lib/api";
 import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";

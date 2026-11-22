@@ -81,7 +81,7 @@ def test_empty_postgres_database_upgrades_to_head():
         with target.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == head
             assert connection.execute(text("SELECT count(*) FROM user_account")).scalar_one() == 0
-            assert connection.execute(text("SELECT template_name FROM grading_template ORDER BY template_name")).scalars().all() == ["Applied", "Core", "Specialized"]
+            assert connection.execute(text("SELECT template_name FROM grading_template ORDER BY template_name")).scalars().all() == ["Applied", "Core", "EPP / TLE & MAPEH", "Specialized"]
         assert "original_exam_assignment_id" in {column["name"] for column in inspector.get_columns("classwork_assignment")}
         assert {"fk_remedial_original_exam", "ck_remedial_exam_has_target"} <= {
             constraint["name"] for constraint in inspector.get_foreign_keys("classwork_assignment") + inspector.get_check_constraints("classwork_assignment")

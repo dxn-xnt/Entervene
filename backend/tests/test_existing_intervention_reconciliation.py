@@ -85,16 +85,16 @@ def test_unchanged_reused_high_prediction_resolves_open_candidate(current_period
     assert intervention.status == "RESOLVED" and intervention.resolution_reason == "IMPROVED_PREDICTION"
 
 
-def test_non_moderate_prediction_without_open_intervention_is_skipped(current_period_context, monkeypatch):
+def test_non_eligible_risk_prediction_without_open_intervention_is_skipped(current_period_context, monkeypatch):
     ctx = current_period_context
     _enroll(ctx)
     model_id = _setup(ctx, monkeypatch, [88])
     result = _run(ctx, model_id)
-    assert reconcile_existing_candidate(ctx["db"], result["prediction_id"], apply=True) == "not_moderate_risk"
+    assert reconcile_existing_candidate(ctx["db"], result["prediction_id"], apply=True) == "not_eligible_risk"
     assert ctx["db"].query(Intervention).count() == 0
 
 
-def test_stale_low_revision_is_skipped(current_period_context, monkeypatch):
+def test_stale_low_revision_is_skipped_while_latest_high_risk_is_eligible(current_period_context, monkeypatch):
     ctx = current_period_context
     _enroll(ctx)
     model_id = _setup(ctx, monkeypatch, [84, 74])
@@ -103,7 +103,7 @@ def test_stale_low_revision_is_skipped(current_period_context, monkeypatch):
     latest = _run(ctx, model_id)
     _remove_candidate(ctx)
     assert reconcile_existing_candidate(ctx["db"], first["prediction_id"], apply=True) == "stale_revision"
-    assert reconcile_existing_candidate(ctx["db"], latest["prediction_id"]) == "not_moderate_risk"
+    assert reconcile_existing_candidate(ctx["db"], latest["prediction_id"]) == "would_create"
     assert ctx["db"].query(Intervention).count() == 0
 
 

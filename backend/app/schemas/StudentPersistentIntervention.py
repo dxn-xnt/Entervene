@@ -73,6 +73,10 @@ class StudentSupportActivity(BaseModel):
     classwork_type: str
     submission_status: str | None
     is_passed: bool = False
+    attempt_count: int = 0
+    max_attempts: int | None = None
+    attempts_remaining: int | None = None
+    needs_teacher_review: bool = False
     grade: float | None
     total_points: float | None
     access_state: Literal["HISTORICAL", "PREPARATION_REQUIRED", "READY"]

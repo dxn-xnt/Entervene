@@ -10,7 +10,8 @@ import SegmentedControl from "@/components/retroui/SegmentedControl";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Empty } from "@/components/retroui/Empty";
-import { Save, SlidersHorizontal } from "lucide-react";
+import { CheckCircle2, Save, SlidersHorizontal } from "lucide-react";
+import ConfirmDialog from "@/components/confirm-dialog";
 import { getTeacherRiskDisplay } from "@/components/predictions/teacher-risk-display";
 import InterventionSupportMaterials, {
   type InterventionSupportMaterialsHandle,
@@ -49,12 +50,12 @@ const percentVariant = (
   return "destructive";
 };
 
-export const INTERVENTION_ACTIVITY_WIZARD_STEP = 1;
+export const INTERVENTION_ACTIVITY_WIZARD_STEP = 3;
 
 const supportTabs = [
-  { id: "1", label: "Support Resources" },
-  { id: "2", label: "Practice Assessment" },
-  { id: "3", label: "Remediation Activity" },
+  { id: "1", label: "1. Support Resources" },
+  { id: "2", label: "2. Practice (Optional)" },
+  { id: "3", label: "3. Remediation Activity" },
 ];
 
 const LAST_SUPPORT_STEP = supportTabs.length;
@@ -167,8 +168,11 @@ export interface InterventionModalProps {
   detailError: string | null;
   actionError: string | null;
   activating: boolean;
+  resolutionAction?: "continue" | "resolve" | null;
   reviewStale: boolean;
   onActivate: () => void | Promise<void>;
+  onContinueSupport?: () => void | Promise<void>;
+  onResolveIntervention?: () => void | Promise<void>;
   previousResolved?: TeacherInterventionSummary;
   newerActive?: TeacherInterventionSummary;
   startSetup?: boolean;
@@ -184,8 +188,11 @@ export default function InterventionModal({
   detailError,
   actionError,
   activating,
+  resolutionAction = null,
   reviewStale,
   onActivate,
+  onContinueSupport,
+  onResolveIntervention,
   previousResolved,
   newerActive,
   startSetup = false,
@@ -196,6 +203,7 @@ export default function InterventionModal({
   const [savingAdjustments, setSavingAdjustments] = useState(false);
   const [supportHasChanges, setSupportHasChanges] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
+  const [confirmResolveOpen, setConfirmResolveOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const supportMaterialsRef = useRef<InterventionSupportMaterialsHandle>(null);
   const interventionId = detail?.intervention_id;
@@ -478,7 +486,68 @@ export default function InterventionModal({
                     );
                   })()
                 ) : detail.status === "ACTIVE" ? (
-                  <InterventionSupportMaterials
+                  <div className="space-y-4">
+                    {supportPage === "overview" &&
+                      (detail.resolution_recommended || detail.can_confirm_resolution) && (
+                        <Alert
+                          status={detail.resolution_recommended ? "success" : "info"}
+                          className="space-y-3"
+                        >
+                          <Alert.Title>
+                            {detail.resolution_recommended
+                              ? "Resolution Recommended"
+                              : "Target Reached — Continuing Support"}
+                          </Alert.Title>
+                          <Alert.Description className="space-y-2">
+                            <p>
+                              {detail.student_name}&apos;s latest valid prediction
+                              {detail.current_predicted_grade != null
+                                ? ` (${detail.current_predicted_grade.toFixed(2)})`
+                                : ""}{" "}
+                              reached the passing target
+                              {detail.passing_threshold != null
+                                ? ` (${detail.passing_threshold})`
+                                : ""}
+                              . Active support remains open until you confirm resolution.
+                            </p>
+                            {(detail.unfinished_remediation_count ?? 0) > 0 && (
+                              <p className="font-semibold">
+                                {detail.has_in_progress_remediation
+                                  ? `Note: ${detail.unfinished_remediation_count} remediation ${detail.unfinished_remediation_count === 1 ? "activity is" : "activities are"} unfinished, including an active in-progress attempt. Choose Continue Support to let the student finish, or Resolve Intervention to close unfinished access while preserving completed work.`
+                                  : `Note: ${detail.unfinished_remediation_count} remediation ${detail.unfinished_remediation_count === 1 ? "activity is" : "activities are"} still unfinished or ungraded. Resolving now closes new submissions for unfinished items while keeping completed submissions reviewable.`}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              {onContinueSupport && detail.resolution_recommended && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={resolutionAction !== null || savingAdjustments}
+                                  onClick={() => void onContinueSupport()}
+                                >
+                                  {resolutionAction === "continue"
+                                    ? "Saving..."
+                                    : "Continue Support"}
+                                </Button>
+                              )}
+                              {onResolveIntervention && detail.can_confirm_resolution && (
+                                <Button
+                                  size="sm"
+                                  disabled={resolutionAction !== null || savingAdjustments}
+                                  onClick={() => setConfirmResolveOpen(true)}
+                                  className="gap-1.5"
+                                >
+                                  <CheckCircle2 className="size-4" />
+                                  {resolutionAction === "resolve"
+                                    ? "Resolving..."
+                                    : "Resolve Intervention"}
+                                </Button>
+                              )}
+                            </div>
+                          </Alert.Description>
+                        </Alert>
+                      )}
+                    <InterventionSupportMaterials
                     onChangesChange={setSupportHasChanges}
                     ref={supportMaterialsRef}
                     key={detail.intervention_id}
@@ -486,6 +555,11 @@ export default function InterventionModal({
                     wizardStep={supportPage === "plan" ? wizardStep : undefined}
                     detail={detail}
                     previousResolved={previousResolved}
+                    onNavigateToStep={(step) => {
+                      setSupportPage("plan");
+                      setWizardStep(step);
+                      contentRef.current?.scrollTo({ top: 0 });
+                    }}
                     navigation={supportPage === "plan" ? (
                       <div className="overflow-x-auto no-scrollbar py-0.5">
                         <SegmentedControl
@@ -509,6 +583,7 @@ export default function InterventionModal({
                       contentRef.current?.scrollTo({ top: 0 });
                     }}
                   />
+                  </div>
                 ) : (
                   <>
                     <Card className="w-full space-y-2 border-2 border-black bg-primary">
@@ -788,7 +863,9 @@ export default function InterventionModal({
 
                 {actionError && (
                   <Alert status="error">
-                    <Alert.Title>Unable to approve intervention</Alert.Title>
+                    <Alert.Title>
+                      {isActive ? "Unable to update intervention" : "Unable to approve intervention"}
+                    </Alert.Title>
                     <Alert.Description>{actionError}</Alert.Description>
                   </Alert>
                 )}
@@ -813,7 +890,11 @@ export default function InterventionModal({
           )}
           {isActive && (
             <Button
-              variant={supportPage === "plan" ? "outline" : "default"}
+              variant={
+                supportPage === "plan" && wizardStep === LAST_SUPPORT_STEP
+                  ? "outline"
+                  : "default"
+              }
               disabled={activating || savingAdjustments || (supportPage === "plan" && wizardStep === LAST_SUPPORT_STEP && !supportHasChanges)}
               onClick={async () => {
                 if (supportPage === "plan") {
@@ -849,11 +930,15 @@ export default function InterventionModal({
             >
               {supportPage === "plan" ? (
                 savingAdjustments ? (
-                  "Saving adjustments..."
-                ) : wizardStep < LAST_SUPPORT_STEP ? "Next" : (
+                  "Saving plan..."
+                ) : wizardStep === 1 ? (
+                  "Next: Practice (Optional)"
+                ) : wizardStep < LAST_SUPPORT_STEP ? (
+                  "Next: Remediation Activity"
+                ) : (
                   <>
                     <Save className="size-4 mr-1.5" />
-                    Save Adjustments
+                    Save Plan
                   </>
                 )
               ) : (
@@ -871,11 +956,27 @@ export default function InterventionModal({
             >
               {activating
                 ? "Checking and approving..."
-                : "Proceed"}
+                : "Approve Intervention"}
             </Button>
           )}
         </Dialog.Footer>
       </Dialog.Content>
+      <ConfirmDialog
+        open={confirmResolveOpen}
+        onOpenChange={setConfirmResolveOpen}
+        title="Resolve active intervention?"
+        description={
+          (detail?.unfinished_remediation_count ?? 0) > 0
+            ? `This will revalidate the latest prediction and move ${detail?.student_name}'s support to Resolved history. ${detail?.unfinished_remediation_count} unfinished remediation ${detail?.unfinished_remediation_count === 1 ? "activity" : "activities"} will stop accepting new submissions, while completed submissions and grades remain preserved.`
+            : `This will revalidate the latest prediction and move ${detail?.student_name}'s active support to Resolved history. All completed work and intervention records will remain preserved.`
+        }
+        confirmLabel={resolutionAction === "resolve" ? "Resolving..." : "Resolve Intervention"}
+        isLoading={resolutionAction === "resolve"}
+        onConfirm={async () => {
+          setConfirmResolveOpen(false);
+          await onResolveIntervention?.();
+        }}
+      />
     </Dialog>
   );
 }

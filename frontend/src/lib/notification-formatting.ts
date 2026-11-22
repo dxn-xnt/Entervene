@@ -1,7 +1,7 @@
 import type { NotificationItem } from "@/lib/notifications-api";
 
 export type StudentNotificationTab = "all" | "classwork" | "study_support";
-export type TeacherNotificationTab = "all" | "repost" | "submissions" | "interventions";
+export type TeacherNotificationTab = "all" | "repost" | "interventions";
 
 const STUDENT_STUDY_SUPPORT_TYPES = new Set<NotificationItem["notification_type"]>([
   "risk_alert",
@@ -91,9 +91,6 @@ export function matchesTeacherNotificationTab(
 ): boolean {
   if (tab === "all") return true;
   if (tab === "repost") return notificationType.startsWith("repost_");
-  if (tab === "submissions") {
-    return notificationType === "submission_graded" || notificationType === "assignment_due";
-  }
   if (tab === "interventions") {
     return notificationType === "risk_alert" || notificationType.startsWith("intervention_");
   }

@@ -191,9 +191,15 @@ def validate_remediation_draft(
     db: Session,
     intervention: Intervention,
     draft_input: RemediationDraft | dict[str, Any],
+    *,
+    target_assignment_id: int | None = None,
 ) -> RemediationDraft:
     """Validate a remediation draft against the intervention's verified evidence scope."""
-    eligibility = resolve_remediation_generation_eligibility(db, intervention)
+    eligibility = resolve_remediation_generation_eligibility(
+        db,
+        intervention,
+        target_assignment_id=target_assignment_id,
+    )
     scope = eligibility.pop("scope")
     scope["_generation_eligibility"] = eligibility
     return validate_draft_against_scope(scope, draft_input)

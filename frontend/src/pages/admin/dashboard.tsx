@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, AlertCircle, ArrowUpRight, School } from "lucide-react";
+import { Settings, AlertCircle, ArrowUpRight, School, TrendingUp, CalendarClock } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -25,7 +25,13 @@ import {
 import { cn } from "@/lib/utils";
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 
-type EnrollmentTrendItem = { week: string; count: number; active?: number };
+type EnrollmentTrendItem = {
+  week: string;
+  count: number;
+  active?: number;
+  start_date?: string;
+  end_date?: string;
+};
 type GradeMetricItem = { grade: string; rate: number };
 type StudentsPerGradeItem = { grade: string; count: number };
 type ActiveUserItem = { day: string; count: number; isDrop?: boolean };
@@ -60,6 +66,8 @@ type GradeHealthItem = {
   availableGradeCount: number;
 };
 type AdminDashboardDetails = {
+  period_state?: "CURRENT" | "FUTURE" | "HISTORICAL";
+  enrollment_trend_scope?: "academic_year" | "period";
   enrollment_trend?: EnrollmentTrendItem[];
   students_per_grade?: StudentsPerGradeItem[];
   attendance_by_grade?: GradeMetricItem[];
@@ -71,15 +79,13 @@ type AdminDashboardDetails = {
   top_performing_subjects?: TopSubjectItem[];
   grade_health?: GradeHealthApiItem[];
 };
-
-const defaultEnrollmentTrend = [
-  { week: "Wk 1", count: 66, active: 58 },
-  { week: "Wk 2", count: 69, active: 63 },
-  { week: "Wk 3", count: 71, active: 61 },
-  { week: "Wk 4", count: 72, active: 66 },
-  { week: "Wk 5", count: 74, active: 70 },
-  { week: "Wk 6", count: 74, active: 74 },
-];
+type AdminTermInfo = {
+  period_id?: number | null;
+  period_name?: string;
+  academic_year?: string;
+  academic_year_id?: number | null;
+  is_active?: boolean;
+};
 
 const defaultActiveUsers = [
   { day: "M", count: 58 },
@@ -117,9 +123,10 @@ const defaultTopPerformingSubjects = [
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const { selectedPeriodId } = useAcademicPeriod();
+  const { selectedPeriodId, selectedPeriod, selectedYearId, selectedYear } = useAcademicPeriod();
   const [cards, setCards] = useState<OverviewCardData[]>([]);
   const [details, setDetails] = useState<AdminDashboardDetails | null>(null);
+  const [termInfo, setTermInfo] = useState<AdminTermInfo | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [showAllGradeHealth, setShowAllGradeHealth] = useState<boolean>(false);
@@ -132,10 +139,12 @@ export default function AdminDashboard() {
       setError(null);
       setCards([]);
       setDetails(null);
+      setTermInfo(null);
       try {
         const data = await getOverviewStats({
           scope: "system",
           academic_period_id: selectedPeriodId ?? undefined,
+          academic_year_id: selectedYearId ?? undefined,
         });
         if (!cancelled) {
           if (data.cards && data.cards.length > 0) {
@@ -143,6 +152,9 @@ export default function AdminDashboard() {
           }
           if (data.details) {
             setDetails(data.details as AdminDashboardDetails);
+          }
+          if (data.term_info) {
+            setTermInfo(data.term_info as AdminTermInfo);
           }
         }
       } catch (err: unknown) {
@@ -161,16 +173,32 @@ export default function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPeriodId]);
+  }, [selectedPeriodId, selectedYearId]);
+
+  const isUpcomingPeriod = details?.period_state === "FUTURE";
+  const activeYearLabel = termInfo?.academic_year || selectedYear?.year_label || "";
+  const activePeriodName = termInfo?.period_name || selectedPeriod?.period || "selected term";
 
   const enrollmentTrend = useMemo(() => {
-    if (!details?.enrollment_trend) return defaultEnrollmentTrend;
-    return details.enrollment_trend.map((item, idx: number) => ({
+    if (!Array.isArray(details?.enrollment_trend)) return [];
+    return details.enrollment_trend.map((item) => ({
       week: item.week,
-      count: item.count,
-      active: item.active ?? Math.min(item.count, (defaultEnrollmentTrend[idx]?.active ?? item.count)),
+      count: Number(item.count ?? 0),
+      active: Number(item.active ?? 0),
+      start_date: item.start_date,
+      end_date: item.end_date,
     }));
   }, [details]);
+
+  const maxEnrollmentTrendCount = useMemo(() => {
+    const peak = Math.max(
+      0,
+      ...enrollmentTrend.flatMap((point) => [point.count, point.active]),
+    );
+    if (peak <= 0) return 10;
+    const step = peak <= 20 ? 5 : peak <= 100 ? 10 : 25;
+    return Math.ceil((peak + 1) / step) * step;
+  }, [enrollmentTrend]);
 
   const studentsPerGrade = details?.students_per_grade ?? [];
   const attendanceByGrade = details?.attendance_by_grade ?? [];
@@ -362,10 +390,15 @@ export default function AdminDashboard() {
                   <Card className="flex flex-col justify-between p-4 sm:p-5">
                     <Card.Header className="p-0">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
-                        <div>
+                        <div className="flex flex-wrap items-center gap-2">
                           <Card.Title className="text-base font-bold sm:text-lg">
                             School Enrollment & Engagement Trend
                           </Card.Title>
+                          {activeYearLabel && (
+                            <Badge variant="surface" size="sm">
+                              {activeYearLabel} · School Year
+                            </Badge>
+                          )}
                         </div>
                       </div>
 
@@ -378,7 +411,7 @@ export default function AdminDashboard() {
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="size-2.5 rounded-full bg-muted inline-block" />
+                          <span className="size-2.5 rounded-full bg-muted-foreground inline-block" />
                           <span className="text-foreground">
                             Active Learners
                           </span>
@@ -387,88 +420,117 @@ export default function AdminDashboard() {
                     </Card.Header>
 
                     {/* Line Chart Body */}
-                    <Card.Content className="h-52 w-full p-0 pb-4">
-                      <ResponsiveContainer width="100%" height="100%" className="-mx-2 text-foreground!">
-                        <LineChart
-                          data={enrollmentTrend}
-                          margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
-                        >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            vertical={false}
-                            stroke="var(--muted-foreground)"
-                            strokeOpacity={0.4}
-                          />
-                          <XAxis
-                            dataKey="week"
-                            tickLine={false}
-                            axisLine={{
-                              stroke: "var(--foreground)",
-                              strokeWidth: 1,
-                            }}
-                            tick={{ fontSize: 11, fontWeight: 500, fill: "var(--foreground)" }}
-                          />
-                          <YAxis
-                            domain={[40, 80]}
-                            ticks={[40, 50, 60, 70, 80]}
-                            tickLine={false}
-                            axisLine={{
-                              stroke: "var(--foreground)",
-                              strokeWidth: 1,
-                            }}
-                            tick={{ fontSize: 11, fill: "var(--foreground)" }}
-                          />
-                          <RechartsTooltip
-                            content={({ active, payload }) => {
-                              if (!active || !payload || !payload.length)
-                                return null;
-                              const point = payload[0].payload;
-                              return (
-                                <div className="space-y-1 rounded border border-border bg-background p-2.5 text-xs text-foreground shadow-md">
-                                  <p className="font-bold">
-                                    {point.week}
-                                  </p>
-                                  <p className="text-emerald-500 font-semibold">
-                                    Enrolled: {point.count} students
-                                  </p>
-                                  <p className="text-amber-500 font-semibold">
-                                    Active: {point.active} students
-                                  </p>
-                                </div>
-                              );
-                            }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="count"
-                            name="Enrolled"
-                            stroke="var(--primary)"
-                            strokeWidth={2.5}
-                            dot={{
-                              r: 4,
-                              stroke: "var(--background)",
-                              strokeWidth: 1.5,
-                              fill: "var(--primary)",
-                            }}
-                            activeDot={{ r: 6 }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="active"
-                            name="Active"
-                            stroke="var(--muted)"
-                            strokeWidth={2.5}
-                            dot={{
-                              r: 4,
-                              stroke: "var(--background)",
-                              strokeWidth: 1.5,
-                              fill: "var(--muted)",
-                            }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                      <Card.Description className="text-xs text-muted-foreground mt-0.5 pb-2">
+                    <Card.Content className="w-full p-0 pb-2">
+                      {isLoading ? (
+                        <div className="h-52 w-full animate-pulse rounded bg-muted/40" />
+                      ) : enrollmentTrend.length === 0 ? (
+                        <EmptyStateCard
+                          compact
+                          icon={<TrendingUp className="text-primary-foreground" />}
+                          title="No weekly trend yet"
+                          description={
+                            activeYearLabel
+                              ? `Enrollment and learner participation trends for ${activeYearLabel} will appear once the school year begins.`
+                              : "Enrollment and learner participation trends will appear once the selected academic year begins."
+                          }
+                          className="my-2"
+                        />
+                      ) : (
+                        <div className="h-52 w-full">
+                          <ResponsiveContainer width="100%" height="100%" className="-mx-2 text-foreground!">
+                            <LineChart
+                              data={enrollmentTrend}
+                              margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
+                            >
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                vertical={false}
+                                stroke="var(--muted-foreground)"
+                                strokeOpacity={0.4}
+                              />
+                              <XAxis
+                                dataKey="week"
+                                tickLine={false}
+                                axisLine={{
+                                  stroke: "var(--foreground)",
+                                  strokeWidth: 1,
+                                }}
+                                tick={{ fontSize: 11, fontWeight: 500, fill: "var(--foreground)" }}
+                              />
+                              <YAxis
+                                domain={[0, maxEnrollmentTrendCount]}
+                                allowDecimals={false}
+                                tickLine={false}
+                                axisLine={{
+                                  stroke: "var(--foreground)",
+                                  strokeWidth: 1,
+                                }}
+                                tick={{ fontSize: 11, fill: "var(--foreground)" }}
+                              />
+                              <RechartsTooltip
+                                content={({ active, payload }) => {
+                                  if (!active || !payload || !payload.length)
+                                    return null;
+                                  const point = payload[0].payload as {
+                                    week: string;
+                                    count: number;
+                                    active: number;
+                                    start_date?: string;
+                                    end_date?: string;
+                                  };
+                                  return (
+                                    <div className="space-y-1 rounded border border-border bg-background p-2.5 text-xs text-foreground shadow-md">
+                                      <p className="font-bold">
+                                        {point.week}
+                                        {point.start_date && point.end_date
+                                          ? ` (${point.start_date} – ${point.end_date})`
+                                          : ""}
+                                      </p>
+                                      <p className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                                        Enrolled: {point.count} {point.count === 1 ? "student" : "students"}
+                                      </p>
+                                      <p className="text-amber-600 dark:text-amber-400 font-semibold">
+                                        Active: {point.active} {point.active === 1 ? "learner" : "learners"}
+                                      </p>
+                                    </div>
+                                  );
+                                }}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="count"
+                                name="Enrolled"
+                                stroke="var(--primary)"
+                                strokeWidth={2.5}
+                                dot={{
+                                  r: 4,
+                                  stroke: "var(--background)",
+                                  strokeWidth: 1.5,
+                                  fill: "var(--primary)",
+                                }}
+                                activeDot={{ r: 6 }}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="active"
+                                name="Active"
+                                stroke="var(--muted-foreground)"
+                                strokeWidth={2.5}
+                                dot={{
+                                  r: 4,
+                                  stroke: "var(--background)",
+                                  strokeWidth: 1.5,
+                                  fill: "var(--muted-foreground)",
+                                }}
+                                activeDot={{ r: 6 }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                      <Card.Description className="text-xs text-muted-foreground mt-2">
                         Total enrolled students vs. actively participating learners across weeks
+                        {activeYearLabel ? ` (${activeYearLabel} to date)` : ""}
                       </Card.Description>
                     </Card.Content>
                   </Card>
@@ -478,9 +540,14 @@ export default function AdminDashboard() {
                     {/* Attendance by grade */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                          Attendance by Grade
-                        </Card.Title>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                            Attendance by Grade
+                          </Card.Title>
+                          {isUpcomingPeriod && (
+                            <Badge variant="surface" size="sm">Upcoming</Badge>
+                          )}
+                        </div>
                         <Tooltip>
                           <TooltipTrigger
                             render={
@@ -499,25 +566,40 @@ export default function AdminDashboard() {
                         </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-3 flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
-                        <div className="flex flex-col gap-2.5">
-                          {attendanceByGrade.map((item) => (
-                            <div
-                              key={item.grade}
-                              className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                            >
-                              <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
-                                {item.grade}
-                              </span>
-                              <Progress value={item.rate} className="h-2.5 flex-1" />
-                              <span className="font-semibold text-foreground text-right w-10 shrink-0">
-                                {item.rate}%
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                      <Card.Content className="mt-3 flex flex-col justify-between gap-2.5 p-0 h-full">
+                        {isLoading ? (
+                          <div className="h-24 w-full animate-pulse rounded bg-muted/40" />
+                        ) : attendanceByGrade.length === 0 ? (
+                          <EmptyStateCard
+                            compact
+                            icon={<CalendarClock className="text-primary-foreground" />}
+                            title={isUpcomingPeriod ? `Upcoming · ${activePeriodName}` : "No attendance recorded yet"}
+                            description={
+                              isUpcomingPeriod
+                                ? `Attendance metrics for ${activePeriodName} will appear once the term starts.`
+                                : `Attendance rates for ${activePeriodName} will appear once teachers log attendance.`
+                            }
+                          />
+                        ) : (
+                          <div className="flex flex-col gap-2.5">
+                            {attendanceByGrade.map((item) => (
+                              <div
+                                key={item.grade}
+                                className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                              >
+                                <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
+                                  {item.grade}
+                                </span>
+                                <Progress value={item.rate} className="h-2.5 flex-1" />
+                                <span className="font-semibold text-foreground text-right w-10 shrink-0">
+                                  {item.rate}%
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         <Card.Description className="mt-2 text-[11px] text-muted-foreground">
-                          Average present rate across all grade levels
+                          Average present rate across all grade levels ({activePeriodName})
                         </Card.Description>
                       </Card.Content>
                     </Card>
@@ -525,9 +607,14 @@ export default function AdminDashboard() {
                     {/* Completion by grade */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                          Completion by Grade
-                        </Card.Title>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                            Completion by Grade
+                          </Card.Title>
+                          {isUpcomingPeriod && (
+                            <Badge variant="surface" size="sm">Upcoming</Badge>
+                          )}
+                        </div>
                         <Tooltip>
                           <TooltipTrigger
                             render={
@@ -546,25 +633,40 @@ export default function AdminDashboard() {
                         </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-3 flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
-                        <div className="flex flex-col gap-2.5">
-                          {completionByGrade.map((item) => (
-                            <div
-                              key={item.grade}
-                              className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                            >
-                              <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
-                                {item.grade}
-                              </span>
-                              <Progress value={item.rate} className="h-2.5 flex-1" />
-                              <span className="font-semibold text-foreground text-right w-10 shrink-0">
-                                {item.rate}%
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                      <Card.Content className="mt-3 flex flex-col justify-between gap-2.5 p-0 h-full">
+                        {isLoading ? (
+                          <div className="h-24 w-full animate-pulse rounded bg-muted/40" />
+                        ) : completionByGrade.length === 0 ? (
+                          <EmptyStateCard
+                            compact
+                            icon={<CalendarClock className="text-primary-foreground" />}
+                            title={isUpcomingPeriod ? `Upcoming · ${activePeriodName}` : "No completion data yet"}
+                            description={
+                              isUpcomingPeriod
+                                ? `Classwork completion for ${activePeriodName} will appear once the term starts.`
+                                : `Completion rates for ${activePeriodName} will appear once assessments are published.`
+                            }
+                          />
+                        ) : (
+                          <div className="flex flex-col gap-2.5">
+                            {completionByGrade.map((item) => (
+                              <div
+                                key={item.grade}
+                                className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                              >
+                                <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
+                                  {item.grade}
+                                </span>
+                                <Progress value={item.rate} className="h-2.5 flex-1" />
+                                <span className="font-semibold text-foreground text-right w-10 shrink-0">
+                                  {item.rate}%
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         <Card.Description className="mt-2 text-[11px] text-muted-foreground">
-                          Assigned classwork completion rate
+                          Assigned classwork completion rate ({activePeriodName})
                         </Card.Description>
                       </Card.Content>
                     </Card>
@@ -573,9 +675,14 @@ export default function AdminDashboard() {
                   {/* 4. Grade-Level Health & Performance (Section-by-Section Health counterpart) */}
                   <Card className="flex flex-col justify-between p-4 sm:p-5">
                     <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                      <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                        Grade-Level Performance & Health
-                      </Card.Title>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                          Grade-Level Performance & Health
+                        </Card.Title>
+                        {isUpcomingPeriod && (
+                          <Badge variant="surface" size="sm">Upcoming</Badge>
+                        )}
+                      </div>
                       <Tooltip>
                         <TooltipTrigger
                           render={
@@ -636,7 +743,7 @@ export default function AdminDashboard() {
                                   Task Completion
                                 </span>
                                 <span className="font-semibold">
-                                  {g.completion == null ? "—" : `${g.completion}%`}
+                                  {g.completion == null ? (isUpcomingPeriod ? "Upcoming" : "—") : `${g.completion}%`}
                                 </span>
                               </div>
                               <Progress
@@ -651,7 +758,7 @@ export default function AdminDashboard() {
                                   Attendance
                                 </span>
                                 <span className="font-semibold">
-                                  {g.attendance == null ? "—" : `${g.attendance}%`}
+                                  {g.attendance == null ? (isUpcomingPeriod ? "Upcoming" : "—") : `${g.attendance}%`}
                                 </span>
                               </div>
                               <Progress
@@ -679,7 +786,7 @@ export default function AdminDashboard() {
                                   size="sm"
                                   className="ml-1"
                                 >
-                                  {g.passingRate == null ? "—" : `${g.passingRate}%`}
+                                  {g.passingRate == null ? (isUpcomingPeriod ? "Upcoming" : "—") : `${g.passingRate}%`}
                                 </Badge>
                               </span>
                             </div>

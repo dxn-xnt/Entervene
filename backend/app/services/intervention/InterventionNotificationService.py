@@ -138,6 +138,104 @@ def _stage_assessment_event(
     return True
 
 
+def _remediation_review_scope(
+    db: Session,
+    assignment: ClassworkAssignment,
+    submission: StudentSubmission,
+):
+    from app.services.intervention.RemediationAttemptPolicy import is_remediation_assessment
+
+    if not is_remediation_assessment(assignment, assignment.classwork):
+        return None
+    if assignment.recipient_student_id != submission.student_id:
+        return None
+    intervention = db.get(Intervention, assignment.source_intervention_id)
+    if intervention is None or intervention.student_id != submission.student_id:
+        return None
+    identity = _responsible_teacher_identity(db, intervention)
+    if identity is None:
+        return None
+    return intervention, identity
+
+
+def stage_intervention_needs_teacher_review(
+    db: Session,
+    assignment: ClassworkAssignment,
+    submission: StudentSubmission,
+    *,
+    max_attempts: int = 3,
+) -> bool:
+    """Stage one teacher notification when a student exhausts all remediation attempts without passing."""
+    scope = _remediation_review_scope(db, assignment, submission)
+    if scope is None:
+        return False
+    intervention, (_staff_id, user_id) = scope
+    action_url = _assessment_action_url(assignment, submission)
+    notification_type = "intervention_needs_teacher_review"
+    if db.query(Notification.notification_id).filter_by(
+        user_id=user_id,
+        notification_type=notification_type,
+        action_url=action_url,
+    ).first() is not None:
+        return False
+
+    student_name = " ".join(
+        part for part in (
+            intervention.student.first_name,
+            intervention.student.middle_name,
+            intervention.student.last_name,
+            intervention.student.suffix,
+        ) if part
+    )
+    subject_name = intervention.subject.subject_name
+    title_text = assignment.classwork.title if assignment.classwork else "Remediation Assessment"
+    score = (
+        f" Latest score: {format(Decimal(str(submission.grade)).normalize(), 'f')}"
+        f"/{format(Decimal(str(assignment.classwork.total_points)).normalize(), 'f')}."
+        if submission.grade is not None
+        and assignment.classwork is not None
+        and assignment.classwork.total_points is not None
+        else ""
+    )
+    attempts_used = int(submission.attempt_count or max_attempts)
+    stage_notification(db, NotificationCreate(
+        user_id=user_id,
+        notification_type=notification_type,
+        title="Needs Teacher Review: Remediation Attempts Exhausted",
+        body=(
+            f"{student_name} did not pass {title_text} ({subject_name}) after "
+            f"{attempts_used}/{max_attempts} attempts.{score} "
+            "Retries are locked and this assessment needs teacher review."
+        ),
+        action_url=action_url,
+    ))
+    return True
+
+
+def stage_remediation_needs_teacher_review_if_exhausted(
+    db: Session,
+    assignment: ClassworkAssignment,
+    submission: StudentSubmission,
+    *,
+    quiz=None,
+) -> bool:
+    """Notify the teacher if this graded remediation attempt exhausted retries without passing."""
+    from app.services.intervention.RemediationAttemptPolicy import evaluate_remediation_attempt_state
+
+    classwork = assignment.classwork
+    state = evaluate_remediation_attempt_state(
+        db, assignment, classwork, submission, quiz=quiz,
+    )
+    if not state["needs_teacher_review"]:
+        return False
+    return stage_intervention_needs_teacher_review(
+        db,
+        assignment,
+        submission,
+        max_attempts=int(state["max_attempts"] or 3),
+    )
+
+
 def stage_intervention_assessment_result(
     db: Session,
     assignment: ClassworkAssignment,
@@ -201,6 +299,23 @@ def stage_intervention_notification(db: Session, intervention: Intervention, *, 
             title="Intervention resolved after improved prediction",
             body=f"{student_name}'s latest {subject_name} prediction improved to {grade}. Intervention criteria are no longer met; the previous intervention remains in history.",
             action_url="/teacher/interventions",
+        )
+    elif event == "RESOLUTION_RECOMMENDED":
+        action_url = f"/teacher/interventions?view=active&active={intervention.intervention_id}"
+        if db.query(Notification.notification_id).filter_by(
+            user_id=user_id,
+            notification_type="intervention_resolution_recommended",
+            action_url=action_url,
+        ).first() is not None:
+            return
+        payload = NotificationCreate(
+            user_id=user_id, notification_type="intervention_resolution_recommended",
+            title="Resolution recommended for active intervention",
+            body=(
+                f"{student_name}'s latest {subject_name} prediction improved to {grade}. "
+                "Review the active intervention to either continue support or confirm resolution."
+            ),
+            action_url=action_url,
         )
     else:
         raise ValueError("Unsupported intervention notification event")

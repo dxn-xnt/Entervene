@@ -20,7 +20,7 @@ from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECT
 
 OPEN_STATUSES = ("CANDIDATE", "ACTIVE")
 IMPROVED_PREDICTION = "IMPROVED_PREDICTION"
-AUTOMATIC_CANDIDATE_LEVEL = "MODERATE_RISK"
+AUTOMATIC_CANDIDATE_LEVELS = frozenset({"HIGH_RISK", "MODERATE_RISK"})
 
 
 def sync_intervention_for_persisted_prediction(
@@ -114,18 +114,30 @@ def sync_intervention_for_persisted_prediction(
 
     if grade >= passing_threshold:
         if open_intervention is not None:
-            open_intervention.status = "RESOLVED"
-            open_intervention.resolution_reason = IMPROVED_PREDICTION
-            open_intervention.resolved_at = datetime.now(timezone.utc)
-            db.flush()
-            stage_intervention_notification(db, open_intervention, event=IMPROVED_PREDICTION, predicted_grade=grade)
+            if open_intervention.status == "CANDIDATE":
+                open_intervention.status = "RESOLVED"
+                open_intervention.resolution_reason = IMPROVED_PREDICTION
+                open_intervention.resolved_at = datetime.now(timezone.utc)
+                db.flush()
+                stage_intervention_notification(
+                    db, open_intervention, event=IMPROVED_PREDICTION, predicted_grade=grade,
+                )
+            elif open_intervention.status == "ACTIVE":
+                # Keep ACTIVE interventions open until the teacher explicitly confirms
+                # resolution, protecting ongoing remediation work from unexpected locking.
+                plan = open_intervention.remediation_plan if isinstance(open_intervention.remediation_plan, dict) else {}
+                review = plan.get("resolution_review") if isinstance(plan.get("resolution_review"), dict) else {}
+                if review.get("continued_prediction_id") != prediction.prediction_id:
+                    stage_intervention_notification(
+                        db, open_intervention, event="RESOLUTION_RECOMMENDED", predicted_grade=grade,
+                    )
         return open_intervention
 
-    # A policy-ineligible revision must not erase an existing candidate or
+    # A non-triggering risk level must not erase an existing candidate or
     # ACTIVE intervention. It only prevents creation for a previously empty scope.
     if open_intervention is not None:
         return open_intervention
-    if prediction.intervention_level != AUTOMATIC_CANDIDATE_LEVEL:
+    if prediction.intervention_level not in AUTOMATIC_CANDIDATE_LEVELS:
         return None
     candidate = Intervention(
         student_id=student_id,

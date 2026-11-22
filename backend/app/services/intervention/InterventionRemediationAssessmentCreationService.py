@@ -126,7 +126,7 @@ def create_remediation_assessment(
             is_published=False,
             is_locked=False,
             allow_late_submissions=False,
-            max_attempts=1 if preflight.draft_format == "QUIZ" else None,
+            max_attempts=3,
         )
         db.add(assignment)
         db.flush()
@@ -137,7 +137,7 @@ def create_remediation_assessment(
             quiz_data["status"] = "DRAFT"
             # Answer keys remain teacher-only for remediation assessments.
             quiz_data["settings"]["show_correct_answers"] = False
-            quiz_data["settings"]["max_attempts"] = 1
+            quiz_data["settings"]["max_attempts"] = 3
             quiz = upsert_quiz_builder(db, classwork, QuizBuilderUpsert.model_validate(quiz_data))
             quiz_id = quiz.quiz_id
 

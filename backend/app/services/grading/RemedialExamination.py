@@ -29,6 +29,40 @@ def effective_exam_scores(assignments: Iterable[Any], scores: dict[int, float | 
     return effective
 
 
+def _submission_grade_sort_key(row: Any) -> tuple[float, int, int]:
+    stamp = row.graded_at or row.submitted_at or row.created_at
+    attempt_num = int(getattr(row, "attempt_count", 0) or 0)
+    sub_id = int(getattr(row, "submission_id", 0) or 0)
+    if stamp is None:
+        return (0.0, attempt_num, sub_id)
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return (stamp.timestamp(), attempt_num, sub_id)
+
+
+def latest_graded_submission_score(db: Any, assignment_id: int, student_id: Any) -> Any:
+    """Return the grade of the latest graded submission for one student and assignment."""
+    from uuid import UUID
+    from app.models.submissions.StudentSubmission import StudentSubmission
+
+    try:
+        student_key = student_id if isinstance(student_id, UUID) else UUID(str(student_id))
+    except (ValueError, TypeError):
+        student_key = student_id
+
+    rows = db.query(StudentSubmission).filter(
+        StudentSubmission.student_id == student_key,
+        StudentSubmission.classwork_assignment_id == assignment_id,
+    ).all()
+    selected = None
+    for row in rows:
+        if row.grade is None:
+            continue
+        if selected is None or _submission_grade_sort_key(row) > _submission_grade_sort_key(selected):
+            selected = row
+    return selected.grade if selected is not None else None
+
+
 def effective_exam_score_for_change(db: Any, assignment: Any, student_id: Any, replacement: float | None) -> float | None:
     """Read the effective score with this attempt's score replaced."""
     from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -45,18 +79,11 @@ def effective_exam_score_for_change(db: Any, assignment: Any, student_id: Any, r
         StudentSubmission.classwork_assignment_id.in_(ids),
     ).all()
     selected = {}
-    def sort_key(row: Any) -> tuple[float, int]:
-        stamp = row.graded_at or row.submitted_at or row.created_at
-        if stamp is None:
-            return (0, row.submission_id)
-        if stamp.tzinfo is None:
-            stamp = stamp.replace(tzinfo=timezone.utc)
-        return (stamp.timestamp(), row.submission_id)
     for row in submissions:
         if row.grade is None:
             continue
         existing = selected.get(row.classwork_assignment_id)
-        if existing is None or sort_key(row) > sort_key(existing):
+        if existing is None or _submission_grade_sort_key(row) > _submission_grade_sort_key(existing):
             selected[row.classwork_assignment_id] = row
     scores = {key: float(row.grade) for key, row in selected.items()}
     scores[assignment.classwork_assignment_id] = replacement
@@ -112,10 +139,8 @@ def effective_grade_changed(db: Any, assignment: Any, student_id: Any, previous:
 
                 if asgn_id == link.remediation_assignment_id:
                     # Changing remediation grade
-                    orig_sub = db.query(StudentSubmission).filter_by(
-                        student_id=student_uuid, classwork_assignment_id=link.original_assignment_id
-                    ).first()
-                    orig_score = float(orig_sub.grade) if orig_sub and orig_sub.grade is not None else None
+                    orig_raw = latest_graded_submission_score(db, link.original_assignment_id, student_uuid)
+                    orig_score = float(orig_raw) if orig_raw is not None else None
                     if orig_score is None:
                         return False
                     try:
@@ -143,10 +168,8 @@ def effective_grade_changed(db: Any, assignment: Any, student_id: Any, previous:
                     return old_eff != new_eff
                 else:
                     # Changing original grade
-                    rem_sub = db.query(StudentSubmission).filter_by(
-                        student_id=student_uuid, classwork_assignment_id=link.remediation_assignment_id
-                    ).first()
-                    rem_score = float(rem_sub.grade) if rem_sub and rem_sub.grade is not None else None
+                    rem_raw = latest_graded_submission_score(db, link.remediation_assignment_id, student_uuid)
+                    rem_score = float(rem_raw) if rem_raw is not None else None
 
                     try:
                         old_adj = adjust_remediation_score(

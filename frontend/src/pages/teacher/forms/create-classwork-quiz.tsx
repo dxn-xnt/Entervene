@@ -82,10 +82,13 @@ import {
   switchQuestionType,
 } from "../classworks/quiz-question-rules";
 import { exportQuizPdf, exportQuizDocx } from "@/lib/quiz-export";
-import AIQuizGeneratorModal from "./ai-quiz-generator-modal";
+import AIQuizGeneratorModal, {
+  type RemediationQuizGeneratorConfig,
+} from "./ai-quiz-generator-modal";
 import type {
   TeacherInterventionDetail,
   RemediationFocus,
+  RemediationGenerationEligibility,
   RemediationResource,
   OriginalExamination,
   RemediationClassworkTarget,
@@ -131,6 +134,8 @@ interface CreateClassworkQuizModalProps {
   remediationOriginalTargets?: RemediationClassworkTarget[];
   initialTargetAssignmentId?: number | null;
   remediationReferences?: RemediationResource[];
+  remediationGenerationEligibility?: RemediationGenerationEligibility | null;
+  remediationScoreAdjustmentCap?: number | null;
   onClose: () => void;
   onSuccess: () => void;
   onBack: () => void;
@@ -153,21 +158,21 @@ const convertAiRemediationQuestions = (
       let options =
         q.question_type === "IDENTIFICATION"
           ? [
-              {
-                option_text: correctText,
-                is_correct: true,
-                option_order: 1,
-              },
-            ]
+            {
+              option_text: correctText,
+              is_correct: true,
+              option_order: 1,
+            },
+          ]
           : q.question_type === "SHORT_ANSWER"
             ? []
             : sortedOptions.map((opt, optIdx) => ({
-                option_text: opt.option_text,
-                is_correct:
-                  opt.option_text.trim().toLowerCase() ===
-                  correctText.toLowerCase(),
-                option_order: opt.option_order || optIdx + 1,
-              }));
+              option_text: opt.option_text,
+              is_correct:
+                opt.option_text.trim().toLowerCase() ===
+                correctText.toLowerCase(),
+              option_order: opt.option_order || optIdx + 1,
+            }));
       if (
         effectiveType === "MULTIPLE_CHOICE" &&
         options.length > 0 &&
@@ -223,6 +228,8 @@ export default function CreateClassworkQuizModal({
   remediationOriginalTargets = [],
   initialTargetAssignmentId = null,
   remediationReferences = [],
+  remediationGenerationEligibility = null,
+  remediationScoreAdjustmentCap = null,
   onClose,
   onSuccess,
   onBack,
@@ -539,9 +546,7 @@ export default function CreateClassworkQuizModal({
           ),
         );
         if (questionLessonIds.length > 0) {
-          setSelectedLessonIds((current) =>
-            Array.from(new Set([...current, ...questionLessonIds])),
-          );
+          setSelectedLessonIds(questionLessonIds);
         }
         loadedReuseClassworkIdRef.current = reuseSourceClassworkId;
         setQuizQuestions(mappedQuestions);
@@ -963,9 +968,11 @@ export default function CreateClassworkQuizModal({
       (!remediationOriginalExam ||
         draft.exam_subtype !== remediationOriginalExam.subtype ||
         Number(draft.total_points) !== remediationOriginalExam.total_points ||
-        Number(draft.max_attempts) !== 1)
+        !Number.isInteger(Number(draft.max_attempts)) ||
+        Number(draft.max_attempts) < 1 ||
+        Number(draft.max_attempts) > 3)
     )
-      return "Remedial Examination must match the original subtype and maximum points, with one quiz attempt.";
+      return "Remedial Examination must match the original subtype and maximum points, with up to 3 quiz attempts.";
     if (isGradedWWPT) {
       if (!selectedOriginalTarget)
         return "Select the original classwork to link this remediation activity.";
@@ -1178,11 +1185,18 @@ export default function CreateClassworkQuizModal({
 
         setAvailableLessons(lessons);
         setSelectedLessonIds((current) => {
-          let next = remediationFocus
-            ? Array.from(
+          const shouldMergeFocusLessons =
+            Boolean(remediationFocus) &&
+            !(
+              (initialQuizMode === "reuse" || initialQuizMode === "ai") &&
+              current.length > 0
+            );
+          let next =
+            shouldMergeFocusLessons && remediationFocus
+              ? Array.from(
                 new Set([...current, ...remediationFocus.lesson_ids]),
               ).filter((id) => uniqueLessons.has(id))
-            : current.filter((id) => uniqueLessons.has(id));
+              : current.filter((id) => uniqueLessons.has(id));
           if (
             next.length === 0 &&
             initialLessonId &&
@@ -1250,6 +1264,7 @@ export default function CreateClassworkQuizModal({
       status: draft.is_published ? "PUBLISHED" : "DRAFT",
       settings: {
         is_shuffle_questions: quizSettings.is_shuffle_questions,
+        is_shuffle_options: quizSettings.is_shuffle_options,
         enable_per_question_scoring: quizSettings.enable_per_question_scoring,
         enable_per_question_time_limits:
           quizSettings.enable_per_question_time_limits,
@@ -1999,12 +2014,13 @@ export default function CreateClassworkQuizModal({
                     <Field label="Grading Component">
                       <Select
                         value={draft.classwork_category}
-                        onValueChange={(val) =>
+                        onValueChange={(val) => {
+                          if (remediationDraft) return;
                           setDraft((current) => ({
                             ...current,
                             classwork_category: val,
-                          }))
-                        }
+                          }));
+                        }}
                         disabled={isCreating || remediationDraft}
                       >
                         <Select.Trigger className="w-full shadow-none">
@@ -2027,6 +2043,13 @@ export default function CreateClassworkQuizModal({
                           </Select.Group>
                         </Select.Content>
                       </Select>
+                      {remediationDraft && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {remediationGradeTreatment === "EXAMINATION"
+                            ? "Read-only: locked to match the targeted original examination."
+                            : "Read-only: locked to match the targeted original classwork's grading component."}
+                        </p>
+                      )}
                     </Field>
                   )}
 
@@ -2872,10 +2895,7 @@ export default function CreateClassworkQuizModal({
                           max_attempts: event.target.value,
                         }));
                       }}
-                      disabled={
-                        isCreating ||
-                        remediationGradeTreatment === "EXAMINATION"
-                      }
+                      disabled={isCreating}
                       className="w-full bg-white border-2 border-black rounded shadow-none"
                     />
                   </Field>
@@ -3801,6 +3821,169 @@ export default function CreateClassworkQuizModal({
           }
           subjects={subjects}
           remediationFocus={remediationFocus}
+          remediationConfig={
+            remediationTarget
+              ? (() => {
+                  const gradeTreatment: "WRITTEN_WORK" | "EXAMINATION" | "PRACTICE_ONLY" =
+                    remediationGradeTreatment === "EXAMINATION"
+                      ? "EXAMINATION"
+                      : remediationGradeTreatment === "WRITTEN_WORK"
+                        ? "WRITTEN_WORK"
+                        : "PRACTICE_ONLY";
+                  const targetComponent: "WRITTEN_WORK" | "EXAMINATION" =
+                    gradeTreatment === "EXAMINATION"
+                      ? "EXAMINATION"
+                      : gradeTreatment === "WRITTEN_WORK"
+                        ? "WRITTEN_WORK"
+                        : remediationFocus?.component === "EXAMINATION"
+                          ? "EXAMINATION"
+                          : "WRITTEN_WORK";
+                  const eligibleLessons =
+                    remediationGenerationEligibility?.eligible_taught_lessons?.length
+                      ? remediationGenerationEligibility.eligible_taught_lessons.map(
+                          (lesson) => ({
+                            lesson_id: lesson.lesson_id,
+                            title: lesson.title,
+                          }),
+                        )
+                      : availableLessons
+                          .filter((lesson) =>
+                            (remediationFocus?.lesson_ids ?? []).includes(
+                              lesson.lesson_id,
+                            ),
+                          )
+                          .map((lesson) => ({
+                            lesson_id: lesson.lesson_id,
+                            title: lesson.title,
+                          }));
+                  const targetId =
+                    gradeTreatment === "EXAMINATION"
+                      ? remediationOriginalExam?.assignment_id ?? null
+                      : gradeTreatment === "WRITTEN_WORK"
+                        ? selectedOriginalTarget?.assignment_id ??
+                          initialTargetAssignmentId ??
+                          null
+                        : null;
+                  const targetTitle =
+                    gradeTreatment === "EXAMINATION"
+                      ? remediationOriginalExam?.title ?? null
+                      : gradeTreatment === "WRITTEN_WORK"
+                        ? selectedOriginalTarget?.title ?? null
+                        : null;
+                  const lockedPoints =
+                    gradeTreatment === "EXAMINATION"
+                      ? remediationOriginalExam?.total_points ?? null
+                      : gradeTreatment === "WRITTEN_WORK"
+                        ? selectedOriginalTarget?.max_points ?? null
+                        : null;
+                  const readingIds = remediationReferences
+                    .filter((ref) => ref.kind === "CLASSWORK")
+                    .map((ref) => ref.id);
+                  const config: RemediationQuizGeneratorConfig = {
+                    interventionId: remediationTarget.intervention_id,
+                    targetComponent,
+                    gradeTreatment,
+                    examSubtype:
+                      targetComponent === "EXAMINATION"
+                        ? (remediationOriginalExam?.subtype ??
+                          remediationFocus?.exam_subtype ??
+                          "SUMMATIVE_1")
+                        : null,
+                    targetAssignmentId: targetId,
+                    targetAssignmentTitle: targetTitle,
+                    lockedTotalPoints: lockedPoints,
+                    scoreAdjustmentCap:
+                      gradeTreatment === "PRACTICE_ONLY"
+                        ? null
+                        : (remediationScoreAdjustmentCap ?? 75),
+                    eligibleLessons,
+                    competencyLabels:
+                      remediationFocus?.competencies?.map((c) => c.label) ?? [],
+                    selectedReadingIds: readingIds,
+                    onRemediationGenerated: (generatedDraft) => {
+                      const fallbackLessonId =
+                        eligibleLessons[0]?.lesson_id ?? initialLessonId ?? null;
+                      const mappedQuestions = convertAiRemediationQuestions(
+                        generatedDraft,
+                        fallbackLessonId,
+                      );
+                      const derivedLessonIds = Array.from(
+                        new Set(
+                          generatedDraft.questions
+                            .map((q) => q.targeted_lesson_id)
+                            .filter(
+                              (id): id is number =>
+                                typeof id === "number" && id > 0,
+                            ),
+                        ),
+                      );
+                      const nextLessonIds =
+                        derivedLessonIds.length > 0
+                          ? derivedLessonIds
+                          : eligibleLessons.map((lesson) => lesson.lesson_id);
+                      setQuizQuestions(
+                        reconcileQuestionLessonMappings(
+                          mappedQuestions.length > 0
+                            ? mappedQuestions
+                            : [createEmptyQuizQuestion(1)],
+                          nextLessonIds,
+                        ),
+                      );
+                      setQuizImportWarnings([]);
+                      setQuizImportNotices([]);
+                      setQuizImportSummary(null);
+                      setAiLinkedLessonTitles(
+                        eligibleLessons
+                          .filter((lesson) =>
+                            nextLessonIds.includes(lesson.lesson_id),
+                          )
+                          .map((lesson) => lesson.title),
+                      );
+                      setAiLinkedSubjectName(
+                        subjects.find((s) => s.id === Number(draft.subject_id))
+                          ?.name,
+                      );
+                      setDraft((current) => ({
+                        ...current,
+                        title: generatedDraft.title?.trim() || current.title,
+                        instructions:
+                          generatedDraft.instructions?.trim() ||
+                          current.instructions,
+                        total_points:
+                          lockedPoints != null
+                            ? String(lockedPoints)
+                            : String(generatedDraft.total_points),
+                        max_attempts: String(
+                          Math.min(
+                            3,
+                            Math.max(1, Number(current.max_attempts || 3)),
+                          ),
+                        ),
+                      }));
+                      if (generatedDraft.duration_minutes) {
+                        setQuizSettings((current) => ({
+                          ...current,
+                          duration_minutes: String(
+                            generatedDraft.duration_minutes,
+                          ),
+                          max_attempts: String(
+                            Math.min(
+                              3,
+                              Math.max(1, Number(current.max_attempts || 3)),
+                            ),
+                          ),
+                        }));
+                      }
+                      if (nextLessonIds.length > 0) {
+                        setSelectedLessonIds(nextLessonIds);
+                      }
+                      setCreateStep("details");
+                    },
+                  };
+                  return config;
+                })()
+              : null
+          }
           onGenerated={(
             questions,
             warnings,

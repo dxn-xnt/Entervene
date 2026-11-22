@@ -1,7 +1,32 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+FORBIDDEN_QUIZ_COMPONENT_AND_LINK_FIELDS = frozenset({
+    "classwork_category",
+    "exam_subtype",
+    "is_graded",
+    "classwork_type",
+    "source_intervention_id",
+    "recipient_student_id",
+    "remediation_request_id",
+    "original_exam_assignment_id",
+    "original_classwork_assignment_id",
+    "remediation_link_id",
+    "intervention_id",
+})
+
+
+def _reject_forged_quiz_component_or_link_fields(data: object) -> object:
+    if isinstance(data, dict):
+        forbidden = sorted(FORBIDDEN_QUIZ_COMPONENT_AND_LINK_FIELDS.intersection(data.keys()))
+        if forbidden:
+            raise ValueError(
+                f"Grading component and remediation linkage fields cannot be modified via quiz endpoints: {', '.join(forbidden)}"
+            )
+    return data
 
 
 class QuizOptionIn(BaseModel):
@@ -39,6 +64,11 @@ class QuizBuilderUpsert(BaseModel):
     status: str = "DRAFT"
     settings: QuizSettingIn = Field(default_factory=QuizSettingIn)
     questions: list[QuizQuestionIn] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_component_or_link_tampering(cls, data: object):
+        return _reject_forged_quiz_component_or_link_fields(data)
 
 
 class QuizImportNotice(BaseModel):
@@ -112,6 +142,11 @@ class QuizResultsSettingsUpdate(BaseModel):
     summary_release_at: Optional[datetime] = None
     confirm_answer_reveal: bool = False
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_component_or_link_tampering(cls, data: object):
+        return _reject_forged_quiz_component_or_link_fields(data)
+
 
 class QuizResultsSettingsResponse(BaseModel):
     classwork_id: int
@@ -132,6 +167,11 @@ class QuizConfigurationUpdate(BaseModel):
     enable_per_question_scoring: bool
     enable_per_question_time_limits: bool
     max_attempts: int = Field(ge=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_component_or_link_tampering(cls, data: object):
+        return _reject_forged_quiz_component_or_link_fields(data)
 
 
 class QuizConfigurationResponse(QuizConfigurationUpdate):
@@ -206,6 +246,7 @@ class QuizAttemptResponse(BaseModel):
     can_submit: bool
     is_intervention_quiz: bool = False
     is_passed: bool = False
+    needs_teacher_review: bool = False
     passing_threshold: Optional[float] = None
     show_scores: bool = True
     summary_available: bool = False

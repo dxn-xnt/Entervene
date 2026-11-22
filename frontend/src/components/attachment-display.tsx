@@ -21,6 +21,7 @@ interface AttachmentDisplayProps {
   attachments: Attachment[];
   downloadUrl?: (attachmentId: number) => string;
   type?: "classwork" | "lesson" | "submission";
+  action?: React.ReactNode | ((attachment: Attachment, index: number) => React.ReactNode);
 }
 
 function formatFileSize(bytes: number): string {
@@ -39,6 +40,7 @@ export default function AttachmentDisplay({
   attachments,
   downloadUrl,
   type = "classwork",
+  action,
 }: AttachmentDisplayProps) {
   const [selectedDocument, setSelectedDocument] = useState<{
     blob: Blob;
@@ -372,6 +374,9 @@ export default function AttachmentDisplay({
                     >
                       Download
                     </Button>
+                  )}
+                  {action && (
+                    typeof action === "function" ? action(attachment, idx) : action
                   )}
                 </div>
               </Card>

@@ -13,7 +13,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { BookOpen } from "lucide-react";
 import { Button } from "@/components/student/button";
-import { StudentSubjectSectionCard } from "@/components/student/student-subject-section-card";
+import { SubjectCard } from "@/components/subject-card";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 const Subjects = () => {
@@ -92,7 +92,9 @@ const Subjects = () => {
               ) : (
                 <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {subjects.map((subject) => (
-                    <StudentSubjectSectionCard
+                    <SubjectCard
+                      variant="student"
+                      className="shadow-md rounded"
                       key={subject.subject_load_id}
                       to={subjectHref(subject)}
                       subjectName={subject.subject_name}

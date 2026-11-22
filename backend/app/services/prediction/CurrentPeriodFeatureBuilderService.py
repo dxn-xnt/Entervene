@@ -104,10 +104,15 @@ def _select_submission(
     timestamps = [_evidence_time(submission) for submission in graded]
     if any(value is None for value in timestamps):
         return None, True
-    latest = max(_as_utc(value) for value in timestamps if value is not None)
-    if sum(_as_utc(value) == latest for value in timestamps if value is not None) != 1:
+    keys = [
+        (_as_utc(value), int(submission.attempt_count or 0))
+        for submission, value in zip(graded, timestamps)
+        if value is not None
+    ]
+    latest = max(keys)
+    if sum(key == latest for key in keys) != 1:
         return None, True
-    return graded[[_as_utc(value) for value in timestamps].index(latest)], False
+    return graded[keys.index(latest)], False
 
 
 def _classwork_rows(

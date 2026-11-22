@@ -20,6 +20,7 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.attendance.Attendance import AttendanceRecord
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -49,6 +50,7 @@ from app.services.activity.TeacherDashboardMetrics import (
     summarize_dashboard_lesson_performance,
 )
 from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 
 
 def format_count(val: int | float | None) -> str:
@@ -96,11 +98,176 @@ def get_target_period(
     return resolve_active_academic_period(db)
 
 
+def _build_enrollment_engagement_trend(
+    db: Session,
+    target_period: AcademicPeriod | None,
+    enrollments: list[StudentClass],
+    active_class_ids: set[int],
+    now_dt: datetime,
+    *,
+    max_weeks: int = 8,
+) -> list[dict[str, Any]]:
+    """Build school-year weekly cumulative enrollment vs. active learner participation up to today.
+
+    Scoped to the selected academic year (not limited to one term) so selecting an
+    upcoming term still preserves real historical weekly participation from earlier
+    terms in the same academic year without fabricating future data.
+    """
+    if target_period is None or not enrollments or not active_class_ids:
+        return []
+
+    year_id = target_period.academic_year_id
+    academic_year = target_period.academic_year or db.get(AcademicYear, year_id)
+    if academic_year is None:
+        return []
+
+    year_periods = (
+        db.query(AcademicPeriod)
+        .filter(AcademicPeriod.academic_year_id == year_id)
+        .order_by(AcademicPeriod.period_sequence.asc(), AcademicPeriod.academic_period_id.asc())
+        .all()
+    )
+    period_starts = [p.start_date for p in year_periods if p.start_date is not None]
+    period_ends = [p.end_date for p in year_periods if p.end_date is not None]
+
+    year_start = min(
+        [d for d in [academic_year.start_date, *period_starts] if d is not None],
+        default=None,
+    )
+    year_end = max(
+        [d for d in [academic_year.end_date, *period_ends] if d is not None],
+        default=None,
+    )
+    if year_start is None or year_end is None or year_end < year_start:
+        return []
+
+    manila_tz = ZoneInfo("Asia/Manila")
+    today = now_dt.astimezone(manila_tz).date()
+    if today < year_start:
+        return []
+
+    window_end = min(today, year_end)
+
+    # Earliest recorded enrollment date per distinct enrolled student in active classes
+    enrolled_dates: dict[Any, Any] = {}
+    for row in enrollments:
+        enrolled_dt = row.enrolled_at
+        if enrolled_dt is not None:
+            enrolled_date = _dashboard_aware_datetime(enrolled_dt).astimezone(manila_tz).date()
+        else:
+            enrolled_date = year_start
+        existing = enrolled_dates.get(row.student_id)
+        if existing is None or enrolled_date < existing:
+            enrolled_dates[row.student_id] = enrolled_date
+
+    if not enrolled_dates:
+        return []
+
+    # Build chronological weekly buckets from year_start through window_end
+    weeks: list[tuple[int, Any, Any]] = []
+    week_start = year_start
+    week_num = 1
+    while week_start <= window_end:
+        week_end = min(week_start + timedelta(days=6), window_end)
+        weeks.append((week_num, week_start, week_end))
+        week_start = week_start + timedelta(days=7)
+        week_num += 1
+
+    if len(weeks) > max_weeks:
+        weeks = weeks[-max_weeks:]
+
+    year_period_ids = [p.academic_period_id for p in year_periods]
+    year_assignments_ids = [
+        row[0]
+        for row in (
+            db.query(ClassworkAssignment.classwork_assignment_id)
+            .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
+            .filter(
+                ClassworkAssignment.academic_period_id.in_(year_period_ids),
+                ClassworkAssignment.class_id.in_(active_class_ids),
+                ClassworkAssignment.is_published.is_(True),
+                Classwork.is_archived.is_(False),
+            )
+            .all()
+        )
+    ] if year_period_ids else []
+
+    year_submissions = (
+        db.query(StudentSubmission)
+        .filter(
+            StudentSubmission.classwork_assignment_id.in_(year_assignments_ids),
+            StudentSubmission.student_id.in_(set(enrolled_dates)),
+        )
+        .all()
+        if year_assignments_ids else []
+    )
+
+    year_attendance = (
+        db.query(AttendanceRecord)
+        .filter(
+            AttendanceRecord.class_id.in_(active_class_ids),
+            AttendanceRecord.student_id.in_(set(enrolled_dates)),
+            AttendanceRecord.date >= year_start,
+            AttendanceRecord.date <= window_end,
+        )
+        .all()
+    )
+
+    # Pre-collect participation dates per enrolled student (submissions + attendance)
+    active_dates_by_student: dict[Any, list[Any]] = {}
+    for sub in year_submissions:
+        if sub.student_id not in enrolled_dates:
+            continue
+        status = (sub.status or "").strip().lower()
+        if status not in {"submitted", "late", "graded"} and (sub.attempt_count or 0) <= 0:
+            continue
+        activity_dt = sub.submitted_at or sub.graded_at or sub.created_at
+        if activity_dt is None:
+            continue
+        activity_date = _dashboard_aware_datetime(activity_dt).astimezone(manila_tz).date()
+        if year_start <= activity_date <= window_end:
+            active_dates_by_student.setdefault(sub.student_id, []).append(activity_date)
+
+    for rec in year_attendance:
+        if rec.student_id not in enrolled_dates or rec.date is None:
+            continue
+        if (rec.status or "").strip().lower() in {"present", "late"}:
+            active_dates_by_student.setdefault(rec.student_id, []).append(rec.date)
+
+    trend: list[dict[str, Any]] = []
+    for num, w_start, w_end in weeks:
+        enrolled_count = sum(1 for dt in enrolled_dates.values() if dt <= w_end)
+        active_count = sum(
+            1
+            for sid, dates in active_dates_by_student.items()
+            if enrolled_dates[sid] <= w_end and any(w_start <= d <= w_end for d in dates)
+        )
+        trend.append({
+            "week": f"Wk {num}",
+            "count": enrolled_count,
+            "active": active_count,
+            "start_date": w_start.isoformat(),
+            "end_date": w_end.isoformat(),
+        })
+    return trend
+
+
 def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> dict[str, Any]:
     period_name = target_period.period_name if target_period else "Current Term"
     academic_year_label = ""
     if target_period and target_period.academic_year:
         academic_year_label = target_period.academic_year.year_label
+
+    now_dt = _dashboard_aware_datetime(_teacher_dashboard_now())
+    today_manila = now_dt.astimezone(ZoneInfo("Asia/Manila")).date()
+    period_state = (
+        SubjectLoadAuthorizationService.classify_academic_period(
+            db, target_period, as_of=today_manila,
+        ).value
+        if target_period is not None else "CURRENT"
+    )
+    is_upcoming_period = period_state == "FUTURE"
+    year_label_display = academic_year_label or period_name
 
     period_id = target_period.academic_period_id if target_period else None
     year_id = target_period.academic_year_id if target_period else None
@@ -109,7 +276,8 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
         *((StudentClass.academic_year_id == year_id,) if year_id is not None else ()),
     ).scalar() or 0
     total_students = enrolled_students
-    load_filters = [SubjectLoad.is_active_version.is_(True), SubjectLoad.status.in_(["active", "published"])]
+    base_load_filters = [SubjectLoad.is_active_version.is_(True), SubjectLoad.status.in_(["active", "published"])]
+    load_filters = list(base_load_filters)
     if period_id is not None:
         load_filters.append(SubjectLoad.academic_period_id == period_id)
     active_staff_loads = db.query(func.count(distinct(SubjectLoad.staff_id))).join(
@@ -118,7 +286,13 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
         *load_filters,
         *((Class.academic_year_id == year_id,) if year_id is not None else ()),
     ).scalar() or 0
-    total_staff = active_staff_loads
+    year_active_staff = db.query(func.count(distinct(SubjectLoad.staff_id))).join(
+        Class, Class.class_id == SubjectLoad.class_id,
+    ).filter(
+        *base_load_filters,
+        *((Class.academic_year_id == year_id,) if year_id is not None else ()),
+    ).scalar() or 0
+    total_staff = year_active_staff
     total_classes = db.query(Class).filter(*((Class.academic_year_id == year_id,) if year_id is not None else ())).count()
     active_classes = db.query(Class).filter(
         Class.class_status == "active", *((Class.academic_year_id == year_id,) if year_id is not None else ()),
@@ -129,7 +303,29 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
         *load_filters,
         *((Class.academic_year_id == year_id,) if year_id is not None else ()),
     ).scalar() or 0
-    total_subjects = active_subjects
+    year_load_subject_ids = {
+        row[0]
+        for row in db.query(distinct(SubjectLoad.subject_id)).join(
+            Class, Class.class_id == SubjectLoad.class_id,
+        ).filter(
+            *base_load_filters,
+            *((Class.academic_year_id == year_id,) if year_id is not None else ()),
+        ).all()
+    }
+    year_offering_subject_ids = {
+        row[0]
+        for row in db.query(distinct(SubjectOffering.subject_id)).filter(
+            *((SubjectOffering.academic_year_id == year_id,) if year_id is not None else ()),
+        ).all()
+    } if year_id is not None else set()
+    year_subjects = len(year_load_subject_ids | year_offering_subject_ids)
+    period_offered_subjects = (
+        db.query(func.count(distinct(SubjectOffering.subject_id))).filter(
+            SubjectOffering.academic_period_id == period_id,
+            *((SubjectOffering.academic_year_id == year_id,) if year_id is not None else ()),
+        ).scalar() or 0
+    ) if period_id is not None else 0
+    total_subjects = year_subjects
 
     # One selected-period roster drives every grade-level denominator. This
     # prevents withdrawn learners and records from another year from leaking
@@ -146,6 +342,7 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
     enrolled_by_class: dict[int, set[Any]] = {
         class_id: set() for class_id in active_class_ids
     }
+    enrollments: list[StudentClass] = []
     if active_class_ids:
         enrollments = db.query(StudentClass).filter(
             StudentClass.class_id.in_(active_class_ids),
@@ -305,34 +502,49 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
     total_assessments = cw_count + quiz_count
 
     ratio_str = f"{total_students / total_staff:.1f} : 1" if total_staff else "—"
+    subjects_term_stat = (
+        str(active_subjects)
+        if active_subjects > 0
+        else str(period_offered_subjects)
+        if period_offered_subjects > 0
+        else "0"
+    )
+    subjects_term_desc = (
+        f"assigned in {period_name}"
+        if active_subjects > 0
+        else f"offered in {period_name}"
+        if period_offered_subjects > 0
+        else f"assigned in {period_name}"
+    )
+    unrecorded_term_stat = "Upcoming" if is_upcoming_period else "Not calculated"
 
     cards = [
         {
             "title": "Students",
             "count": format_count(total_students),
             "stat": str(enrolled_students),
-            "statDescription": f"enrolled in {period_name}",
+            "statDescription": f"enrolled in {year_label_display}",
             "rawCount": total_students,
         },
         {
             "title": "Teachers",
             "count": format_count(total_staff),
             "stat": str(active_staff_loads),
-            "statDescription": f"teaching in {period_name}",
+            "statDescription": f"assigned in {period_name}",
             "rawCount": total_staff,
         },
         {
             "title": "Classes",
             "count": format_count(total_classes),
             "stat": str(active_classes),
-            "statDescription": f"active in {period_name}",
+            "statDescription": f"active in {year_label_display}",
             "rawCount": total_classes,
         },
         {
             "title": "Subjects",
             "count": format_count(total_subjects),
-            "stat": str(active_subjects),
-            "statDescription": f"active in {period_name}",
+            "stat": subjects_term_stat,
+            "statDescription": subjects_term_desc,
             "rawCount": total_subjects,
         },
         {
@@ -344,7 +556,7 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
             "stat": (
                 f"{overall_grade_summary.passing_count} of "
                 f"{overall_grade_summary.available_grade_count} recorded grades passing"
-                if overall_grade_summary.passing_count is not None else "Not calculated"
+                if overall_grade_summary.passing_count is not None else unrecorded_term_stat
             ),
             "statDescription": period_name,
         },
@@ -354,7 +566,7 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
             "stat": (
                 f"{overall_attendance.present_count + overall_attendance.late_count} of "
                 f"{overall_attendance.record_count} recorded entries"
-                if overall_attendance.record_count else "Not calculated"
+                if overall_attendance.record_count else unrecorded_term_stat
             ),
             "statDescription": period_name,
         },
@@ -362,11 +574,11 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
             "title": "Student-Teacher Ratio",
             "count": ratio_str,
             "stat": f"{total_students} students",
-            "statDescription": f"per {total_staff} active teachers",
+            "statDescription": f"per {total_staff} active teachers ({year_label_display})",
         },
         {
             "title": "New Enrollments",
-            "count": "—", "stat": "Not calculated", "statDescription": period_name,
+            "count": "—", "stat": unrecorded_term_stat, "statDescription": period_name,
         },
         {
             "title": "Ungraded Backlog",
@@ -378,17 +590,25 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
             "title": "Assessments Published",
             "count": str(total_assessments),
             "stat": f"{cw_count} classworks · {quiz_count} quizzes",
-            "statDescription": "this term",
+            "statDescription": period_name,
         },
         {
             "title": "Submission Completion",
-            "count": "—", "stat": "Not calculated", "statDescription": period_name,
+            "count": "—", "stat": unrecorded_term_stat, "statDescription": period_name,
         },
         {
             "title": "Term Progress",
-            "count": "—", "stat": "Calendar period", "statDescription": period_name, "progressValue": 0,
+            "count": "—", "stat": "Upcoming" if is_upcoming_period else "Calendar period", "statDescription": period_name, "progressValue": 0,
         },
     ]
+
+    enrollment_trend = _build_enrollment_engagement_trend(
+        db,
+        target_period,
+        enrollments,
+        active_class_ids,
+        now_dt,
+    )
 
     return {
         "term_info": {
@@ -400,11 +620,17 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
         },
         "cards": cards,
         "details": {
+            "period_state": period_state,
+            "enrollment_trend_scope": "academic_year",
             "students": {"total": total_students, "enrolled": enrolled_students},
             "teachers": {"total": total_staff, "active_loads": active_staff_loads},
             "classes": {"total": total_classes, "active": active_classes},
-            "subjects": {"total": total_subjects, "active": active_subjects},
-            "enrollment_trend": [],
+            "subjects": {
+                "total": total_subjects,
+                "active": active_subjects,
+                "offered_in_period": period_offered_subjects,
+            },
+            "enrollment_trend": enrollment_trend,
             "students_per_grade": [
                 {"grade": row["grade"], "count": row["students"]}
                 for row in grade_health
@@ -734,6 +960,69 @@ def build_subject_overview(
         ClassworkLesson.classwork_id.in_(db.query(scoped_classwork_ids.c.classwork_id)),
     ).scalar() or 0
 
+    # Calculate Students Average Grade from finalized period grades or graded submissions
+    grade_q = db.query(func.avg(StudentPeriodGrade.final_period_grade)).filter(
+        StudentPeriodGrade.subject_id == subject_id,
+        *((StudentPeriodGrade.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+    )
+    avg_grade_val = grade_q.scalar()
+
+    if avg_grade_val is None:
+        sub_grade_q = (
+            db.query(
+                func.sum(StudentSubmission.grade),
+                func.sum(Classwork.total_points),
+            )
+            .join(ClassworkAssignment, ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id)
+            .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+            .join(Class, Class.class_id == ClassworkAssignment.class_id)
+            .filter(
+                Classwork.subject_id == subject_id,
+                Classwork.is_archived.is_(False),
+                StudentSubmission.status == "graded",
+                StudentSubmission.grade.isnot(None),
+                Classwork.total_points > 0,
+                *((ClassworkAssignment.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+                *((Class.academic_year_id == target_period.academic_year_id,) if target_period else ()),
+            )
+        )
+        earned_sum, total_sum = sub_grade_q.first() or (None, None)
+        if earned_sum is not None and total_sum and float(total_sum) > 0:
+            avg_grade_val = round((float(earned_sum) / float(total_sum)) * 100, 1)
+
+    avg_grade_num = round(float(avg_grade_val), 1) if avg_grade_val is not None else None
+    avg_grade_str = f"{avg_grade_num}%" if avg_grade_num is not None else "--"
+
+    # Calculate Overall Class Mastery from graded submissions
+    mastery_q = (
+        db.query(
+            func.sum(StudentSubmission.grade),
+            func.sum(Classwork.total_points),
+        )
+        .join(ClassworkAssignment, ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id)
+        .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+        .join(Class, Class.class_id == ClassworkAssignment.class_id)
+        .filter(
+            Classwork.subject_id == subject_id,
+            Classwork.is_archived.is_(False),
+            StudentSubmission.status == "graded",
+            StudentSubmission.grade.isnot(None),
+            Classwork.total_points > 0,
+            *((ClassworkAssignment.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+            *((Class.academic_year_id == target_period.academic_year_id,) if target_period else ()),
+        )
+    )
+    m_earned, m_possible = mastery_q.first() or (None, None)
+    if m_earned is not None and m_possible and float(m_possible) > 0:
+        mastery_pct = round((float(m_earned) / float(m_possible)) * 100)
+        mastery_str = f"{mastery_pct}%"
+    elif avg_grade_num is not None:
+        mastery_pct = round(avg_grade_num)
+        mastery_str = f"{mastery_pct}%"
+    else:
+        mastery_pct = None
+        mastery_str = "--"
+
     cards = [
         {
             "title": "Total Classes",
@@ -743,25 +1032,25 @@ def build_subject_overview(
             "rawCount": subj_classes,
         },
         {
-            "title": "Teachers",
-            "count": format_count(subj_teachers),
-            "stat": str(subj_teachers),
-            "statDescription": f"assigned faculty in {period_name}",
-            "rawCount": subj_teachers,
+            "title": "Active Classes",
+            "count": format_count(subj_classes),
+            "stat": str(subj_classes),
+            "statDescription": f"active sections in {period_name}",
+            "rawCount": subj_classes,
         },
         {
-            "title": "Lessons",
-            "count": format_count(lessons_count),
-            "stat": str(lessons_count),
-            "statDescription": f"learning modules in {period_name}",
-            "rawCount": lessons_count,
+            "title": "Overall Class Mastery",
+            "count": mastery_str,
+            "stat": mastery_str,
+            "statDescription": "Average performance across lessons",
+            "rawCount": mastery_pct,
         },
         {
-            "title": "Classworks",
-            "count": format_count(classworks_count),
-            "stat": str(classworks_count),
-            "statDescription": f"activities & quizzes in {period_name}",
-            "rawCount": classworks_count,
+            "title": "Students Average Grade",
+            "count": avg_grade_str,
+            "stat": avg_grade_str,
+            "statDescription": "Average recorded student grade",
+            "rawCount": avg_grade_num,
         },
     ]
 
@@ -781,6 +1070,8 @@ def build_subject_overview(
             "teachers_count": subj_teachers,
             "lessons_count": lessons_count,
             "classworks_count": classworks_count,
+            "overall_class_mastery": mastery_pct,
+            "students_average_grade": avg_grade_num,
         },
     }
 

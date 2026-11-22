@@ -131,72 +131,88 @@ export default function StudentInterventions() {
                 (left, right) => left.order - right.order
               );
 
+              const canOpenActivity =
+                (!historical && !locked && !preparationBlocked) ||
+                canReviewResolvedCompleted;
+
               return (
-                <Card
-                  key={activity.assignment_id}
-                  className="w-full space-y-4 border-2 border-border bg-card p-3 shadow-none sm:p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h4 className="break-words text-base font-bold sm:text-lg">
-                        {activity.title}
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        {activity.classwork_type === "QUIZ"
-                          ? "Quiz"
-                          : activity.classwork_type === "ASSIGNMENT"
-                            ? "Assignment"
-                            : activity.classwork_type}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {activity.grade != null && activity.total_points != null && (
-                        <Badge variant="outline" size="sm">
-                          Score: {activity.grade}/{activity.total_points}
-                        </Badge>
-                      )}
-                      {activity.submission_status && (
-                        <Badge variant={finished ? "solid" : "outline"} size="sm" className="capitalize">
-                          {activity.submission_status === "graded"
-                            ? "Completed"
-                            : activity.submission_status === "submitted"
-                              ? "Submitted"
-                              : activity.submission_status}
-                        </Badge>
-                      )}
-                      <Badge
-                        variant={
-                          canReviewResolvedCompleted
-                            ? "outline"
-                            : historical
-                              ? "default"
-                              : locked
-                                ? "outline"
-                                : "success"
-                        }
-                        size="sm"
-                        className="gap-1"
-                      >
-                        {historical ? (
-                          <History className="size-3.5" />
-                        ) : locked ? (
-                          <LockKeyhole className="size-3.5" />
-                        ) : (
-                          <CheckCircle2 className="size-3.5" />
+                <div key={activity.assignment_id} className="space-y-2">
+                  <ClassworkItemLine
+                    className="border-2! shadow-none!"
+                    item={{
+                      classwork_id: activity.assignment_id,
+                      title: activity.title,
+                      classwork_type: activity.classwork_type,
+                    }}
+                    subtitle={
+                      activity.classwork_type === "QUIZ"
+                        ? "Quiz"
+                        : activity.classwork_type === "ASSIGNMENT"
+                          ? "Assignment"
+                          : activity.classwork_type
+                    }
+                    onClick={
+                      canOpenActivity
+                        ? () => navigate(classworkLink(activity.assignment_id, interventionId))
+                        : undefined
+                    }
+                    showPublicationStatus={false}
+                    showCategory={false}
+                    showType={false}
+                    rightContent={
+                      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                        {activity.grade != null && activity.total_points != null && (
+                          <Badge variant="outline" size="sm">
+                            Score: {activity.grade}/{activity.total_points}
+                          </Badge>
                         )}
-                        {canReviewResolvedCompleted
-                          ? "Review"
-                          : historical
-                            ? "Unavailable"
-                            : locked
-                              ? "Locked"
-                              : "Ready"}
-                      </Badge>
-                    </div>
-                  </div>
+                        {activity.submission_status && (
+                          <Badge
+                            variant={finished ? "solid" : "outline"}
+                            size="sm"
+                            className="capitalize"
+                          >
+                            {activity.submission_status === "graded"
+                              ? "Completed"
+                              : activity.submission_status === "submitted"
+                                ? "Submitted"
+                                : activity.submission_status}
+                          </Badge>
+                        )}
+                        <Badge
+                          variant={
+                            canReviewResolvedCompleted
+                              ? "outline"
+                              : historical
+                                ? "default"
+                                : locked
+                                  ? "outline"
+                                  : "success"
+                          }
+                          size="sm"
+                          className="gap-1"
+                        >
+                          {historical ? (
+                            <History className="size-3.5" />
+                          ) : locked ? (
+                            <LockKeyhole className="size-3.5" />
+                          ) : (
+                            <CheckCircle2 className="size-3.5" />
+                          )}
+                          {canReviewResolvedCompleted
+                            ? "Review"
+                            : historical
+                              ? "Unavailable"
+                              : locked
+                                ? "Locked"
+                                : "Ready"}
+                        </Badge>
+                      </div>
+                    }
+                  />
 
                   {activity.preparation && (
-                    <div className="flex items-center gap-2 text-sm font-semibold">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground px-1">
                       <BookOpen className="size-4 shrink-0" />
                       {activity.preparation.completed_count} of {activity.preparation.required_count}{" "}
                       reviewed
@@ -204,8 +220,8 @@ export default function StudentInterventions() {
                   )}
 
                   {orderedReadings.length > 0 && (
-                    <div className="space-y-2" aria-label={`Required readings for ${activity.title}`}>
-                      <p className="text-sm font-bold">Required Supporting Readings</p>
+                    <div className="ml-4 space-y-2 border-l-2 border-border pl-3" aria-label={`Required readings for ${activity.title}`}>
+                      <p className="text-xs font-bold text-muted-foreground">Required Supporting Readings</p>
                       {orderedReadings.map((reading) => {
                         const isReviewed = reading.review_status === "REVIEWED";
                         return (
@@ -263,44 +279,20 @@ export default function StudentInterventions() {
                       Some required readings are unavailable. Your teacher needs to update this activity before you can continue.
                     </Alert>
                   ) : locked ? (
-                    <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <LockKeyhole className="mt-0.5 size-4 shrink-0" />
+                    <p className="flex items-start gap-2 text-xs sm:text-sm text-muted-foreground px-1">
+                      <LockKeyhole className="mt-0.5 size-3.5 shrink-0" />
                       Complete all Supporting Readings before opening this activity.
                     </p>
                   ) : canReviewResolvedCompleted ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm text-muted-foreground">
-                        This support has ended. Your saved result remains available for review.
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        autoIcon={false}
-                        className="gap-2"
-                        onClick={() => navigate(classworkLink(activity.assignment_id, interventionId))}
-                      >
-                        <ExternalLink className="size-4" />
-                        View Results
-                      </Button>
-                    </div>
+                    <p className="text-xs sm:text-sm text-muted-foreground px-1">
+                      This support has ended. Your saved result remains available for review.
+                    </p>
                   ) : historical ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs sm:text-sm text-muted-foreground px-1">
                       {activity.prerequisite_message || "This activity is no longer available."}
                     </p>
-                  ) : (
-                    <div className="flex justify-end">
-                      <Button
-                        size="sm"
-                        autoIcon={false}
-                        className="gap-2"
-                        onClick={() => navigate(classworkLink(activity.assignment_id, interventionId))}
-                      >
-                        <ExternalLink className="size-4" />
-                        {finished ? "View Activity" : "Start Activity"}
-                      </Button>
-                    </div>
-                  )}
-                </Card>
+                  ) : null}
+                </div>
               );
             })}
           </div>

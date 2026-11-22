@@ -96,6 +96,18 @@ export interface SubmissionLink {
   position: number;
 }
 
+export interface SubmissionAttemptSummary {
+  submission_id: number;
+  attempt_count: number;
+  status: string;
+  submitted_at?: string | null;
+  graded_at?: string | null;
+  grade?: number | null;
+  feedback?: string | null;
+  attachments: SubmissionAttachment[];
+  links?: SubmissionLink[];
+}
+
 export interface Submission {
   submission_id: number;
   classwork_assignment_id?: number;
@@ -106,6 +118,15 @@ export interface Submission {
   attempt_count: number;
   attachments: SubmissionAttachment[];
   links?: SubmissionLink[];
+  is_intervention_assessment?: boolean;
+  max_attempts?: number | null;
+  attempts_used?: number | null;
+  attempts_remaining?: number | null;
+  is_passed?: boolean;
+  passing_threshold?: number | null;
+  needs_teacher_review?: boolean;
+  can_retry?: boolean;
+  attempt_history?: SubmissionAttemptSummary[];
 }
 
 export interface QuizAttemptOption {
@@ -148,6 +169,7 @@ export interface QuizAttempt {
   can_submit: boolean;
   is_intervention_quiz?: boolean;
   is_passed?: boolean;
+  needs_teacher_review?: boolean;
   passing_threshold?: number | null;
   show_scores?: boolean;
   summary_available: boolean;

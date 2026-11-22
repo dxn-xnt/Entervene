@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import type { StudentLesson } from "@/types/student-subject";
 
-export const MASTERY_THRESHOLD_HIGH = 80;
-export const MASTERY_THRESHOLD_MODERATE = 50;
+export const MASTERY_THRESHOLD_HIGH = 85;
+export const MASTERY_THRESHOLD_MODERATE = 75;
 
 export type MasteryLevelId = "not_yet_rated" | "low" | "moderate" | "high";
 
@@ -39,6 +39,7 @@ export interface ComputedMasteryResult {
   badgeClass: string;
   colorClass: string;
   bgClass: string;
+  fillColor: string;
   icon: LucideIcon;
   percentage: number | null;
   earnedPoints: number;
@@ -160,6 +161,7 @@ export function classifyMasteryPercentage(
       badgeClass: "bg-muted text-black border-2 border-black font-bold",
       colorClass: "text-muted-foreground",
       bgClass: "bg-retro bg-muted/40 border-border",
+      fillColor: "none",
       icon: ScanFace,
       percentage: null,
       description:
@@ -179,6 +181,7 @@ export function classifyMasteryPercentage(
       badgeClass: "bg-[#00e65f] text-black border-2 border-black font-bold",
       colorClass: "text-[#00e65f] dark:text-[#00e65f]",
       bgClass: "bg-retro bg-[#00e65f]/20 border-border",
+      fillColor: "#00e65f",
       icon: FaceSlightlySmiling,
       percentage: clamped,
       description: "You've got this down. Keep shining!",
@@ -194,6 +197,7 @@ export function classifyMasteryPercentage(
       badgeClass: "bg-[#ff9233] text-black border-2 border-black font-bold",
       colorClass: "text-[#ff9233] dark:text-[#ff9233]",
       bgClass: "bg-retro bg-[#ff9233]/15 border-border",
+      fillColor: "#ff9233",
       icon: FaceNeutral,
       percentage: clamped,
       description: "You're getting there. Keep going",
@@ -208,6 +212,7 @@ export function classifyMasteryPercentage(
     badgeClass: "bg-[#ff3333] text-black border-2 border-black font-bold",
     colorClass: "text-[#ff3333] dark:text-[#ff3333]",
     bgClass: "bg-retro bg-[#ff3333]/15 border-border",
+    fillColor: "#ff3333",
     icon: FaceSlightlyFrowning,
     percentage: clamped,
     description: "Every expert started here. Let's grow!",

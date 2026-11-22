@@ -59,7 +59,8 @@ export function StudentLessonMastery({
           >
             <AggregateIcon
               aria-hidden="true"
-              className={cn("size-8 transition-colors", aggregate.colorClass)}
+              fill={aggregate.fillColor}
+              className="size-8 stroke-black stroke-[2] [&_path]:fill-none"
             />
             <p className={cn("text-base font-bold text-center", aggregate.colorClass)}>
               {aggregate.percentage !== null

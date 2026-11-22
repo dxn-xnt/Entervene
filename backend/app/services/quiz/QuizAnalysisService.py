@@ -31,7 +31,11 @@ from app.schemas.Quiz import (
 )
 from app.services.quiz.QuizBuilderService import get_teacher_quiz_classwork
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
-from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
+from app.services.grading.RemedialExamination import (
+    effective_grade_changed,
+    ensure_remedial_period_open,
+    latest_graded_submission_score,
+)
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.quiz.quiz_normalization import normalize_answer
 from app.services.submission.SubmissionService import feedback_fingerprint
@@ -180,6 +184,7 @@ def _submissions(db: Session, assignment_ids: list[int]) -> list[StudentSubmissi
         db.query(StudentSubmission)
         .options(selectinload(StudentSubmission.quiz_answers))
         .filter(StudentSubmission.classwork_assignment_id.in_(assignment_ids))
+        .order_by(StudentSubmission.submission_id.asc())
         .all()
     )
 
@@ -544,6 +549,9 @@ def grade_teacher_quiz_submission(
             )
 
     previous_grade = submission.grade
+    previous_effective_raw = latest_graded_submission_score(
+        db, assignment.classwork_assignment_id, submission.student_id,
+    )
     for grade_item in payload.answers:
         question = question_map[grade_item.quiz_question_id]
         pts_decimal = Decimal(str(grade_item.points_awarded))
@@ -598,14 +606,25 @@ def grade_teacher_quiz_submission(
     )
     enqueue_automatic_feedback_draft(db, submission.submission_id, staff_id)
 
-    if assignment.source_intervention_id is not None and classwork.is_graded:
+    if assignment.source_intervention_id is not None:
         from app.services.intervention.InterventionNotificationService import (
             stage_intervention_assessment_result,
+            stage_remediation_needs_teacher_review_if_exhausted,
         )
         db.flush()
-        stage_intervention_assessment_result(db, assignment, submission)
+        if classwork.is_graded:
+            stage_intervention_assessment_result(db, assignment, submission)
+        stage_remediation_needs_teacher_review_if_exhausted(
+            db, assignment, submission, quiz=quiz,
+        )
 
-    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
+    db.flush()
+    current_effective_raw = latest_graded_submission_score(
+        db, assignment.classwork_assignment_id, submission.student_id,
+    )
+    refresh_needed = classwork.is_graded and effective_grade_changed(
+        db, assignment, submission.student_id, previous_effective_raw, current_effective_raw,
+    )
     db.commit()
     db.refresh(submission)
     dispatch_background_draft_processing()

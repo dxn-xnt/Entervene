@@ -11,6 +11,7 @@ import {
   ChevronUp,
   BookMarked,
   List,
+  Lock,
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/teacher/button";
@@ -24,7 +25,13 @@ import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { apiFetch } from "@/lib/api";
-import type { RemediationFocus } from "@/lib/teacher-interventions-api";
+import {
+  generateRemediationDraft,
+  InterventionApiError,
+  type RemediationFocus,
+  type RemediationQuizDraft,
+  type RemediationQuizTestPartRequest,
+} from "@/lib/teacher-interventions-api";
 import { focusGuidance } from "@/lib/remediation-authoring";
 import type {
   QuizQuestionDraft,
@@ -56,6 +63,27 @@ export type TestPartRow = {
   difficulty_breakdown: DifficultyBreakdown;
 };
 
+export type RemediationQuizPartType =
+  | "MULTIPLE_CHOICE"
+  | "TRUE_FALSE"
+  | "IDENTIFICATION"
+  | "SHORT_ANSWER";
+
+export interface RemediationQuizGeneratorConfig {
+  interventionId: number;
+  targetComponent: "WRITTEN_WORK" | "EXAMINATION";
+  gradeTreatment: "WRITTEN_WORK" | "EXAMINATION" | "PRACTICE_ONLY";
+  examSubtype?: "SUMMATIVE_1" | "SUMMATIVE_2" | "TERM_EXAM" | null;
+  targetAssignmentId?: number | null;
+  targetAssignmentTitle?: string | null;
+  lockedTotalPoints?: number | null;
+  scoreAdjustmentCap?: number | null;
+  eligibleLessons: Array<{ lesson_id: number; title: string }>;
+  competencyLabels?: string[];
+  selectedReadingIds?: number[];
+  onRemediationGenerated: (draft: RemediationQuizDraft) => void;
+}
+
 export interface AIQuizGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -64,7 +92,8 @@ export interface AIQuizGeneratorModalProps {
   subjects?: Array<{ id: number; name: string }>;
   quizTitle?: string; // draft title from parent
   remediationFocus?: RemediationFocus | null;
-  onGenerated: (
+  remediationConfig?: RemediationQuizGeneratorConfig | null;
+  onGenerated?: (
     questions: QuizQuestionDraft[],
     warnings?: string[],
     chosenSubjectId?: number,
@@ -135,6 +164,130 @@ const hasBreakdownError = (part: TestPartRow, isExpanded: boolean): boolean => {
   return breakdownSum(part) !== part.count;
 };
 
+const REMEDIATION_PART_TYPES: RemediationQuizPartType[] = [
+  "MULTIPLE_CHOICE",
+  "TRUE_FALSE",
+  "IDENTIFICATION",
+  "SHORT_ANSWER",
+];
+
+const buildDefaultRemediationTestParts = (
+  lockedTotalPoints?: number | null,
+): TestPartRow[] => {
+  if (lockedTotalPoints == null || !Number.isFinite(lockedTotalPoints) || lockedTotalPoints <= 0) {
+    return [
+      {
+        id: "part-1",
+        type: "MULTIPLE_CHOICE",
+        count: 5,
+        points_per_item: 1,
+        difficulty_breakdown: DEFAULT_BREAKDOWN(5),
+      },
+      {
+        id: "part-2",
+        type: "TRUE_FALSE",
+        count: 5,
+        points_per_item: 1,
+        difficulty_breakdown: DEFAULT_BREAKDOWN(5),
+      },
+    ];
+  }
+
+  if (lockedTotalPoints >= 4 && lockedTotalPoints <= 20 && Number.isInteger(lockedTotalPoints)) {
+    const mcCount = Math.ceil(lockedTotalPoints / 2);
+    const tfCount = lockedTotalPoints - mcCount;
+    return [
+      {
+        id: "part-1",
+        type: "MULTIPLE_CHOICE",
+        count: mcCount,
+        points_per_item: 1,
+        difficulty_breakdown: DEFAULT_BREAKDOWN(mcCount),
+      },
+      {
+        id: "part-2",
+        type: "TRUE_FALSE",
+        count: tfCount,
+        points_per_item: 1,
+        difficulty_breakdown: DEFAULT_BREAKDOWN(tfCount),
+      },
+    ];
+  }
+
+  if (lockedTotalPoints < 4) {
+    if (Number.isInteger(lockedTotalPoints) && lockedTotalPoints >= 1) {
+      return [
+        {
+          id: "part-1",
+          type: "MULTIPLE_CHOICE",
+          count: lockedTotalPoints,
+          points_per_item: 1,
+          difficulty_breakdown: DEFAULT_BREAKDOWN(lockedTotalPoints),
+        },
+      ];
+    }
+    return [
+      {
+        id: "part-1",
+        type: "MULTIPLE_CHOICE",
+        count: 1,
+        points_per_item: Number(lockedTotalPoints.toFixed(2)),
+        difficulty_breakdown: DEFAULT_BREAKDOWN(1),
+      },
+    ];
+  }
+
+  const preferredCount =
+    [10, 8, 5, 4, 2, 1].find((n) => {
+      const perItem = lockedTotalPoints / n;
+      return perItem <= 100 && Math.abs(perItem * 2 - Math.round(perItem * 2)) < 1e-6;
+    }) ?? Math.min(20, Math.max(1, Math.ceil(lockedTotalPoints / 100)));
+  const pointsPerItem = Number((lockedTotalPoints / preferredCount).toFixed(2));
+  if (preferredCount >= 2) {
+    const mcCount = Math.ceil(preferredCount / 2);
+    const tfCount = preferredCount - mcCount;
+    return [
+      {
+        id: "part-1",
+        type: "MULTIPLE_CHOICE",
+        count: mcCount,
+        points_per_item: pointsPerItem,
+        difficulty_breakdown: DEFAULT_BREAKDOWN(mcCount),
+      },
+      {
+        id: "part-2",
+        type: "TRUE_FALSE",
+        count: tfCount,
+        points_per_item: pointsPerItem,
+        difficulty_breakdown: DEFAULT_BREAKDOWN(tfCount),
+      },
+    ];
+  }
+  return [
+    {
+      id: "part-1",
+      type: "MULTIPLE_CHOICE",
+      count: preferredCount,
+      points_per_item: pointsPerItem,
+      difficulty_breakdown: DEFAULT_BREAKDOWN(preferredCount),
+    },
+  ];
+};
+
+const formatGradeTreatmentLabel = (
+  gradeTreatment: RemediationQuizGeneratorConfig["gradeTreatment"],
+  examSubtype?: RemediationQuizGeneratorConfig["examSubtype"],
+): string => {
+  if (gradeTreatment === "PRACTICE_ONLY") return "Practice Only (Ungraded)";
+  if (gradeTreatment === "EXAMINATION") {
+    const subtype = examSubtype
+      ? ` · ${examSubtype.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}`
+      : "";
+    return `Examination${subtype}`;
+  }
+  return "Written Work";
+};
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AIQuizGeneratorModal({
@@ -145,8 +298,10 @@ export default function AIQuizGeneratorModal({
   subjects,
   quizTitle,
   remediationFocus,
+  remediationConfig = null,
   onGenerated,
 }: AIQuizGeneratorModalProps) {
+  const isRemediationMode = Boolean(remediationConfig);
   // Active subject selection
   const [currentSubjectId, setCurrentSubjectId] = useState<number>(subjectId);
 
@@ -272,7 +427,22 @@ export default function AIQuizGeneratorModal({
   // ── Data fetching ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!isOpen || !currentSubjectId) return;
+    if (!isOpen || !remediationConfig) return;
+    setTestParts(
+      buildDefaultRemediationTestParts(remediationConfig.lockedTotalPoints),
+    );
+    setExpandedPartIds(new Set());
+    setSelectedLessonIds(
+      remediationConfig.eligibleLessons.map((lesson) => lesson.lesson_id),
+    );
+    setAdditionalCoverage(
+      remediationFocus ? focusGuidance(remediationFocus) : "",
+    );
+    setError("");
+  }, [isOpen, remediationConfig, remediationFocus]);
+
+  useEffect(() => {
+    if (!isOpen || !currentSubjectId || isRemediationMode) return;
     let active = true;
     setIsLoadingSource(true);
 
@@ -304,10 +474,17 @@ export default function AIQuizGeneratorModal({
     return () => {
       active = false;
     };
-  }, [isOpen, currentSubjectId, remediationFocus]);
+  }, [isOpen, currentSubjectId, remediationFocus, isRemediationMode]);
 
   useEffect(() => {
-    if (!isOpen || !currentSubjectId || sourceMode !== "specific") return;
+    if (
+      !isOpen ||
+      !currentSubjectId ||
+      sourceMode !== "specific" ||
+      isRemediationMode
+    ) {
+      return;
+    }
 
     let active = true;
     setIsLoadingSource(true);
@@ -330,7 +507,7 @@ export default function AIQuizGeneratorModal({
     return () => {
       active = false;
     };
-  }, [isOpen, currentSubjectId, sourceMode]);
+  }, [isOpen, currentSubjectId, sourceMode, isRemediationMode]);
 
   // Reset error when modal opens/closes
   useEffect(() => {
@@ -363,16 +540,16 @@ export default function AIQuizGeneratorModal({
 
   const addTestPart = () => {
     const used = new Set(testParts.map((p) => p.type));
-    const next =
-      (
-        [
+    const allowedTypes: AIQuizPartType[] = isRemediationMode
+      ? REMEDIATION_PART_TYPES
+      : [
           "MULTIPLE_CHOICE",
           "TRUE_FALSE",
           "IDENTIFICATION",
           "SHORT_ANSWER",
           "ESSAY",
-        ] as AIQuizPartType[]
-      ).find((t) => !used.has(t)) ?? "MULTIPLE_CHOICE";
+        ];
+    const next = allowedTypes.find((t) => !used.has(t)) ?? "MULTIPLE_CHOICE";
     setTestParts((prev) => [
       ...prev,
       {
@@ -422,7 +599,11 @@ export default function AIQuizGeneratorModal({
   const togglePartExpanded = (id: string) => {
     setExpandedPartIds((prev) => {
       const s = new Set(prev);
-      s.has(id) ? s.delete(id) : s.add(id);
+      if (s.has(id)) {
+        s.delete(id);
+      } else {
+        s.add(id);
+      }
       return s;
     });
   };
@@ -449,8 +630,14 @@ export default function AIQuizGeneratorModal({
 
   // ── Generate ─────────────────────────────────────────────────────────────
 
+  const remediationPointsMismatch =
+    isRemediationMode &&
+    remediationConfig?.lockedTotalPoints != null &&
+    Math.abs(totalPointsCount - remediationConfig.lockedTotalPoints) > 0.01;
+
   const handleGenerate = async () => {
     if (
+      !isRemediationMode &&
       sourceMode === "specific" &&
       readingClassworks.length > 0 &&
       selectedReadingIds.length === 0
@@ -476,6 +663,112 @@ export default function AIQuizGeneratorModal({
       setError(
         "Difficulty breakdown totals must equal the item count for each part.",
       );
+      return;
+    }
+
+    if (remediationConfig) {
+      if (remediationConfig.eligibleLessons.length === 0) {
+        setError(
+          "No lesson in this intervention is verified as taught at the active remediation evidence cutoff.",
+        );
+        return;
+      }
+      if (testParts.some((part) => part.type === "ESSAY")) {
+        setError(
+          "Essay questions are not supported for AI remediation quizzes. Choose Multiple Choice, True/False, Identification, or Short Answer.",
+        );
+        return;
+      }
+      if (remediationPointsMismatch && remediationConfig.lockedTotalPoints != null) {
+        setError(
+          `Total points (${totalPointsCount} pts) must match the targeted original classwork's locked maximum (${remediationConfig.lockedTotalPoints} pts) before generating.`,
+        );
+        return;
+      }
+
+      setIsGenerating(true);
+      setError("");
+
+      try {
+        const quizTestPartsPayload: RemediationQuizTestPartRequest[] =
+          testParts.map((p) => {
+            const count = Math.max(1, Math.min(20, Number(p.count) || 1));
+            const pointsPerItem = Math.max(
+              0.5,
+              Math.min(100, Number(p.points_per_item) || 1),
+            );
+            const difficultyBreakdown = isDefaultBreakdown(p)
+              ? { EASY: count }
+              : (Object.fromEntries(
+                  Object.entries(p.difficulty_breakdown).filter(
+                    ([, v]) => v > 0,
+                  ),
+                ) as Partial<Record<"EASY" | "MEDIUM" | "HARD", number>>);
+            return {
+              question_type: p.type as RemediationQuizPartType,
+              count,
+              points_per_item: pointsPerItem,
+              difficulty_breakdown: difficultyBreakdown,
+            };
+          });
+
+        const draft = await generateRemediationDraft(
+          remediationConfig.interventionId,
+          {
+            draft_format: "QUIZ",
+            target_component: remediationConfig.targetComponent,
+            grade_treatment: remediationConfig.gradeTreatment,
+            exam_subtype: remediationConfig.examSubtype ?? undefined,
+            target_assignment_id:
+              remediationConfig.targetAssignmentId ?? undefined,
+            item_count: totalItemCount,
+            total_points:
+              remediationConfig.lockedTotalPoints ?? totalPointsCount,
+            activity_mode: "ONLINE",
+            quiz_test_parts: quizTestPartsPayload,
+            selected_lesson_ids: remediationConfig.eligibleLessons.map(
+              (lesson) => lesson.lesson_id,
+            ),
+            selected_reading_ids: remediationConfig.selectedReadingIds?.length
+              ? remediationConfig.selectedReadingIds
+              : undefined,
+            custom_teacher_instructions:
+              additionalCoverage.trim() || undefined,
+          },
+        );
+
+        if (draft.draft_format !== "QUIZ" || !draft.questions?.length) {
+          throw new Error(
+            "AI returned an empty remediation quiz. Please try again.",
+          );
+        }
+
+        remediationConfig.onRemediationGenerated(draft);
+        onClose();
+      } catch (cause: unknown) {
+        const status =
+          cause instanceof InterventionApiError
+            ? cause.status
+            : typeof cause === "object" && cause !== null && "status" in cause
+              ? Number((cause as { status?: unknown }).status)
+              : undefined;
+        let msg =
+          cause instanceof Error
+            ? cause.message
+            : "AI remediation draft generation failed.";
+        if (status === 429) {
+          msg =
+            "AI generation rate limit reached. Please wait a moment before trying again.";
+        } else if (status === 502) {
+          msg = `AI generation service error: ${msg}`;
+        } else if (status === 504 || status === 503) {
+          msg =
+            "AI provider timed out or is temporarily unavailable. Please retry shortly.";
+        }
+        setError(msg);
+      } finally {
+        setIsGenerating(false);
+      }
       return;
     }
 
@@ -564,7 +857,7 @@ export default function AIQuizGeneratorModal({
       }
 
       // Hand off directly to Question Review in Quiz Builder
-      onGenerated(
+      onGenerated?.(
         drafts,
         data.warnings ?? [],
         currentSubjectId,
@@ -613,257 +906,355 @@ export default function AIQuizGeneratorModal({
       >
         {/* ── Fixed Header ── */}
         <Dialog.Header position="fixed">
-          <h2 className="font-sans text-xl font-bold">AI Quiz Generator</h2>
+          <h2 className="font-sans text-xl font-bold">
+            {isRemediationMode
+              ? "AI Remediation Quiz Generator"
+              : "AI Quiz Generator"}
+          </h2>
         </Dialog.Header>
 
         {/* ── Scrollable Body ── */}
         <section className="flex flex-col gap-4 p-5">
           {error && <FormMessage>{error}</FormMessage>}
 
-          {/* Subject Selection */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-bold text-black">
-                Subject / Learning Area
-              </label>
-              <span className="text-sm font-semibold text-muted-foreground">
-                Change subject to source different lessons
-              </span>
-            </div>
-            {subjects && subjects.length > 1 ? (
-              <div className="relative">
-                <Select
-                  value={String(currentSubjectId)}
-                  onValueChange={(value) => {
-                    const newId = Number(value);
-                    setCurrentSubjectId(newId);
-                    setSelectedLessonIds([]);
-                    setSelectedReadingIds([]);
-                  }}
-                  disabled={isGenerating}
-                >
-                  <Select.Trigger className="w-full">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Content>
-                    {subjects.map((s) => (
-                      <Select.Item key={s.id} value={String(s.id)}>
-                        {s.name}
-                      </Select.Item>
-                    ))}
-                  </Select.Content>
-                </Select>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 rounded! border-2 border-border bg-background px-3 py-2 text-sm font-bold shadow-none">
-                <BookOpen className="w-4 h-4 text-black/70" />
-                <span>{currentSubjectName}</span>
-                <Badge size="sm" variant="outline" className="ml-auto">
-                  Pre-selected
+          {remediationConfig ? (
+            <div className="space-y-3 rounded! border-2 border-border bg-muted/30 p-3.5 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 font-bold text-black">
+                  <Lock className="w-3.5 h-3.5" />
+                  Locked Remediation Context
+                </span>
+                <Badge size="sm" variant="surface">
+                  {formatGradeTreatmentLabel(
+                    remediationConfig.gradeTreatment,
+                    remediationConfig.examSubtype,
+                  )}
                 </Badge>
               </div>
-            )}
-          </div>
 
-          {/* Source Mode Toggle */}
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-black">
-              Question Source
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {(
-                [
-                  {
-                    mode: "lesson",
-                    icon: <List className="w-3.5 h-3.5" />,
-                    label: "By Lesson",
-                  },
-                  {
-                    mode: "specific",
-                    icon: <BookMarked className="w-3.5 h-3.5" />,
-                    label: "By Specific Readings",
-                  },
-                ] as const
-              ).map(({ mode, icon, label }) => (
-                <Button
-                  key={mode}
-                  type="button"
-                  size="sm"
-                  variant={sourceMode === mode ? "default" : "outline"}
-                  onClick={() => handleSourceModeChange(mode)}
-                  className="gap-2 shadow-none hover:shadow-none"
-                >
-                  {icon}
-                  {label}
-                </Button>
-              ))}
-            </div>
-
-            {/* ── Lesson Mode ── */}
-            {sourceMode === "lesson" && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Select lessons — all attached readings will be used as
-                    source material.
-                  </span>
-                  {lessons.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedLessonIds(
-                          selectedLessonIds.length === lessons.length
-                            ? []
-                            : lessons.map((l) => l.lesson_id),
-                        )
-                      }
-                      className="text-sm font-bold text-foreground hover:underline cursor-pointer shrink-0 ml-2"
-                    >
-                      {selectedLessonIds.length === lessons.length
-                        ? "Deselect All"
-                        : "Select All"}
-                    </button>
-                  )}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Subject / Learning Area
+                  </p>
+                  <p className="font-bold text-foreground">
+                    {currentSubjectName}
+                  </p>
                 </div>
 
-                {isLoadingSource ? (
-                  <div className="flex items-center gap-2 p-4 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading lessons…
-                  </div>
-                ) : lessons.length === 0 ? (
-                  <div className="p-3 border-2 border-dashed border-black/30 rounded! bg-neutral-50 text-sm text-muted-foreground">
-                    No lessons found. AI will generate based on general
-                    curriculum for <strong>{currentSubjectName}</strong>.
-                  </div>
-                ) : (
-                  <div className="max-h-32 overflow-y-auto rounded! border-2 border-border p-2 space-y-1.5 bg-background shadow-none">
-                    {lessons.map((lesson) => {
-                      const sel = selectedLessonIds.includes(lesson.lesson_id);
-                      return (
-                        <label
-                          key={lesson.lesson_id}
-                          className={`flex items-center gap-2 p-2 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${
-                            sel
-                              ? "bg-primary border-border font-bold"
-                              : "hover:bg-neutral-50"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={sel}
-                            onChange={() =>
-                              setSelectedLessonIds((prev) =>
-                                prev.includes(lesson.lesson_id)
-                                  ? prev.filter((id) => id !== lesson.lesson_id)
-                                  : [...prev, lesson.lesson_id],
-                              )
-                            }
-                            className="rounded rounded! border-2 border-border accent-black w-4 h-4 cursor-pointer"
-                          />
-                          <span className="flex-1 truncate">
-                            {lesson.title}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  {selectedLessonIds.length} lesson(s) selected.
-                </p>
-              </div>
-            )}
-
-            {/* ── Specific Readings Mode ── */}
-            {sourceMode === "specific" && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Hand-pick individual reading classworks across lessons.
-                  </span>
-                  {readingClassworks.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedReadingIds(
-                          selectedReadingIds.length === readingClassworks.length
-                            ? []
-                            : readingClassworks.map((r) => r.classwork_id),
-                        )
-                      }
-                      className="text-sm font-bold text-foreground hover:underline cursor-pointer shrink-0 ml-2"
-                    >
-                      {selectedReadingIds.length === readingClassworks.length
-                        ? "Deselect All"
-                        : "Select All"}
-                    </button>
-                  )}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Targeted Original Classwork
+                  </p>
+                  <p className="font-bold text-foreground">
+                    {remediationConfig.targetAssignmentTitle ||
+                      "Practice Remediation (Unlinked)"}
+                  </p>
                 </div>
 
-                {isLoadingSource ? (
-                  <div className="flex items-center gap-2 p-4 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading reading classworks…
-                  </div>
-                ) : readingClassworks.length === 0 ? (
-                  <div className="p-3 border-2 border-dashed border-black/30 rounded! bg-neutral-50 text-sm text-muted-foreground">
-                    No reading classworks found for this subject. Try "By
-                    Lesson" mode or add reading classworks first.
-                  </div>
-                ) : (
-                  <div className="max-h-40 overflow-y-auto rounded! border-2 border-border p-2 space-y-3 bg-background shadow-none">
-                    {readingsByLesson.map(([lessonTitle, items]) => (
-                      <div key={lessonTitle}>
-                        <p className="text-sm font-bold text-black/50 mb-1">
-                          {lessonTitle}
-                        </p>
-                        <div className="space-y-1">
-                          {items.map((cw) => {
-                            const sel = selectedReadingIds.includes(
-                              cw.classwork_id,
-                            );
-                            return (
-                              <label
-                                key={cw.classwork_id}
-                                className={`flex items-center gap-2 p-1.5 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${
-                                  sel
-                                    ? "bg-primary border-border font-bold"
-                                    : "hover:bg-neutral-50"
-                                }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={sel}
-                                  onChange={() =>
-                                    setSelectedReadingIds((prev) =>
-                                      prev.includes(cw.classwork_id)
-                                        ? prev.filter(
-                                            (id) => id !== cw.classwork_id,
-                                          )
-                                        : [...prev, cw.classwork_id],
-                                    )
-                                  }
-                                  className="rounded rounded! border-2 border-border accent-black w-4 h-4 cursor-pointer"
-                                />
-                                <span className="flex-1 truncate">
-                                  {cw.title}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Score-Adjustment & Attempts
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    {remediationConfig.gradeTreatment === "PRACTICE_ONLY"
+                      ? "Ungraded practice · Up to 3 attempts"
+                      : `${remediationConfig.scoreAdjustmentCap != null ? `Up to ${remediationConfig.scoreAdjustmentCap}% ceiling` : "Score ceiling enforced"}${remediationConfig.lockedTotalPoints != null ? ` · ${remediationConfig.lockedTotalPoints} pts max` : ""} · Max 3 attempts`}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Verified Taught Lesson(s)
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {remediationConfig.eligibleLessons.map((lesson) => (
+                      <Badge
+                        key={lesson.lesson_id}
+                        size="sm"
+                        variant="outline"
+                        className="bg-background"
+                      >
+                        {lesson.title}
+                      </Badge>
                     ))}
                   </div>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  {selectedReadingIds.length} reading classwork(s) selected
-                  across lessons.
-                </p>
+                </div>
               </div>
-            )}
-          </div>
+
+              {remediationConfig.competencyLabels &&
+                remediationConfig.competencyLabels.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Verified Competency Focus
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {remediationConfig.competencyLabels.map((comp) => (
+                        <Badge
+                          key={comp}
+                          size="sm"
+                          variant="outline"
+                          className="bg-background"
+                        >
+                          {comp}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              <p className="text-xs text-muted-foreground">
+                Target classwork, verified lesson scope, grading component, and score-adjustment link are inherited and locked from the active intervention.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Subject Selection */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-black">
+                    Subject / Learning Area
+                  </label>
+                  <span className="text-sm font-semibold text-muted-foreground">
+                    Change subject to source different lessons
+                  </span>
+                </div>
+                {subjects && subjects.length > 1 ? (
+                  <div className="relative">
+                    <Select
+                      value={String(currentSubjectId)}
+                      onValueChange={(value) => {
+                        const newId = Number(value);
+                        setCurrentSubjectId(newId);
+                        setSelectedLessonIds([]);
+                        setSelectedReadingIds([]);
+                      }}
+                      disabled={isGenerating}
+                    >
+                      <Select.Trigger className="w-full">
+                        <Select.Value />
+                      </Select.Trigger>
+                      <Select.Content>
+                        {subjects.map((s) => (
+                          <Select.Item key={s.id} value={String(s.id)}>
+                            {s.name}
+                          </Select.Item>
+                        ))}
+                      </Select.Content>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded! border-2 border-border bg-background px-3 py-2 text-sm font-bold shadow-none">
+                    <BookOpen className="w-4 h-4 text-black/70" />
+                    <span>{currentSubjectName}</span>
+                    <Badge size="sm" variant="outline" className="ml-auto">
+                      Pre-selected
+                    </Badge>
+                  </div>
+                )}
+              </div>
+
+              {/* Source Mode Toggle */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-black">
+                  Question Source
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      {
+                        mode: "lesson",
+                        icon: <List className="w-3.5 h-3.5" />,
+                        label: "By Lesson",
+                      },
+                      {
+                        mode: "specific",
+                        icon: <BookMarked className="w-3.5 h-3.5" />,
+                        label: "By Specific Readings",
+                      },
+                    ] as const
+                  ).map(({ mode, icon, label }) => (
+                    <Button
+                      key={mode}
+                      type="button"
+                      size="sm"
+                      variant={sourceMode === mode ? "default" : "outline"}
+                      onClick={() => handleSourceModeChange(mode)}
+                      className="gap-2 shadow-none hover:shadow-none"
+                    >
+                      {icon}
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+
+                {/* ── Lesson Mode ── */}
+                {sourceMode === "lesson" && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Select lessons — all attached readings will be used as
+                        source material.
+                      </span>
+                      {lessons.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedLessonIds(
+                              selectedLessonIds.length === lessons.length
+                                ? []
+                                : lessons.map((l) => l.lesson_id),
+                            )
+                          }
+                          className="text-sm font-bold text-foreground hover:underline cursor-pointer shrink-0 ml-2"
+                        >
+                          {selectedLessonIds.length === lessons.length
+                            ? "Deselect All"
+                            : "Select All"}
+                        </button>
+                      )}
+                    </div>
+
+                    {isLoadingSource ? (
+                      <div className="flex items-center gap-2 p-4 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading lessons…
+                      </div>
+                    ) : lessons.length === 0 ? (
+                      <div className="p-3 border-2 border-dashed border-black/30 rounded! bg-neutral-50 text-sm text-muted-foreground">
+                        No lessons found. AI will generate based on general
+                        curriculum for <strong>{currentSubjectName}</strong>.
+                      </div>
+                    ) : (
+                      <div className="max-h-32 overflow-y-auto rounded! border-2 border-border p-2 space-y-1.5 bg-background shadow-none">
+                        {lessons.map((lesson) => {
+                          const sel = selectedLessonIds.includes(lesson.lesson_id);
+                          return (
+                            <label
+                              key={lesson.lesson_id}
+                              className={`flex items-center gap-2 p-2 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${
+                                sel
+                                  ? "bg-primary border-border font-bold"
+                                  : "hover:bg-neutral-50"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={sel}
+                                onChange={() =>
+                                  setSelectedLessonIds((prev) =>
+                                    prev.includes(lesson.lesson_id)
+                                      ? prev.filter((id) => id !== lesson.lesson_id)
+                                      : [...prev, lesson.lesson_id],
+                                  )
+                                }
+                                className="rounded rounded! border-2 border-border accent-black w-4 h-4 cursor-pointer"
+                              />
+                              <span className="flex-1 truncate">
+                                {lesson.title}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {selectedLessonIds.length} lesson(s) selected.
+                    </p>
+                  </div>
+                )}
+
+                {/* ── Specific Readings Mode ── */}
+                {sourceMode === "specific" && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Hand-pick individual reading classworks across lessons.
+                      </span>
+                      {readingClassworks.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedReadingIds(
+                              selectedReadingIds.length === readingClassworks.length
+                                ? []
+                                : readingClassworks.map((r) => r.classwork_id),
+                            )
+                          }
+                          className="text-sm font-bold text-foreground hover:underline cursor-pointer shrink-0 ml-2"
+                        >
+                          {selectedReadingIds.length === readingClassworks.length
+                            ? "Deselect All"
+                            : "Select All"}
+                        </button>
+                      )}
+                    </div>
+
+                    {isLoadingSource ? (
+                      <div className="flex items-center gap-2 p-4 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading reading classworks…
+                      </div>
+                    ) : readingClassworks.length === 0 ? (
+                      <div className="p-3 border-2 border-dashed border-black/30 rounded! bg-neutral-50 text-sm text-muted-foreground">
+                        No reading classworks found for this subject. Try "By
+                        Lesson" mode or add reading classworks first.
+                      </div>
+                    ) : (
+                      <div className="max-h-40 overflow-y-auto rounded! border-2 border-border p-2 space-y-3 bg-background shadow-none">
+                        {readingsByLesson.map(([lessonTitle, items]) => (
+                          <div key={lessonTitle}>
+                            <p className="text-sm font-bold text-black/50 mb-1">
+                              {lessonTitle}
+                            </p>
+                            <div className="space-y-1">
+                              {items.map((cw) => {
+                                const sel = selectedReadingIds.includes(
+                                  cw.classwork_id,
+                                );
+                                return (
+                                  <label
+                                    key={cw.classwork_id}
+                                    className={`flex items-center gap-2 p-1.5 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${
+                                      sel
+                                        ? "bg-primary border-border font-bold"
+                                        : "hover:bg-neutral-50"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={sel}
+                                      onChange={() =>
+                                        setSelectedReadingIds((prev) =>
+                                          prev.includes(cw.classwork_id)
+                                            ? prev.filter(
+                                                (id) => id !== cw.classwork_id,
+                                              )
+                                            : [...prev, cw.classwork_id],
+                                        )
+                                      }
+                                      className="rounded rounded! border-2 border-border accent-black w-4 h-4 cursor-pointer"
+                                    />
+                                    <span className="flex-1 truncate">
+                                      {cw.title}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {selectedReadingIds.length} reading classwork(s) selected
+                      across lessons.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Additional Coverage */}
           <div className="space-y-1.5">
@@ -882,14 +1273,25 @@ export default function AIQuizGeneratorModal({
 
           {/* Test Parts Configuration */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="text-sm font-bold text-black">
                 Test Parts & Difficulties
               </label>
-              <span className="text-sm font-semibold text-black">
+              <span
+                className={`text-sm font-semibold ${
+                  remediationPointsMismatch ? "text-red-600" : "text-black"
+                }`}
+              >
                 Total: {totalItemCount} items ({totalPointsCount} pts)
+                {remediationConfig?.lockedTotalPoints != null &&
+                  ` / Locked target: ${remediationConfig.lockedTotalPoints} pts`}
               </span>
             </div>
+            {isRemediationMode && (
+              <p className="text-xs text-muted-foreground">
+                Up to 20 questions. Essay questions are not supported for AI remediation quizzes.
+              </p>
+            )}
 
             <div className="space-y-2">
               {testParts.map((part, index) => {
@@ -934,9 +1336,11 @@ export default function AIQuizGeneratorModal({
                           <Select.Item value="SHORT_ANSWER">
                             Short Answer (Essay)
                           </Select.Item>
-                          <Select.Item value="ESSAY">
-                            Essay / Open-ended Response
-                          </Select.Item>
+                          {!isRemediationMode && (
+                            <Select.Item value="ESSAY">
+                              Essay / Open-ended Response
+                            </Select.Item>
+                          )}
                         </Select.Content>
                       </Select>
 
@@ -1155,7 +1559,11 @@ export default function AIQuizGeneratorModal({
           {/* Left side */}
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <HelpCircle className="w-3.5 h-3.5 text-muted-foreground" />
-            <span>AI generates questions, choices, answers, and rubrics.</span>
+            <span>
+              {isRemediationMode
+                ? "Generated questions open in the Quiz Builder for review and assignment."
+                : "AI generates questions, choices, answers, and rubrics."}
+            </span>
           </div>
 
           {/* Right side */}

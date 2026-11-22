@@ -1,10 +1,9 @@
 "use client";
 
-import { activeFirst } from "@/lib/active-first";
-
-import { Plus, Settings, Trash2, Users } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Lock, Plus, Settings, Trash2, Users } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useOptionalAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
   fetchPathways,
   getClassFormOptions,
@@ -85,16 +84,16 @@ export default function ManualClassWizard({
   onScreenChange?: (screen: "details" | "official-sections") => void;
 }) {
   const navigate = useNavigate();
+  const academicPeriod = useOptionalAcademicPeriod();
+  const lockedYearId =
+    initialSetup?.academicYear.academic_year_id ??
+    academicPeriod?.selectedYearId ??
+    undefined;
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [academicLevelId, setAcademicLevelId] = useState(
     initialSetup?.academicLevelId ? String(initialSetup.academicLevelId) : "",
-  );
-  const [selectedYearId, setSelectedYearId] = useState(
-    initialSetup?.academicYear.academic_year_id
-      ? String(initialSetup.academicYear.academic_year_id)
-      : "",
   );
   const [sections, setSections] = useState<ManualSectionDraft[]>(
     initialSetup?.sections ?? [createSectionDraft()],
@@ -115,26 +114,16 @@ export default function ManualClassWizard({
   const [availablePathways, setAvailablePathways] = useState<
     AcademicPathwayRead[]
   >([]);
-  const loadedYearIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setLoadError("");
 
-    if (
-      loadedYearIdRef.current &&
-      loadedYearIdRef.current === selectedYearId &&
-      options
-    ) {
-      return;
-    }
-
-    getClassFormOptions(selectedYearId ? Number(selectedYearId) : undefined)
+    getClassFormOptions(lockedYearId)
       .then((classData) => {
         if (cancelled) return;
         setOptions(classData);
-        const resolvedYearId = String(classData.academic_year.academic_year_id);
-        loadedYearIdRef.current = resolvedYearId;
-        if (!selectedYearId) setSelectedYearId(resolvedYearId);
         const defaultLevelId = initialSetup?.academicLevelId
           ? String(initialSetup.academicLevelId)
           : String(classData.academic_levels[0]?.academic_level_id ?? "");
@@ -162,9 +151,8 @@ export default function ManualClassWizard({
   }, [
     initialSetup?.academicLevelId,
     initialSetup?.sections,
-    options,
+    lockedYearId,
     retryKey,
-    selectedYearId,
   ]);
 
   useEffect(() => {
@@ -357,13 +345,8 @@ export default function ManualClassWizard({
     setReturningToDetails(true);
     setManagerError("");
     try {
-      const classData = await getClassFormOptions(
-        selectedYearId ? Number(selectedYearId) : undefined,
-      );
+      const classData = await getClassFormOptions(lockedYearId);
       setOptions(classData);
-      loadedYearIdRef.current = String(
-        classData.academic_year.academic_year_id,
-      );
       setScreen("details");
       onScreenChange?.("details");
     } catch (error: unknown) {
@@ -515,40 +498,26 @@ export default function ManualClassWizard({
     <div className="grid gap-5">
       <div className="grid grid-cols-2 gap-4 -mb-3">
         <div className="flex flex-col gap-1">
-          <Field label="Academic Year" isRequired>
-            <Select
-              value={selectedYearId}
-              onValueChange={(value) => {
-                setSelectedYearId(value);
-                setOptions(null);
-                setLoading(true);
-                setSections([createSectionDraft()]);
-                setConfiguredAdvisers({});
-                setErrors({ sectionRows: {}, configuredRows: {} });
-              }}
-            >
-              <Select.Trigger className="w-full">
-                <Select.Value placeholder="Select academic year" />
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Group>
-                  {activeFirst(
-                    options.academic_years ?? [options.academic_year],
-                  ).map((year) => (
-                    <Select.Item
-                      key={year.academic_year_id}
-                      value={String(year.academic_year_id)}
-                    >
-                      {year.year_label}
-                    </Select.Item>
-                  ))}
-                </Select.Group>
-              </Select.Content>
-            </Select>
+          <Field label="Academic Year">
+            <div className="relative">
+              <Input
+                id="new-class-academic-year"
+                readOnly
+                disabled
+                aria-readonly="true"
+                value={options.academic_year.year_label}
+                className="h-10 w-full cursor-not-allowed bg-muted/50 pr-9 text-sm text-muted-foreground shadow-none"
+              />
+              <Lock
+                aria-hidden="true"
+                className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              />
+            </div>
           </Field>
           {noAdvisers && (
             <Text as="p" className="text-xs text-muted-foreground">
-              All advisers are currently assigned for the active academic year.
+              All advisers are currently assigned for{" "}
+              {options.academic_year.year_label}.
             </Text>
           )}
         </div>

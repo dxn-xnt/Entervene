@@ -701,6 +701,9 @@ export default function CreateClassworkModal({
           String(remediationTarget.intervention_id),
         );
         formData.append("remediation_request_id", remediationRequestId);
+        if (selectedType !== "READING") {
+          formData.append("max_attempts", "3");
+        }
         if (
           remediationOriginalExam &&
           remediationGradeTreatment === "EXAMINATION"
@@ -1071,12 +1074,13 @@ export default function CreateClassworkModal({
                     <Field label="Grading Component">
                       <Select
                         value={draft.classwork_category}
-                        onValueChange={(val) =>
+                        onValueChange={(val) => {
+                          if (remediationDraft) return;
                           setDraft((current) => ({
                             ...current,
                             classwork_category: val,
-                          }))
-                        }
+                          }));
+                        }}
                         disabled={isCreating || remediationDraft}
                       >
                         <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
@@ -1099,6 +1103,13 @@ export default function CreateClassworkModal({
                           </Select.Group>
                         </Select.Content>
                       </Select>
+                      {remediationDraft && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {remediationGradeTreatment === "EXAMINATION"
+                            ? "Read-only: locked to match the targeted original examination."
+                            : "Read-only: locked to match the targeted original classwork's grading component."}
+                        </p>
+                      )}
                     </Field>
                   )}
 

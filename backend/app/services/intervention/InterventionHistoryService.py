@@ -77,6 +77,7 @@ def resolution_projection(db: Session, row: Intervention) -> float | None:
                     db,
                     academic_year_id=period.academic_year_id,
                     subject_id=row.subject_id,
+                    academic_period_id=row.academic_period_id,
                 )
                 threshold_val = float(res.threshold)
         except Exception:

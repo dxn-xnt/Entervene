@@ -139,7 +139,8 @@ const SubjectGrade = ({
                   >
                     <MasteryIcon
                       aria-hidden="true"
-                      className={cn("size-8 transition-colors", masterySummary.colorClass)}
+                      fill={masterySummary.fillColor}
+                      className="size-8 stroke-black stroke-[2] [&_path]:fill-none"
                     />
                     <p className={cn("text-base font-bold text-center", masterySummary.colorClass)}>
                       {masterySummary.label}

@@ -32,6 +32,8 @@ import {
 import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import IconContainer from "@/components/icon-container";
+import { cn } from "@/lib/utils";
+import { classifyMasteryPercentage } from "@/lib/student-lesson-mastery";
 
 const INITIAL_SUBJECTS_LIMIT = 4;
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -74,25 +76,6 @@ function MetricCard({
       </Card.Content>
     </Card>
   );
-}
-
-function computeSubjectPerformance(todos: TodoItem[]) {
-  const buckets: Record<string, { subject: string; subjectId: number; earned: number; possible: number }> = {};
-  todos.forEach((todo) => {
-    if (todo.grade === null || !todo.total_points || todo.is_graded === false || todo.type?.toUpperCase() === "READING") return;
-    const bucket = buckets[todo.subject_id] ?? {
-      subject: todo.subject,
-      subjectId: todo.subject_id,
-      earned: 0,
-      possible: 0,
-    };
-    bucket.earned += todo.grade;
-    bucket.possible += todo.total_points;
-    buckets[todo.subject_id] = bucket;
-  });
-  return Object.values(buckets)
-    .map((bucket) => ({ ...bucket, score: Math.round((bucket.earned / bucket.possible) * 100) }))
-    .sort((a, b) => b.score - a.score);
 }
 
 export function GradeOverviewCards({ isLoading, error }: {
@@ -153,6 +136,7 @@ const StoryBoard = () => {
     metricsLoadedPeriod !== selectedPeriodId;
   const metricsError = metricsErrorPeriod === selectedPeriodId;
   const [isSubjectsExpanded, setIsSubjectsExpanded] = useState(false);
+  const [isStrengthsExpanded, setIsStrengthsExpanded] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -231,19 +215,54 @@ const StoryBoard = () => {
     };
   }, [todos]);
 
-  const subjectPerformance = useMemo(
-    () => computeSubjectPerformance(todos),
-    [todos],
-  );
-  const weakestSubject = subjectPerformance.at(-1);
-
   const onTimeTotal =
     (metrics?.on_time_count || 0) + (metrics?.late_submission_count || 0);
 
+  const sortedSubjects = useMemo(() => {
+    if (!subjects.length) return [];
+
+    return [...subjects].sort((a, b) => {
+      const aTodos = todos.filter((t) => t.subject_id === a.subject_id);
+      const bTodos = todos.filter((t) => t.subject_id === b.subject_id);
+
+      const aPending = aTodos.filter(
+        (t) => !t.is_submitted && t.status !== "completed",
+      );
+      const bPending = bTodos.filter(
+        (t) => !t.is_submitted && t.status !== "completed",
+      );
+
+      // Primary: Subject with most pending activities first
+      if (bPending.length !== aPending.length) {
+        return bPending.length - aPending.length;
+      }
+
+      // Secondary: Due time of the classworks (soonest due first)
+      const getEarliestDue = (pendingList: typeof aPending) => {
+        const dates = pendingList
+          .map((t) =>
+            t.due_date ? new Date(t.due_date).getTime() : Number.MAX_SAFE_INTEGER,
+          )
+          .filter((d) => !isNaN(d));
+        return dates.length ? Math.min(...dates) : Number.MAX_SAFE_INTEGER;
+      };
+
+      const aDue = getEarliestDue(aPending);
+      const bDue = getEarliestDue(bPending);
+
+      if (aDue !== bDue) {
+        return aDue - bDue;
+      }
+
+      // Tertiary: Alphabetical tie-breaker
+      return a.subject_name.localeCompare(b.subject_name);
+    });
+  }, [subjects, todos]);
+
   const displayedSubjects = isSubjectsExpanded
-    ? subjects
-    : subjects.slice(0, INITIAL_SUBJECTS_LIMIT);
-  const remainingSubjectsCount = subjects.length - INITIAL_SUBJECTS_LIMIT;
+    ? sortedSubjects
+    : sortedSubjects.slice(0, INITIAL_SUBJECTS_LIMIT);
+  const remainingSubjectsCount = sortedSubjects.length - INITIAL_SUBJECTS_LIMIT;
 
   const handleSubjectClick = (subject: {
     class_id: number;
@@ -279,6 +298,8 @@ const StoryBoard = () => {
       latestActivityDue: latestPending?.deadline
         ? `Due ${latestPending.deadline}`
         : undefined,
+      latestActivityAssignmentId: latestPending?.assignment_id,
+      latestActivityId: latestPending?.assignment_id ?? latestPending?.classwork_id,
     };
   };
 
@@ -390,10 +411,18 @@ const StoryBoard = () => {
                               <SubjectCard
                                 key={subject.subject_load_id}
                                 title={subject.subject_name}
+                                sectionName={subject.section_name}
+                                teacher={subject.teacher_name}
+                                teacherAvatar={subject.teacher_avatar}
                                 pendingCount={stats.pendingCount}
                                 completionRate={stats.completionRate}
                                 latestActivityTitle={stats.latestActivityTitle}
                                 latestActivityDue={stats.latestActivityDue}
+                                latestActivityAssignmentId={stats.latestActivityAssignmentId}
+                                latestActivityId={stats.latestActivityId}
+                                classworks={todos.filter(
+                                  (t) => t.subject_id === subject.subject_id,
+                                )}
                                 onClick={() => handleSubjectClick(subject)}
                               />
                             );
@@ -402,7 +431,7 @@ const StoryBoard = () => {
 
                         <div className="flex items-center justify-between pt-1">
                           <div>
-                            {subjects.length > INITIAL_SUBJECTS_LIMIT && (
+                            {sortedSubjects.length > INITIAL_SUBJECTS_LIMIT && (
                               <Button
                                 variant="default"
                                 size="sm"
@@ -614,13 +643,154 @@ const StoryBoard = () => {
                       </div>
                     </MetricCard> */}
 
+
+                    <MetricCard
+                      title="Strengths & Focus Areas"
+                      className="sm:col-span-2 xl:col-span-12"
+                    >
+                      {isLoading ? (
+                        <LoadingPanel label="Loading subject scores..." />
+                      ) : error ? (
+                        <p className="text-sm text-destructive">
+                          Unable to load subject scores.
+                        </p>
+                      ) : overview.subjects.length === 0 ? (
+                        <StudentEmptyState
+                          embedded
+                          icon={<FileText />}
+                          title="No released scores yet"
+                          description="Subject strengths and focus areas will appear after graded scores are released."
+                        />
+                      ) : (
+                        <>
+                          <div className="grid gap-5 sm:grid-cols-2">
+                            {[
+                              {
+                                label: "Strongest subjects",
+                                entries: isStrengthsExpanded
+                                  ? overview.subjects
+                                  : overview.subjects.slice(0, 2),
+                              },
+                              {
+                                label: "Focus areas",
+                                entries: isStrengthsExpanded
+                                  ? [...overview.subjects].reverse()
+                                  : [...overview.subjects]
+                                      .reverse()
+                                      .slice(0, 2),
+                              },
+                            ].map((group) => (
+                              <div key={group.label}>
+                                <h4 className="mb-2 text-sm font-semibold">
+                                  {group.label}
+                                </h4>
+                                <div className="space-y-3">
+                                  {group.entries.map((item) => {
+                                    const mastery = classifyMasteryPercentage(item.score);
+                                    const MasteryIcon = mastery.icon;
+                                    const masteryFill =
+                                      mastery.id === "high"
+                                        ? "#00e65f"
+                                        : mastery.id === "moderate"
+                                          ? "#ff9233"
+                                          : mastery.id === "low"
+                                            ? "#ff3333"
+                                            : "none";
+
+                                    return (
+                                      <div
+                                        key={item.name}
+                                        className="flex items-start gap-2.5 text-sm"
+                                      >
+                                        <Tooltip>
+                                          <TooltipTrigger
+                                            render={
+                                              <span>
+                                                <IconContainer
+                                                  className={cn(
+                                                    "shrink-0 border-2 border-black mt-0.5",
+                                                    mastery.bgClass,
+                                                  )}
+                                                  aria-label={`${mastery.label} mastery`}
+                                                >
+                                                  <MasteryIcon
+                                                    fill={masteryFill}
+                                                    className="size-8! stroke-black stroke-[1.5] [&_path]:fill-none"
+                                                  />
+                                                </IconContainer>
+                                              </span>
+                                            }
+                                          />
+                                          <TooltipContent>
+                                            {mastery.label} Mastery
+                                          </TooltipContent>
+                                        </Tooltip>
+
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center justify-between gap-2 mb-1">
+                                            <Tooltip>
+                                              <TooltipTrigger
+                                                render={
+                                                  <span
+                                                    tabIndex={0}
+                                                    className="truncate font-medium text-foreground"
+                                                  >
+                                                    {item.name}
+                                                  </span>
+                                                }
+                                              />
+                                              <TooltipContent>
+                                                {item.name}
+                                              </TooltipContent>
+                                            </Tooltip>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                              {/* <span className="text-xs font-bold text-muted-foreground">
+                                                {mastery.label}
+                                              </span> */}
+                                            </div>
+                                          </div>
+                                          <Progress
+                                            value={item.score}
+                                            className="h-2.5 w-full"
+                                            aria-label={`${item.name}: ${item.score}% (${mastery.label})`}
+                                          />
+                                          <p className="text-xs text-muted-foreground mt-1">
+                                            {mastery.description}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {overview.subjects.length > 2 && (
+                            <div className="flex items-center justify-start pt-4">
+                              <Button
+                                variant="default"
+                                size="sm"
+                                autoIcon={false}
+                                onClick={() =>
+                                  setIsStrengthsExpanded((prev) => !prev)
+                                }
+                                className="border-2 border-border shadow-none text-sm font-bold px-3 py-1.5 h-auto rounded bg-primary text-black hover:bg-primary/90"
+                              >
+                                {isStrengthsExpanded
+                                  ? "Hide display"
+                                  : "Show all"}
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </MetricCard>
+
                     <MetricCard
                       title="Time per Subject"
                       className="sm:col-span-2 xl:col-span-6"
                     >
-                      <p className="mb-3 text-sm text-muted-foreground">
-                        Cumulative reading time on work recorded this week
-                      </p>
                       <div className="space-y-3">
                         {metricsLoading ? (
                           <LoadingPanel label="Loading reading time..." />
@@ -778,116 +948,6 @@ const StoryBoard = () => {
                         </>
                       )}
                     </MetricCard>
-
-                    <MetricCard
-                      title="Strengths & Focus Areas"
-                      className="sm:col-span-2 xl:col-span-12"
-                    >
-                      {isLoading ? (
-                        <LoadingPanel label="Loading subject scores..." />
-                      ) : error ? (
-                        <p className="text-sm text-destructive">
-                          Unable to load subject scores.
-                        </p>
-                      ) : overview.subjects.length === 0 ? (
-                        <StudentEmptyState
-                          embedded
-                          icon={<FileText />}
-                          title="No released scores yet"
-                          description="Subject strengths and focus areas will appear after graded scores are released."
-                        />
-                      ) : (
-                        <>
-                          <div className="grid gap-5 sm:grid-cols-2">
-                            {[
-                              {
-                                label: "Strongest subjects",
-                                entries: overview.subjects.slice(0, 3),
-                              },
-                              {
-                                label: "Focus areas",
-                                entries: [...overview.subjects]
-                                  .reverse()
-                                  .slice(0, 3),
-                              },
-                            ].map((group) => (
-                              <div key={group.label}>
-                                <h4 className="mb-2 text-sm font-semibold">
-                                  {group.label}
-                                </h4>
-                                <div className="space-y-2">
-                                  {group.entries.map((item) => (
-                                    <div
-                                      key={item.name}
-                                      className="grid grid-cols-[minmax(0,1fr)_3rem] gap-x-2 gap-y-1 text-sm"
-                                    >
-                                      <Tooltip>
-                                        <TooltipTrigger
-                                          render={
-                                            <span
-                                              tabIndex={0}
-                                              className="truncate"
-                                            >
-                                              {item.name}
-                                            </span>
-                                          }
-                                        />
-                                        <TooltipContent>
-                                          {item.name}
-                                        </TooltipContent>
-                                      </Tooltip>
-                                      <span className="text-right font-semibold">
-                                        {item.score}%
-                                      </span>
-                                      <Progress
-                                        value={item.score}
-                                        className="col-span-2 h-3"
-                                        aria-label={`${item.name}: ${item.score}%`}
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </MetricCard>
-
-                    <Card className="flex flex-col w-full min-h-64 sm:col-span-2 xl:col-span-6">
-                      <Card.Header>
-                        <Card.Title className="text-2xl">Subject Performance</Card.Title>
-                      </Card.Header>
-                      <Card.Content className="flex flex-1 flex-col w-full">
-                        {subjectPerformance.length === 0 ? (
-                          <StudentEmptyState
-                            embedded
-                            className="shadow-none"
-                            icon={<FileText />}
-                            title="No graded classwork yet"
-                            description="Scores will appear here as your teachers grade your submissions."
-                          />
-                        ) : (
-                          <div className="flex flex-1 flex-col justify-between">
-                            <div className="flex flex-col gap-2">
-                              {subjectPerformance.map((item) => <div key={item.subjectId} className="flex items-center gap-2">
-                                <span className="w-20 truncate text-sm" title={item.subject}>{item.subject}</span>
-                                <Progress
-                                  value={Math.min(100, Math.max(0, item.score))}
-                                  className="h-3 flex-1"
-                                  aria-label={`${item.subject} score: ${item.score}%`}
-                                />
-                                <span className="text-right text-sm font-semibold">{item.score}%</span>
-                              </div>)}
-                            </div>
-
-                            <div className="flex pt-4 mt-auto">
-                              {weakestSubject && <p className="text-sm text-muted-foreground">Recommended Attention: <span className="font-bold">{weakestSubject.subject}</span></p>}
-                            </div>
-                          </div>
-                        )}
-                      </Card.Content>
-                    </Card>
                   </div>
                 </div>
 
