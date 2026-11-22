@@ -76,6 +76,7 @@ export type TeacherClasswork = {
   rubric_levels?: ActivityRubricLevel[];
   has_submissions?: boolean;
   has_graded_submissions?: boolean;
+  is_linked_original_for_remediation?: boolean;
   is_graded?: boolean;
   due_date?: string | null;
   auto_ai_feedback_enabled?: boolean;

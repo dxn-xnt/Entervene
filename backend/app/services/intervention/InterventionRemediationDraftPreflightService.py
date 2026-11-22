@@ -91,7 +91,12 @@ def preflight_remediation_draft(
         draft = draft_input
 
     # 3. Validate draft against verified evidence scope, taught lessons, and leak guards
-    validated_draft = validate_remediation_draft(db, intervention, draft)
+    validated_draft = validate_remediation_draft(
+        db,
+        intervention,
+        draft,
+        target_assignment_id=target_assignment_id,
+    )
 
     # 4. Validate academic plan alignment
     plan = intervention.remediation_plan if isinstance(intervention.remediation_plan, dict) else {}

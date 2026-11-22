@@ -98,7 +98,7 @@ export default function AddClassModal({
   const [manualStep, setManualStep] = useState<
     "details" | "assignment" | "review"
   >("details");
-  const [manualScreen, setManualScreen] = useState<
+  const [detailsScreen, setDetailsScreen] = useState<
     "details" | "official-sections"
   >("details");
   const [skippedStudents, setSkippedStudents] = useState(false);
@@ -114,7 +114,7 @@ export default function AddClassModal({
     setMode("choice");
     setManualSetup(null);
     setManualStep("details");
-    setManualScreen("details");
+    setDetailsScreen("details");
     setSkippedStudents(false);
     setAssignmentState(null);
     setResetWarning("");
@@ -126,6 +126,7 @@ export default function AddClassModal({
   function continueFromDetails(setup: ManualClassSetup) {
     setSaveSuccess(null);
     setSetupYearStep("configure");
+    setDetailsScreen("details");
     setSkippedStudents(false);
     setManualSetup(setup);
     setManualStep("assignment");
@@ -189,7 +190,7 @@ export default function AddClassModal({
   function resetManualState() {
     setManualSetup(null);
     setManualStep("details");
-    setManualScreen("details");
+    setDetailsScreen("details");
     setSkippedStudents(false);
     setAssignmentState(null);
     setResetWarning("");
@@ -202,6 +203,7 @@ export default function AddClassModal({
   ) {
     setSaveSuccess(null);
     setSetupYearStep("configure");
+    setDetailsScreen("details");
     setSkippedStudents(skipToReview);
     if (
       !skipToReview &&
@@ -289,11 +291,11 @@ export default function AddClassModal({
           ? "Confirm Academic-Year Setup"
           : "Set Up from Previous Year"
         : manualStep === "details"
-          ? mode === "manual"
-            ? manualScreen === "official-sections"
-              ? "Manage Official Sections"
-              : "Add Class Details"
-            : "Import Class Details"
+          ? detailsScreen === "official-sections"
+            ? "Manage Official Sections"
+            : mode === "manual"
+              ? "Add Class Details"
+              : "Import Class Details"
           : manualStep === "assignment"
             ? "Assign Students"
             : "Review Class Setup";
@@ -301,7 +303,7 @@ export default function AddClassModal({
   const stepCountText =
     saveSuccess || (mode === "setup_year" && setupYearStep === "success")
       ? null
-      : mode === "manual" && manualScreen === "official-sections"
+      : manualStep === "details" && detailsScreen === "official-sections"
         ? null
         : mode === "setup_year"
           ? setupYearStep === "confirm"
@@ -360,9 +362,12 @@ export default function AddClassModal({
                 initialSetup={manualSetup}
                 onComplete={continueFromDetails}
                 onSkipStudents={reviewWithoutStudents}
-                onBack={() => setMode("choice")}
+                onBack={() => {
+                  setDetailsScreen("details");
+                  setMode("choice");
+                }}
                 onClose={handleClose}
-                onScreenChange={setManualScreen}
+                onScreenChange={setDetailsScreen}
               />
             ) : manualStep === "assignment" && manualSetup ? (
               <StudentAssignmentWorkspace
@@ -399,8 +404,12 @@ export default function AddClassModal({
                 existingClasses={classes}
                 onContinue={continueFromImport}
                 onValidationStale={clearImportHydration}
-                onBack={() => setMode("choice")}
+                onBack={() => {
+                  setDetailsScreen("details");
+                  setMode("choice");
+                }}
                 onClose={handleClose}
+                onScreenChange={setDetailsScreen}
               />
             </div>
             {manualStep === "assignment" && manualSetup ? (

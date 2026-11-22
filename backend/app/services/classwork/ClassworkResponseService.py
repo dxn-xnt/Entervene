@@ -1,5 +1,6 @@
 from pathlib import Path
 from fastapi import HTTPException
+from sqlalchemy.orm import object_session
 
 from app.models.academic.Lesson import Lesson
 from app.models.classwork.Classwork import Classwork
@@ -189,6 +190,29 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
             for index, (name, multiplier, description) in enumerate(defaults)
         ]
 
+    session = object_session(cw)
+    is_linked_original_for_remediation = False
+    if session is not None and cw.assignments:
+        asgn_ids = [
+            assignment.classwork_assignment_id
+            for assignment in cw.assignments
+            if assignment.classwork_assignment_id is not None
+        ]
+        if asgn_ids:
+            from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+            from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+
+            is_linked_original_for_remediation = (
+                session.query(RemediationAssignmentLink.remediation_link_id)
+                .filter(RemediationAssignmentLink.original_assignment_id.in_(asgn_ids))
+                .first()
+                is not None
+                or session.query(ClassworkAssignment.classwork_assignment_id)
+                .filter(ClassworkAssignment.original_exam_assignment_id.in_(asgn_ids))
+                .first()
+                is not None
+            )
+
     return ClassworkResponse(
         classwork_id=cw.classwork_id,
         title=cw.title,
@@ -234,4 +258,5 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
             submission.status == "graded" or submission.grade is not None
             for submission in submissions
         ),
+        is_linked_original_for_remediation=is_linked_original_for_remediation,
     )

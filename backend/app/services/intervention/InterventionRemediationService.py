@@ -182,9 +182,60 @@ def _row(db: Session, staff_id: str, intervention_id: int) -> Intervention:
     return row
 
 
-def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
+def _active_target_assignment_id(
+    db: Session,
+    row: Intervention,
+    explicit_target_id: int | None = None,
+) -> int | None:
+    """Resolve the single active target original assignment for scoping focus/resources."""
+    if explicit_target_id is not None:
+        return explicit_target_id
+    plan = row.remediation_plan if isinstance(row.remediation_plan, dict) else {}
+    if plan.get("grade_treatment") == "EXAMINATION":
+        exam_id = plan.get("original_exam_assignment_id")
+        if isinstance(exam_id, int):
+            return exam_id
+    plan_targets = [
+        tid for tid in (plan.get("target_assignment_ids") or [])
+        if isinstance(tid, int)
+    ]
+    if not plan_targets:
+        return None
+    linked_ids = {
+        item[0]
+        for item in db.query(RemediationAssignmentLink.original_assignment_id)
+        .filter_by(student_id=row.student_id)
+        .all()
+    }
+    unlinked = [tid for tid in plan_targets if tid not in linked_ids]
+    if unlinked:
+        return unlinked[-1]
+    if len(plan_targets) == 1:
+        return plan_targets[0]
+    return None
+
+
+def resources(
+    db: Session,
+    row: Intervention,
+    staff_id: str,
+    *,
+    target_assignment_id: int | None = None,
+) -> list[dict]:
     result = []
-    focus = build_remediation_focus(row, db=db)
+    focus = build_remediation_focus(row, db=db, target_assignment_id=target_assignment_id)
+    focus_lesson_ids = {
+        item["id"] for item in focus["lessons"] if item.get("id") is not None
+    }
+    selected_cw_ids = {
+        ref.get("id")
+        for ref in (
+            row.remediation_plan.get("selected_resources", [])
+            if isinstance(row.remediation_plan, dict)
+            else []
+        )
+        if isinstance(ref, dict) and ref.get("kind") == "CLASSWORK" and ref.get("id") is not None
+    }
 
     # Supporting Resources are genuine, non-graded READING classworks only (Lessons are not supporting resources).
     classworks = db.query(Classwork).filter(
@@ -208,12 +259,40 @@ def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
             .filter_by(classwork_id=cw.classwork_id)
             .all()
         )
-        if assignments and not any(
-            a.class_id in authorized_subject_class_ids
+        period_assignments = [
+            a for a in assignments
+            if a.class_id in authorized_subject_class_ids
             and a.academic_period_id == row.academic_period_id
-            for a in assignments
-        ):
+        ]
+        if assignments and not period_assignments:
             continue
+
+        allows_student_in_class = any(
+            a.class_id == row.class_id and assignment_allows_student(a, row.student_id)
+            for a in period_assignments
+        )
+        has_classwide_assignment = any(
+            a.recipient_student_id is None and not (getattr(a, "recipients", None) or [])
+            for a in period_assignments
+        )
+        is_from_other_intervention = (
+            cw.intervention_resource_origin_id is not None
+            and cw.intervention_resource_origin_id != row.intervention_id
+        )
+        if is_from_other_intervention:
+            # Another student's intervention-created reading may only be shown when
+            # legitimately shared with this student's class or all subject students.
+            if cw.classwork_id not in selected_cw_ids and not allows_student_in_class:
+                if not (
+                    cw.intervention_resource_recipient_scope == "ALL_SUBJECT_STUDENTS"
+                    and has_classwide_assignment
+                ):
+                    continue
+        elif period_assignments and cw.classwork_id not in selected_cw_ids:
+            # Exclude individual-only readings targeted exclusively to other students.
+            if not allows_student_in_class and not has_classwide_assignment:
+                continue
+
         accessible = bool(cw.is_published and any(
             a.class_id == row.class_id
             and a.academic_period_id == row.academic_period_id
@@ -222,9 +301,10 @@ def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
             and not assignment_is_locked(a)
             for a in assignments
         ))
+        is_added_for_this_intervention = cw.intervention_resource_origin_id == row.intervention_id
         current_scope = (
             cw.intervention_resource_recipient_scope
-            if cw.intervention_resource_origin_id is not None
+            if is_added_for_this_intervention
             else describe_resource_recipient_scope(
                 assignments,
                 row=row,
@@ -232,14 +312,24 @@ def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
             )
         ) or "UNASSIGNED"
         linked_lessons = {lesson.lesson_id for lesson in cw.lessons}
-        linked_competencies = {lesson.competency_id for lesson in cw.lessons if lesson.competency_id is not None}
+        direct_coverage_competencies: set[int] = set()
         for coverage in db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all():
             if coverage.competency_id is not None:
-                linked_competencies.add(coverage.competency_id)
+                direct_coverage_competencies.add(coverage.competency_id)
             if coverage.lesson_id is not None:
                 linked_lessons.add(coverage.lesson_id)
-        matched_competency = next((item for item in focus["competencies"] if item["id"] in linked_competencies), None)
         matched_lesson = next((item for item in focus["lessons"] if item["id"] in linked_lessons), None)
+
+        # Avoid inferring relevance across unrelated lessons solely because they share a competency.
+        linked_competencies: set[int] = set()
+        if not linked_lessons or not focus_lesson_ids or matched_lesson is not None:
+            linked_competencies.update(direct_coverage_competencies)
+            for lesson in cw.lessons:
+                if lesson.competency_id is not None and (
+                    not focus_lesson_ids or lesson.lesson_id in focus_lesson_ids
+                ):
+                    linked_competencies.add(lesson.competency_id)
+        matched_competency = next((item for item in focus["competencies"] if item["id"] in linked_competencies), None)
 
         if matched_competency:
             reason = (f"Matched competency metadata: {matched_competency['label']}"
@@ -273,7 +363,7 @@ def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
             "access": "ALREADY_ACCESSIBLE" if accessible else "PLANNING_ONLY",
             "ai_read": "METADATA_ONLY",
             "recommended": recommended,
-            "added_by_teacher": cw.intervention_resource_origin_id is not None,
+            "added_by_teacher": is_added_for_this_intervention,
             "match_reason": reason,
             "match_level": match_level,
             "match_rank": rank,
@@ -758,7 +848,13 @@ def build_remediation_prediction_impact(
         }
 
 
-def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
+def get_workspace(
+    db: Session,
+    staff_id: str,
+    intervention_id: int,
+    *,
+    target_assignment_id: int | None = None,
+) -> dict:
     row = _row(db, staff_id, intervention_id)
     stored_plan = dict(row.remediation_plan or {})
     stored_treatment = stored_plan.get("grade_treatment")
@@ -774,7 +870,8 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     if cap is None:
         cap = float(DEFAULT_REMEDIATION_CAP_PERCENTAGE)
 
-    focus = build_remediation_focus(row, db=db)
+    active_target_id = _active_target_assignment_id(db, row, target_assignment_id)
+    focus = build_remediation_focus(row, db=db, target_assignment_id=active_target_id)
     cached_suggestion = stored_plan.get("ai_suggestion")
     if (
         isinstance(cached_suggestion, dict)
@@ -797,14 +894,16 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     preview_data = preview_score_adjustment(
         db, staff_id, intervention_id, cap_percentage=cap, target_assignment_ids=target_ids
     )
-    eligibility = resolve_remediation_generation_eligibility(db, row)
+    eligibility = resolve_remediation_generation_eligibility(
+        db, row, target_assignment_id=active_target_id,
+    )
     eligibility.pop("scope", None)
     progress_data = progress(db, row)
     prediction_impact = build_remediation_prediction_impact(
         db, row, plan_data, progress_data["assigned_remediation"],
     )
     return {"plan": plan_data,
-            "resources": resources(db, row, staff_id), "focus": focus,
+            "resources": resources(db, row, staff_id, target_assignment_id=active_target_id), "focus": focus,
             "recipient_scopes": resolve_intervention_recipient_scopes(db, staff_id, row),
             "generation_eligibility": eligibility,
             "original_exams": original_exams(db, row),

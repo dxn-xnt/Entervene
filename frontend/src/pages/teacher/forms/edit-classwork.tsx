@@ -252,6 +252,21 @@ export default function EditClassworkModal({
       ) ?? null,
     [currentClasswork.assignments],
   );
+  const isRemediationActivity = Boolean(targetedAssignment);
+  const isLinkedOriginalForRemediation = Boolean(
+    currentClasswork.is_linked_original_for_remediation,
+  );
+  const isGradingComponentLocked =
+    isRemediationActivity || isLinkedOriginalForRemediation;
+  const isPracticeOnlyRemediation =
+    isRemediationActivity && currentClasswork.is_graded === false;
+  const gradingComponentLockReason = isPracticeOnlyRemediation
+    ? "Read-only: locked to practice-only remediation (no official grading component)."
+    : isRemediationActivity
+      ? "Read-only: locked to match the targeted original classwork's grading component."
+      : isLinkedOriginalForRemediation
+        ? "Read-only: locked because a linked remediation activity uses this grading component."
+        : null;
   const isInterventionCreatedReading = Boolean(
     currentClasswork.intervention_resource_origin_id &&
       isReadingType(currentClasswork.classwork_type),
@@ -1003,10 +1018,19 @@ export default function EditClassworkModal({
               title: editDraft.title.trim(),
               description: editDraft.description.trim() || null,
               instructions: editDraft.instructions.trim() || null,
-              classwork_type: editDraft.classwork_type,
-              classwork_category: editDraft.classwork_category || null,
-              exam_subtype: editDraft.exam_subtype || null,
-              total_points: totalPoints,
+              classwork_type: isGradingComponentLocked
+                ? currentClasswork.classwork_type
+                : editDraft.classwork_type,
+              classwork_category: isGradingComponentLocked
+                ? currentClasswork.classwork_category || null
+                : editDraft.classwork_category || null,
+              exam_subtype: isGradingComponentLocked
+                ? currentClasswork.exam_subtype || null
+                : editDraft.exam_subtype || null,
+              total_points:
+                isGradingComponentLocked && !isPracticeOnlyRemediation
+                  ? (currentClasswork.total_points ?? totalPoints)
+                  : totalPoints,
               rubric_levels:
                 hasRubric && rubricChanged ? rubricLevels : undefined,
               confirm_rubric_change:
@@ -1335,13 +1359,14 @@ export default function EditClassworkModal({
                   <Field label="Type">
                     <Select
                       value={editDraft.classwork_type}
-                      onValueChange={(v) =>
+                      onValueChange={(v) => {
+                        if (isGradingComponentLocked) return;
                         setEditDraft((current) => ({
                           ...current,
                           classwork_type: v,
-                        }))
-                      }
-                      disabled={isSavingEdit}
+                        }));
+                      }}
+                      disabled={isSavingEdit || isGradingComponentLocked}
                     >
                       <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                         <Select.Value />
@@ -1386,34 +1411,49 @@ export default function EditClassworkModal({
                         }`}
                     >
                       <Field label="Grading Component">
-                        <Select
-                          value={editDraft.classwork_category || "NONE"}
-                          onValueChange={(val) =>
-                            setEditDraft((current) => ({
-                              ...current,
-                              classwork_category: val === "NONE" ? "" : val,
-                            }))
-                          }
-                          disabled={isSavingEdit}
-                        >
-                          <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
-                            <Select.Value placeholder="Select Category" />
-                          </Select.Trigger>
-                          <Select.Content className="border-2 border-black rounded bg-white">
-                            <Select.Group>
-                              <Select.Item value="NONE">None</Select.Item>
-                              <Select.Item value="WRITTEN_WORK">
-                                Written Works
-                              </Select.Item>
-                              <Select.Item value="PERFORMANCE_TASK">
-                                Performance Task
-                              </Select.Item>
-                              <Select.Item value="QUARTERLY_ASSESSMENT">
-                                Exams
-                              </Select.Item>
-                            </Select.Group>
-                          </Select.Content>
-                        </Select>
+                        {isPracticeOnlyRemediation ? (
+                          <Input
+                            value="Practice Only (No Grading Component)"
+                            readOnly
+                            disabled
+                            className="w-full bg-muted/40 border-2 border-black rounded shadow-md"
+                          />
+                        ) : (
+                          <Select
+                            value={editDraft.classwork_category || "NONE"}
+                            onValueChange={(val) => {
+                              if (isGradingComponentLocked) return;
+                              setEditDraft((current) => ({
+                                ...current,
+                                classwork_category: val === "NONE" ? "" : val,
+                              }));
+                            }}
+                            disabled={isSavingEdit || isGradingComponentLocked}
+                          >
+                            <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                              <Select.Value placeholder="Select Category" />
+                            </Select.Trigger>
+                            <Select.Content className="border-2 border-black rounded bg-white">
+                              <Select.Group>
+                                <Select.Item value="NONE">None</Select.Item>
+                                <Select.Item value="WRITTEN_WORK">
+                                  Written Works
+                                </Select.Item>
+                                <Select.Item value="PERFORMANCE_TASK">
+                                  Performance Task
+                                </Select.Item>
+                                <Select.Item value="QUARTERLY_ASSESSMENT">
+                                  Exams
+                                </Select.Item>
+                              </Select.Group>
+                            </Select.Content>
+                          </Select>
+                        )}
+                        {gradingComponentLockReason && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {gradingComponentLockReason}
+                          </p>
+                        )}
                       </Field>
 
                       {(editDraft.classwork_category ===
@@ -1422,13 +1462,14 @@ export default function EditClassworkModal({
                           <Field label="Exam Sub-type">
                             <Select
                               value={editDraft.exam_subtype || "SUMMATIVE_1"}
-                              onValueChange={(val) =>
+                              onValueChange={(val) => {
+                                if (isGradingComponentLocked) return;
                                 setEditDraft((current) => ({
                                   ...current,
                                   exam_subtype: val,
-                                }))
-                              }
-                              disabled={isSavingEdit}
+                                }));
+                              }}
+                              disabled={isSavingEdit || isGradingComponentLocked}
                             >
                               <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                                 <Select.Value placeholder="Select Sub-type" />
@@ -1447,6 +1488,11 @@ export default function EditClassworkModal({
                                 </Select.Group>
                               </Select.Content>
                             </Select>
+                            {isGradingComponentLocked && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Read-only: locked to match the linked examination.
+                              </p>
+                            )}
                           </Field>
                         )}
 
@@ -1459,15 +1505,32 @@ export default function EditClassworkModal({
                               step="1"
                               inputMode="decimal"
                               value={editDraft.total_points}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                if (
+                                  isGradingComponentLocked &&
+                                  !isPracticeOnlyRemediation
+                                ) {
+                                  return;
+                                }
                                 setEditDraft((current) => ({
                                   ...current,
                                   total_points: event.target.value,
-                                }))
+                                }));
+                              }}
+                              disabled={
+                                isSavingEdit ||
+                                (isGradingComponentLocked &&
+                                  !isPracticeOnlyRemediation)
                               }
-                              disabled={isSavingEdit}
                               className="w-full bg-white border-2 border-black rounded shadow-md"
                             />
+                            {isGradingComponentLocked &&
+                              !isPracticeOnlyRemediation && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Read-only: locked to match the linked
+                                  classwork&apos;s maximum points.
+                                </p>
+                              )}
                           </Field>
                         )}
                     </div>

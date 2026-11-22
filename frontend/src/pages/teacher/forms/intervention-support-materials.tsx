@@ -22,6 +22,9 @@ import { Activity, BookOpen, Plus, Sparkles, Pencil, RefreshCw } from "lucide-re
 import AiRemediationDraftModal, {
   type DraftValidationResult,
 } from "./ai-remediation-draft-modal";
+import AIQuizGeneratorModal, {
+  type RemediationQuizGeneratorConfig,
+} from "./ai-quiz-generator-modal";
 import PracticeAssessmentModal from "./practice-assessment-modal";
 import {
   type PracticeAssessmentDetail,
@@ -395,6 +398,8 @@ const InterventionSupportMaterials = forwardRef<
   const [recipientScopes, setRecipientScopes] = useState<InterventionRecipientScopes | null>(null);
   const [resourceRecipientScope, setResourceRecipientScope] = useState<ResourceRecipientScope>("THIS_STUDENT");
   const [generationEligibility, setGenerationEligibility] = useState<RemediationGenerationEligibility | null>(null);
+  const latestEligibilityRef = useRef<RemediationGenerationEligibility | null>(null);
+  const targetScopeRequestRef = useRef(0);
   const [refreshingEvidence, setRefreshingEvidence] = useState(false);
   const [progress, setProgress] = useState<RemediationProgress | null>(null);
   const [predictionImpact, setPredictionImpact] = useState<RemediationPredictionImpact | null>(null);
@@ -499,8 +504,15 @@ const InterventionSupportMaterials = forwardRef<
   const handleReadingCreated = async (createdData?: unknown) => {
     setIsCreatingReading(false);
     try {
-      const updatedWorkspace = await getRemediationWorkspace(interventionId);
+      const currentTargetId =
+        plan.grade_treatment === "EXAMINATION"
+          ? plan.original_exam_assignment_id ?? selectedActivityIds[0] ?? null
+          : selectedActivityIds[0] ?? null;
+      const updatedWorkspace = await getRemediationWorkspace(interventionId, currentTargetId);
       setResources(updatedWorkspace.resources);
+      setFocus(updatedWorkspace.focus);
+      setGenerationEligibility(updatedWorkspace.generation_eligibility);
+      latestEligibilityRef.current = updatedWorkspace.generation_eligibility;
       setRecipientScopes(updatedWorkspace.recipient_scopes ?? null);
 
       const createdObj = createdData as { classwork_id?: number; id?: number; title?: string } | undefined;
@@ -553,6 +565,7 @@ const InterventionSupportMaterials = forwardRef<
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generatedDraft, setGeneratedDraft] = useState<RemediationGeneratedDraft | null>(null);
   const [showDraftPreview, setShowDraftPreview] = useState(false);
+  const [isRemediationQuizAiModalOpen, setIsRemediationQuizAiModalOpen] = useState(false);
   const [isEditingDraft, setIsEditingDraft] = useState(false);
   const [draftSaveState, setDraftSaveState] = useState<"idle" | "validating" | "saving" | "saved" | "error">("idle");
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
@@ -565,6 +578,7 @@ const InterventionSupportMaterials = forwardRef<
     setGenerationError(null);
     setGeneratedDraft(null);
     setShowDraftPreview(false);
+    setIsRemediationQuizAiModalOpen(false);
     setIsEditingDraft(false);
     setDraftSaveState("idle");
     setDraftSaveError(null);
@@ -723,6 +737,7 @@ const InterventionSupportMaterials = forwardRef<
       );
       setFocus(workspace.focus);
       setGenerationEligibility(workspace.generation_eligibility);
+      latestEligibilityRef.current = workspace.generation_eligibility;
       setProgress(workspace.progress);
       setPredictionImpact(workspace.prediction_impact ?? null);
       setOriginalExams(workspace.original_exams ?? []);
@@ -1513,6 +1528,71 @@ const InterventionSupportMaterials = forwardRef<
     }));
     setPanel("");
   };
+  const refreshTargetScopedWorkspace = useCallback(
+    async (targetId: number | null) => {
+      const reqId = ++targetScopeRequestRef.current;
+      try {
+        const workspace = await getRemediationWorkspace(interventionId, targetId);
+        if (reqId !== targetScopeRequestRef.current) return;
+        setFocus(workspace.focus);
+        setResources(workspace.resources);
+        setGenerationEligibility(workspace.generation_eligibility);
+        latestEligibilityRef.current = workspace.generation_eligibility;
+        if (workspace.recipient_scopes !== undefined) {
+          setRecipientScopes(workspace.recipient_scopes ?? null);
+        }
+      } catch {
+        // Keep current workspace state if a transient target-scope refresh fails.
+      }
+    },
+    [interventionId],
+  );
+  const autoSelectedSingleTargetRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      loading ||
+      hasSavedAssessment ||
+      !plan.grade_treatment ||
+      plan.grade_treatment === "PRACTICE_ONLY" ||
+      selectedActivityIds.length > 0 ||
+      eligibleTreatmentActivities.length !== 1
+    ) {
+      return;
+    }
+    const soleActivity = eligibleTreatmentActivities[0];
+    const soleId = canonicalAssignmentId(soleActivity, originalExams);
+    if (soleId == null || linkedOriginalIds.has(soleId)) return;
+    const autoKey = `${interventionId}:${plan.grade_treatment}:${soleId}`;
+    if (autoSelectedSingleTargetRef.current === autoKey) return;
+    autoSelectedSingleTargetRef.current = autoKey;
+
+    const matchingExam = originalExams.find((e) => e.assignment_id === soleId);
+    const examTargetId = matchingExam?.assignment_id ?? soleId;
+    setSelectedActivityIds([soleId]);
+    setPlan((current) => ({
+      ...current,
+      target_assignment_ids: reconcileTargetAssignmentIds(
+        current.target_assignment_ids,
+        linkedOriginalIds,
+        soleId,
+      ),
+      original_exam_assignment_id:
+        current.grade_treatment === "EXAMINATION" ? examTargetId : null,
+    }));
+    preModalSelectedIdsRef.current = [soleId];
+    void refreshTargetScopedWorkspace(soleId);
+  }, [
+    loading,
+    hasSavedAssessment,
+    plan.grade_treatment,
+    selectedActivityIds.length,
+    eligibleTreatmentActivities,
+    originalExams,
+    linkedOriginalIds,
+    interventionId,
+    refreshTargetScopedWorkspace,
+  ]);
+
   const confirmTargetSelection = () => {
     const candidateId =
       selectedActivityIds.find((id) => !linkedOriginalIds.has(id)) ??
@@ -1551,6 +1631,7 @@ const InterventionSupportMaterials = forwardRef<
       resetDraftCreationState();
       setWizardError(null);
       preModalSelectedIdsRef.current = [confirmedId];
+      void refreshTargetScopedWorkspace(confirmedId);
     }
     setPanel("");
   };
@@ -1709,6 +1790,9 @@ const InterventionSupportMaterials = forwardRef<
           .filter((r) => r.kind === "CLASSWORK")
           .map((r) => r.id);
         setSavedReadingIds(updatedSavedReadings);
+        setFocus(result.focus);
+        setGenerationEligibility(result.generation_eligibility);
+        latestEligibilityRef.current = result.generation_eligibility;
         if (result.progress) setProgress(result.progress);
         if (result.prediction_impact !== undefined) {
           setPredictionImpact(result.prediction_impact ?? null);
@@ -1832,6 +1916,9 @@ const InterventionSupportMaterials = forwardRef<
         .map((r) => r.id);
       setSavedReadingIds(updatedSavedReadings);
       setResources(result.resources);
+      setFocus(result.focus);
+      setGenerationEligibility(result.generation_eligibility);
+      latestEligibilityRef.current = result.generation_eligibility;
       if (result.recipient_scopes !== undefined) {
         setRecipientScopes(result.recipient_scopes ?? null);
       }
@@ -1886,15 +1973,6 @@ const InterventionSupportMaterials = forwardRef<
       return;
     }
 
-    const eligibleLessonIds = eligibleRemediationLessonIds(generationEligibility);
-    if (eligibleLessonIds.length === 0) {
-      setGeneratedDraft(null);
-      setIsEditingDraft(false);
-      setGenerationError("No lesson in this intervention is verified as taught at the active remediation evidence cutoff. Refresh the evidence after confirming lesson delivery, or continue with manual authoring.");
-      setShowDraftPreview(true);
-      return;
-    }
-
     if (
       isGraded(plan.teacher_choice) &&
       (!plan.grade_treatment ||
@@ -1918,6 +1996,29 @@ const InterventionSupportMaterials = forwardRef<
     const saved = await saveAdjustments({ silentIfUnchanged: true });
     if (!saved) return;
 
+    const effectiveEligibility = latestEligibilityRef.current ?? generationEligibility;
+    const eligibleLessonIds = eligibleRemediationLessonIds(effectiveEligibility);
+    if (eligibleLessonIds.length === 0) {
+      if (plan.teacher_choice === "QUIZ") {
+        toast.error({
+          title: "No eligible lessons for AI generation",
+          description:
+            "No lesson in this intervention is verified as taught at the active remediation evidence cutoff. Refresh the evidence after confirming lesson delivery, or continue with manual authoring.",
+        });
+        return;
+      }
+      setGeneratedDraft(null);
+      setIsEditingDraft(false);
+      setGenerationError("No lesson in this intervention is verified as taught at the active remediation evidence cutoff. Refresh the evidence after confirming lesson delivery, or continue with manual authoring.");
+      setShowDraftPreview(true);
+      return;
+    }
+
+    if (plan.teacher_choice === "QUIZ") {
+      setIsRemediationQuizAiModalOpen(true);
+      return;
+    }
+
     setGeneratingDraft(true);
     setGenerationError(null);
     setGeneratedDraft(null);
@@ -1936,7 +2037,7 @@ const InterventionSupportMaterials = forwardRef<
     } else if (plan.grade_treatment === "WRITTEN_WORK") {
       targetComponent = "WRITTEN_WORK";
     } else {
-      targetComponent = (focus?.component ?? (plan.teacher_choice === "QUIZ" ? "WRITTEN_WORK" : "PERFORMANCE_TASK")) as "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
+      targetComponent = (focus?.component ?? "PERFORMANCE_TASK") as "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
     }
 
     const selectedTargetForGeneration =
@@ -1997,8 +2098,15 @@ const InterventionSupportMaterials = forwardRef<
     setRefreshingEvidence(true);
     try {
       const refreshed = await refreshRemediationEvidence(interventionId);
-      const workspace = await getRemediationWorkspace(interventionId);
+      const currentTargetId =
+        plan.grade_treatment === "EXAMINATION"
+          ? plan.original_exam_assignment_id ?? selectedActivityIds[0] ?? null
+          : activeUnlinkedTargetId ?? selectedActivityIds[0] ?? null;
+      const workspace = await getRemediationWorkspace(interventionId, currentTargetId);
+      setFocus(workspace.focus);
+      setResources(workspace.resources);
       setGenerationEligibility(workspace.generation_eligibility);
+      latestEligibilityRef.current = workspace.generation_eligibility;
       setProgress(workspace.progress);
       setPredictionImpact(workspace.prediction_impact ?? null);
       setGenerationError(null);
@@ -3537,16 +3645,98 @@ const InterventionSupportMaterials = forwardRef<
                 onUpdateClassworkTeacherGuide={handleUpdateClassworkTeacherGuide}
               />
 
+              {isRemediationQuizAiModalOpen && (
+                <AIQuizGeneratorModal
+                  isOpen={isRemediationQuizAiModalOpen}
+                  onClose={() => setIsRemediationQuizAiModalOpen(false)}
+                  subjectId={subjectId}
+                  subjectName={subjectName}
+                  remediationFocus={focus}
+                  remediationConfig={(() => {
+                    const effectiveEligibility =
+                      latestEligibilityRef.current ?? generationEligibility;
+                    const gradeTreatment: "WRITTEN_WORK" | "EXAMINATION" | "PRACTICE_ONLY" =
+                      plan.grade_treatment === "EXAMINATION"
+                        ? "EXAMINATION"
+                        : plan.grade_treatment === "WRITTEN_WORK"
+                          ? "WRITTEN_WORK"
+                          : "PRACTICE_ONLY";
+                    const targetComponent: "WRITTEN_WORK" | "EXAMINATION" =
+                      gradeTreatment === "EXAMINATION"
+                        ? "EXAMINATION"
+                        : gradeTreatment === "WRITTEN_WORK"
+                          ? "WRITTEN_WORK"
+                          : focus?.component === "EXAMINATION"
+                            ? "EXAMINATION"
+                            : "WRITTEN_WORK";
+                    const selectedTargetId =
+                      gradeTreatment === "EXAMINATION"
+                        ? plan.original_exam_assignment_id ?? selectedActivityIds[0] ?? null
+                        : gradeTreatment === "WRITTEN_WORK"
+                          ? activeUnlinkedTargetId ?? selectedActivityIds[0] ?? null
+                          : null;
+                    const selectedExam =
+                      targetComponent === "EXAMINATION" && selectedTargetId != null
+                        ? originalExams.find((exam) => exam.assignment_id === selectedTargetId)
+                        : undefined;
+                    const examSubtype =
+                      targetComponent === "EXAMINATION"
+                        ? (selectedExam?.subtype ?? focus?.exam_subtype ?? "SUMMATIVE_1")
+                        : null;
+                    const readingIds = reconcileSelectedResources(
+                      plan.selected_resources,
+                      resources,
+                    )
+                      .filter((r) => r.kind === "CLASSWORK")
+                      .map((r) => r.id);
+                    const parsedCap = Number(capInput);
+                    const effectiveCap = Number.isFinite(parsedCap)
+                      ? parsedCap
+                      : (plan.score_adjustment_cap ?? 75);
+                    const config: RemediationQuizGeneratorConfig = {
+                      interventionId,
+                      targetComponent,
+                      gradeTreatment,
+                      examSubtype,
+                      targetAssignmentId: selectedTargetId,
+                      targetAssignmentTitle: targetAssignmentSummary,
+                      lockedTotalPoints:
+                        gradeTreatment === "PRACTICE_ONLY"
+                          ? null
+                          : selectedTargetMaximum,
+                      scoreAdjustmentCap:
+                        gradeTreatment === "PRACTICE_ONLY" ? null : effectiveCap,
+                      eligibleLessons:
+                        effectiveEligibility?.eligible_taught_lessons.map((l) => ({
+                          lesson_id: l.lesson_id,
+                          title: l.title,
+                        })) ?? [],
+                      competencyLabels:
+                        focus?.competencies?.map((c) => c.label) ?? [],
+                      selectedReadingIds: readingIds,
+                      onRemediationGenerated: (draft) => {
+                        setIsRemediationQuizAiModalOpen(false);
+                        void openTool("ai", draft);
+                      },
+                    };
+                    return config;
+                  })()}
+                />
+              )}
+
               {/* Practice Assessment Section */}
-              <div className={wizardStep !== 2 ? "hidden" : "flex flex-col gap-1"}>
-                {wizardStep == null && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-black">Practice Assessment</h3>
-                      <Badge variant="outline" size="sm">Independent & Ungraded</Badge>
-                    </div>
+              <div className={wizardStep !== 2 ? "hidden" : "flex flex-col gap-2"}>
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-black">Practice Assessment</h3>
+                    <Badge variant="outline" size="sm">Optional · Ungraded</Badge>
                   </div>
-                )}
+                  {wizardStep === 2 && (
+                    <span className="text-xs text-muted-foreground">
+                      Skip directly to Step 3 if independent practice is not needed.
+                    </span>
+                  )}
+                </div>
 
                 <Card className="flex flex-col gap-3 p-4">
                   {practiceAssessmentLoading ? (
@@ -3764,17 +3954,6 @@ const InterventionSupportMaterials = forwardRef<
                       );
                     })}
                   </div>
-                  <p className="text-xs text-muted-foreground px-2 mb-2">
-                    {activeGradeTreatment === "PRACTICE_ONLY"
-                      ? "Ungraded Activity stores completion without changing grades."
-                      : activeGradeTreatment === "WRITTEN_WORK"
-                        ? "Written Work adds a portion of the score to a classwork under the category."
-                        : activeGradeTreatment === "PERFORMANCE_TASK"
-                          ? "Performance Task adds a portion of the score to a performance task under the category."
-                          : activeGradeTreatment === "EXAMINATION"
-                            ? "Remedial Exam replaces the original assessment's effective score only when higher."
-                            : "Grade treatment and score adjustment rules are locked to the saved assessment."}
-                  </p>
 
                   {plan.ai_suggestion && (
                     <div className="px-1 text-sm text-muted-foreground">
@@ -3870,7 +4049,9 @@ const InterventionSupportMaterials = forwardRef<
                                   variant="outline"
                                   onClick={openTargetSelectionModal}
                                 >
-                                  Change Target
+                                  {eligibleTreatmentActivities.length > 1
+                                    ? "Change Target & Ceiling"
+                                    : "Adjust Score Ceiling"}
                                 </Button>
                               )}
                             </div>
@@ -4045,9 +4226,11 @@ const InterventionSupportMaterials = forwardRef<
                                 </Empty.Content>
                               </Empty>
                             )}
-                            <p className="text-sm text-muted-foreground px-1 flex items-center gap-1">
-                              Academic treatment, targeted classwork, and target-score ceiling are locked because a curated remediation activity exists.
-                            </p>
+                            {hasSavedAssessment && (
+                              <p className="text-sm text-muted-foreground px-1 flex items-center gap-1">
+                                Grade treatment, targeted classwork, and target-score ceiling are locked because a remediation activity already exists.
+                              </p>
+                            )}
                           </div>
                         )}
 
@@ -4245,26 +4428,36 @@ const InterventionSupportMaterials = forwardRef<
                             Reuse Quiz Questions
                           </Button>
                         )}
+                        <Button
+                          disabled={continueDisabled || working || generatingDraft}
+                          onClick={() => void openTool("manual")}
+                          size="sm"
+                          variant={
+                            (plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") &&
+                            Boolean(generationEligibility?.eligible_taught_lessons.length)
+                              ? "outline"
+                              : "default"
+                          }
+                          className="gap-2"
+                        >
+                          {plan.teacher_choice === "QUIZ"
+                            ? "Create Manually"
+                            : plan.teacher_choice === "CLASSWORK"
+                              ? "Create Manually"
+                              : "Continue to TOS Generator"}
+                        </Button>
                         {(plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") && (
                           <Button
                             disabled={continueDisabled || working || generatingDraft || !generationEligibility?.eligible_taught_lessons.length}
                             onClick={handleGenerateWithAI}
                             size="sm"
-                            variant="outline"
+                            variant="default"
                             className="gap-2"
                           >
                             <Sparkles className="size-4" />
                             Generate with AI
                           </Button>
                         )}
-                        <Button disabled={continueDisabled || working || generatingDraft} onClick={() => void openTool("manual")} size="sm" className="gap-2">
-                          Continue to{" "}
-                          {plan.teacher_choice === "QUIZ"
-                            ? "Quiz Builder"
-                            : plan.teacher_choice === "CLASSWORK"
-                              ? "Classwork Creator"
-                              : "TOS Generator"}
-                        </Button>
                       </div>
                     )}
 
@@ -4325,31 +4518,36 @@ const InterventionSupportMaterials = forwardRef<
                                 Reuse Quiz Questions
                               </Button>
                             )}
+                            <Button
+                              disabled={continueDisabled || working || generatingDraft}
+                              onClick={() => void openTool("manual")}
+                              size="sm"
+                              variant={
+                                (plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") &&
+                                Boolean(generationEligibility?.eligible_taught_lessons.length)
+                                  ? "outline"
+                                  : "default"
+                              }
+                              className="gap-2"
+                            >
+                              {plan.teacher_choice === "QUIZ"
+                                ? "Create Manually"
+                                : plan.teacher_choice === "CLASSWORK"
+                                  ? "Create Manually"
+                                  : "Continue to TOS Generator"}
+                            </Button>
                             {(plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") && (
                               <Button
                                 disabled={continueDisabled || working || generatingDraft || !generationEligibility?.eligible_taught_lessons.length}
                                 onClick={handleGenerateWithAI}
                                 size="sm"
-                                variant="outline"
+                                variant="default"
                                 className="gap-2"
                               >
                                 <Sparkles className="size-4" />
                                 Generate with AI
                               </Button>
                             )}
-                            <Button
-                              disabled={continueDisabled || working || generatingDraft}
-                              onClick={() => void openTool("manual")}
-                              size="sm"
-                              className="gap-2"
-                            >
-                              Continue to{" "}
-                              {plan.teacher_choice === "QUIZ"
-                                ? "Quiz Builder"
-                                : plan.teacher_choice === "CLASSWORK"
-                                  ? "Classwork Creator"
-                                  : "TOS Generator"}
-                            </Button>
                           </div>
                         )}
                       </Card>

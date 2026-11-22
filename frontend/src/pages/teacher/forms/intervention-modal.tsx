@@ -50,12 +50,12 @@ const percentVariant = (
   return "destructive";
 };
 
-export const INTERVENTION_ACTIVITY_WIZARD_STEP = 1;
+export const INTERVENTION_ACTIVITY_WIZARD_STEP = 3;
 
 const supportTabs = [
-  { id: "1", label: "Support Resources" },
-  { id: "2", label: "Practice Assessment" },
-  { id: "3", label: "Remediation Activity" },
+  { id: "1", label: "1. Support Resources" },
+  { id: "2", label: "2. Practice (Optional)" },
+  { id: "3", label: "3. Remediation Activity" },
 ];
 
 const LAST_SUPPORT_STEP = supportTabs.length;
@@ -890,7 +890,11 @@ export default function InterventionModal({
           )}
           {isActive && (
             <Button
-              variant={supportPage === "plan" ? "outline" : "default"}
+              variant={
+                supportPage === "plan" && wizardStep === LAST_SUPPORT_STEP
+                  ? "outline"
+                  : "default"
+              }
               disabled={activating || savingAdjustments || (supportPage === "plan" && wizardStep === LAST_SUPPORT_STEP && !supportHasChanges)}
               onClick={async () => {
                 if (supportPage === "plan") {
@@ -926,11 +930,15 @@ export default function InterventionModal({
             >
               {supportPage === "plan" ? (
                 savingAdjustments ? (
-                  "Saving adjustments..."
-                ) : wizardStep < LAST_SUPPORT_STEP ? "Next" : (
+                  "Saving plan..."
+                ) : wizardStep === 1 ? (
+                  "Next: Practice (Optional)"
+                ) : wizardStep < LAST_SUPPORT_STEP ? (
+                  "Next: Remediation Activity"
+                ) : (
                   <>
                     <Save className="size-4 mr-1.5" />
-                    Save Adjustments
+                    Save Plan
                   </>
                 )
               ) : (
@@ -948,7 +956,7 @@ export default function InterventionModal({
             >
               {activating
                 ? "Checking and approving..."
-                : "Proceed"}
+                : "Approve Intervention"}
             </Button>
           )}
         </Dialog.Footer>

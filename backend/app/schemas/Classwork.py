@@ -66,6 +66,27 @@ class ClassworkCreate(BaseModel):
         return self
 
 
+FORBIDDEN_REMEDIATION_LINK_UPDATE_FIELDS = frozenset({
+    "source_intervention_id",
+    "recipient_student_id",
+    "remediation_request_id",
+    "original_exam_assignment_id",
+    "original_classwork_assignment_id",
+    "remediation_link_id",
+    "intervention_id",
+})
+
+
+def _reject_forged_remediation_link_fields(data: object) -> object:
+    if isinstance(data, dict):
+        forbidden = sorted(FORBIDDEN_REMEDIATION_LINK_UPDATE_FIELDS.intersection(data.keys()))
+        if forbidden:
+            raise ValueError(
+                f"Remediation linkage fields cannot be modified or removed: {', '.join(forbidden)}"
+            )
+    return data
+
+
 class ClassworkUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -84,6 +105,11 @@ class ClassworkUpdate(BaseModel):
     confirm_rubric_change: bool = False
     reference_links: Optional[list[ClassworkReferenceLinkInput]] = None
     recipient_scope: Optional[Literal["THIS_STUDENT", "ENTIRE_CLASS", "ALL_SUBJECT_STUDENTS"]] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_remediation_link_tampering(cls, data: object):
+        return _reject_forged_remediation_link_fields(data)
 
     @model_validator(mode="after")
     def validate_rubric(self):
@@ -175,6 +201,7 @@ class ClassworkResponse(BaseModel):
     rubric_levels: list[ActivityRubricLevelResponse] = []
     has_submissions: bool = False
     has_graded_submissions: bool = False
+    is_linked_original_for_remediation: bool = False
 
 
 class ClassworkAssignRequest(BaseModel):
@@ -186,6 +213,11 @@ class ClassworkAssignRequest(BaseModel):
     allow_late_submissions: Optional[bool] = False
     max_attempts: Optional[int] = 1
     is_published: Optional[bool] = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_remediation_link_tampering(cls, data: object):
+        return _reject_forged_remediation_link_fields(data)
 
 
 class ClassworkAssignmentResponse(BaseModel):
