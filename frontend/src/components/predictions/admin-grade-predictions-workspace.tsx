@@ -252,24 +252,7 @@ export function AdminGradePredictionsWorkspace({
       </div>
 
       <div className="flex w-full flex-col gap-0 p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-xl font-black">Student Predictions</h2>
-            <Badge size="sm" variant="outline" className="border-2 border-black bg-yellow-50 font-bold">
-              {selectedClassId === undefined ? "All Classes" : selectedSection?.section_name ?? "Selected Class"}
-            </Badge>
-            {selectedSubject && (
-              <Badge size="sm" variant="outline" className="border-2 border-black bg-yellow-50 font-bold">
-                {selectedSubject.subject_name}
-              </Badge>
-            )}
-          </div>
-          <p className="shrink-0 text-sm font-semibold text-muted-foreground">
-            Showing {visibleStudents.length} of {students.length} students
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3 py-4">
+        <div className="flex flex-col gap-3 py-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative min-w-0 flex-1">
               <Search aria-hidden className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />

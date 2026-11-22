@@ -534,757 +534,754 @@ export default function Dashboard() {
                 />
               ) : (
                 <>
-              {error && (
-                <Alert status="error" className="flex items-center gap-2">
-                  <AlertCircle className="size-4 shrink-0" />
-                  <Alert.Description className="text-sm font-semibold text-destructive">
-                    {error}
-                  </Alert.Description>
-                </Alert>
-              )}
-              {!isLoading && !isPeriodLoading && !error && data && !data.trend_chart.available_filters.length && (
-                <TeacherEmptyState
-                  compact
-                  icon={<BookOpen />}
-                  title={dashboardClass !== "all" || dashboardSubject !== "all" ? "No data for this selection" : "No classes assigned"}
-                  description={dashboardClass !== "all" || dashboardSubject !== "all" ? "Choose another class or subject to view its analytics." : "Dashboard analytics will appear when you have assigned classes and subjects for this academic period."}
-                  action={dashboardClass !== "all" || dashboardSubject !== "all" ? { label: "Clear filters", onClick: () => changeDashboardScope("all", "all") } : undefined}
-                />
-              )}
+                  {error && (
+                    <Alert status="error" className="flex items-center gap-2">
+                      <AlertCircle className="size-4 shrink-0" />
+                      <Alert.Description className="text-sm font-semibold text-destructive">
+                        {error}
+                      </Alert.Description>
+                    </Alert>
+                  )}
+                  {!isLoading && !isPeriodLoading && !error && data && !data.trend_chart.available_filters.length && (
+                    <TeacherEmptyState
+                      compact
+                      icon={<BookOpen />}
+                      title={dashboardClass !== "all" || dashboardSubject !== "all" ? "No data for this selection" : "No classes assigned"}
+                      description={dashboardClass !== "all" || dashboardSubject !== "all" ? "Choose another class or subject to view its analytics." : "Dashboard analytics will appear when you have assigned classes and subjects for this academic period."}
+                      action={dashboardClass !== "all" || dashboardSubject !== "all" ? { label: "Clear filters", onClick: () => changeDashboardScope("all", "all") } : undefined}
+                    />
+                  )}
 
-              {/* 2-Column Responsive Layout: Left/Center Main Analytics & Right Overview Cards */}
-              <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 md:gap-4">
-                {/* Left to Center Column: Learning Performance & Existing Dashboard Functions */}
-                <div className="flex min-w-0 flex-col gap-3 lg:col-span-9 xl:col-span-9 md:gap-4">
-                  {/* 1. Classwork Performance & Completion Trend Chart */}
-                  <Card className="flex flex-col justify-between p-4 sm:p-5">
-                    <Card.Header className="p-0">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
-                        <div>
-                          <Card.Title className="text-base font-bold sm:text-lg">
-                            Classwork Performance & Completion Trend
-                          </Card.Title>
-                        </div>
-
-                        {data &&
-                          data.trend_chart.available_filters.length > 0 && (
-                            <div className="flex items-center gap-1.5 sm:w-auto">
-                              <Select
-                                value={selectedFilterKey || `${data.trend_chart.selected_class_id}-${data.trend_chart.selected_subject_id}`}
-                                onValueChange={setSelectedFilterKey}
-                              >
-                                <Select.Trigger
-                                  id="trend-filter"
-                                  className="h-8 sm:min-w-44 shadow-none"
-                                >
-                                  <Select.Value placeholder="Select section" />
-                                </Select.Trigger>
-                                <Select.Content>
-                                  {data.trend_chart.available_filters.map((f) => (
-                                    <Select.Item
-                                      key={`${f.class_id}-${f.subject_id}`}
-                                      value={`${f.class_id}-${f.subject_id}`}
-                                    >
-                                      {f.section_name} · {f.subject_name}
-                                    </Select.Item>
-                                  ))}
-                                </Select.Content>
-                              </Select>
+                  {/* 2-Column Responsive Layout: Left/Center Main Analytics & Right Overview Cards */}
+                  <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 md:gap-4">
+                    {/* Left to Center Column: Learning Performance & Existing Dashboard Functions */}
+                    <div className="flex min-w-0 flex-col gap-3 lg:col-span-9 xl:col-span-9 md:gap-4">
+                      {/* 1. Classwork Performance & Completion Trend Chart */}
+                      <Card className="flex flex-col justify-between p-4 sm:p-5">
+                        <Card.Header className="p-0">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
+                            <div>
+                              <Card.Title className="text-base font-bold sm:text-lg">
+                                Classwork Performance & Completion Trend
+                              </Card.Title>
                             </div>
-                          )}
-                      </div>
 
-                      {/* Chart Legend */}
-                      <div className="flex flex-wrap items-center gap-4 mb-1 text-xs text-muted-foreground font-medium">
-                        <div className="flex items-center gap-1.5">
-                          <span className="size-2.5 rounded-full bg-primary inline-block" />
-                          <span className="text-foreground">
-                            Average task score (%)
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="size-2.5 rounded-full bg-muted inline-block" />
-                          <span className="text-foreground">
-                            Submission completion (%)
-                          </span>
-                        </div>
-                      </div>
-                    </Card.Header>
-
-                    {/* Line Chart Body */}
-                    <Card.Content className={trendPoints.length ? "h-52 w-full p-0 pb-4" : "w-full p-0"}>
-                      {trendPoints.length ? <>
-                      <ResponsiveContainer width="100%" height="100%" className="-mx-2 text-foreground!">
-                        <LineChart
-                          data={trendPoints}
-                          margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
-                        >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            vertical={false}
-                            stroke="var(--muted-foreground)"
-                            strokeOpacity={0.4}
-                          />
-                          <XAxis
-                            dataKey="short_label"
-                            tickLine={false}
-                            axisLine={{
-                              stroke: "var(--foreground)",
-                              strokeWidth: 1,
-                            }}
-                            tick={{ fontSize: 11, fontWeight: 500, fill: "var(--foreground)" }}
-                          />
-                          <YAxis
-                            domain={trendAxisRange}
-                            ticks={[trendAxisRange[0], (trendAxisRange[0] + trendAxisRange[1]) / 2, trendAxisRange[1]]}
-                            tickLine={false}
-                            axisLine={{
-                              stroke: "var(--foreground)",
-                              strokeWidth: 1,
-                            }}
-                            tick={{ fontSize: 11, fill: "var(--foreground)" }}
-                          />
-                          <RechartsTooltip
-                            content={({ active, payload }) => {
-                              if (!active || !payload || !payload.length)
-                                return null;
-                              const point = payload[0].payload;
-                              return (
-                                <div className="space-y-1 rounded border border-border bg-background p-2.5 text-xs text-foreground shadow-md">
-                                  <p className="font-bold">
-                                    {point.short_label} · {point.title}
-                                  </p>
-                                  <p className="text-emerald-400 font-semibold">
-                                    Average task score: {formatPercent(point.avg_score_percent)}
-                                  </p>
-                                  <p className="text-amber-400 font-semibold">
-                                    Completion: {formatPercent(point.completion_rate_percent)}
-                                  </p>
-                                  {point.scored_count != null && point.eligible_count != null && (
-                                    <p>{point.scored_count} scored of {point.eligible_count} eligible student-task requirements.</p>
-                                  )}
+                            {data &&
+                              data.trend_chart.available_filters.length > 0 && (
+                                <div className="flex items-center gap-1.5 sm:w-auto">
+                                  <Select
+                                    value={selectedFilterKey || `${data.trend_chart.selected_class_id}-${data.trend_chart.selected_subject_id}`}
+                                    onValueChange={setSelectedFilterKey}
+                                  >
+                                    <Select.Trigger
+                                      id="trend-filter"
+                                      className="h-8 sm:min-w-44 shadow-none"
+                                    >
+                                      <Select.Value placeholder="Select section" />
+                                    </Select.Trigger>
+                                    <Select.Content>
+                                      {data.trend_chart.available_filters.map((f) => (
+                                        <Select.Item
+                                          key={`${f.class_id}-${f.subject_id}`}
+                                          value={`${f.class_id}-${f.subject_id}`}
+                                        >
+                                          {f.section_name} · {f.subject_name}
+                                        </Select.Item>
+                                      ))}
+                                    </Select.Content>
+                                  </Select>
                                 </div>
-                              );
-                            }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="avg_score_percent"
-                            name="Average task score %"
-                            stroke="var(--primary)"
-                            strokeWidth={2.5}
-                            dot={{
-                              r: 4,
-                              stroke: "var(--background)",
-                              strokeWidth: 1.5,
-                              fill: "var(--primary)",
-                            }}
-                            activeDot={{ r: 6 }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="completion_rate_percent"
-                            name="Completion %"
-                            stroke="var(--muted)"
-                            strokeWidth={2.5}
-                            dot={{
-                              r: 4,
-                              stroke: "var(--background)",
-                              strokeWidth: 1.5,
-                              fill: "var(--muted)",
-                            }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                      <Card.Description className="text-xs text-muted-foreground mt-0.5 pb-2">
-                        {trendPoints.length
-                          ? "Grouped by Manila deadline date; publish or creation date used when no deadline exists. Raw task scores, not Current grades."
-                          : emptyMessage("No published classwork for this selection.")}
-                        {!isLoading && !isPeriodLoading && !error && data?.trend_chart.warnings?.map((warning, index) => (
-                          <span key={`${warning.code}-${warning.assignment_id}-${index}`}> {warning.message}</span>
-                        ))}
-                      </Card.Description>
-                      </> : dashboardEmptyState("No classwork performance yet", "Published classwork results will appear here for the selected class and subject.", <BookOpen />)}
-                    </Card.Content>
-                  </Card>
-
-                  {/* 2. Learning Performance & Action Queue: Lowest Mastery Lessons Graph & Submissions to Review */}
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {/* Lowest Mastery Lessons Graph */}
-                    <Card className="flex flex-col p-4 sm:p-5 min-h-62">
-                      <Card.Header className="mb-0 p-0 flex flex-col gap-2">
-                        <div className="flex flex-row items-center justify-between">
-                          <div>
-                            <Card.Title className="text-base font-bold text-foreground sm:text-lg">
-                              Lowest Mastery Lessons
-                            </Card.Title>
-                            <Card.Description className="text-xs text-muted-foreground">
-                              Calculated from eligible graded quiz responses; insufficient data is not shown as 0%
-                            </Card.Description>
+                              )}
                           </div>
-                          <Tooltip>
+
+                          {/* Chart Legend */}
+                          <div className="flex flex-wrap items-center gap-4 mb-1 text-xs text-muted-foreground font-medium">
+                            <div className="flex items-center gap-1.5">
+                              <span className="size-2.5 rounded-full bg-primary inline-block" />
+                              <span className="text-foreground">
+                                Average task score (%)
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="size-2.5 rounded-full bg-muted inline-block" />
+                              <span className="text-foreground">
+                                Submission completion (%)
+                              </span>
+                            </div>
+                          </div>
+                        </Card.Header>
+
+                        {/* Line Chart Body */}
+                        <Card.Content className={trendPoints.length ? "h-52 w-full p-0 pb-4" : "w-full p-0"}>
+                          {trendPoints.length ? <>
+                            <ResponsiveContainer width="100%" height="100%" className="-mx-2 text-foreground!">
+                              <LineChart
+                                data={trendPoints}
+                                margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
+                              >
+                                <CartesianGrid
+                                  strokeDasharray="3 3"
+                                  vertical={false}
+                                  stroke="var(--muted-foreground)"
+                                  strokeOpacity={0.4}
+                                />
+                                <XAxis
+                                  dataKey="short_label"
+                                  tickLine={false}
+                                  axisLine={{
+                                    stroke: "var(--foreground)",
+                                    strokeWidth: 1,
+                                  }}
+                                  tick={{ fontSize: 11, fontWeight: 500, fill: "var(--foreground)" }}
+                                />
+                                <YAxis
+                                  domain={trendAxisRange}
+                                  ticks={[trendAxisRange[0], (trendAxisRange[0] + trendAxisRange[1]) / 2, trendAxisRange[1]]}
+                                  tickLine={false}
+                                  axisLine={{
+                                    stroke: "var(--foreground)",
+                                    strokeWidth: 1,
+                                  }}
+                                  tick={{ fontSize: 11, fill: "var(--foreground)" }}
+                                />
+                                <RechartsTooltip
+                                  content={({ active, payload }) => {
+                                    if (!active || !payload || !payload.length)
+                                      return null;
+                                    const point = payload[0].payload;
+                                    return (
+                                      <div className="space-y-1 rounded border border-border bg-background p-2.5 text-xs text-foreground shadow-md">
+                                        <p className="font-bold">
+                                          {point.short_label} · {point.title}
+                                        </p>
+                                        <p className="text-emerald-400 font-semibold">
+                                          Average task score: {formatPercent(point.avg_score_percent)}
+                                        </p>
+                                        <p className="text-amber-400 font-semibold">
+                                          Completion: {formatPercent(point.completion_rate_percent)}
+                                        </p>
+                                        {point.scored_count != null && point.eligible_count != null && (
+                                          <p>{point.scored_count} scored of {point.eligible_count} eligible student-task requirements.</p>
+                                        )}
+                                      </div>
+                                    );
+                                  }}
+                                />
+                                <Line
+                                  type="monotone"
+                                  dataKey="avg_score_percent"
+                                  name="Average task score %"
+                                  stroke="var(--primary)"
+                                  strokeWidth={2.5}
+                                  dot={{
+                                    r: 4,
+                                    stroke: "var(--background)",
+                                    strokeWidth: 1.5,
+                                    fill: "var(--primary)",
+                                  }}
+                                  activeDot={{ r: 6 }}
+                                />
+                                <Line
+                                  type="monotone"
+                                  dataKey="completion_rate_percent"
+                                  name="Completion %"
+                                  stroke="var(--muted)"
+                                  strokeWidth={2.5}
+                                  dot={{
+                                    r: 4,
+                                    stroke: "var(--background)",
+                                    strokeWidth: 1.5,
+                                    fill: "var(--muted)",
+                                  }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                            <Card.Description className="text-xs text-muted-foreground mt-0.5 pb-2">
+                              {trendPoints.length
+                                ? "Grouped by Manila deadline date; publish or creation date used when no deadline exists. Raw task scores, not Current grades."
+                                : emptyMessage("No published classwork for this selection.")}
+                              {!isLoading && !isPeriodLoading && !error && data?.trend_chart.warnings?.map((warning, index) => (
+                                <span key={`${warning.code}-${warning.assignment_id}-${index}`}> {warning.message}</span>
+                              ))}
+                            </Card.Description>
+                          </> : dashboardEmptyState("No classwork performance yet", "Published classwork results will appear here for the selected class and subject.", <BookOpen />)}
+                        </Card.Content>
+                      </Card>
+
+                      {/* 2. Learning Performance & Action Queue: Lowest Mastery Lessons Graph & Submissions to Review */}
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {/* Lowest Mastery Lessons Graph */}
+                        <Card className="flex flex-col p-4 sm:p-5 min-h-62">
+                          <Card.Header className="mb-0 p-0 flex flex-col gap-2">
+                            <div className="flex flex-row items-center justify-between">
+                              <div>
+                                <Card.Title className="text-base font-bold text-foreground sm:text-lg">
+                                  Lowest Mastery Lessons
+                                </Card.Title>
+                              </div>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      autoIcon={false}
+                                      aria-label="View lesson subject"
+                                      disabled={!isPositiveId(lessonSubject?.subject_id) || !isPositiveId(lessonClassId)}
+                                      onClick={() => {
+                                        if (isPositiveId(lessonSubject?.subject_id) && isPositiveId(lessonClassId)) {
+                                          navigate(`/teacher/classes/${lessonClassId}/subjects/${lessonSubject.subject_id}`);
+                                        }
+                                      }}
+                                      className="text-foreground shadow-none px-1.5"
+                                    >
+                                      <ArrowUpRight className="size-4" />
+                                    </Button>
+                                  }
+                                />
+                                <TooltipContent side="right">{isPositiveId(lessonClassId) ? "View subject" : "Choose a class to view this subject."}</TooltipContent>
+                              </Tooltip>
+                            </div>
+
+                            {subjects.length > 0 && (
+                              <div className="flex flex-row flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                                {subjects.map((subject) => (
+                                  <Button
+                                    key={subject.subject_id}
+                                    autoIcon={false}
+                                    variant={
+                                      lessonSubject?.subject_id === subject.subject_id
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                    size="sm"
+                                    onClick={() => setSubjectFilter(String(subject.subject_id))}
+                                    className="shrink-0 border-black shadow-none text-[11px] px-2 py-0.5"
+                                  >
+                                    {subject.subject_name}
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </Card.Header>
+
+                          <Card.Content className="mt-2 flex flex-col justify-between gap-2.5 p-0 h-full">
+                            {!lowestMasteryItems.length ? (
+                              dashboardEmptyState(
+                                "Insufficient lesson mastery data",
+                                !lessonSubject
+                                  ? "No subjects assigned for this academic period."
+                                  : lessonSubject.coverage.scored_mapped_response_count === 0
+                                    ? "No scored graded quiz answers linked to lessons for this subject."
+                                    : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions (shown as insufficient data rather than 0% mastery).`,
+                                <BookOpen />,
+                              )
+                            ) : (
+                              <div
+                                className="h-52 w-full min-w-0"
+                                role="region"
+                                aria-label={`Lowest mastery lessons graph for ${lessonSubject?.subject_name ?? "selected subject"}`}
+                              >
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart
+                                    data={lowestMasteryItems}
+                                    layout="vertical"
+                                    margin={{ top: 4, right: 16, left: 4, bottom: 4 }}
+                                  >
+                                    <CartesianGrid
+                                      strokeDasharray="3 3"
+                                      horizontal={false}
+                                      stroke="var(--muted-foreground)"
+                                      strokeOpacity={0.35}
+                                    />
+                                    <XAxis
+                                      type="number"
+                                      domain={[0, 100]}
+                                      ticks={[0, 25, 50, 75, 100]}
+                                      tickFormatter={(v) => `${v}%`}
+                                      tickLine={false}
+                                      axisLine={{ stroke: "var(--foreground)", strokeWidth: 1 }}
+                                      tick={{ fontSize: 11, fill: "var(--foreground)" }}
+                                    />
+                                    <YAxis
+                                      type="category"
+                                      dataKey="title"
+                                      width={120}
+                                      tickLine={false}
+                                      axisLine={{ stroke: "var(--foreground)", strokeWidth: 1 }}
+                                      tick={{ fontSize: 11, fontWeight: 500, fill: "var(--foreground)" }}
+                                    />
+                                    <RechartsTooltip
+                                      content={({ active, payload }) => {
+                                        if (!active || !payload || !payload.length) return null;
+                                        const item = payload[0].payload;
+                                        return (
+                                          <div className="space-y-1 rounded border border-border bg-background p-2.5 text-xs text-foreground shadow-md">
+                                            <p className="font-bold">{item.title}</p>
+                                            <p className="font-semibold">
+                                              Mastery: {formatPercent(item.performance_percent)}
+                                            </p>
+                                            <p className="text-muted-foreground">
+                                              {item.awarded_points} / {item.possible_points} pts · {item.scored_response_count} scored responses · {item.learner_count} learners · {item.question_count} questions
+                                            </p>
+                                          </div>
+                                        );
+                                      }}
+                                    />
+                                    <Bar
+                                      dataKey="performance_percent"
+                                      name="Mastery %"
+                                      fill="var(--primary)"
+                                      stroke="var(--foreground)"
+                                      strokeWidth={1.5}
+                                      barSize={18}
+                                      radius={[0, 3, 3, 0]}
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+                            )}
+                            {lessonSubject && (
+                              <Card.Description className="text-[11px] text-muted-foreground">
+                                {lessonSubject.coverage.scored_mapped_response_count} scored lesson-linked responses from eligible graded quizzes. {lessonSubject.coverage.unmapped_response_count} unmapped; {lessonSubject.coverage.ungraded_response_count} awaiting scores{lessonSubject.coverage.insufficient_lesson_count > 0 ? `; ${lessonSubject.coverage.insufficient_lesson_count} below minimum evidence threshold` : ""}.
+                                {lessonSubject.warnings.map((warning, index) => <span key={`${warning.code}-${index}`}> {warning.message}</span>)}
+                              </Card.Description>
+                            )}
+                          </Card.Content>
+                        </Card>
+
+                        {/* Submissions to Review */}
+                        {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="submissions to review" /> : (
+                          <Card className="flex flex-col p-4 sm:p-5">
+                            <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                              <Card.Title className="text-base font-bold text-foreground sm:text-lg">
+                                Submissions to Review
+                              </Card.Title>
+                              <Tooltip >
+                                <TooltipTrigger
+                                  render={
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      autoIcon={false}
+                                      onClick={() => navigate(routes.teacher.classworks)}
+                                      className="text-foreground shadow-none px-1.5"
+                                    >
+                                      <ArrowUpRight className="size-4" />
+                                    </Button>
+                                  }
+                                />
+                                <TooltipContent side="right">View classworks</TooltipContent>
+                              </Tooltip>
+                            </Card.Header>
+
+                            <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
+                              {reviewSubmissions.length === 0 && (
+                                reviewWarnings.length ? (
+                                  <p className="py-6 text-sm text-muted-foreground" role="status">Review queue incomplete.</p>
+                                ) : dashboardEmptyState(
+                                  isHistorical ? "No historical submissions to review" : "No submissions need grading",
+                                  isHistorical ? "There are no submissions awaiting review for this period." : "You're all caught up with grading.",
+                                  <CheckCircle />,
+                                )
+                              )}
+                              {reviewSubmissions.slice(0, 3).map((item) => (
+                                <Card
+                                  key={item.submission_id}
+                                  onClick={() => {
+                                    if (isPositiveId(item.classwork_id)) navigate(`/teacher/classworks/${item.classwork_id}`);
+                                  }}
+                                  className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
+                                >
+                                  <div className="flex flex-col min-w-0 pr-2">
+                                    <span className="font-semibold text-foreground truncate">
+                                      {item.title}
+                                    </span>
+                                    <span className="text-[11px] text-muted-foreground truncate">
+                                      {item.section}
+                                    </span>
+                                  </div>
+                                  <Badge
+                                    size="sm"
+                                    variant={
+                                      item.variant === "destructive"
+                                        ? "destructive"
+                                        : "default"
+                                    }
+                                    className="shrink-0"
+                                  >
+                                    {item.badge}
+                                  </Badge>
+                                </Card>
+                              ))}
+                              {reviewWarnings.map((warning, index) => (
+                                <Card.Description key={`${warning.code}-${warning.assignment_id}-${index}`} className="text-xs text-muted-foreground">
+                                  {warning.message}
+                                </Card.Description>
+                              ))}
+                            </Card.Content>
+                          </Card>
+                        )}
+                      </div>
+
+                      {/* 3. Section-by-Section Health */}
+                      <Card className="flex flex-col justify-between p-4 sm:p-5">
+                        <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                          <Card.Title className="text-base font-bold text-foreground sm:text-lg">
+                            Section-by-Section Health
+                          </Card.Title>
+                          <Tooltip >
                             <TooltipTrigger
                               render={
                                 <Button
                                   variant="secondary"
                                   size="sm"
                                   autoIcon={false}
-                                  aria-label="View lesson subject"
-                                  disabled={!isPositiveId(lessonSubject?.subject_id) || !isPositiveId(lessonClassId)}
-                                  onClick={() => {
-                                    if (isPositiveId(lessonSubject?.subject_id) && isPositiveId(lessonClassId)) {
-                                      navigate(`/teacher/classes/${lessonClassId}/subjects/${lessonSubject.subject_id}`);
-                                    }
-                                  }}
+                                  onClick={() => navigate(routes.teacher.classes)}
                                   className="text-foreground shadow-none px-1.5"
                                 >
                                   <ArrowUpRight className="size-4" />
                                 </Button>
                               }
                             />
-                            <TooltipContent side="right">{isPositiveId(lessonClassId) ? "View subject" : "Choose a class to view this subject."}</TooltipContent>
+                            <TooltipContent side="right">View all sections</TooltipContent>
                           </Tooltip>
-                        </div>
+                        </Card.Header>
 
-                        {subjects.length > 0 && (
-                          <div className="flex flex-row flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-                            {subjects.map((subject) => (
-                              <Button
-                                key={subject.subject_id}
-                                autoIcon={false}
-                                variant={
-                                  lessonSubject?.subject_id === subject.subject_id
-                                    ? "default"
-                                    : "outline"
-                                }
-                                size="sm"
-                                onClick={() => setSubjectFilter(String(subject.subject_id))}
-                                className="shrink-0 border-black shadow-none text-[11px] px-2 py-0.5"
-                              >
-                                {subject.subject_name}
-                              </Button>
-                            ))}
-                          </div>
-                        )}
-                      </Card.Header>
+                        <Card.Content className="mt-1 flex flex-col gap-3 p-0">
+                          {(() => {
+                            const sections = isDataMatchingPeriod ? (data?.section_matrix ?? []) : [];
+                            const displayed = showAllSectionHealth ? sections : sections.slice(0, 2);
 
-                      <Card.Content className="mt-2 flex flex-col justify-between gap-2.5 p-0 h-full">
-                        {!lowestMasteryItems.length ? (
-                          dashboardEmptyState(
-                            "Insufficient lesson mastery data",
-                            !lessonSubject
-                              ? "No subjects assigned for this academic period."
-                              : lessonSubject.coverage.scored_mapped_response_count === 0
-                                ? "No scored graded quiz answers linked to lessons for this subject."
-                                : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions (shown as insufficient data rather than 0% mastery).`,
-                            <BookOpen />,
-                          )
-                        ) : (
-                          <div
-                            className="h-52 w-full min-w-0"
-                            role="region"
-                            aria-label={`Lowest mastery lessons graph for ${lessonSubject?.subject_name ?? "selected subject"}`}
-                          >
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart
-                                data={lowestMasteryItems}
-                                layout="vertical"
-                                margin={{ top: 4, right: 16, left: 4, bottom: 4 }}
-                              >
-                                <CartesianGrid
-                                  strokeDasharray="3 3"
-                                  horizontal={false}
-                                  stroke="var(--muted-foreground)"
-                                  strokeOpacity={0.35}
-                                />
-                                <XAxis
-                                  type="number"
-                                  domain={[0, 100]}
-                                  ticks={[0, 25, 50, 75, 100]}
-                                  tickFormatter={(v) => `${v}%`}
-                                  tickLine={false}
-                                  axisLine={{ stroke: "var(--foreground)", strokeWidth: 1 }}
-                                  tick={{ fontSize: 11, fill: "var(--foreground)" }}
-                                />
-                                <YAxis
-                                  type="category"
-                                  dataKey="title"
-                                  width={120}
-                                  tickLine={false}
-                                  axisLine={{ stroke: "var(--foreground)", strokeWidth: 1 }}
-                                  tick={{ fontSize: 11, fontWeight: 500, fill: "var(--foreground)" }}
-                                />
-                                <RechartsTooltip
-                                  content={({ active, payload }) => {
-                                    if (!active || !payload || !payload.length) return null;
-                                    const item = payload[0].payload;
-                                    return (
-                                      <div className="space-y-1 rounded border border-border bg-background p-2.5 text-xs text-foreground shadow-md">
-                                        <p className="font-bold">{item.title}</p>
-                                        <p className="font-semibold">
-                                          Mastery: {formatPercent(item.performance_percent)}
-                                        </p>
-                                        <p className="text-muted-foreground">
-                                          {item.awarded_points} / {item.possible_points} pts · {item.scored_response_count} scored responses · {item.learner_count} learners · {item.question_count} questions
-                                        </p>
+                            return (
+                              <>
+                                {sections.length === 0 && (
+                                  dashboardEmptyState("No classes for this period", "Assigned classes will appear here for the selected academic period.", <BookOpen />)
+                                )}
+                                {displayed.map((sec, idx: number) => (
+                                  <Card
+                                    key={idx}
+                                    className="shadow-none p-4 text-xs hover:bg-retro hover:-translate-y-1 cursor-pointer transition-all"
+                                    onClick={() => {
+                                      if (isPositiveId(sec.class_id) && isPositiveId(sec.subject_id)) {
+                                        navigate(`/teacher/classes/${sec.class_id}/${sec.subject_id}`);
+                                      }
+                                    }}
+                                  >
+                                    <div className="flex items-center justify-between mb-4">
+                                      <div className="flex items-center gap-3">
+                                        <span className="font-bold text-xl text-foreground">
+                                          {sec.section_name}
+                                        </span>
+                                        <Badge
+                                          variant="secondary"
+                                          size="sm"
+                                          className="px-1.5 py-0.5"
+                                        >
+                                          {sec.subject_name}
+                                        </Badge>
                                       </div>
-                                    );
-                                  }}
-                                />
-                                <Bar
-                                  dataKey="performance_percent"
-                                  name="Mastery %"
-                                  fill="var(--primary)"
-                                  stroke="var(--foreground)"
-                                  strokeWidth={1.5}
-                                  barSize={18}
-                                  radius={[0, 3, 3, 0]}
-                                />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
-                        {lessonSubject && (
-                          <Card.Description className="text-[11px] text-muted-foreground">
-                            {lessonSubject.coverage.scored_mapped_response_count} scored lesson-linked responses from eligible graded quizzes. {lessonSubject.coverage.unmapped_response_count} unmapped; {lessonSubject.coverage.ungraded_response_count} awaiting scores{lessonSubject.coverage.insufficient_lesson_count > 0 ? `; ${lessonSubject.coverage.insufficient_lesson_count} below minimum evidence threshold` : ""}.
-                            {lessonSubject.warnings.map((warning, index) => <span key={`${warning.code}-${index}`}> {warning.message}</span>)}
-                          </Card.Description>
-                        )}
-                      </Card.Content>
-                    </Card>
+                                      <span className="font-semibold text-xs text-muted-foreground">
+                                        {sec.student_count} Students
+                                      </span>
+                                    </div>
 
-                    {/* Submissions to Review */}
-                    {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="submissions to review" /> : (
-                    <Card className="flex flex-col p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
-                          Submissions to Review
-                        </Card.Title>
-                        <Tooltip >
-                          <TooltipTrigger
-                            render={
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                autoIcon={false}
-                                onClick={() => navigate(routes.teacher.classworks)}
-                                className="text-foreground shadow-none px-1.5"
-                              >
-                                <ArrowUpRight className="size-4" />
-                              </Button>
-                            }
-                          />
-                          <TooltipContent side="right">View classworks</TooltipContent>
-                        </Tooltip>
-                      </Card.Header>
+                                    {/* Task completion & attendance progress */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-2.5">
+                                      <div className="space-y-1">
+                                        <div className="flex justify-between text-sm">
+                                          <span className="text-foreground">
+                                            Task Completion
+                                          </span>
+                                          <span className="font-semibold">
+                                            {formatPercent(sec.completion_rate_percent)}
+                                          </span>
+                                        </div>
+                                        <Progress
+                                          value={sec.completion_rate_percent}
+                                          className="h-2"
+                                        />
+                                      </div>
 
-                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {reviewSubmissions.length === 0 && (
-                          reviewWarnings.length ? (
-                            <p className="py-6 text-sm text-muted-foreground" role="status">Review queue incomplete.</p>
-                          ) : dashboardEmptyState(
-                            isHistorical ? "No historical submissions to review" : "No submissions need grading",
-                            isHistorical ? "There are no submissions awaiting review for this period." : "You're all caught up with grading.",
-                            <CheckCircle />,
-                          )
-                        )}
-                        {reviewSubmissions.slice(0, 3).map((item) => (
-                          <Card
-                            key={item.submission_id}
-                            onClick={() => {
-                              if (isPositiveId(item.classwork_id)) navigate(`/teacher/classworks/${item.classwork_id}`);
-                            }}
-                            className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
-                          >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {item.title}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
-                                {item.section}
-                              </span>
-                            </div>
-                            <Badge
-                              size="sm"
-                              variant={
-                                item.variant === "destructive"
-                                  ? "destructive"
-                                  : "default"
-                              }
-                              className="shrink-0"
-                            >
-                              {item.badge}
-                            </Badge>
-                          </Card>
-                        ))}
-                        {reviewWarnings.map((warning, index) => (
-                          <Card.Description key={`${warning.code}-${warning.assignment_id}-${index}`} className="text-xs text-muted-foreground">
-                            {warning.message}
-                          </Card.Description>
-                        ))}
-                      </Card.Content>
-                    </Card>
-                    )}
-                  </div>
+                                      <div className="space-y-1">
+                                        <div className="flex justify-between text-sm">
+                                          <span className="text-foreground">
+                                            Attendance
+                                          </span>
+                                          <span className="font-semibold">
+                                            {formatPercent(sec.attendance_rate_percent)}
+                                          </span>
+                                        </div>
+                                        <Progress
+                                          value={sec.attendance_rate_percent}
+                                          className="h-2"
+                                        />
+                                      </div>
+                                    </div>
 
-                  {/* 3. Section-by-Section Health */}
-                  <Card className="flex flex-col justify-between p-4 sm:p-5">
-                    <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                      <Card.Title className="text-base font-bold text-foreground sm:text-lg">
-                        Section-by-Section Health
-                      </Card.Title>
-                      <Tooltip >
-                        <TooltipTrigger
-                          render={
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              autoIcon={false}
-                              onClick={() => navigate(routes.teacher.classes)}
-                              className="text-foreground shadow-none px-1.5"
-                            >
-                              <ArrowUpRight className="size-4" />
-                            </Button>
-                          }
-                        />
-                        <TooltipContent side="right">View all sections</TooltipContent>
-                      </Tooltip>
-                    </Card.Header>
-
-                    <Card.Content className="mt-1 flex flex-col gap-3 p-0">
-                      {(() => {
-                        const sections = isDataMatchingPeriod ? (data?.section_matrix ?? []) : [];
-                        const displayed = showAllSectionHealth ? sections : sections.slice(0, 2);
-
-                        return (
-                          <>
-                            {sections.length === 0 && (
-                              dashboardEmptyState("No classes for this period", "Assigned classes will appear here for the selected academic period.", <BookOpen />)
-                            )}
-                            {displayed.map((sec, idx: number) => (
-                              <Card
-                                key={idx}
-                                className="shadow-none p-4 text-xs hover:bg-retro hover:-translate-y-1 cursor-pointer transition-all"
-                                onClick={() => {
-                                  if (isPositiveId(sec.class_id) && isPositiveId(sec.subject_id)) {
-                                    navigate(`/teacher/classes/${sec.class_id}/${sec.subject_id}`);
-                                  }
-                                }}
-                              >
-                                <div className="flex items-center justify-between mb-4">
-                                  <div className="flex items-center gap-3">
-                                    <span className="font-bold text-xl text-foreground">
-                                      {sec.section_name}
-                                    </span>
-                                    <Badge
+                                    {/* Bottom Info Bar */}
+                                    <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
+                                      <div className="flex items-center gap-4">
+                                        <span className="text-foreground font-semibold">
+                                          Current grade:{" "}
+                                          <Badge
+                                            variant={
+                                              sec.current_grade_meets_threshold === false
+                                                ? "destructive"
+                                                : sec.current_grade_meets_threshold === true
+                                                  ? "success"
+                                                  : "surface"
+                                            }
+                                            size="sm"
+                                            className="ml-1"
+                                            title={sec.passing_threshold != null
+                                              ? `Passing grade is set per subject group: ${sec.passing_threshold}. Compared before display rounding.`
+                                              : "Passing grade is set by the subject grading template; unavailable for this section."}
+                                          >
+                                            {formatGrade(sec.current_grade)}
+                                          </Badge>
+                                        </span>
+                                        <span className="text-foreground font-semibold">
+                                          Passing Rate:{" "}
+                                          <Badge
+                                            variant="surface"
+                                            size="sm"
+                                            className="ml-1"
+                                          >
+                                            {formatPercent(sec.passing_rate_percent)}
+                                          </Badge>
+                                        </span>
+                                      </div>
+                                      <span className="text-foreground">
+                                        <span className="text-foreground font-bold mr-1">
+                                          {sec.published_classworks}
+                                        </span>
+                                        published tasks
+                                      </span>
+                                    </div>
+                                    <Card.Description className="text-xs text-muted-foreground">
+                                      {sec.warnings?.map((warning: { code: string; message: string }) => (
+                                        <span key={warning.code}> {warning.message}</span>
+                                      ))}
+                                      {sec.engagement?.warnings.map((warning: { code: string; message: string }, index: number) => (
+                                        <span key={`engagement-${warning.code}-${index}`}> {warning.message}</span>
+                                      ))}
+                                    </Card.Description>
+                                  </Card>
+                                ))}
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
+                                  <Card.Description className="text-xs text-muted-foreground">
+                                    Performance and completion across your classes. Attendance uses all recorded entries in the selected period.
+                                  </Card.Description>
+                                  {sections.length > 2 && (
+                                    <Button
                                       variant="secondary"
                                       size="sm"
-                                      className="px-1.5 py-0.5"
+                                      autoIcon={false}
+                                      onClick={() => setShowAllSectionHealth((prev) => !prev)}
+                                      className="self-end sm:self-auto text-xs font-semibold px-2.5 py-1 h-7 text-foreground shadow-none"
                                     >
-                                      {sec.subject_name}
-                                    </Badge>
-                                  </div>
-                                  <span className="font-semibold text-xs text-muted-foreground">
-                                    {sec.student_count} Students
-                                  </span>
+                                      {showAllSectionHealth ? "Show less" : "Show all classes"}
+                                    </Button>
+                                  )}
                                 </div>
+                              </>
+                            );
+                          })()}
+                        </Card.Content>
+                      </Card>
 
-                                {/* Task completion & attendance progress */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-2.5">
-                                  <div className="space-y-1">
-                                    <div className="flex justify-between text-sm">
-                                      <span className="text-foreground">
-                                        Task Completion
-                                      </span>
-                                      <span className="font-semibold">
-                                        {formatPercent(sec.completion_rate_percent)}
-                                      </span>
-                                    </div>
-                                    <Progress
-                                      value={sec.completion_rate_percent}
-                                      className="h-2"
-                                    />
-                                  </div>
+                      {/* 4. Remaining Existing Dashboard Functions: Monthly Attendance, Weekday Submissions, Grade Distribution */}
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {/* Monthly attendance by section */}
+                        <Card className="flex flex-col p-4 sm:p-5">
+                          <Card.Header className="mb-0 p-0">
+                            <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
+                              Attendance This Month by Section
+                            </Card.Title>
+                          </Card.Header>
 
-                                  <div className="space-y-1">
-                                    <div className="flex justify-between text-sm">
-                                      <span className="text-foreground">
-                                        Attendance
-                                      </span>
-                                      <span className="font-semibold">
-                                        {formatPercent(sec.attendance_rate_percent)}
-                                      </span>
-                                    </div>
-                                    <Progress
-                                      value={sec.attendance_rate_percent}
-                                      className="h-2"
-                                    />
-                                  </div>
-                                </div>
-
-                                {/* Bottom Info Bar */}
-                                <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
-                                  <div className="flex items-center gap-4">
-                                    <span className="text-foreground font-semibold">
-                                      Current grade:{" "}
-                                      <Badge
-                                        variant={
-                                          sec.current_grade_meets_threshold === false
-                                            ? "destructive"
-                                            : sec.current_grade_meets_threshold === true
-                                              ? "success"
-                                              : "surface"
-                                        }
-                                        size="sm"
-                                        className="ml-1"
-                                        title={sec.passing_threshold != null
-                                          ? `Passing grade is set per subject group: ${sec.passing_threshold}. Compared before display rounding.`
-                                          : "Passing grade is set by the subject grading template; unavailable for this section."}
-                                      >
-                                        {formatGrade(sec.current_grade)}
-                                      </Badge>
-                                    </span>
-                                    <span className="text-foreground font-semibold">
-                                      Passing Rate:{" "}
-                                      <Badge
-                                        variant="surface"
-                                        size="sm"
-                                        className="ml-1"
-                                      >
-                                        {formatPercent(sec.passing_rate_percent)}
-                                      </Badge>
-                                    </span>
-                                  </div>
-                                  <span className="text-foreground">
-                                    <span className="text-foreground font-bold mr-1">
-                                      {sec.published_classworks}
-                                    </span>
-                                    published tasks
-                                  </span>
-                                </div>
-                                <Card.Description className="text-xs text-muted-foreground">
-                                  {sec.warnings?.map((warning: { code: string; message: string }) => (
-                                    <span key={warning.code}> {warning.message}</span>
-                                  ))}
-                                  {sec.engagement?.warnings.map((warning: { code: string; message: string }, index: number) => (
-                                    <span key={`engagement-${warning.code}-${index}`}> {warning.message}</span>
-                                  ))}
-                                </Card.Description>
-                              </Card>
-                            ))}
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
-                              <Card.Description className="text-xs text-muted-foreground">
-                                Performance and completion across your classes. Attendance uses all recorded entries in the selected period.
-                              </Card.Description>
-                              {sections.length > 2 && (
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  autoIcon={false}
-                                  onClick={() => setShowAllSectionHealth((prev) => !prev)}
-                                  className="self-end sm:self-auto text-xs font-semibold px-2.5 py-1 h-7 text-foreground shadow-none"
+                          <Card.Content className="mt-3 flex flex-col justify-between gap-3 p-0">
+                            {attendanceSections.length === 0 ? (
+                              dashboardEmptyState(
+                                "No section attendance yet",
+                                "Attendance rates by section will appear here for the selected academic period.",
+                                <Calendar />,
+                              )
+                            ) : (
+                              attendanceSections.map((item) => (
+                                <div
+                                  key={item.class_id}
+                                  className="flex items-center justify-between gap-2 text-xs sm:text-sm"
+                                  title={`${item.record_count} recorded ${item.record_count === 1 ? "entry" : "entries"}.`}
                                 >
-                                  {showAllSectionHealth ? "Show less" : "Show all classes"}
-                                </Button>
+                                  <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">
+                                    {item.section}
+                                  </span>
+                                  <Progress value={item.rate ?? 0} className="h-3 flex-1" />
+                                  <span className="font-semibold text-foreground text-right w-10 shrink-0">
+                                    {formatPercent(item.rate)}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </Card.Content>
+                          <Card.Description className="mt-3 text-[11px] text-muted-foreground mt-auto">
+                            {visiblePhaseTwo?.month_window && visiblePhaseTwo.month_window.start_date <= visiblePhaseTwo.month_window.end_date
+                              ? `${visiblePhaseTwo.month_window.label} (${formatDashboardDate(visiblePhaseTwo.month_window.start_date)}–${formatDashboardDate(visiblePhaseTwo.month_window.end_date)}) · Present + late / recorded entries.`
+                              : visiblePhaseTwo?.month_window
+                                ? "The current Manila month does not overlap the selected period."
+                                : "Current Manila month within the selected period · Present + late / recorded entries."}
+                          </Card.Description>
+                        </Card>
+
+                        {/* Submissions by weekday */}
+                        <Card className="flex flex-col justify-start p-4 sm:p-5">
+                          <Card.Header className="mb-0 p-0">
+                            <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
+                              Submissions by weekday
+                            </Card.Title>
+                            <Card.Description className="mt-0.5 text-xs text-muted-foreground">
+                              Selected period · Manila time · Sunday: {weekdayUnavailable ? "—" : visiblePhaseTwo?.weekdays.sunday_count ?? "—"}.
+                              {visiblePhaseTwo?.weekdays && (
+                                <span> {visiblePhaseTwo.weekdays.total_count} of {visiblePhaseTwo.weekdays.completed_count} submissions have recorded timestamps.</span>
                               )}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </Card.Content>
-                  </Card>
-
-                  {/* 4. Remaining Existing Dashboard Functions: Monthly Attendance, Weekday Submissions, Grade Distribution */}
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {/* Monthly attendance by section */}
-                    <Card className="flex flex-col p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
-                          Attendance This Month by Section
-                        </Card.Title>
-                      </Card.Header>
-
-                      <Card.Content className="mt-3 flex flex-col justify-between gap-3 p-0">
-                        {attendanceSections.length === 0 ? (
-                          dashboardEmptyState(
-                            "No section attendance yet",
-                            "Attendance rates by section will appear here for the selected academic period.",
-                            <Calendar />,
-                          )
-                        ) : (
-                          attendanceSections.map((item) => (
-                            <div
-                              key={item.class_id}
-                              className="flex items-center justify-between gap-2 text-xs sm:text-sm"
-                              title={`${item.record_count} recorded ${item.record_count === 1 ? "entry" : "entries"}.`}
-                            >
-                              <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">
-                                {item.section}
-                              </span>
-                              <Progress value={item.rate ?? 0} className="h-3 flex-1" />
-                              <span className="font-semibold text-foreground text-right w-10 shrink-0">
-                                {formatPercent(item.rate)}
-                              </span>
-                            </div>
-                          ))
-                        )}
-                      </Card.Content>
-                      <Card.Description className="mt-3 text-[11px] text-muted-foreground mt-auto">
-                        {visiblePhaseTwo?.month_window && visiblePhaseTwo.month_window.start_date <= visiblePhaseTwo.month_window.end_date
-                          ? `${visiblePhaseTwo.month_window.label} (${formatDashboardDate(visiblePhaseTwo.month_window.start_date)}–${formatDashboardDate(visiblePhaseTwo.month_window.end_date)}) · Present + late / recorded entries.`
-                          : visiblePhaseTwo?.month_window
-                            ? "The current Manila month does not overlap the selected period."
-                            : "Current Manila month within the selected period · Present + late / recorded entries."}
-                      </Card.Description>
-                    </Card>
-
-                    {/* Submissions by weekday */}
-                    <Card className="flex flex-col justify-start p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
-                          Submissions by weekday
-                        </Card.Title>
-                        <Card.Description className="mt-0.5 text-xs text-muted-foreground">
-                          Selected period · Manila time · Sunday: {weekdayUnavailable ? "—" : visiblePhaseTwo?.weekdays.sunday_count ?? "—"}.
-                          {visiblePhaseTwo?.weekdays && (
-                            <span> {visiblePhaseTwo.weekdays.total_count} of {visiblePhaseTwo.weekdays.completed_count} submissions have recorded timestamps.</span>
-                          )}
-                          {weekdayWarnings.map((warning) => <span key={`${warning.code}:${warning.message}`}> {warning.message}</span>)}
-                        </Card.Description>
-                      </Card.Header>
-
-                      <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
-                        {submissionsWeekday.map((item, idx: number) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                          >
-                            <span className="font-medium text-foreground/90 shrink-0 w-10 truncate">
-                              {item.day}
-                            </span>
-                            <Progress
-                              value={Math.round(
-                                ((item.count ?? 0) / maxWeekdayCount) * 100,
-                              )}
-                              className="h-3 flex-1"
-                            />
-                            <span className="font-semibold text-foreground text-right w-8 shrink-0">
-                              {item.count ?? "—"}
-                            </span>
-                          </div>
-                        ))}
-                      </Card.Content>
-                    </Card>
-
-                    {/* Grade Distribution */}
-                    <Card className="flex flex-col justify-between p-4 sm:p-5 md:col-span-2 xl:col-span-1">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
-                          Grade distribution
-                        </Card.Title>
-                        <Card.Description className="mt-0.5 text-xs text-muted-foreground">
-                          Student-subject Current grades per band, selected period.
-                        </Card.Description>
-                      </Card.Header>
-
-                      <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
-                        {(!gradeDetails || gradeDetails.available_grade_count === 0 || gradeDistribution.length === 0) && (
-                          dashboardEmptyState("No grade distribution yet", gradeEmptyMessage(Array.isArray(visibleGradeData?.grade_distribution)), <BookOpen />)
-                        )}
-                        {gradeDetails && gradeDetails.available_grade_count > 0 && gradeDistribution.map((item) => (
-                          <div
-                            key={item.band}
-                            className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                          >
-                            <span className="font-medium text-foreground/90 shrink-0 w-20 whitespace-nowrap">
-                              {item.band}
-                            </span>
-                            <Progress
-                              value={Math.round(
-                                (item.count / maxGradeDistCount) * 100,
-                              )}
-                              className="h-3 flex-1"
-                              indicatorClassName="bg-muted-foreground"
-                            />
-                            <span className="font-semibold text-foreground text-right w-8 shrink-0">
-                              {item.count}
-                            </span>
-                          </div>
-                        ))}
-                      </Card.Content>
-                      {gradeCoverage()}
-                      <Card.Description className="mt-0.5 text-xs text-muted-foreground">
-                        Bands use unrounded grades and do not indicate passing.
-                      </Card.Description>
-                    </Card>
-                  </div>
-
-                </div>
-
-                {/* Right Column: Filters & Overview Summary Metrics */}
-                <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-3 xl:col-span-3">
-                  <div className="grid min-w-0 grid-cols-1 gap-2" aria-label="Dashboard filters">
-                    <p className="text-sm font-medium">Filters</p>
-                    <div className="flex min-w-0 flex-col gap-2">
-                      <label htmlFor="dashboard-class" className="sr-only">Class</label>
-                      <Select name="dashboard-class" value={dashboardClass} onValueChange={(value) => changeDashboardScope(value,
-                        dashboardSubject === "all" || dashboardFilters.some(item => (value === "all" || String(item.class_id) === value) && String(item.subject_id) === dashboardSubject)
-                          ? dashboardSubject : "all")}
-                        disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
-                        <Select.Trigger id="dashboard-class" className="w-full"><Select.Value /></Select.Trigger>
-                        <Select.Content>
-                          <Select.Item value="all">All Classes</Select.Item>
-                          {classOptions.map(item => <Select.Item key={item.class_id} value={String(item.class_id)}>{item.section_name}</Select.Item>)}
-                        </Select.Content>
-                      </Select>
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-2">
-                      <label htmlFor="dashboard-subject" className="sr-only">Subject</label>
-                      <Select name="dashboard-subject" value={dashboardSubject} onValueChange={(value) => changeDashboardScope(dashboardClass, value)}
-                        disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
-                        <Select.Trigger id="dashboard-subject" className="w-full"><Select.Value /></Select.Trigger>
-                        <Select.Content>
-                          <Select.Item value="all">All Subjects</Select.Item>
-                          {subjectOptions.map(item => <Select.Item key={item.subject_id} value={String(item.subject_id)}>{item.subject_name}</Select.Item>)}
-                        </Select.Content>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3.5">
-                    {isLoading && !data
-                      ? Array.from({ length: defaultTeacherCards.length }).map((_, i) => (
-                        <Card key={i} className="@container/card animate-pulse">
-                          <Card.Header>
-                            <Card.Description className="h-4 w-24 bg-muted text-transparent">
-                              Loading
+                              {weekdayWarnings.map((warning) => <span key={`${warning.code}:${warning.message}`}> {warning.message}</span>)}
                             </Card.Description>
                           </Card.Header>
-                          <Card.Content className="space-y-2">
-                            <Card.Title className="h-8 w-16 bg-muted text-transparent">
-                              0
-                            </Card.Title>
-                            <p className="h-3 w-32 bg-muted text-transparent">
-                              Loading summary
-                            </p>
+
+                          <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
+                            {submissionsWeekday.map((item, idx: number) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                              >
+                                <span className="font-medium text-foreground/90 shrink-0 w-10 truncate">
+                                  {item.day}
+                                </span>
+                                <Progress
+                                  value={Math.round(
+                                    ((item.count ?? 0) / maxWeekdayCount) * 100,
+                                  )}
+                                  className="h-3 flex-1"
+                                />
+                                <span className="font-semibold text-foreground text-right w-8 shrink-0">
+                                  {item.count ?? "—"}
+                                </span>
+                              </div>
+                            ))}
                           </Card.Content>
                         </Card>
-                      ))
-                      : statCards.map((card) => (
-                        <OverviewCard
-                          key={card.title}
-                          title={card.title}
-                          count={card.count}
-                          stat={card.stat}
-                          statDescription={card.statDescription}
-                          trend={card.trend}
-                          progressValue={card.progressValue}
-                        />
-                      ))}
+
+                        {/* Grade Distribution */}
+                        <Card className="flex flex-col justify-between p-4 sm:p-5 md:col-span-2 xl:col-span-1">
+                          <Card.Header className="mb-0 p-0">
+                            <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
+                              Grade distribution
+                            </Card.Title>
+                            <Card.Description className="mt-0.5 text-xs text-muted-foreground">
+                              Student-subject Current grades per band, selected period.
+                            </Card.Description>
+                          </Card.Header>
+
+                          <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
+                            {(!gradeDetails || gradeDetails.available_grade_count === 0 || gradeDistribution.length === 0) && (
+                              dashboardEmptyState("No grade distribution yet", gradeEmptyMessage(Array.isArray(visibleGradeData?.grade_distribution)), <BookOpen />)
+                            )}
+                            {gradeDetails && gradeDetails.available_grade_count > 0 && gradeDistribution.map((item) => (
+                              <div
+                                key={item.band}
+                                className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                              >
+                                <span className="font-medium text-foreground/90 shrink-0 w-20 whitespace-nowrap">
+                                  {item.band}
+                                </span>
+                                <Progress
+                                  value={Math.round(
+                                    (item.count / maxGradeDistCount) * 100,
+                                  )}
+                                  className="h-3 flex-1"
+                                  indicatorClassName="bg-muted-foreground"
+                                />
+                                <span className="font-semibold text-foreground text-right w-8 shrink-0">
+                                  {item.count}
+                                </span>
+                              </div>
+                            ))}
+                          </Card.Content>
+                          {gradeCoverage()}
+                          <Card.Description className="mt-0.5 text-xs text-muted-foreground">
+                            Bands use unrounded grades and do not indicate passing.
+                          </Card.Description>
+                        </Card>
+                      </div>
+
+                    </div>
+
+                    {/* Right Column: Filters & Overview Summary Metrics */}
+                    <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-3 xl:col-span-3">
+                      <div className="grid min-w-0 grid-cols-1 gap-2" aria-label="Dashboard filters">
+                        <p className="text-sm font-medium">Filters</p>
+                        <div className="flex min-w-0 flex-col gap-2">
+                          <label htmlFor="dashboard-class" className="sr-only">Class</label>
+                          <Select name="dashboard-class" value={dashboardClass} onValueChange={(value) => changeDashboardScope(value,
+                            dashboardSubject === "all" || dashboardFilters.some(item => (value === "all" || String(item.class_id) === value) && String(item.subject_id) === dashboardSubject)
+                              ? dashboardSubject : "all")}
+                            disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
+                            <Select.Trigger id="dashboard-class" className="w-full"><Select.Value /></Select.Trigger>
+                            <Select.Content>
+                              <Select.Item value="all">All Classes</Select.Item>
+                              {classOptions.map(item => <Select.Item key={item.class_id} value={String(item.class_id)}>{item.section_name}</Select.Item>)}
+                            </Select.Content>
+                          </Select>
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-2">
+                          <label htmlFor="dashboard-subject" className="sr-only">Subject</label>
+                          <Select name="dashboard-subject" value={dashboardSubject} onValueChange={(value) => changeDashboardScope(dashboardClass, value)}
+                            disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
+                            <Select.Trigger id="dashboard-subject" className="w-full"><Select.Value /></Select.Trigger>
+                            <Select.Content>
+                              <Select.Item value="all">All Subjects</Select.Item>
+                              {subjectOptions.map(item => <Select.Item key={item.subject_id} value={String(item.subject_id)}>{item.subject_name}</Select.Item>)}
+                            </Select.Content>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3.5">
+                        {isLoading && !data
+                          ? Array.from({ length: defaultTeacherCards.length }).map((_, i) => (
+                            <Card key={i} className="@container/card animate-pulse">
+                              <Card.Header>
+                                <Card.Description className="h-4 w-24 bg-muted text-transparent">
+                                  Loading
+                                </Card.Description>
+                              </Card.Header>
+                              <Card.Content className="space-y-2">
+                                <Card.Title className="h-8 w-16 bg-muted text-transparent">
+                                  0
+                                </Card.Title>
+                                <p className="h-3 w-32 bg-muted text-transparent">
+                                  Loading summary
+                                </p>
+                              </Card.Content>
+                            </Card>
+                          ))
+                          : statCards.map((card) => (
+                            <OverviewCard
+                              key={card.title}
+                              title={card.title}
+                              count={card.count}
+                              stat={card.stat}
+                              statDescription={card.statDescription}
+                              trend={card.trend}
+                              progressValue={card.progressValue}
+                            />
+                          ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              </>
+                </>
               )}
             </main>
           </div>

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Card } from "@/components/retroui/Card";
 import { Text } from "@/components/retroui/Text";
 import { Badge } from "./retroui/Badge";
+import type { ReactNode } from "react";
 
 type NotificationCardProps = {
     title: string;
@@ -15,6 +16,7 @@ type NotificationCardProps = {
     badge?: string;
     isRead: boolean;
     className?: string;
+    children?: ReactNode;
 };
 
 export function NotificationCard({
@@ -26,6 +28,7 @@ export function NotificationCard({
     badge,
     isRead,
     className,
+    children,
 }: NotificationCardProps) {
     const itemType =
         type ||
@@ -72,7 +75,7 @@ export function NotificationCard({
                         {` • ${user}`}
                     </Text>
                 ) : null}
-
+                {children}
             </Card.Content>
         </Card>
     );

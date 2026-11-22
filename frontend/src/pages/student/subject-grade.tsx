@@ -103,145 +103,161 @@ const SubjectGrade = ({
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              <div className="flex flex-col gap-4 md:flex-row">
-                <Card className="flex flex-1 flex-row items-center justify-between gap-4 border-black bg-white p-4 shadow-md hover:shadow-none md:p-6">
-                  <div className="flex flex-col gap-1">
-                    <Card.Title className="text-sm font-medium">
-                      Completion Rate
-                    </Card.Title>
-
-                    <Card.Content className="text-sm text-muted-foreground">
-                      {completedCount} of {totalCount} activities done
-                    </Card.Content>
-                  </div>
-
-                  <Progress variant="circular" value={completionRate} />
-                </Card>
-
-                <Card className="flex flex-1 flex-col justify-between gap-3 border-black bg-white p-4 shadow-md hover:shadow-none md:p-6">
-                  <div className="flex items-center justify-between gap-2">
-                    <Card.Title className="text-xl font-bold">
-                      Lesson Mastery
-                    </Card.Title>
-                    <Badge
-                      size="sm"
-                      className={cn(masterySummary.badgeClass)}
-                    >
-                      {masterySummary.badgeLabel}
-                    </Badge>
-                  </div>
-
-                  <div
-                    className={cn(
-                      "flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-black p-3.5 text-center shadow-none",
-                      masterySummary.bgClass,
-                    )}
+              <div className="flex flex-col-reverse gap-4 lg:flex-row lg:items-start">
+                <div className="min-w-0 flex-1">
+                  <Table
+                    wrapperClassName="shadow-md transition-all hover:shadow-none"
+                    className="table-fixed bg-background"
                   >
-                    <MasteryIcon
-                      aria-hidden="true"
-                      fill={masterySummary.fillColor}
-                      className="size-8 stroke-black stroke-[2] [&_path]:fill-none"
-                    />
-                    <p className={cn("text-base font-bold text-center", masterySummary.colorClass)}>
-                      {masterySummary.label}
-                    </p>
-                  </div>
-
-                  <p className="text-sm text-muted-foreground">
-                    {masterySummary.description}
-                  </p>
-                </Card>
-              </div>
-              <Table
-                wrapperClassName="shadow-md transition-all hover:shadow-none"
-                className="table-fixed bg-background"
-              >
-                <Table.Header>
-                  <Table.Row>
-                    <Table.Head>Classwork</Table.Head>
-                    <Table.Head className="text-center">Type</Table.Head>
-                    <Table.Head className="text-right">Score</Table.Head>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {loading ? (
-                    <Table.Row>
-                      <Table.Cell
-                        colSpan={3}
-                        className="text-center py-6 text-muted-foreground"
-                      >
-                        Loading classworks...
-                      </Table.Cell>
-                    </Table.Row>
-                  ) : gradableTodos.length === 0 ? (
-                    <Table.Row>
-                      <Table.Cell
-                        colSpan={3}
-                        className="text-center py-6 text-muted-foreground"
-                      >
-                        <StudentEmptyState
-                          className="shadow-none"
-                          embedded
-                          icon={<FileCheck2 />}
-                          title="No graded classwork yet"
-                          description="Scores for this subject will appear after your teacher grades and releases them."
-                        />
-                      </Table.Cell>
-                    </Table.Row>
-                  ) : (
-                    gradableTodos.map((item) => {
-                      const canNavigate = Boolean(item.assignment_id);
-                      return (
-                        <Table.Row
-                          key={item.assignment_id}
-                          className={
-                            canNavigate
-                              ? "cursor-pointer hover:bg-primary/50 transition-colors"
-                              : "hover:bg-transparent"
-                          }
-                          onClick={() => {
-                            navigate(
-                              `/student/classworks/${item.assignment_id}?from=${encodeURIComponent(window.location.pathname + window.location.search)}`,
-                            );
-                          }}
-                          title={
-                            canNavigate
-                              ? `Open "${item.title}" classwork`
-                              : undefined
-                          }
-                        >
-                          <Table.Cell className="font-medium w-1/2">
-                            {item.title}
-                          </Table.Cell>
-                          <Table.Cell className="w-32 text-center">
-                            <Badge variant="surface" size="sm">
-                              {formatToTitleCase(item.type)}
-                            </Badge>
-                          </Table.Cell>
-                          <Table.Cell className="text-right font-bold">
-                            {item.show_scores !== false ? (
-                              <>
-                                {item.grade !== null ? item.grade : "-"}
-                                <span className="text-sm text-muted-foreground">
-                                  /{item.total_points ?? 100}
-                                </span>
-                              </>
-                            ) : (
-                              <Badge
-                                variant="outline"
-                                size="sm"
-                                className="rounded border border-gray-300 bg-gray-100 text-sm font-normal text-gray-500"
-                              >
-                                Score hidden
-                              </Badge>
-                            )}
+                    <Table.Header>
+                      <Table.Row>
+                        <Table.Head>Classwork</Table.Head>
+                        <Table.Head className="text-center">Type</Table.Head>
+                        <Table.Head className="text-right">Score</Table.Head>
+                      </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                      {loading ? (
+                        <Table.Row>
+                          <Table.Cell
+                            colSpan={3}
+                            className="text-center py-6 text-muted-foreground"
+                          >
+                            Loading classworks...
                           </Table.Cell>
                         </Table.Row>
-                      );
-                    })
-                  )}
-                </Table.Body>
-              </Table>
+                      ) : gradableTodos.length === 0 ? (
+                        <Table.Row>
+                          <Table.Cell
+                            colSpan={3}
+                            className="text-center py-6 text-muted-foreground"
+                          >
+                            <StudentEmptyState
+                              className="shadow-none"
+                              embedded
+                              icon={<FileCheck2 />}
+                              title="No graded classwork yet"
+                              description="Scores for this subject will appear after your teacher grades and releases them."
+                            />
+                          </Table.Cell>
+                        </Table.Row>
+                      ) : (
+                        gradableTodos.map((item) => {
+                          const canNavigate = Boolean(item.assignment_id);
+                          return (
+                            <Table.Row
+                              key={item.assignment_id}
+                              className={
+                                canNavigate
+                                  ? "cursor-pointer hover:bg-primary/50 transition-colors"
+                                  : "hover:bg-transparent"
+                              }
+                              onClick={() => {
+                                navigate(
+                                  `/student/classworks/${item.assignment_id}?from=${encodeURIComponent(window.location.pathname + window.location.search)}`,
+                                );
+                              }}
+                              title={
+                                canNavigate
+                                  ? `Open "${item.title}" classwork`
+                                  : undefined
+                              }
+                            >
+                              <Table.Cell className="font-medium w-1/2">
+                                {item.title}
+                              </Table.Cell>
+                              <Table.Cell className="w-32 text-center">
+                                <Badge variant="surface" size="sm">
+                                  {formatToTitleCase(item.type)}
+                                </Badge>
+                              </Table.Cell>
+                              <Table.Cell className="text-right font-bold">
+                                {item.show_scores !== false ? (
+                                  <>
+                                    {item.grade !== null ? item.grade : "-"}
+                                    <span className="text-sm text-muted-foreground">
+                                      /{item.total_points ?? 100}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <Badge
+                                    variant="outline"
+                                    size="sm"
+                                    className="rounded border border-gray-300 bg-gray-100 text-sm font-normal text-gray-500"
+                                  >
+                                    Score hidden
+                                  </Badge>
+                                )}
+                              </Table.Cell>
+                            </Table.Row>
+                          );
+                        })
+                      )}
+                    </Table.Body>
+                  </Table>
+                </div>
+
+                <div className="flex w-full flex-col gap-4 lg:w-80 xl:w-96 shrink-0">
+                  <Card className="flex flex-col items-start gap-4 border-black bg-white p-5! shadow-md hover:shadow-none md:p-6">
+                    <div className="flex flex-col gap-1">
+                      <Card.Title className="text-xl font-bold">
+                        Completion Rate
+                      </Card.Title>
+                    </div>
+                    <Card.Content className="flex flex-row gap-3 items-center text-sm text-muted-foreground w-full">
+                      <Progress variant="circular" className="size-20 shrink-0" value={completionRate} />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-3xl font-bold text-foreground">
+                          {completedCount}
+                          <span className="ml-1 text-base font-normal text-muted-foreground">
+                            of {totalCount}
+                          </span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {completedCount === 1 ? "classwork done" : "classworks done"}
+                        </span>
+                      </div>
+                    </Card.Content>
+                    <p className="text-sm text-muted-foreground">
+                      {masterySummary.description}
+                    </p>
+                  </Card>
+
+                  <Card className="flex flex-col justify-between gap-3 border-black bg-white p-5! shadow-md hover:shadow-none md:p-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <Card.Title className="text-xl font-bold">
+                        Lesson Mastery
+                      </Card.Title>
+                      <Badge
+                        size="sm"
+                        className={cn(masterySummary.badgeClass)}
+                      >
+                        {masterySummary.badgeLabel}
+                      </Badge>
+                    </div>
+
+                    <div
+                      className={cn(
+                        "flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-black p-3.5 text-center shadow-none",
+                        masterySummary.bgClass,
+                      )}
+                    >
+                      <MasteryIcon
+                        aria-hidden="true"
+                        fill={masterySummary.fillColor}
+                        className="size-8 stroke-black stroke-[2] [&_path]:fill-none"
+                      />
+                      <p className={cn("text-base font-bold text-center", masterySummary.colorClass)}>
+                        {masterySummary.label}
+                      </p>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      {masterySummary.description}
+                    </p>
+                  </Card>
+                </div>
+              </div>
             </div>
           </div>
         </div>
