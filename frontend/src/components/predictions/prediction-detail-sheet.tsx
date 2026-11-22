@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import {
   Sheet,
@@ -46,6 +46,11 @@ import {
   fetchPredictionSuggestions,
   submitTeacherReview,
 } from "@/lib/prediction-api";
+import {
+  activateTeacherCandidate,
+  InterventionApiError,
+} from "@/lib/teacher-interventions-api";
+import { describeActivationConflict } from "@/lib/intervention-activation-conflict";
 
 interface PredictionDetailSheetProps {
   predictionId: number | null;
@@ -213,6 +218,7 @@ export default function PredictionDetailSheet({
               isTeacher={isTeacher}
               candidateId={candidateId}
               activeInterventionId={activeInterventionId}
+              onClose={() => onOpenChange(false)}
             />
           </div>
         ) : loading ? (
@@ -763,12 +769,58 @@ function CurrentTermTeacherDetail({
   isTeacher = false,
   candidateId,
   activeInterventionId,
+  onClose,
 }: {
   prediction: DevelopmentCurrentTermListItem;
   isTeacher?: boolean;
   candidateId?: number;
   activeInterventionId?: number;
+  onClose?: () => void;
 }) {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [proceeding, setProceeding] = useState(false);
+  const [proceedError, setProceedError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setProceeding(false);
+    setProceedError(null);
+  }, [candidateId, prediction.prediction_id]);
+
+  const handleProceedWithIntervention = async () => {
+    if (candidateId === undefined || proceeding) return;
+    setProceeding(true);
+    setProceedError(null);
+    try {
+      const active = await activateTeacherCandidate(candidateId);
+      toast.success({
+        title: "Intervention started",
+        description: `Intervention started for ${active.student_name} in ${active.subject_name}.`,
+      });
+      onClose?.();
+      navigate(
+        `${routes.teacher.interventions}?view=active&active=${active.intervention_id}&setup=1&step=1`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to proceed with intervention. Please try again.";
+      if (error instanceof InterventionApiError && error.status === 409) {
+        setProceedError(describeActivationConflict(message).message);
+      } else if (
+        error instanceof InterventionApiError &&
+        (error.status === 401 || error.status === 403)
+      ) {
+        setProceedError("You no longer have teaching access to this candidate.");
+      } else {
+        setProceedError(message);
+      }
+    } finally {
+      setProceeding(false);
+    }
+  };
+
   const academic = prediction.academic_evidence;
   const attendance = prediction.participation_context.attendance;
   const submissions = prediction.participation_context.submissions;
@@ -1074,11 +1126,26 @@ function CurrentTermTeacherDetail({
         </dl>
       </section>
       {isTeacher && candidateId !== undefined && activeInterventionId === undefined && (
-        <div className="pb-5">
-          <Button asChild>
-            <Link to={`${routes.teacher.interventions}?candidate=${candidateId}`}>
-              Proceed With Intervention
-            </Link>
+        <div className="flex flex-col gap-2 pb-5">
+          {proceedError && (
+            <Alert status="error" className="text-xs font-semibold">
+              {proceedError}
+            </Alert>
+          )}
+          <Button
+            type="button"
+            className="w-full"
+            disabled={proceeding}
+            onClick={() => void handleProceedWithIntervention()}
+          >
+            {proceeding ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" />
+                Proceeding...
+              </>
+            ) : (
+              "Proceed With Intervention"
+            )}
           </Button>
         </div>
       )}

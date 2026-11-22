@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { BookOpen, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useAuth } from "@/context/AuthContext";
 import AppLayout from "@/layouts/app-layout";
@@ -11,8 +11,6 @@ import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
 import { Progress } from "@/components/retroui/Progress";
 import { Button } from "@/components/teacher/button";
-import { Empty } from "@/components/retroui/Empty";
-import IconContainer from "@/components/icon-container";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import PredictionFilters from "@/components/predictions/prediction-filters";
@@ -184,18 +182,6 @@ export default function SubjectPrediction() {
     return [];
   }, [healthData, routeSubjectId]);
 
-  const lessonPerformance = isHealthLoading ? undefined : healthData?.details?.lesson_performance;
-  const lessonSubject = useMemo(() => {
-    if (!lessonPerformance?.subjects.length) return undefined;
-    if (routeSubjectId != null) {
-      return lessonPerformance.subjects.find((s) => s.subject_id === routeSubjectId);
-    }
-    return lessonPerformance.subjects[0];
-  }, [lessonPerformance, routeSubjectId]);
-
-  const emptyLessonMessage = (message: string) =>
-    isHealthLoading ? "Loading lesson performance..." : message;
-
   const matchingScope = assignedScopes.find((s) => s.subject_id === routeSubjectId);
   const subjectDisplayName = matchingScope
     ? formatSubjectDisplayName(matchingScope.subject_name, matchingScope.grade_level)
@@ -339,7 +325,7 @@ export default function SubjectPrediction() {
               </div>
 
               {/* ── Right Column: Section-by-Section Health ── */}
-              {isTeacher && <aside className="lg:col-span-4 xl:col-span-5 min-w-0 lg:sticky lg:top-4 flex flex-col gap-4">
+              {isTeacher && <aside className="lg:col-span-7 xl:col-span-5 min-w-0 lg:sticky lg:top-4 flex flex-col gap-4">
                 <Card className="flex flex-col justify-between p-4 sm:p-5 border-2 border-black bg-background">
                   <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
                     <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
@@ -488,63 +474,6 @@ export default function SubjectPrediction() {
                         </>
                       );
                     })()}
-                  </Card.Content>
-                </Card>
-
-                {/* Scored quiz lesson performance */}
-                <Card className="flex flex-col p-4 sm:p-5 min-h-62 border-2 border-black bg-background">
-                  <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                    <Card.Title className="text-base font-bold text-foreground sm:text-lg">
-                      Lesson Performance
-                    </Card.Title>
-                  </Card.Header>
-
-                  <Card.Content className="flex flex-col justify-between gap-2.5 p-0 h-full">
-                    <div className="flex flex-col gap-2.5">
-                      {!lessonSubject?.items.length && (
-                        <Empty className="rounded! bg-retro shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
-                          <Empty.Content>
-                            <Empty.Icon>
-                              <IconContainer className="bg-primary rounded-none">
-                                <BookOpen className="size-6 text-foreground" />
-                              </IconContainer>
-                            </Empty.Icon>
-                            <Empty.Title className="text-base! font-medium">
-                              {emptyLessonMessage(!lessonSubject
-                                ? matchingScope
-                                  ? "No lesson performance data is available for this assigned subject yet."
-                                  : "No subjects assigned for this academic period."
-                                : lessonSubject.coverage.scored_mapped_response_count === 0
-                                  ? "No scored quiz answers linked to lessons for this subject."
-                                  : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}
-                            </Empty.Title>
-                          </Empty.Content>
-                        </Empty>
-                      )}
-                      {lessonSubject?.items.slice(0, 5).map((item) => (
-                        <div
-                          key={item.lesson_id}
-                          title={`Points earned / points available. ${item.scored_response_count} scored responses · ${item.learner_count} learners · ${item.question_count} questions.`}
-                          className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                        >
-                          <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
-                            {item.title}
-                          </span>
-                          <Progress value={item.performance_percent} className="h-2.5 flex-1" />
-                          <span className="font-semibold text-foreground text-right w-10 shrink-0">
-                            {item.performance_percent}%
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    {lessonSubject && (
-                      <Card.Description className="text-xs text-muted-foreground -mb-2">
-                        {lessonSubject.coverage.scored_mapped_response_count} scored lesson-linked responses. {lessonSubject.coverage.ungraded_response_count} awaiting scores.
-                        {lessonSubject.warnings.map((warning, index) => (
-                          <span key={`${warning.code}-${index}`}> {warning.message}</span>
-                        ))}
-                      </Card.Description>
-                    )}
                   </Card.Content>
                 </Card>
               </aside>}

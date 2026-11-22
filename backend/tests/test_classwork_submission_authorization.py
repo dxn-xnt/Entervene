@@ -384,6 +384,26 @@ def _wizard_payload(
     return payload
 
 
+def _quiz_wizard_payload(authz_context, lesson: Lesson, class_ids: list[int]):
+    c = authz_context
+    quiz_payload = _valid_quiz_payload(lesson.lesson_id)
+    quiz_payload["settings"]["is_shuffle_questions"] = True
+    quiz_payload["settings"]["is_shuffle_options"] = True
+    return {
+        "title": "Multi-section quiz",
+        "classwork_type": "QUIZ",
+        "subject_id": str(c["subject"].subject_id),
+        "classwork_category": "WRITTEN_WORK",
+        "total_points": "10",
+        "is_published": "true",
+        "class_ids": json.dumps(class_ids),
+        "academic_period_id": str(c["period"].academic_period_id),
+        "lesson_ids": json.dumps([lesson.lesson_id]),
+        "max_attempts": "1",
+        "quiz_payload": json.dumps(quiz_payload),
+    }
+
+
 def test_reference_links_create_draft_edit_publish_and_student_detail(authz_context):
     c = authz_context
     endpoint = "/api/v1/classwork-assignments/with-assignments"
@@ -777,6 +797,98 @@ def test_quiz_classwork_creation_saves_builder_atomically(authz_context):
     assert response.json()["reference_links"] == []
 
 
+def test_quiz_creation_assigns_each_authorized_section_once_and_preserves_settings(authz_context):
+    c = authz_context
+    lesson = Lesson(
+        title="Shared quiz coverage",
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+        is_draft=False,
+    )
+    c["db"].add_all([
+        lesson,
+        SubjectLoad(
+            staff_id=c["owner"].staff_id,
+            subject_id=c["subject"].subject_id,
+            class_id=c["other_class"].class_id,
+            academic_period_id=c["period"].academic_period_id,
+            status="active",
+            is_active_version=True,
+        ),
+    ])
+    c["db"].commit()
+
+    response = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data=_quiz_wizard_payload(
+            c,
+            lesson,
+            [
+                c["allowed_class"].class_id,
+                c["other_class"].class_id,
+                c["other_class"].class_id,
+            ],
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    classwork_id = response.json()["classwork_id"]
+    assignments = c["db"].query(ClassworkAssignment).filter_by(
+        classwork_id=classwork_id,
+    ).all()
+    assert {assignment.class_id for assignment in assignments} == {
+        c["allowed_class"].class_id,
+        c["other_class"].class_id,
+    }
+    assert len(assignments) == 2
+    setting = c["db"].query(QuizSetting).filter_by(classwork_id=classwork_id).one()
+    assert setting.is_shuffle_questions is True
+    assert setting.is_shuffle_options is True
+
+    _act_as(c, "student", "student")
+    allowed_items = c["client"].get(
+        f"/api/v1/classwork-assignments/class/{c['allowed_class'].class_id}"
+        f"/subject/{c['subject'].subject_id}"
+    )
+    _act_as(c, "other_student", "student")
+    other_items = c["client"].get(
+        f"/api/v1/classwork-assignments/class/{c['other_class'].class_id}"
+        f"/subject/{c['subject'].subject_id}"
+    )
+    assert allowed_items.status_code == other_items.status_code == 200
+    assert any(item["classwork_id"] == classwork_id for item in allowed_items.json())
+    assert any(item["classwork_id"] == classwork_id for item in other_items.json())
+
+
+def test_quiz_creation_rejects_an_unauthorized_section_without_partial_records(authz_context):
+    c = authz_context
+    lesson = Lesson(
+        title="Protected quiz coverage",
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+        is_draft=False,
+    )
+    c["db"].add(lesson)
+    c["db"].commit()
+    before_classworks = c["db"].query(Classwork).count()
+    before_assignments = c["db"].query(ClassworkAssignment).count()
+
+    response = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data=_quiz_wizard_payload(
+            c,
+            lesson,
+            [c["allowed_class"].class_id, c["other_class"].class_id],
+        ),
+    )
+
+    assert response.status_code == 403
+    assert c["db"].query(Classwork).count() == before_classworks
+    assert c["db"].query(ClassworkAssignment).count() == before_assignments
+
+
 def test_quiz_classwork_creation_rolls_back_when_builder_fails(authz_context):
     c = authz_context
     before_classworks = c["db"].query(Classwork).count()
@@ -968,7 +1080,7 @@ def test_atomic_classwork_create_persists_assignments_materials_and_lesson(authz
             "class_ids": f"[{c['allowed_class'].class_id}]",
             "academic_period_id": str(c["period"].academic_period_id),
             "lesson_ids": f"[{lesson.lesson_id}]",
-            "due_date": "2025-10-31T00:00:00",
+            "due_date": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
             "max_attempts": "2",
         },
         files=[("files", ("guide.pdf", b"%PDF", "application/pdf"))],

@@ -66,7 +66,9 @@ from app.services.classwork.ClassworkShared import (
     normalize_classwork_type,
     normalize_uploaded_path,
     parse_id_list,
+    same_instant,
     validate_classwork_values,
+    validate_future_deadline,
     validate_schedule,
 )
 from app.services.quiz.QuizBuilderService import (
@@ -398,6 +400,7 @@ async def create_classwork_wizard_record(
     selected_lesson_ids = parse_id_list(lesson_ids, "lesson_ids")
     validate_classwork_values(total_points=total_points, max_attempts=max_attempts)
     validate_schedule(None, due_date, lock_date)
+    validate_future_deadline(due_date)
     ensure_subject_owner(db, staff_id, subject_id)
     selected_reference_links = _parse_reference_links_form(reference_links)
     if is_quiz_type(normalized_type) and selected_reference_links:
@@ -1366,6 +1369,7 @@ def update_classwork_record(
             db.query(ClassworkLesson).filter(ClassworkLesson.classwork_id == classwork_id).delete()
             for lesson_id in lesson_ids:
                 db.add(ClassworkLesson(classwork_id=classwork_id, lesson_id=lesson_id))
+            db.flush()
         if replacement_links is not None:
             _replace_reference_links(db, classwork, replacement_links)
         if recipient_scope is not None:
@@ -1685,6 +1689,23 @@ def assign_classwork_to_classes(
         max_attempts = None
     validate_classwork_values(max_attempts=max_attempts)
     validate_schedule(None, body.due_date, body.lock_date)
+    if body.due_date is not None:
+        existing_by_class = {
+            row.class_id: row
+            for row in db.query(ClassworkAssignment)
+            .filter(
+                ClassworkAssignment.classwork_id == classwork_id,
+                ClassworkAssignment.class_id.in_(class_ids),
+            )
+            .all()
+        }
+        needs_future_check = any(
+            (cid not in existing_by_class)
+            or (not same_instant(existing_by_class[cid].due_date, body.due_date))
+            for cid in class_ids
+        )
+        if needs_future_check:
+            validate_future_deadline(body.due_date)
     if is_targeted_remediation:
         if is_quiz_type(classwork.classwork_type) and body.due_date is None:
             raise HTTPException(status_code=400, detail="A due date is required for a Study Support quiz")
@@ -1737,7 +1758,7 @@ def assign_classwork_to_classes(
                 ClassworkAssignment.class_id == class_id,
             ).first()
             if existing:
-                if existing.due_date != body.due_date:
+                if not same_instant(existing.due_date, body.due_date):
                     deadline_changed = True
                 if body.is_published and not existing.is_published:
                     newly_published_assignment = True

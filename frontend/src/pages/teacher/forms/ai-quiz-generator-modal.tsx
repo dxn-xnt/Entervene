@@ -81,6 +81,7 @@ export interface RemediationQuizGeneratorConfig {
   eligibleLessons: Array<{ lesson_id: number; title: string }>;
   competencyLabels?: string[];
   selectedReadingIds?: number[];
+  selectedReadingTitles?: string[];
   onRemediationGenerated: (draft: RemediationQuizDraft) => void;
 }
 
@@ -1003,8 +1004,29 @@ export default function AIQuizGeneratorModal({
                   </div>
                 )}
 
+              {remediationConfig.selectedReadingTitles &&
+                remediationConfig.selectedReadingTitles.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Linked Reading Material(s)
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {remediationConfig.selectedReadingTitles.map((title) => (
+                        <Badge
+                          key={title}
+                          size="sm"
+                          variant="outline"
+                          className="bg-background"
+                        >
+                          {title}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
               <p className="text-xs text-muted-foreground">
-                Target classwork, verified lesson scope, grading component, and score-adjustment link are inherited and locked from the active intervention.
+                Target classwork, verified lesson scope, linked readings, grading component, and score-adjustment link are inherited and locked from the active intervention.
               </p>
             </div>
           ) : (

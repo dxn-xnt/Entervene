@@ -4,7 +4,11 @@ import { DatePicker } from "@/components/retroui/DatePicker";
 import { useState, useEffect, useMemo } from "react";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { unorderedValues, optionalNumber } from "@/lib/form-changes";
-import { NoChangesMessage } from "@/components/retroui/FormMessage";
+import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
+import {
+  getMinFutureDeadlineInput,
+  validateFutureDeadline,
+} from "@/lib/deadline-validation";
 import {
   Check,
   CheckCheck,
@@ -271,6 +275,8 @@ export default function EditClassworkModal({
     currentClasswork.intervention_resource_origin_id &&
       isReadingType(currentClasswork.classwork_type),
   );
+  const hideRemediationReferenceMaterials =
+    isRemediationActivity && !isReadingType(currentClasswork.classwork_type);
 
   const autoAiSupported = useMemo(() => {
     if (targetedAssignment) return false;
@@ -288,6 +294,7 @@ export default function EditClassworkModal({
     currentClasswork.activity_mode,
   ]);
 
+  const [dueDateError, setDueDateError] = useState("");
   const setFormError = (msg: string) => {
     toast.error({ title: msg });
   };
@@ -795,10 +802,12 @@ export default function EditClassworkModal({
       setFormError("Classwork title is required.");
       return;
     }
-    const linksError = validateReferenceLinks(referenceLinks);
-    if (linksError) {
-      setFormError(linksError);
-      return;
+    if (!hideRemediationReferenceMaterials) {
+      const linksError = validateReferenceLinks(referenceLinks);
+      if (linksError) {
+        setFormError(linksError);
+        return;
+      }
     }
     if (
       totalPoints !== null &&
@@ -968,6 +977,18 @@ export default function EditClassworkModal({
         currentClasswork.assignments?.map((item) => item.class_id) ?? [],
       ),
     ];
+    const dueDateChanged = editDraft.due_date !== initialDraft.due_date;
+    const hasNewSections = selectedClassIds.some(
+      (id) => !initialClassIds.includes(id),
+    );
+    if (!isReading && editDraft.due_date && (dueDateChanged || hasNewSections)) {
+      const deadlineError = validateFutureDeadline(editDraft.due_date);
+      if (deadlineError) {
+        setDueDateError(deadlineError);
+        return;
+      }
+    }
+    setDueDateError("");
     const classworkDetailsChanged =
       editDraft.title.trim() !== initialDraft.title.trim() ||
       editDraft.description.trim() !== initialDraft.description.trim() ||
@@ -1042,6 +1063,7 @@ export default function EditClassworkModal({
                 : false,
               lesson_ids: selectedLessonIds,
               reference_links:
+                hideRemediationReferenceMaterials ||
                 JSON.stringify(referenceLinks) ===
                   JSON.stringify(editReferenceLinks(currentClasswork))
                   ? undefined
@@ -1067,14 +1089,25 @@ export default function EditClassworkModal({
               .join("; ");
             throw new Error(msgs || "Validation error");
           }
-          throw new Error(
-            typeof detail === "string"
-              ? detail
-              : detail &&
-                typeof detail === "object" &&
-                typeof detail.message === "string"
+          if (detail && typeof detail === "object") {
+            const message =
+              typeof detail.message === "string"
                 ? detail.message
-                : "Unable to update classwork.",
+                : "Unable to update classwork.";
+            const readinessErrors = Array.isArray(detail.readiness_errors)
+              ? detail.readiness_errors.filter(
+                  (item: unknown): item is string =>
+                    typeof item === "string" && item.trim().length > 0,
+                )
+              : [];
+            throw new Error(
+              readinessErrors.length > 0
+                ? `${message} ${readinessErrors.join(" ")}`
+                : message,
+            );
+          }
+          throw new Error(
+            typeof detail === "string" ? detail : "Unable to update classwork.",
           );
         }
 
@@ -1088,9 +1121,11 @@ export default function EditClassworkModal({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               class_ids: selectedClassIds,
-              due_date: editDraft.due_date
-                ? new Date(editDraft.due_date).toISOString()
-                : null,
+              due_date: !dueDateChanged
+                ? (currentClasswork.assignments?.[0]?.due_date ?? null)
+                : editDraft.due_date
+                  ? new Date(editDraft.due_date).toISOString()
+                  : null,
               lock_date: editDraft.lock_date
                 ? new Date(editDraft.lock_date).toISOString()
                 : null,
@@ -1117,6 +1152,23 @@ export default function EditClassworkModal({
               })
               .join("; ");
             throw new Error(msgs || "Validation error");
+          }
+          if (detail && typeof detail === "object") {
+            const message =
+              typeof detail.message === "string"
+                ? detail.message
+                : "Unable to update assignment settings.";
+            const readinessErrors = Array.isArray(detail.readiness_errors)
+              ? detail.readiness_errors.filter(
+                  (item: unknown): item is string =>
+                    typeof item === "string" && item.trim().length > 0,
+                )
+              : [];
+            throw new Error(
+              readinessErrors.length > 0
+                ? `${message} ${readinessErrors.join(" ")}`
+                : message,
+            );
           }
           throw new Error(
             typeof detail === "string"
@@ -1537,6 +1589,7 @@ export default function EditClassworkModal({
                   )}
                 </section>
 
+                {!hideRemediationReferenceMaterials && (
                 <section
                   aria-labelledby="edit-classwork-reference-materials"
                   className={`${isInterventionCreatedReading ? "order-3" : "order-2"} space-y-3 pt-2`}
@@ -1691,6 +1744,7 @@ export default function EditClassworkModal({
                     )}
                   </Field>
                 </section>
+                )}
 
                 {(editDraft.classwork_type === "ACTIVITY" ||
                   editDraft.classwork_type === "ASSIGNMENT") && (
@@ -1767,16 +1821,35 @@ export default function EditClassworkModal({
                       >
                         <DatePicker
                           includeTime
+                          min={getMinFutureDeadlineInput()}
                           value={editDraft.due_date}
-                          onValueChange={(value) =>
+                          onValueChange={(value) => {
+                            const initialDueDate =
+                              classworkToEditDraft(currentClasswork).due_date;
+                            const nextDeadlineError =
+                              value && value !== initialDueDate
+                                ? validateFutureDeadline(value)
+                                : "";
+                            setDueDateError(nextDeadlineError);
                             setEditDraft((current) => ({
                               ...current,
                               due_date: value,
-                            }))
-                          }
+                            }));
+                          }}
                           disabled={isSavingEdit}
+                          aria-invalid={Boolean(dueDateError)}
+                          aria-describedby={
+                            dueDateError
+                              ? "edit-classwork-due-date-error"
+                              : undefined
+                          }
                           className="w-full bg-white border-2 border-black rounded shadow-none"
                         />
+                        {dueDateError && (
+                          <FormMessage id="edit-classwork-due-date-error">
+                            {dueDateError}
+                          </FormMessage>
+                        )}
                       </Field>
                     )}
 

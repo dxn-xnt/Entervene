@@ -34,6 +34,13 @@ export function DatePicker({ id, value, onValueChange, min, max, disabled, requi
   const selected = parseDate(value);
   const minimum = parseDate(min);
   const maximum = parseDate(max);
+  const minDatePart = min?.includes("T") ? min.split("T")[0] : undefined;
+  const minTimePart = min?.includes("T") ? min.split("T")[1] : undefined;
+  const selectedDatePart = value ? value.split("T")[0] : "";
+  const timeMin =
+    minDatePart && minTimePart && selectedDatePart === minDatePart
+      ? minTimePart
+      : undefined;
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
@@ -52,9 +59,26 @@ export function DatePicker({ id, value, onValueChange, min, max, disabled, requi
           <Popover.Popup className="rounded! border-2 border-border bg-background shadow-md">
             <Calendar mode="single" selected={selected} defaultMonth={selected || minimum}
               disabled={(date) => Boolean((minimum && date < minimum) || (maximum && date > maximum))}
-              onSelect={(date) => { onValueChange(date ? format(date, "yyyy-MM-dd") + (includeTime ? `T${value.split("T")[1] || "00:00"}` : "") : ""); if (!includeTime) setOpen(false); }}
+              onSelect={(date) => {
+                if (!date) {
+                  onValueChange("");
+                  if (!includeTime) setOpen(false);
+                  return;
+                }
+                const nextDatePart = format(date, "yyyy-MM-dd");
+                const existingTime = value.split("T")[1];
+                const defaultTime =
+                  minDatePart &&
+                  minTimePart &&
+                  nextDatePart === minDatePart &&
+                  (!existingTime || existingTime < minTimePart)
+                    ? minTimePart
+                    : existingTime || "00:00";
+                onValueChange(nextDatePart + (includeTime ? `T${defaultTime}` : ""));
+                if (!includeTime) setOpen(false);
+              }}
             />
-            {includeTime && <div className="space-y-2 px-3 pb-3"><label className="block text-sm font-medium">Time<Input type="time" aria-label="Time" value={value.split("T")[1] || ""} disabled={!value} onChange={(event) => { if (value && event.target.value) onValueChange(value.split("T")[0] + "T" + event.target.value); }} /></label><Button type="button" size="sm" onClick={() => setOpen(false)}>Done</Button></div>}
+            {includeTime && <div className="space-y-2 px-3 pb-3"><label className="block text-sm font-medium">Time<Input type="time" aria-label="Time" min={timeMin} value={value.split("T")[1] || ""} disabled={!value} onChange={(event) => { if (value && event.target.value) onValueChange(value.split("T")[0] + "T" + event.target.value); }} /></label><Button type="button" size="sm" onClick={() => setOpen(false)}>Done</Button></div>}
             {!required && value && <div className="px-3 pb-3"><Button type="button" variant="outline" size="sm" onClick={() => { onValueChange(""); setOpen(false); }}>Clear date</Button></div>}
           </Popover.Popup>
         </Popover.Positioner>

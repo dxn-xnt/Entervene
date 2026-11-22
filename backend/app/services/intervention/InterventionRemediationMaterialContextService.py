@@ -31,6 +31,9 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkCoverage import ClassworkCoverage
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.intervention.Intervention import Intervention
+from app.models.quiz.Question import Question
+from app.models.quiz.Quiz import Quiz
+from app.models.quiz.QuizQuestion import QuizQuestion
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.classwork.ClassworkShared import assignment_is_available, assignment_is_locked
 
@@ -279,18 +282,63 @@ def extract_attachment_text(
     return sanitized, "EXTRACTED", None
 
 
+def _target_classwork_lesson_ids(
+    db: Session,
+    intervention: Intervention,
+    target_assignment_id: int | None,
+) -> set[int]:
+    """Collect lessons directly linked to the targeted original classwork/quiz."""
+    if target_assignment_id is None:
+        return set()
+    target_asgn = db.get(ClassworkAssignment, target_assignment_id)
+    if (
+        target_asgn is None
+        or target_asgn.classwork is None
+        or target_asgn.classwork.is_archived
+        or target_asgn.source_intervention_id is not None
+        or target_asgn.original_exam_assignment_id is not None
+        or target_asgn.class_id != intervention.class_id
+        or target_asgn.academic_period_id != intervention.academic_period_id
+        or target_asgn.classwork.subject_id != intervention.subject_id
+        or not assignment_allows_student(target_asgn, intervention.student_id)
+    ):
+        return set()
+
+    cw = target_asgn.classwork
+    lesson_ids: set[int] = {
+        l.lesson_id for l in (cw.lessons or []) if l.subject_id == intervention.subject_id
+    }
+    for cov in db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all():
+        if cov.lesson_id is not None:
+            lesson_ids.add(cov.lesson_id)
+    quiz_lesson_rows = (
+        db.query(Question.lesson_id)
+        .join(QuizQuestion, QuizQuestion.question_id == Question.question_id)
+        .join(Quiz, Quiz.quiz_id == QuizQuestion.quiz_id)
+        .filter(Quiz.classwork_id == cw.classwork_id, Question.lesson_id.isnot(None))
+        .all()
+    )
+    for (lid,) in quiz_lesson_rows:
+        if isinstance(lid, int):
+            lesson_ids.add(lid)
+    return lesson_ids
+
+
 def resolve_remediation_material_context(
     db: Session,
     intervention: Intervention,
     scope: dict[str, Any],
     *,
     selected_reading_ids: list[int] | None = None,
+    target_assignment_id: int | None = None,
     max_total_chars: int = 4000,
     max_chars_per_item: int = 1500,
 ) -> RemediationMaterialContext:
     """Resolve and bound relevant learning materials and reading classworks for remediation.
 
     Distinguishes historical taught lessons from supporting reading materials.
+    When target_assignment_id is specified, anchors lesson content and reading
+    materials to the targeted original classwork/quiz's lessons first.
     """
     academic_scope = scope.get("academic_scope") or {}
     cutoff_str = academic_scope.get("evidence_cutoff_at") or intervention.diagnosis_snapshot.get("evidence_cutoff_at", "")
@@ -298,10 +346,16 @@ def resolve_remediation_material_context(
     weak_competencies = {c["competency_id"]: c for c in scope.get("competencies") or []}
     scope_lessons = {l["lesson_id"]: l for l in scope.get("lessons") or []}
     taught_lessons = {l["lesson_id"]: l for l in scope.get("lessons") or [] if l.get("is_taught") is True}
+    target_lesson_ids = _target_classwork_lesson_ids(db, intervention, target_assignment_id)
+    effective_target_lessons = (
+        {lid for lid in target_lesson_ids if lid in taught_lessons}
+        if target_lesson_ids and taught_lessons
+        else set(taught_lessons)
+    )
 
-    # 1. Lesson content for eligible taught lessons only
+    # 1. Lesson content for eligible taught lessons (anchored to target classwork lessons when available)
     lesson_materials: list[dict[str, Any]] = []
-    for lid, l_info in sorted(taught_lessons.items()):
+    for lid in sorted(effective_target_lessons or taught_lessons):
         lesson_row = db.get(app_models_lesson(), lid)
         if lesson_row is not None:
             text_body = lesson_row.content or lesson_row.description or ""
@@ -349,6 +403,20 @@ def resolve_remediation_material_context(
         scoped_readings.append(cw)
 
     scoped_reading_map = {cw.classwork_id: cw for cw in scoped_readings}
+    reading_lessons_by_cw: dict[int, set[int]] = {}
+    for cw in scoped_readings:
+        lids = {l.lesson_id for l in cw.lessons}
+        for cov in db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all():
+            if cov.lesson_id is not None:
+                lids.add(cov.lesson_id)
+        reading_lessons_by_cw[cw.classwork_id] = lids
+
+    target_linked_reading_ids: list[int] = []
+    if target_assignment_id is not None and (target_lesson_ids or taught_lessons):
+        anchor_lessons = target_lesson_ids or set(taught_lessons)
+        for cw in scoped_readings:
+            if reading_lessons_by_cw.get(cw.classwork_id, set()) & anchor_lessons:
+                target_linked_reading_ids.append(cw.classwork_id)
 
     # Handle teacher selection vs auto-discovery
     reported_gaps: list[str] = []
@@ -361,43 +429,63 @@ def resolve_remediation_material_context(
                     status_code=422,
                     detail=f"Selected reading classwork ID {cid} is outside the intervention subject/class scope",
                 )
-        target_cw_ids = list(selected_reading_ids)
+        if target_linked_reading_ids:
+            target_set = set(target_linked_reading_ids)
+            aligned_selected = [cid for cid in selected_reading_ids if cid in target_set]
+            # Prefer teacher-selected readings linked to the targeted classwork's lessons;
+            # if none of the selected readings belong to the targeted classwork's lessons,
+            # use the targeted classwork's own linked readings so AI stays grounded in it.
+            target_cw_ids = aligned_selected if aligned_selected else list(target_linked_reading_ids)
+        else:
+            target_cw_ids = list(selected_reading_ids)
     else:
-        # Check plan selected resources
         plan = dict(intervention.remediation_plan or {})
-        for ref in plan.get("selected_resources") or []:
-            if isinstance(ref, dict) and ref.get("kind") == "CLASSWORK":
-                rid = ref.get("id")
-                if rid in scoped_reading_map and rid not in target_cw_ids:
+        plan_selected_ids = [
+            ref.get("id")
+            for ref in (plan.get("selected_resources") or [])
+            if isinstance(ref, dict)
+            and ref.get("kind") == "CLASSWORK"
+            and ref.get("id") in scoped_reading_map
+        ]
+
+        if target_linked_reading_ids:
+            target_set = set(target_linked_reading_ids)
+            for rid in plan_selected_ids:
+                if rid in target_set and rid not in target_cw_ids:
+                    target_cw_ids.append(rid)
+            for rid in target_linked_reading_ids:
+                if rid not in target_cw_ids:
+                    target_cw_ids.append(rid)
+        else:
+            for rid in plan_selected_ids:
+                if rid not in target_cw_ids:
                     target_cw_ids.append(rid)
 
-        # Also auto-discover reading classworks linked to weak competencies or taught lessons
-        for cw in scoped_readings:
-            if cw.classwork_id in target_cw_ids:
-                continue
-            linked_lessons = {l.lesson_id for l in cw.lessons}
-            direct_cov_comps: set[int] = set()
-            for cov in db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all():
-                if cov.competency_id is not None:
-                    direct_cov_comps.add(cov.competency_id)
-                if cov.lesson_id is not None:
-                    linked_lessons.add(cov.lesson_id)
+            # Auto-discover reading classworks linked to weak competencies or taught lessons
+            for cw in scoped_readings:
+                if cw.classwork_id in target_cw_ids:
+                    continue
+                linked_lessons = set(reading_lessons_by_cw.get(cw.classwork_id, set()))
+                direct_cov_comps: set[int] = set()
+                for cov in db.query(ClassworkCoverage).filter_by(classwork_id=cw.classwork_id, valid_until=None).all():
+                    if cov.competency_id is not None:
+                        direct_cov_comps.add(cov.competency_id)
 
-            has_taught_lesson = any(lid in taught_lessons for lid in linked_lessons)
-            has_scope_lesson = any(lid in scope_lessons for lid in linked_lessons)
-            # Do not infer relevance across unrelated lessons solely via a shared competency.
-            linked_comps: set[int] = set()
-            if not linked_lessons or not scope_lessons or has_scope_lesson:
-                linked_comps.update(direct_cov_comps)
-                for l in cw.lessons:
-                    if l.competency_id is not None and (
-                        not scope_lessons or l.lesson_id in scope_lessons
-                    ):
-                        linked_comps.add(l.competency_id)
+                has_taught_lesson = any(lid in taught_lessons for lid in linked_lessons)
+                has_scope_lesson = any(lid in scope_lessons for lid in linked_lessons)
+                # Do not infer relevance across unrelated lessons solely via a shared competency.
+                linked_comps: set[int] = set()
+                if not linked_lessons or not scope_lessons or has_scope_lesson:
+                    linked_comps.update(direct_cov_comps)
+                    for l in cw.lessons:
+                        if l.competency_id is not None and (
+                            not scope_lessons or l.lesson_id in scope_lessons
+                        ):
+                            linked_comps.add(l.competency_id)
 
-            has_weak_comp = any(cid in weak_competencies for cid in linked_comps)
-            if has_weak_comp or has_taught_lesson:
-                target_cw_ids.append(cw.classwork_id)
+                has_weak_comp = any(cid in weak_competencies for cid in linked_comps)
+                if has_weak_comp or has_taught_lesson:
+                    target_cw_ids.append(cw.classwork_id)
 
     # 3. Resolve, filter, and extract reading materials
     resolved_readings: list[ResolvedReadingMaterial] = []

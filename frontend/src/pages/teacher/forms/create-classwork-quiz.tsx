@@ -3,6 +3,11 @@
 "use client";
 
 import { DatePicker } from "@/components/retroui/DatePicker";
+import {
+  DEADLINE_FUTURE_ERROR,
+  getMinFutureDeadlineInput,
+  validateFutureDeadline,
+} from "@/lib/deadline-validation";
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ArrowLeft,
@@ -1249,6 +1254,7 @@ export default function CreateClassworkQuizModal({
     loads,
     contextLesson,
     initialLessonId,
+    initialQuizMode,
     remediationFocus,
   ]);
 
@@ -1356,6 +1362,12 @@ export default function CreateClassworkQuizModal({
       const msg = "A due date is required for a Study Support quiz.";
       setCreateError(msg);
       toast.error({ title: msg });
+      return;
+    }
+    const deadlineError = validateFutureDeadline(draft.due_date);
+    if (deadlineError) {
+      setCreateError(deadlineError);
+      setCreateStep("assign");
       return;
     }
     if (
@@ -2986,30 +2998,38 @@ export default function CreateClassworkQuizModal({
                   >
                     <DatePicker
                       includeTime
+                      min={getMinFutureDeadlineInput()}
                       value={draft.due_date}
                       onValueChange={(value) => {
-                        if (
-                          value &&
-                          createError.startsWith("A due date is required")
-                        )
+                        const nextDeadlineError = validateFutureDeadline(value);
+                        if (nextDeadlineError) {
+                          setCreateError(nextDeadlineError);
+                        } else if (
+                          createError === DEADLINE_FUTURE_ERROR ||
+                          (value && createError.startsWith("A due date is required"))
+                        ) {
                           setCreateError("");
+                        }
                         setDraft((current) => ({
                           ...current,
                           due_date: value,
                         }));
                       }}
                       disabled={isCreating}
-                      aria-invalid={createError.startsWith(
-                        "A due date is required",
-                      )}
+                      aria-invalid={
+                        createError === DEADLINE_FUTURE_ERROR ||
+                        createError.startsWith("A due date is required")
+                      }
                       aria-describedby={
+                        createError === DEADLINE_FUTURE_ERROR ||
                         createError.startsWith("A due date is required")
                           ? "quiz-due-date-error"
                           : undefined
                       }
                       className="w-full shadow-none"
                     />
-                    {createError.startsWith("A due date is required") && (
+                    {(createError === DEADLINE_FUTURE_ERROR ||
+                      createError.startsWith("A due date is required")) && (
                       <FormMessage id="quiz-due-date-error">
                         {createError}
                       </FormMessage>
@@ -3058,30 +3078,6 @@ export default function CreateClassworkQuizModal({
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-5 gap-y-1 mt-2">
-                  <ClassworkSettingRow
-                    label="Shuffle questions"
-                    tooltip="Randomizes question order for each student during the quiz attempt."
-                    checked={quizSettings.is_shuffle_questions}
-                    onCheckedChange={(checked) =>
-                      setQuizSettings((current) => ({
-                        ...current,
-                        is_shuffle_questions: checked,
-                      }))
-                    }
-                    disabled={isCreating}
-                  />
-                  <ClassworkSettingRow
-                    label="Shuffle answer choices"
-                    tooltip="Randomizes multiple-choice answer options for each student during the quiz attempt."
-                    checked={quizSettings.is_shuffle_options}
-                    onCheckedChange={(checked) =>
-                      setQuizSettings((current) => ({
-                        ...current,
-                        is_shuffle_options: checked,
-                      }))
-                    }
-                    disabled={isCreating}
-                  />
                   <ClassworkSettingRow
                     label="Enable per-question scoring"
                     tooltip="Allows setting custom point values individually for each question."
@@ -3165,7 +3161,7 @@ export default function CreateClassworkQuizModal({
                             selectedSubjectLoads.map((load) => load.class_id),
                           );
                         }}
-                        disabled={isCreating || isSubjectLocked}
+                        disabled={isCreating || Boolean(remediationTarget)}
                       >
                         <CheckCheck className="size-4 mr-2" />
                         Select All
@@ -3220,7 +3216,8 @@ export default function CreateClassworkQuizModal({
                             key={load.subject_load_id}
                             type="button"
                             onClick={() => toggleClass(load.class_id)}
-                            disabled={isCreating || isSubjectLocked}
+                            disabled={isCreating || Boolean(remediationTarget)}
+                            aria-pressed={isSelected}
                             className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
                               ? "bg-primary text-black"
                               : "bg-white text-black hover:bg-accent"

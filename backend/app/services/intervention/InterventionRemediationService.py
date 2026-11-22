@@ -1406,15 +1406,20 @@ def preview_score_adjustment(
         item["assignment_id"]: item for item in (items or []) if "assignment_id" in item
     }
 
-    diag_activities: dict[int, dict] = {}
+    diag_by_assignment_id: dict[int, dict] = {}
+    diag_by_classwork_id: dict[int, dict] = {}
     for act in (row.diagnosis_snapshot or {}).get("supporting_activities", []):
-        if "classwork_assignment_id" in act and act["classwork_assignment_id"] is not None:
-            diag_activities[act["classwork_assignment_id"]] = act
-        if "classwork_id" in act and act["classwork_id"] is not None:
-            diag_activities[act["classwork_id"]] = act
+        asgn_id = act.get("classwork_assignment_id")
+        cw_id = act.get("classwork_id")
+        if asgn_id is not None:
+            diag_by_assignment_id[asgn_id] = act
+        if cw_id is not None and cw_id not in diag_by_classwork_id:
+            diag_by_classwork_id[cw_id] = act
 
     for exam in original_exams(db, row):
-        diag_activities[exam["assignment_id"]] = {
+        diag_by_assignment_id[exam["assignment_id"]] = {
+            "classwork_id": exam.get("classwork_id"),
+            "classwork_assignment_id": exam.get("assignment_id"),
             "score": exam.get("score"),
             "possible_score": exam.get("total_points"),
             "title": exam.get("title"),
@@ -1429,6 +1434,23 @@ def preview_score_adjustment(
         orig_score = None
         max_points = None
         title = None
+        resolved_classwork_id = None
+
+        # Always resolve the authoritative assignment by primary key first so a
+        # different classwork whose classwork_id numerically equals target_id
+        # can never overwrite this assignment's metadata or score.
+        assignment = (
+            db.query(ClassworkAssignment)
+            .filter_by(classwork_assignment_id=target_id)
+            .first()
+        )
+        if assignment and (
+            assignment.class_id != row.class_id
+            or assignment.academic_period_id != row.academic_period_id
+            or assignment.classwork is None
+            or assignment.classwork.subject_id != row.subject_id
+        ):
+            assignment = None
 
         if target_id in provided_items:
             p = provided_items[target_id]
@@ -1437,15 +1459,9 @@ def preview_score_adjustment(
                 max_points = p["max_points"]
                 title = p.get("title")
 
-        if orig_score is None or max_points is None:
-            if target_id in diag_activities:
-                act = diag_activities[target_id]
-                orig_score = act.get("score")
-                max_points = act.get("possible_score")
-                title = act.get("title")
-
-        assignment = db.query(ClassworkAssignment).filter_by(classwork_assignment_id=target_id).first()
-        if not assignment:
+        matched_diag = diag_by_assignment_id.get(target_id)
+        if matched_diag is None and assignment is None:
+            matched_diag = diag_by_classwork_id.get(target_id)
             assignment = (
                 db.query(ClassworkAssignment)
                 .filter_by(
@@ -1455,13 +1471,22 @@ def preview_score_adjustment(
                 )
                 .first()
             )
-        if assignment and (
-            assignment.class_id != row.class_id
-            or assignment.academic_period_id != row.academic_period_id
-            or assignment.classwork is None
-            or assignment.classwork.subject_id != row.subject_id
-        ):
-            assignment = None
+            if assignment and (
+                assignment.classwork is None
+                or assignment.classwork.subject_id != row.subject_id
+            ):
+                assignment = None
+
+        if assignment and assignment.classwork:
+            resolved_classwork_id = assignment.classwork_id
+        elif matched_diag and matched_diag.get("classwork_id") is not None:
+            resolved_classwork_id = matched_diag.get("classwork_id")
+
+        if orig_score is None or max_points is None:
+            if matched_diag is not None:
+                orig_score = matched_diag.get("score")
+                max_points = matched_diag.get("possible_score")
+                title = matched_diag.get("title")
 
         if orig_score is None or max_points is None:
             if assignment and assignment.classwork:
@@ -1494,6 +1519,7 @@ def preview_score_adjustment(
             )
             previews.append({
                 "assignment_id": target_id,
+                "classwork_id": resolved_classwork_id,
                 "title": title,
                 "original_score": float(adj.original_score),
                 "max_points": float(adj.max_points),

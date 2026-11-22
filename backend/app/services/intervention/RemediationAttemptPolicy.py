@@ -11,6 +11,8 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+from app.models.intervention.Intervention import Intervention
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
@@ -20,6 +22,7 @@ from app.services.grading.PassingThresholdResolver import (
     PassingThresholdConfigurationError,
     resolve_passing_threshold,
 )
+from app.services.grading.RemediationScoreAdjuster import validate_cap_percentage
 
 
 REMEDIATION_MAX_ATTEMPTS = 3
@@ -61,6 +64,64 @@ def remediation_max_attempts(
     return max(1, min(int(configured), REMEDIATION_MAX_ATTEMPTS))
 
 
+def _configured_remediation_ceiling(
+    db: Session,
+    assignment: ClassworkAssignment,
+    classwork: Classwork,
+) -> Decimal | None:
+    """Return the persisted intervention ceiling (score_adjustment_cap) if applicable.
+
+    Precedence:
+    1. Immutable per-assessment snapshot on ``RemediationAssignmentLink.score_adjustment_cap``
+       when the link exists for this assignment and intervention. This governs
+       existing assessments even if intervention plan settings are later altered.
+    2. Associated ``Intervention.remediation_plan["score_adjustment_cap"]`` for
+       non-examination, graded curated remediation assessments when no link row
+       exists (e.g., legacy or unlinked records).
+
+    Returns ``None`` for examination remediation, ungraded practice-only
+    remediation, or interventions without a valid configured ceiling so callers
+    can fall back to the subject passing threshold.
+    """
+    if assignment.source_intervention_id is None:
+        return None
+
+    if assignment.classwork_assignment_id is not None:
+        link = (
+            db.query(RemediationAssignmentLink)
+            .filter_by(remediation_assignment_id=assignment.classwork_assignment_id)
+            .first()
+        )
+        if (
+            link is not None
+            and link.source_intervention_id == assignment.source_intervention_id
+            and link.score_adjustment_cap is not None
+        ):
+            try:
+                return validate_cap_percentage(link.score_adjustment_cap)
+            except (ValueError, TypeError):
+                pass
+
+    if assignment.original_exam_assignment_id is not None:
+        return None
+
+    if not classwork.is_graded:
+        return None
+
+    intervention = db.get(Intervention, assignment.source_intervention_id)
+    if intervention is None or not isinstance(intervention.remediation_plan, dict):
+        return None
+    if intervention.remediation_plan.get("grade_treatment") in {"PRACTICE_ONLY", "EXAMINATION"}:
+        return None
+    raw_cap = intervention.remediation_plan.get("score_adjustment_cap")
+    if raw_cap is None:
+        return None
+    try:
+        return validate_cap_percentage(raw_cap)
+    except (ValueError, TypeError):
+        return None
+
+
 def remediation_passing_threshold(
     db: Session,
     assignment: ClassworkAssignment,
@@ -68,6 +129,9 @@ def remediation_passing_threshold(
 ) -> Decimal | None:
     if not is_remediation_assessment(assignment, classwork):
         return None
+    configured_ceiling = _configured_remediation_ceiling(db, assignment, classwork)
+    if configured_ceiling is not None:
+        return configured_ceiling
     academic_year_id: int | None = None
     if assignment.class_id is not None:
         class_row = db.get(Class, assignment.class_id)
