@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  AlertTriangle,
   ArrowUpRight,
   BookOpen,
   Calendar,
+  CheckCircle2,
   CheckSquare,
   ClipboardList,
+  Clock,
   FileText,
+  GraduationCap,
+  HeartHandshake,
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
@@ -29,14 +34,26 @@ import {
   type StudentStudyboardMetrics,
   type TodoItem,
 } from "@/lib/api";
+import {
+  listMyActiveInterventions,
+  type StudentPersistentIntervention,
+} from "@/lib/student-persistent-interventions-api";
 import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import IconContainer from "@/components/icon-container";
 import { cn } from "@/lib/utils";
-import { classifyMasteryPercentage } from "@/lib/student-lesson-mastery";
+import {
+  computeAcademicOverview,
+  computeOnTimeSummary,
+  computeSubjectMastery,
+  prioritizeStudyboardTasks,
+  type SubjectMasteryItem,
+} from "@/lib/studyboard-insights";
 
 const INITIAL_SUBJECTS_LIMIT = 4;
-const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const PRIORITY_PREVIEW_LIMIT = 6;
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
+
 const attendanceLabel = {
   present: "Present",
   late: "Late",
@@ -50,80 +67,199 @@ const dayLabel = (value: string) =>
     value.includes("T") ? value : `${value}T12:00:00`,
   ).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-const duration = (seconds: number) => {
-  const minutes = seconds > 0 ? Math.max(1, Math.round(seconds / 60)) : 0;
-  return minutes >= 60
-    ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
-    : `${minutes}m`;
-};
-
-function MetricCard({
+function SectionCard({
   title,
+  subtitle,
+  action,
   children,
   className = "",
 }: {
   title: string;
+  subtitle?: string;
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <Card className={`flex min-w-0 flex-col gap-0 ${className}`}>
-      <Card.Header className="mb-3">
-        <Card.Title className="text-lg sm:text-xl">{title}</Card.Title>
+    <Card
+      className={cn(
+        "flex min-w-0 flex-col gap-0 border-border bg-card shadow-md hover:shadow-md",
+        className,
+      )}
+    >
+      <Card.Header className="mb-3 flex flex-row items-start justify-between gap-2 pb-0">
+        <div className="min-w-0">
+          <Card.Title className="text-lg font-bold sm:text-xl">
+            {title}
+          </Card.Title>
+          {subtitle && (
+            <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+          )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
       </Card.Header>
-      <Card.Content className="flex min-w-0 flex-1 flex-col">
+      <Card.Content className="flex min-w-0 flex-1 flex-col pt-0">
         {children}
       </Card.Content>
     </Card>
   );
 }
 
-export function GradeOverviewCards({ isLoading, error }: {
-  todos: TodoItem[];
-  isLoading: boolean;
-  error: string | null;
+function OverviewStatCard({
+  label,
+  value,
+  sublabel,
+  icon,
+  tone = "default",
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  sublabel: string;
+  icon: ReactNode;
+  tone?: "default" | "primary" | "destructive" | "success";
+  onClick?: () => void;
 }) {
-  if (isLoading) return <LoadingPanel label="Loading grade overview..." />;
-  if (error) {
-    return (
-      <Empty>
-        <Empty.Content>
-          <Empty.Title>Unable to load grade overview</Empty.Title>
-          <Empty.Description>{error}</Empty.Description>
-        </Empty.Content>
-      </Empty>
-    );
-  }
+  const iconContainerClass =
+    tone === "destructive"
+      ? "bg-destructive text-destructive-foreground"
+      : tone === "primary"
+        ? "bg-primary text-primary-foreground"
+        : tone === "success"
+          ? "bg-success text-black"
+          : "bg-accent text-accent-foreground";
 
   return (
-    <section aria-labelledby="grade-overview-heading" className="flex flex-col gap-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {/* <Card className="w-full">
-          <Card.Header><Card.Title>Completion Rate</Card.Title></Card.Header>
-          <Card.Content>
-            <div className="flex items-center gap-3">
-              <Progress
-                value={completion.rate}
-                className="flex-1 size-25"
-                variant="circular"
-                aria-label={`Completion rate: ${completion.rate}%`}
-              />
-            </div>
-            <p className="mt-3 text-xs text-muted-foreground">{completion.completed} of {completion.total} activities done</p>
-          </Card.Content>
-        </Card> */}
-
-
+    <Card
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        "flex min-w-0 flex-col justify-between gap-2 border-border bg-card p-3.5 shadow-sm transition-transform",
+        onClick &&
+          "cursor-pointer hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        <span
+          className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded border-2 border-border",
+            iconContainerClass,
+          )}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
       </div>
-    </section>
+      <div className="min-w-0">
+        <p className="text-2xl font-black leading-none tracking-tight sm:text-3xl">
+          {value}
+        </p>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {sublabel}
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+function SubjectPerformanceCard({
+  item,
+  onSelect,
+}: {
+  item: SubjectMasteryItem;
+  onSelect: () => void;
+}) {
+  const hasScore = item.percentage !== null;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      aria-label={`View ${item.subjectName}${hasScore ? `, ${item.percentage}% released score average` : ", no released graded scores yet"}`}
+      className="group flex min-w-0 cursor-pointer flex-col justify-between gap-2 rounded border-2 border-border bg-background p-3 transition-all hover:-translate-y-0.5 hover:bg-accent/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <p className="truncate text-sm font-bold text-foreground sm:text-base">
+                  {item.subjectName}
+                </p>
+              }
+            />
+            <TooltipContent>{item.subjectName}</TooltipContent>
+          </Tooltip>
+          {item.teacherName && (
+            <p className="truncate text-xs text-muted-foreground">
+              {item.teacherName}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {hasScore ? (
+            <span className="text-lg font-black leading-none text-foreground sm:text-xl">
+              {item.percentage}%
+            </span>
+          ) : (
+            <Badge variant="outline" size="sm">
+              No scores yet
+            </Badge>
+          )}
+          <ArrowUpRight
+            className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
+            aria-hidden="true"
+          />
+        </div>
+      </div>
+
+      {hasScore ? (
+        <div className="space-y-1">
+          <Progress
+            value={item.percentage!}
+            className="h-2 w-full"
+            aria-label={`${item.subjectName} released score average: ${item.percentage}%`}
+          />
+          <p className="text-xs text-muted-foreground">
+            Based on {item.gradedCount} released graded{" "}
+            {item.gradedCount === 1 ? "score" : "scores"}
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          No released graded scores yet.
+        </p>
+      )}
+    </div>
   );
 }
 
 const StoryBoard = () => {
   const navigate = useNavigate();
-  const { subjects, todos, urgentTodos, isLoading, error } =
-    useStudentOverviewData();
-  const { selectedPeriodId } = useAcademicPeriod();
+  const { subjects, todos, isLoading, error } = useStudentOverviewData();
+  const { selectedPeriodId, selectedPeriod, selectedYear } = useAcademicPeriod();
+
   const [metrics, setMetrics] = useState<StudentStudyboardMetrics | null>(null);
   const [metricsLoadedPeriod, setMetricsLoadedPeriod] = useState<
     number | null | "unloaded"
@@ -131,12 +267,26 @@ const StoryBoard = () => {
   const [metricsErrorPeriod, setMetricsErrorPeriod] = useState<
     number | null | "unloaded"
   >("unloaded");
+
+  const [studySupportItems, setStudySupportItems] = useState<
+    StudentPersistentIntervention[]
+  >([]);
+  const [supportLoadedPeriod, setSupportLoadedPeriod] = useState<
+    number | null | "unloaded"
+  >("unloaded");
+
+  const [isSubjectsExpanded, setIsSubjectsExpanded] = useState(false);
+  const [performanceFilter, setPerformanceFilter] = useState<
+    "with_scores" | "no_scores" | "all"
+  >("with_scores");
+
   const metricsLoading =
     metricsLoadedPeriod === "unloaded" ||
     metricsLoadedPeriod !== selectedPeriodId;
   const metricsError = metricsErrorPeriod === selectedPeriodId;
-  const [isSubjectsExpanded, setIsSubjectsExpanded] = useState(false);
-  const [isStrengthsExpanded, setIsStrengthsExpanded] = useState(false);
+  const supportLoading =
+    supportLoadedPeriod === "unloaded" ||
+    supportLoadedPeriod !== selectedPeriodId;
 
   useEffect(() => {
     let active = true;
@@ -156,67 +306,54 @@ const StoryBoard = () => {
     };
   }, [selectedPeriodId]);
 
-  const overview = useMemo(() => {
-    const graded = todos.filter(
-      (item) =>
-        item.grade !== null &&
-        item.total_points &&
-        item.is_graded !== false &&
-        item.show_scores !== false,
-    );
-    const earned = graded.reduce((sum, item) => sum + (item.grade || 0), 0);
-    const possible = graded.reduce(
-      (sum, item) => sum + (item.total_points || 0),
-      0,
-    );
-    const done = todos.filter(
-      (item) => item.is_submitted || item.status === "completed",
-    ).length;
-    const late = todos.filter((item) => item.status === "pastdue").length;
-    const pending = Math.max(0, todos.length - done - late);
-    const bySubject = new Map<
-      number,
-      { name: string; earned: number; possible: number }
-    >();
-    graded.forEach((item) => {
-      const bucket = bySubject.get(item.subject_id) || {
-        name: item.subject,
-        earned: 0,
-        possible: 0,
-      };
-      bucket.earned += item.grade || 0;
-      bucket.possible += item.total_points || 0;
-      bySubject.set(item.subject_id, bucket);
-    });
-    const overviewSubjects = [...bySubject.values()]
-      .map((item) => ({
-        name: item.name,
-        score: Math.round((item.earned / item.possible) * 100),
-      }))
-      .sort((a, b) => b.score - a.score);
-    const deadlines = todos
-      .filter(
-        (item) =>
-          item.status === "pending" && !item.is_submitted && item.due_date,
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime(),
-      )
-      .slice(0, 4);
-    return {
-      average: possible ? Math.round((earned / possible) * 100) : null,
-      gradedCount: graded.length,
-      done,
-      late,
-      pending,
-      subjects: overviewSubjects,
-      deadlines,
+  useEffect(() => {
+    let active = true;
+    listMyActiveInterventions(selectedPeriodId)
+      .then((res) => {
+        if (active) setStudySupportItems(res.items ?? []);
+      })
+      .catch(() => {
+        if (active) setStudySupportItems([]);
+      })
+      .finally(() => {
+        if (active) setSupportLoadedPeriod(selectedPeriodId);
+      });
+    return () => {
+      active = false;
     };
-  }, [todos]);
+  }, [selectedPeriodId]);
 
-  const onTimeTotal =
-    (metrics?.on_time_count || 0) + (metrics?.late_submission_count || 0);
+  const overview = useMemo(() => computeAcademicOverview(todos), [todos]);
+  const prioritizedTasks = useMemo(
+    () => prioritizeStudyboardTasks(todos, new Date(), PRIORITY_PREVIEW_LIMIT),
+    [todos],
+  );
+  const subjectPerformanceItems = useMemo(
+    () => computeSubjectMastery(subjects, todos),
+    [subjects, todos],
+  );
+  const subjectsWithScores = useMemo(
+    () => subjectPerformanceItems.filter((item) => item.percentage !== null),
+    [subjectPerformanceItems],
+  );
+  const subjectsWithoutScores = useMemo(
+    () => subjectPerformanceItems.filter((item) => item.percentage === null),
+    [subjectPerformanceItems],
+  );
+  const filteredPerformanceItems = useMemo(() => {
+    if (performanceFilter === "with_scores") return subjectsWithScores;
+    if (performanceFilter === "no_scores") return subjectsWithoutScores;
+    return subjectPerformanceItems;
+  }, [
+    performanceFilter,
+    subjectPerformanceItems,
+    subjectsWithScores,
+    subjectsWithoutScores,
+  ]);
+  const onTimeSummary = useMemo(
+    () => computeOnTimeSummary(metrics),
+    [metrics],
+  );
 
   const sortedSubjects = useMemo(() => {
     if (!subjects.length) return [];
@@ -232,12 +369,10 @@ const StoryBoard = () => {
         (t) => !t.is_submitted && t.status !== "completed",
       );
 
-      // Primary: Subject with most pending activities first
       if (bPending.length !== aPending.length) {
         return bPending.length - aPending.length;
       }
 
-      // Secondary: Due time of the classworks (soonest due first)
       const getEarliestDue = (pendingList: typeof aPending) => {
         const dates = pendingList
           .map((t) =>
@@ -254,7 +389,6 @@ const StoryBoard = () => {
         return aDue - bDue;
       }
 
-      // Tertiary: Alphabetical tie-breaker
       return a.subject_name.localeCompare(b.subject_name);
     });
   }, [subjects, todos]);
@@ -281,7 +415,7 @@ const StoryBoard = () => {
       (t) => !t.is_submitted && t.status !== "completed",
     );
     const completedTodos = subjectTodos.filter(
-      (t) => t.is_submitted || t.status === "completed" || t.grade !== null,
+      (t) => t.is_submitted || t.status === "completed",
     );
     const completionRate =
       subjectTodos.length > 0
@@ -299,7 +433,8 @@ const StoryBoard = () => {
         ? `Due ${latestPending.deadline}`
         : undefined,
       latestActivityAssignmentId: latestPending?.assignment_id,
-      latestActivityId: latestPending?.assignment_id ?? latestPending?.classwork_id,
+      latestActivityId:
+        latestPending?.assignment_id ?? latestPending?.classwork_id,
     };
   };
 
@@ -322,7 +457,7 @@ const StoryBoard = () => {
     }
   };
 
-  const openTodo = async (item: TodoItem) => {
+  const openTodo = (item: TodoItem) => {
     if (item.assignment_id) {
       navigate(
         `/student/classworks/${item.assignment_id}?from=${encodeURIComponent(window.location.pathname + window.location.search)}`,
@@ -330,14 +465,12 @@ const StoryBoard = () => {
       return;
     }
     let targetClassId = item.class_id;
-
     if (!targetClassId && item.subject_id) {
       const subject = subjects.find(
         (candidate) => candidate.subject_id === item.subject_id,
       );
       if (subject) targetClassId = subject.class_id;
     }
-
     if (targetClassId && item.subject_id) {
       navigate(
         `/student/subjects/${targetClassId}/${item.subject_id}?tab=classwork&classworkAssignmentId=${item.assignment_id}`,
@@ -347,17 +480,35 @@ const StoryBoard = () => {
     }
   };
 
+  const hasAttendanceRecords = Boolean(
+    metrics?.attendance?.some((day) => day.status !== "no_record"),
+  );
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            {/* Header & Academic Context */}
             <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
-                <h1 className="whitespace-nowrap text-xl font-bold sm:text-2xl md:text-4xl">
-                  Study Board
-                </h1>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <h1 className="whitespace-nowrap text-xl font-bold sm:text-2xl md:text-4xl">
+                    Study Board
+                  </h1>
+                  {(selectedPeriod?.period || selectedYear?.year_label) && (
+                    <Badge
+                      variant="outline"
+                      size="sm"
+                      className="hidden sm:inline-flex"
+                    >
+                      {[selectedPeriod?.period, selectedYear?.year_label]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Button
@@ -375,17 +526,97 @@ const StoryBoard = () => {
             </header>
 
             <div className="-mt-[1px] flex flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                {/* Left 2 Columns: Main Section */}
-                <div className="flex w-full min-w-0 flex-col gap-4 xl:col-span-2">
-                  <GradeOverviewCards
-                    todos={todos}
-                    isLoading={isLoading}
-                    error={error}
-                  />
+              {/* 1. Academic Overview KPI Strip */}
+              <section
+                aria-label="Academic overview"
+                className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+              >
+                <OverviewStatCard
+                  label="Pending Work"
+                  value={isLoading ? "—" : overview.pendingCount}
+                  sublabel={
+                    overview.pendingCount === 0
+                      ? "No open tasks right now"
+                      : `${overview.pendingCount} ${overview.pendingCount === 1 ? "activity" : "activities"} to complete`
+                  }
+                  icon={<ClipboardList className="size-4" />}
+                  tone="primary"
+                  onClick={() => navigate(routes.student.todo)}
+                />
+                <OverviewStatCard
+                  label="Overdue"
+                  value={isLoading ? "—" : overview.overdueCount}
+                  sublabel={
+                    overview.overdueCount === 0
+                      ? "No overdue activities"
+                      : overview.overdueActionableCount > 0
+                        ? `${overview.overdueActionableCount} open for late submission`
+                        : `${overview.overdueClosedCount} past due (closed)`
+                  }
+                  icon={<AlertTriangle className="size-4" />}
+                  tone={overview.overdueCount > 0 ? "destructive" : "default"}
+                  onClick={() => navigate(routes.student.todo)}
+                />
+                <OverviewStatCard
+                  label="Upcoming (7d)"
+                  value={isLoading ? "—" : overview.upcomingCount}
+                  sublabel={
+                    overview.nextDeadlineItem
+                      ? `Next: ${overview.nextDeadlineItem.deadline}`
+                      : "No deadlines in next 7 days"
+                  }
+                  icon={<Clock className="size-4" />}
+                  tone="default"
+                  onClick={() => navigate(routes.student.todo)}
+                />
+                <OverviewStatCard
+                  label="Classwork Completion"
+                  value={
+                    isLoading
+                      ? "—"
+                      : overview.completionRate === null
+                        ? "—"
+                        : `${overview.completionRate}%`
+                  }
+                  sublabel={
+                    overview.totalCount === 0
+                      ? "No activities assigned yet"
+                      : `${overview.completedCount} of ${overview.totalCount} activities done`
+                  }
+                  icon={<CheckCircle2 className="size-4" />}
+                  tone={
+                    overview.completionRate !== null &&
+                    overview.completionRate >= 80
+                      ? "success"
+                      : "default"
+                  }
+                />
+              </section>
 
-                  {/* Enrolled Subjects Container */}
-                  <Card className="flex w-full min-w-0 flex-col gap-3 -mt-4">
+              {/* 2. Main Responsive Workspace */}
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+                {/* Left Column (8 cols): My Subjects + Subject Mastery */}
+                <div className="flex min-w-0 flex-col gap-4 xl:col-span-8">
+                  {/* Subjects Overview */}
+                  <SectionCard
+                    title="My Subjects"
+                    subtitle={
+                      subjects.length > 0
+                        ? `${subjects.length} enrolled ${subjects.length === 1 ? "subject" : "subjects"} · sorted by pending work`
+                        : undefined
+                    }
+                    action={
+                      <Button
+                        variant="link"
+                        className="inline-flex h-auto items-center gap-1 p-0 text-sm font-semibold text-foreground hover:underline"
+                        onClick={() => navigate(routes.student.subjects)}
+                        title="View all subjects"
+                      >
+                        <span>View all</span>
+                        <ArrowUpRight className="size-4" />
+                      </Button>
+                    }
+                  >
                     {isLoading ? (
                       <LoadingPanel label="Loading subjects..." />
                     ) : error ? (
@@ -398,6 +629,7 @@ const StoryBoard = () => {
                     ) : subjects.length === 0 ? (
                       <StudentEmptyState
                         embedded
+                        compact
                         icon={<BookOpen />}
                         title="No subjects this period"
                         description="Your assigned subjects will appear here once enrollment is available."
@@ -418,7 +650,9 @@ const StoryBoard = () => {
                                 completionRate={stats.completionRate}
                                 latestActivityTitle={stats.latestActivityTitle}
                                 latestActivityDue={stats.latestActivityDue}
-                                latestActivityAssignmentId={stats.latestActivityAssignmentId}
+                                latestActivityAssignmentId={
+                                  stats.latestActivityAssignmentId
+                                }
                                 latestActivityId={stats.latestActivityId}
                                 classworks={todos.filter(
                                   (t) => t.subject_id === subject.subject_id,
@@ -429,696 +663,440 @@ const StoryBoard = () => {
                           })}
                         </div>
 
-                        <div className="flex items-center justify-between pt-1">
-                          <div>
-                            {sortedSubjects.length > INITIAL_SUBJECTS_LIMIT && (
-                              <Button
-                                variant="default"
-                                size="sm"
-                                autoIcon={false}
-                                onClick={() =>
-                                  setIsSubjectsExpanded((prev) => !prev)
-                                }
-                                className="border-2 border-border shadow-none text-sm font-bold px-3 py-1.5 h-auto rounded bg-primary text-black hover:bg-primary/90"
-                              >
-                                {isSubjectsExpanded
-                                  ? "Show less"
-                                  : `Show ${remainingSubjectsCount} more`}
-                              </Button>
-                            )}
+                        {sortedSubjects.length > INITIAL_SUBJECTS_LIMIT && (
+                          <div className="mt-3 flex items-center justify-start">
+                            <Button
+                              variant="default"
+                              size="sm"
+                              autoIcon={false}
+                              onClick={() =>
+                                setIsSubjectsExpanded((prev) => !prev)
+                              }
+                              className="h-auto rounded border-2 border-border bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground shadow-none hover:bg-primary/90"
+                            >
+                              {isSubjectsExpanded
+                                ? "Show less"
+                                : `Show ${remainingSubjectsCount} more`}
+                            </Button>
                           </div>
-                          <Button
-                            variant="link"
-                            className="p-0 text-sm text-foreground inline-flex items-center font-semibold hover:underline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(routes.student.subjects);
-                            }}
-                            title="View all subjects"
-                          >
-                            <span>View all subjects</span>
-                            <ArrowUpRight className="size-4" />
-                          </Button>
-                        </div>
+                        )}
                       </>
                     )}
-                  </Card>
+                  </SectionCard>
 
-                  {/* Additional Metric Cards displayed below subjects container */}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-12">
-                    {/* <MetricCard
-                      title="Assignment Status"
-                      className="sm:col-span-1 xl:col-span-6"
-                    >
-                      <div className="flex flex-1 items-center gap-4">
+                  {/* Subject Performance */}
+                  <SectionCard
+                    title="Subject Performance"
+                    subtitle="Released graded-score average per enrolled subject · click any subject to view details"
+                    action={
+                      !isLoading && !error && subjectPerformanceItems.length > 0 ? (
                         <div
-                          className="relative shrink-0"
-                          role="img"
-                          aria-label={`${overview.done} done, ${overview.pending} pending, ${overview.late} past due`}
+                          role="group"
+                          aria-label="Filter subject performance"
+                          className="inline-flex flex-wrap items-center gap-1 rounded border-2 border-border bg-background p-0.5"
                         >
-                          <PieChart width={136} height={136}>
-                            <Pie
-                              data={[
-                                { value: overview.done },
-                                { value: overview.pending },
-                                { value: overview.late },
-                              ]}
-                              dataKey="value"
-                              innerRadius={42}
-                              outerRadius={62}
-                              stroke="var(--border)"
-                              strokeWidth={1}
-                              isAnimationActive={false}
-                            >
-                              <Cell fill="var(--primary)" />
-                              <Cell fill="var(--muted)" />
-                              <Cell fill="var(--destructive)" />
-                            </Pie>
-                          </PieChart>
-                          <span className="absolute inset-0 flex items-center justify-center text-xl font-bold">
-                            {todos.length}
-                          </span>
-                        </div>
-                        <div className="flex flex-col gap-1.5 text-sm">
-                          <span>
-                            <i className="mr-2 inline-block size-2.5 bg-primary" />
-                            Done: {overview.done}
-                          </span>
-                          <span>
-                            <i className="mr-2 inline-block size-2.5 bg-muted ring-1 ring-border" />
-                            Pending: {overview.pending}
-                          </span>
-                          <span>
-                            <i className="mr-2 inline-block size-2.5 bg-destructive" />
-                            Past due: {overview.late}
-                          </span>
-                        </div>
-                      </div>
-                    </MetricCard> */}
-
-                    {/* <MetricCard
-                      title="Study Time This Week"
-                      className="sm:col-span-2 xl:col-span-12"
-                    >
-                      <p className="text-4xl font-black">
-                        {duration(readingTotal)}
-                      </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Cumulative reading time on work recorded this week;
-                        daily study sessions are not tracked
-                      </p>
-                      <div
-                        className="mt-3 h-36 min-w-0"
-                        aria-label="Reading time grouped by work date"
-                      >
-                        <ResponsiveContainer
-                          width="100%"
-                          height="100%"
-                          minWidth={0}
-                        >
-                          <BarChart
-                            data={readingDays}
-                            margin={{ top: 8, right: 0, left: -28, bottom: 0 }}
-                          >
-                            <CartesianGrid
-                              vertical={false}
-                              stroke="var(--border)"
-                              strokeOpacity={0.35}
-                            />
-                            <XAxis
-                              dataKey="day"
-                              tickLine={false}
-                              axisLine={false}
-                              tick={{ fill: "var(--foreground)", fontSize: 11 }}
-                            />
-                            <YAxis
-                              tickLine={false}
-                              axisLine={false}
-                              tick={{
-                                fill: "var(--muted-foreground)",
-                                fontSize: 10,
-                              }}
-                            />
-                            <ChartTooltip
-                              formatter={(value) => `${value} min`}
-                              contentStyle={{
-                                background: "var(--card)",
-                                borderColor: "var(--border)",
-                                color: "var(--foreground)",
-                              }}
-                            />
-                            <Bar
-                              dataKey="minutes"
-                              fill="var(--primary)"
-                              stroke="var(--border)"
-                              maxBarSize={42}
-                            />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </MetricCard> */}
-
-                    {/* <MetricCard
-                      title="Grade Trend"
-                      className="sm:col-span-2 xl:col-span-7"
-                    >
-                      <p className="mb-3 text-sm text-muted-foreground">
-                        Weekly average of released graded classwork
-                      </p>
-                      <div
-                        className="h-56 min-w-0"
-                        aria-label="Grade trend over six weeks"
-                      >
-                        <ResponsiveContainer
-                          width="100%"
-                          height="100%"
-                          minWidth={0}
-                        >
-                          <LineChart
-                            data={trend}
-                            margin={{ top: 8, right: 12, left: -26, bottom: 0 }}
-                          >
-                            <CartesianGrid
-                              vertical={false}
-                              stroke="var(--border)"
-                              strokeOpacity={0.35}
-                            />
-                            <XAxis
-                              dataKey="label"
-                              tickLine={false}
-                              axisLine={false}
-                              tick={{ fill: "var(--foreground)", fontSize: 11 }}
-                            />
-                            <YAxis
-                              domain={[0, 100]}
-                              tickLine={false}
-                              axisLine={false}
-                              tick={{
-                                fill: "var(--muted-foreground)",
-                                fontSize: 11,
-                              }}
-                            />
-                            <ChartTooltip
-                              formatter={(value) => `${value}%`}
-                              contentStyle={{
-                                background: "var(--card)",
-                                borderColor: "var(--border)",
-                                color: "var(--foreground)",
-                              }}
-                            />
-                            <Line
-                              type="linear"
-                              dataKey="average"
-                              stroke="var(--primary)"
-                              strokeWidth={3}
-                              dot={{
-                                r: 4,
-                                fill: "var(--primary)",
-                                stroke: "var(--border)",
-                              }}
-                              connectNulls={false}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </MetricCard> */}
-
-
-                    <MetricCard
-                      title="Strengths & Focus Areas"
-                      className="sm:col-span-2 xl:col-span-12"
-                    >
-                      {isLoading ? (
-                        <LoadingPanel label="Loading subject scores..." />
-                      ) : error ? (
-                        <p className="text-sm text-destructive">
-                          Unable to load subject scores.
-                        </p>
-                      ) : overview.subjects.length === 0 ? (
-                        <StudentEmptyState
-                          embedded
-                          icon={<FileText />}
-                          title="No released scores yet"
-                          description="Subject strengths and focus areas will appear after graded scores are released."
-                        />
-                      ) : (
-                        <>
-                          <div className="grid gap-5 sm:grid-cols-2">
-                            {[
+                          {(
+                            [
                               {
-                                label: "Strongest subjects",
-                                entries: isStrengthsExpanded
-                                  ? overview.subjects
-                                  : overview.subjects.slice(0, 2),
+                                id: "with_scores",
+                                label: "With Scores",
+                                count: subjectsWithScores.length,
                               },
                               {
-                                label: "Focus areas",
-                                entries: isStrengthsExpanded
-                                  ? [...overview.subjects].reverse()
-                                  : [...overview.subjects]
-                                      .reverse()
-                                      .slice(0, 2),
+                                id: "no_scores",
+                                label: "No Scores",
+                                count: subjectsWithoutScores.length,
                               },
-                            ].map((group) => (
-                              <div key={group.label}>
-                                <h4 className="mb-2 text-sm font-semibold">
-                                  {group.label}
-                                </h4>
-                                <div className="space-y-3">
-                                  {group.entries.map((item) => {
-                                    const mastery = classifyMasteryPercentage(item.score);
-                                    const MasteryIcon = mastery.icon;
-                                    const masteryFill =
-                                      mastery.id === "high"
-                                        ? "#00e65f"
-                                        : mastery.id === "moderate"
-                                          ? "#ff9233"
-                                          : mastery.id === "low"
-                                            ? "#ff3333"
-                                            : "none";
-
-                                    return (
-                                      <div
-                                        key={item.name}
-                                        className="flex items-start gap-2.5 text-sm"
-                                      >
-                                        <Tooltip>
-                                          <TooltipTrigger
-                                            render={
-                                              <span>
-                                                <IconContainer
-                                                  className={cn(
-                                                    "shrink-0 border-2 border-black mt-0.5",
-                                                    mastery.bgClass,
-                                                  )}
-                                                  aria-label={`${mastery.label} mastery`}
-                                                >
-                                                  <MasteryIcon
-                                                    fill={masteryFill}
-                                                    className="size-8! stroke-black stroke-[1.5] [&_path]:fill-none"
-                                                  />
-                                                </IconContainer>
-                                              </span>
-                                            }
-                                          />
-                                          <TooltipContent>
-                                            {mastery.label} Mastery
-                                          </TooltipContent>
-                                        </Tooltip>
-
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center justify-between gap-2 mb-1">
-                                            <Tooltip>
-                                              <TooltipTrigger
-                                                render={
-                                                  <span
-                                                    tabIndex={0}
-                                                    className="truncate font-medium text-foreground"
-                                                  >
-                                                    {item.name}
-                                                  </span>
-                                                }
-                                              />
-                                              <TooltipContent>
-                                                {item.name}
-                                              </TooltipContent>
-                                            </Tooltip>
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                              {/* <span className="text-xs font-bold text-muted-foreground">
-                                                {mastery.label}
-                                              </span> */}
-                                            </div>
-                                          </div>
-                                          <Progress
-                                            value={item.score}
-                                            className="h-2.5 w-full"
-                                            aria-label={`${item.name}: ${item.score}% (${mastery.label})`}
-                                          />
-                                          <p className="text-xs text-muted-foreground mt-1">
-                                            {mastery.description}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-
-                          {overview.subjects.length > 2 && (
-                            <div className="flex items-center justify-start pt-4">
-                              <Button
-                                variant="default"
-                                size="sm"
-                                autoIcon={false}
-                                onClick={() =>
-                                  setIsStrengthsExpanded((prev) => !prev)
-                                }
-                                className="border-2 border-border shadow-none text-sm font-bold px-3 py-1.5 h-auto rounded bg-primary text-black hover:bg-primary/90"
-                              >
-                                {isStrengthsExpanded
-                                  ? "Hide display"
-                                  : "Show all"}
-                              </Button>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </MetricCard>
-
-                    <MetricCard
-                      title="Time per Subject"
-                      className="sm:col-span-2 xl:col-span-6"
-                    >
-                      <div className="space-y-3">
-                        {metricsLoading ? (
-                          <LoadingPanel label="Loading reading time..." />
-                        ) : metricsError ? (
-                          <p className="text-sm text-destructive">
-                            Unable to load reading time.
-                          </p>
-                        ) : (metrics?.subject_reading_seconds || []).length ===
-                          0 ? (
-                          <StudentEmptyState
-                            embedded
-                            className="shadow-none"
-                            icon={<BookOpen />}
-                            title="No reading time yet"
-                            description="Time spent reading class materials will appear here after you start."
-                          />
-                        ) : (
-                          metrics!.subject_reading_seconds.map((item) => (
-                            <div
-                              key={item.subject}
-                              className="grid grid-cols-[minmax(0,1fr)_4rem] gap-x-2 gap-y-1 text-sm"
-                            >
-                              <Tooltip>
-                                <TooltipTrigger
-                                  render={
-                                    <span
-                                      tabIndex={0}
-                                      className="truncate font-medium"
-                                    >
-                                      {item.subject}
-                                    </span>
-                                  }
-                                />
-                                <TooltipContent>{item.subject}</TooltipContent>
-                              </Tooltip>
-                              <span className="text-right font-semibold">
-                                {duration(item.seconds)}
-                              </span>
-                              <Progress
-                                value={
-                                  (item.seconds /
-                                    Math.max(
-                                      1,
-                                      ...metrics!.subject_reading_seconds.map(
-                                        (subject) => subject.seconds,
-                                      ),
-                                    )) *
-                                  100
-                                }
-                                className="col-span-2 h-3"
-                                aria-label={`${item.subject}: ${duration(item.seconds)}`}
-                              />
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </MetricCard>
-
-                    <MetricCard
-                      title="On-Time Submissions"
-                      className="sm:col-span-1 xl:col-span-6"
-                    >
-                      <div className="flex items-center gap-4">
-                        <Progress
-                          value={
-                            onTimeTotal > 0
-                              ? Math.round(
-                                ((metrics?.on_time_count || 0) /
-                                  onTimeTotal) *
-                                100,
-                              )
-                              : 0
-                          }
-                          variant="circular"
-                          className="size-24"
-                          aria-label={`${metrics?.on_time_count || 0} of ${onTimeTotal} on time`}
-                        />
-                        <div className="text-sm">
-                          <p className="font-semibold">
-                            {metrics?.on_time_count || 0} of {onTimeTotal} on
-                            time
-                          </p>
-                          <p className="text-muted-foreground">
-                            {metrics?.late_submission_count || 0} late
-                          </p>
-                        </div>
-                      </div>
-                    </MetricCard>
-
-                    <MetricCard
-                      title="Attendance"
-                      className="sm:col-span-2 xl:col-span-12"
-                    >
-                      {metricsLoading ? (
-                        <LoadingPanel label="Loading attendance..." />
-                      ) : metricsError ? (
-                        <p className="text-sm text-destructive">
-                          Unable to load attendance.
-                        </p>
-                      ) : !metrics?.attendance?.some(
-                        (day) => day.status !== "no_record",
-                      ) ? (
-                        <StudentEmptyState
-                          embedded
-                          className="shadow-none"
-                          icon={<Calendar />}
-                          title="No attendance recorded yet"
-                          description="Your attendance for this week will appear when your school records it."
-                        />
-                      ) : (
-                        <>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-4xl font-black">
-                              {metrics?.attendance_rate == null
-                                ? "—"
-                                : `${metrics.attendance_rate}%`}
-                            </p>
-                            <span className="text-sm text-muted-foreground">
-                              recorded days this week
-                            </span>
-                          </div>
-                          <div className="mt-4 grid grid-cols-5 gap-1 sm:gap-2">
-                            {metrics?.attendance.map((day, index) => (
-                              <div
-                                key={day.date}
-                                className="min-w-0 text-center"
-                              >
-                                <p className="mb-1 text-sm font-semibold">
-                                  {days[index]}
-                                </p>
-                                <Tooltip>
-                                  <TooltipTrigger
-                                    render={
-                                      <div
-                                        tabIndex={0}
-                                        aria-label={`${dayLabel(day.date)}: ${attendanceLabel[day.status]}`}
-                                        className={`flex min-h-12 items-center justify-center break-words rounded border-2 border-border px-0.5 text-sm font-semibold sm:px-1 ${day.status === "present" ? "bg-primary text-primary-foreground" : day.status === "late" ? "bg-accent text-accent-foreground" : day.status === "absent" ? "bg-destructive text-destructive-foreground" : day.status === "excused" ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"}`}
-                                      >
-                                        {attendanceLabel[day.status]}
-                                      </div>
-                                    }
-                                  />
-                                  <TooltipContent>
-                                    {dayLabel(day.date)}:{" "}
-                                    {attendanceLabel[day.status]}
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-                            ))}
-                          </div>
-                          <p className="mt-3 text-sm text-muted-foreground">
-                            Monday–Friday · Present, late, and excused count as
-                            attended
-                          </p>
-                        </>
-                      )}
-                    </MetricCard>
-                  </div>
-                </div>
-
-                {/* Right column: Week Streak + To do Card */}
-                <div className="flex w-full min-w-0 flex-col gap-4 xl:col-span-1">
-                  {/* <Card className="block w-full border-border bg-white shadow-md hover:shadow-none">
-                    <Card.Content className="">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex flex-row gap-2 items-center">
-                          <Zap
-                            size={20}
-                            className="fill-primary text-foreground"
-                          />
-                          <Text as="p" className="text-md font-semibold">
-                            1 week streak
-                          </Text>
-                        </div>
-
-                        <Text as="p" className="text-sm font-normal">
-                          1-day streak — keep going, build the habit!
-                        </Text>
-                      </div>
-                      <div className="mt-2 w-full">
-                        <div className="grid w-full grid-cols-7 gap-1.5 sm:gap-2">
-                          <Badge
-                            size="md"
-                            variant="secondary"
-                            className="flex min-w-0 items-center justify-center px-1 sm:px-2.5"
-                          >
-                            <Check size={17} className="mt-0.5" />
-                          </Badge>
-                          <Badge
-                            size="md"
-                            variant="default"
-                            className="min-w-0 px-1 text-center sm:px-2.5 justify-center"
-                          >
-                            Tu
-                          </Badge>
-                          <Badge
-                            size="md"
-                            variant="default"
-                            className="min-w-0 px-1 text-center sm:px-2.5 justify-center"
-                          >
-                            We
-                          </Badge>
-                          <Badge
-                            size="md"
-                            variant="secondary"
-                            className="min-w-0 px-1 text-center sm:px-2.5 justify-center"
-                          >
-                            Th
-                          </Badge>
-                          <Badge
-                            size="md"
-                            variant="outline"
-                            className="min-w-0 px-1 text-center sm:px-2.5 justify-center"
-                          >
-                            Fr
-                          </Badge>
-                          <Badge
-                            size="md"
-                            variant="outline"
-                            className="min-w-0 px-1 text-center sm:px-2.5 justify-center"
-                          >
-                            Sa
-                          </Badge>
-                          <Badge
-                            size="md"
-                            variant="outline"
-                            className="min-w-0 px-1 text-center sm:px-2.5 justify-center"
-                          >
-                            Su
-                          </Badge>
-                        </div>
-                      </div>
-                    </Card.Content>
-                  </Card> */}
-
-                  <Card className="block w-full min-h-[630px] border-border bg-white shadow-md hover:shadow-none">
-                    <Card.Content>
-                      <div className="flex items-center justify-between mb-4">
-                        <Card.Title className="mb-0 text-2xl md:text-3xl">
-                          To do
-                        </Card.Title>
-
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => navigate(routes.student.todo)}
-                          className="shadow-none px-1"
-                          aria-label="View all to-do items"
-                        >
-                          <ArrowUpRight size={18} />
-                        </Button>
-                      </div>
-
-                      {isLoading ? (
-                        <LoadingPanel label="Loading to-do items..." />
-                      ) : error ? (
-                        <Empty className="border-none bg-card shadow-none hover:shadow-none">
-                          <Empty.Content>
-                            <Empty.Title>
-                              Unable to load to-do items
-                            </Empty.Title>
-                            <Empty.Description>{error}</Empty.Description>
-                          </Empty.Content>
-                        </Empty>
-                      ) : urgentTodos.length === 0 ? (
-                        <StudentEmptyState
-                          embedded
-                          icon={<CheckSquare />}
-                          title="You're all caught up!"
-                          description="You have no pending classwork right now."
-                          className="shadow-none"
-                        />
-                      ) : (
-                        <div className="flex flex-col gap-2.5">
-                          {urgentTodos.map((item) => {
-                            const IconComponent = getClassworkIcon(
-                              item.type,
-                              item.category,
-                            );
+                              {
+                                id: "all",
+                                label: "All Subjects",
+                                count: subjectPerformanceItems.length,
+                              },
+                            ] as const
+                          ).map((tab) => {
+                            const active = performanceFilter === tab.id;
                             return (
-                              <Card
-                                key={item.assignment_id}
-                                onClick={() => openTodo(item)}
-                                onKeyDown={(event) => {
-                                  if (
-                                    event.key === "Enter" ||
-                                    event.key === " "
-                                  ) {
-                                    event.preventDefault();
-                                    openTodo(item);
-                                  }
-                                }}
-                                role="button"
-                                tabIndex={0}
-                                className="flex w-full cursor-pointer shadow-none items-center gap-3 border-border bg-background p-2.5 hover:-translate-y-1 hover:bg-retro hover:text-foreground!"
-                              >
-                                <IconContainer className="bg-primary" size="sm">
-                                  <IconComponent
-                                    size={14}
-                                    className="shrink-0"
-                                  />
-                                </IconContainer>
-
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate font-semibold text-sm">
-                                    {item.title}
-                                  </p>
-                                  <p className="truncate text-sm text-muted-foreground">
-                                    {item.subject} · {item.deadline}
-                                  </p>
-                                </div>
-                                {item.status === "pastdue" && (
-                                  <Badge
-                                    variant="destructive"
-                                    size="sm"
-                                    className="shrink-0"
-                                  >
-                                    Past Due
-                                  </Badge>
+                              <button
+                                key={tab.id}
+                                type="button"
+                                aria-pressed={active}
+                                onClick={() => setPerformanceFilter(tab.id)}
+                                className={cn(
+                                  "cursor-pointer rounded-sm px-2 py-1 text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                                  active
+                                    ? "bg-primary text-primary-foreground"
+                                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                                 )}
-                              </Card>
+                              >
+                                {tab.label} ({tab.count})
+                              </button>
                             );
                           })}
                         </div>
-                      )}
-                    </Card.Content>
-                  </Card>
+                      ) : undefined
+                    }
+                  >
+                    {isLoading ? (
+                      <LoadingPanel label="Loading subject performance..." />
+                    ) : error ? (
+                      <p className="text-sm text-destructive">
+                        Unable to load subject performance.
+                      </p>
+                    ) : subjectPerformanceItems.length === 0 ? (
+                      <StudentEmptyState
+                        embedded
+                        compact
+                        icon={<BookOpen />}
+                        title="No subjects this period"
+                        description="Your subject performance will appear here once enrollment is available."
+                      />
+                    ) : filteredPerformanceItems.length === 0 ? (
+                      performanceFilter === "with_scores" ? (
+                        <StudentEmptyState
+                          embedded
+                          compact
+                          icon={<FileText />}
+                          title="No released graded scores yet"
+                          description="Subject averages will appear here once teachers release graded scores."
+                          action={{
+                            label: `View all enrolled subjects (${subjectPerformanceItems.length})`,
+                            onClick: () => setPerformanceFilter("all"),
+                          }}
+                        />
+                      ) : (
+                        <StudentEmptyState
+                          embedded
+                          compact
+                          icon={<CheckCircle2 />}
+                          title="All subjects have released scores"
+                          description="Every enrolled subject in this term already has at least one released graded score."
+                        />
+                      )
+                    ) : (
+                      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                        {filteredPerformanceItems.map((item) => (
+                          <SubjectPerformanceCard
+                            key={item.subjectLoadId}
+                            item={item}
+                            onSelect={() =>
+                              handleSubjectClick({
+                                class_id: item.classId,
+                                subject_id: item.subjectId,
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </SectionCard>
+                </div>
+
+                {/* Right Column (4 cols): My Priorities, Study Support, On-Time Submissions, Weekly Attendance */}
+                <div className="flex min-w-0 flex-col gap-4 xl:col-span-4">
+                  {/* My Priorities */}
+                  <SectionCard
+                    title="My Priorities"
+                    subtitle="Actionable overdue work first, then upcoming deadlines"
+                    action={
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate(routes.student.todo)}
+                        className="px-2 shadow-none"
+                        aria-label="View all to-do items"
+                      >
+                        <span className="text-xs font-bold">View all</span>
+                        <ArrowUpRight className="ml-1 size-3.5" />
+                      </Button>
+                    }
+                  >
+                    {isLoading ? (
+                      <LoadingPanel label="Loading priorities..." />
+                    ) : error ? (
+                      <p className="text-sm text-destructive">{error}</p>
+                    ) : prioritizedTasks.length === 0 ? (
+                      <StudentEmptyState
+                        embedded
+                        compact
+                        icon={<CheckSquare />}
+                        title="You're all caught up!"
+                        description="No actionable pending classwork right now."
+                        className="shadow-none"
+                      />
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {prioritizedTasks.map(({ item, bucket }) => {
+                          const IconComponent = getClassworkIcon(
+                            item.type,
+                            item.category,
+                          );
+                          return (
+                            <div
+                              key={item.assignment_id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openTodo(item)}
+                              onKeyDown={(event) => {
+                                if (
+                                  event.key === "Enter" ||
+                                  event.key === " "
+                                ) {
+                                  event.preventDefault();
+                                  openTodo(item);
+                                }
+                              }}
+                              className="flex w-full cursor-pointer items-center gap-2.5 rounded border-2 border-border bg-background p-2.5 transition-all hover:-translate-y-0.5 hover:bg-accent/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                            >
+                              <IconContainer
+                                className="shrink-0 border-2 border-border bg-primary text-primary-foreground"
+                                size="sm"
+                              >
+                                <IconComponent
+                                  size={14}
+                                  className="shrink-0"
+                                />
+                              </IconContainer>
+
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-foreground">
+                                  {item.title}
+                                </p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {item.subject} · {item.deadline}
+                                </p>
+                              </div>
+
+                              <div className="flex shrink-0 flex-col items-end gap-1">
+                                {bucket === "overdue" ? (
+                                  <Badge variant="destructive" size="sm">
+                                    Overdue
+                                  </Badge>
+                                ) : bucket === "due_soon" ? (
+                                  <Badge variant="default" size="sm">
+                                    Due Soon
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" size="sm">
+                                    Pending
+                                  </Badge>
+                                )}
+                                {item.is_study_support && (
+                                  <Badge variant="secondary" size="sm">
+                                    Study Support
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </SectionCard>
+
+                  {/* Study Support Preview */}
+                  {!supportLoading && studySupportItems.length > 0 && (
+                    <SectionCard
+                      title="Study Support"
+                      subtitle="Teacher-recommended resources and activities for you"
+                      action={
+                        <Button
+                          variant="link"
+                          className="inline-flex h-auto items-center gap-1 p-0 text-xs font-semibold text-foreground hover:underline"
+                          onClick={() => navigate(routes.student.interventions)}
+                        >
+                          <span>Open</span>
+                          <ArrowUpRight className="size-3.5" />
+                        </Button>
+                      }
+                    >
+                      <div className="flex flex-col gap-2">
+                        {studySupportItems.slice(0, 3).map((support) => {
+                          const readyActivities = support.activities.filter(
+                            (a) => !a.is_passed,
+                          ).length;
+                          return (
+                            <div
+                              key={support.intervention_id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() =>
+                                navigate(
+                                  `${routes.student.interventions}/${support.intervention_id}`,
+                                )
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  navigate(
+                                    `${routes.student.interventions}/${support.intervention_id}`,
+                                  );
+                                }
+                              }}
+                              className="flex cursor-pointer items-center justify-between gap-2 rounded border-2 border-border bg-accent/30 p-2.5 transition-all hover:-translate-y-0.5 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                            >
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <IconContainer
+                                  className="shrink-0 border-2 border-border bg-primary text-primary-foreground"
+                                  size="sm"
+                                >
+                                  <HeartHandshake className="size-3.5" />
+                                </IconContainer>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold">
+                                    {support.subject_name}
+                                  </p>
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {support.preparation.required_count > 0
+                                      ? `Readings: ${support.preparation.completed_count}/${support.preparation.required_count}`
+                                      : "Active Study Support"}
+                                    {readyActivities > 0
+                                      ? ` · ${readyActivities} ${readyActivities === 1 ? "activity" : "activities"}`
+                                      : ""}
+                                  </p>
+                                </div>
+                              </div>
+                              <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </SectionCard>
+                  )}
+
+                  {/* On-Time Submissions */}
+                  <SectionCard
+                    title="On-Time Submissions"
+                    subtitle="Submitted work with assigned due dates"
+                  >
+                    {metricsLoading ? (
+                      <LoadingPanel label="Loading submission timeliness..." />
+                    ) : metricsError ? (
+                      <p className="text-sm text-destructive">
+                        Unable to load submission timeliness.
+                      </p>
+                    ) : !onTimeSummary.hasData ? (
+                      <div className="flex items-center gap-3 rounded border-2 border-dashed border-border bg-background p-3">
+                        <GraduationCap className="size-5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 text-xs">
+                          <p className="font-semibold text-foreground">
+                            No timed submissions yet
+                          </p>
+                          <p className="text-muted-foreground">
+                            {onTimeSummary.withoutDeadlineCount > 0
+                              ? `${onTimeSummary.withoutDeadlineCount} submitted without a due date.`
+                              : "Submitted work with due dates will appear here."}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-4">
+                        <Progress
+                          value={onTimeSummary.rate ?? 0}
+                          variant="circular"
+                          className="size-20 shrink-0"
+                          aria-label={`${onTimeSummary.onTimeCount} of ${onTimeSummary.eligibleCount} on time (${onTimeSummary.rate}%)`}
+                        />
+                        <div className="min-w-0 space-y-0.5 text-sm">
+                          <p className="font-bold text-foreground">
+                            {onTimeSummary.onTimeCount} of{" "}
+                            {onTimeSummary.eligibleCount} on time
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {onTimeSummary.lateCount} late
+                            {onTimeSummary.withoutDeadlineCount > 0
+                              ? ` · ${onTimeSummary.withoutDeadlineCount} without due date`
+                              : ""}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </SectionCard>
+
+                  {/* Weekly Attendance */}
+                  <SectionCard
+                    title="Weekly Attendance"
+                    subtitle="Monday–Friday recorded attendance"
+                  >
+                    {metricsLoading ? (
+                      <LoadingPanel label="Loading attendance..." />
+                    ) : metricsError ? (
+                      <p className="text-sm text-destructive">
+                        Unable to load attendance.
+                      </p>
+                    ) : !hasAttendanceRecords ? (
+                      <div className="flex items-center gap-3 rounded border-2 border-dashed border-border bg-background p-3">
+                        <Calendar className="size-5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 text-xs">
+                          <p className="font-semibold text-foreground">
+                            No attendance recorded this week
+                          </p>
+                          <p className="text-muted-foreground">
+                            Daily attendance appears once your school records
+                            it.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-3xl font-black">
+                            {metrics?.attendance_rate == null
+                              ? "—"
+                              : `${metrics.attendance_rate}%`}
+                          </p>
+                          <span className="text-xs text-muted-foreground">
+                            attended this week
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-5 gap-1.5">
+                          {metrics?.attendance.map((day, index) => (
+                            <div
+                              key={day.date}
+                              className="min-w-0 text-center"
+                            >
+                              <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                {WEEKDAYS[index]}
+                              </p>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <div
+                                      tabIndex={0}
+                                      aria-label={`${dayLabel(day.date)}: ${attendanceLabel[day.status]}`}
+                                      className={cn(
+                                        "flex min-h-10 items-center justify-center rounded border-2 border-border px-0.5 text-[11px] font-bold",
+                                        day.status === "present"
+                                          ? "bg-primary text-primary-foreground"
+                                          : day.status === "late"
+                                            ? "bg-accent text-accent-foreground"
+                                            : day.status === "absent"
+                                              ? "bg-destructive text-destructive-foreground"
+                                              : day.status === "excused"
+                                                ? "bg-secondary text-secondary-foreground"
+                                                : "bg-muted text-muted-foreground",
+                                      )}
+                                    >
+                                      {day.status === "no_record"
+                                        ? "—"
+                                        : attendanceLabel[day.status]}
+                                    </div>
+                                  }
+                                />
+                                <TooltipContent>
+                                  {dayLabel(day.date)}:{" "}
+                                  {attendanceLabel[day.status]}
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mt-2.5 text-[11px] text-muted-foreground">
+                          Present, late, and excused count as attended.
+                        </p>
+                      </>
+                    )}
+                  </SectionCard>
                 </div>
               </div>
             </div>
