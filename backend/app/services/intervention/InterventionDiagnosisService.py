@@ -20,6 +20,7 @@ from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.grading.ComponentMapper import CanonicalGradingComponent, classify_classwork_component
 from app.services.prediction.CurrentPeriodFeatureBuilderService import _classwork_rows
 
@@ -108,14 +109,34 @@ def effective_diagnosis_snapshot(db: Session | None, row: Any) -> dict[str, Any]
         return diagnosis
 
     raw_activities = diagnosis.get("supporting_activities") or []
-    enriched_activities: list[dict[str, Any]] | None = None
-    for idx, act in enumerate(raw_activities):
-        if isinstance(act, dict) and not act.get("classwork_type") and isinstance(act.get("classwork_id"), int):
+    filtered_activities: list[dict[str, Any]] = []
+    activities_changed = False
+    row_student_id = getattr(row, "student_id", None)
+    row_class_id = getattr(row, "class_id", None)
+    row_period_id = getattr(row, "academic_period_id", None)
+    for act in raw_activities:
+        if not isinstance(act, dict):
+            filtered_activities.append(act)
+            continue
+        assignment_id = act.get("classwork_assignment_id")
+        if isinstance(assignment_id, int):
+            asgn = db.get(ClassworkAssignment, assignment_id)
+            if asgn is not None and (
+                (row_class_id is not None and asgn.class_id != row_class_id)
+                or (row_period_id is not None and asgn.academic_period_id not in (None, row_period_id))
+                or (row_student_id is not None and not assignment_allows_student(asgn, row_student_id))
+            ):
+                activities_changed = True
+                continue
+        item = act
+        if not act.get("classwork_type") and isinstance(act.get("classwork_id"), int):
             cw = db.get(Classwork, act["classwork_id"])
             if cw is not None and cw.subject_id == row.subject_id:
-                if enriched_activities is None:
-                    enriched_activities = [dict(item) if isinstance(item, dict) else item for item in raw_activities]
-                enriched_activities[idx]["classwork_type"] = cw.classwork_type
+                item = dict(act)
+                item["classwork_type"] = cw.classwork_type
+                activities_changed = True
+        filtered_activities.append(item)
+    enriched_activities: list[dict[str, Any]] | None = filtered_activities if activities_changed else None
 
     scored = diagnosis.get("lowest_supported_competencies") or []
     coverage = diagnosis.get("manual_assessment_coverage") or []
@@ -148,6 +169,7 @@ def effective_diagnosis_snapshot(db: Session | None, row: Any) -> dict[str, Any]
                 or assignment.classwork_id != classwork_id
                 or assignment.class_id != getattr(row, "class_id", None)
                 or assignment.academic_period_id != getattr(row, "academic_period_id", None)
+                or assignment.recipient_student_id not in (None, getattr(row, "student_id", None))
                 or classwork.subject_id != row.subject_id
                 or submission.classwork_assignment_id != assignment_id
                 or submission.student_id != getattr(row, "student_id", None)
@@ -202,6 +224,203 @@ def effective_diagnosis_snapshot(db: Session | None, row: Any) -> dict[str, Any]
         updated["lowest_supported_competencies"] = hydrated_competencies
         updated["competency_detail_status"] = "AVAILABLE"
     return updated
+
+
+def _stored_target_classwork_lesson_ids(
+    db: Session,
+    classwork_id: int,
+    subject_id: int,
+    cutoff: datetime | None,
+) -> set[int]:
+    """Return explicitly stored subject-scoped lesson links for one classwork."""
+    lesson_ids: set[int] = set()
+    for link in db.query(ClassworkLesson).filter_by(classwork_id=classwork_id).all():
+        lesson = db.get(Lesson, link.lesson_id)
+        if lesson is not None and lesson.subject_id == subject_id:
+            lesson_ids.add(lesson.lesson_id)
+
+    quiz_question_lessons = (
+        db.query(Question.lesson_id)
+        .join(QuizQuestion, QuizQuestion.question_id == Question.question_id)
+        .join(Quiz, Quiz.quiz_id == QuizQuestion.quiz_id)
+        .filter(Quiz.classwork_id == classwork_id, Question.lesson_id.isnot(None))
+        .all()
+    )
+    for (lesson_id,) in quiz_question_lessons:
+        lesson = db.get(Lesson, lesson_id)
+        if lesson is not None and lesson.subject_id == subject_id:
+            lesson_ids.add(lesson.lesson_id)
+
+    coverage_rows = db.query(ClassworkCoverage).filter_by(classwork_id=classwork_id).all()
+    for cov in coverage_rows:
+        if cov.lesson_id is None:
+            continue
+        if cutoff is not None:
+            if cov.valid_from is None or not (
+                _utc(cov.valid_from) <= cutoff
+                and (cov.valid_until is None or cutoff < _utc(cov.valid_until))
+            ):
+                continue
+        elif cov.valid_until is not None:
+            continue
+        lesson = db.get(Lesson, cov.lesson_id)
+        if lesson is not None and lesson.subject_id == subject_id:
+            lesson_ids.add(lesson.lesson_id)
+
+    return lesson_ids
+
+
+def scope_diagnosis_to_target(
+    db: Session | None,
+    row: Any,
+    diagnosis: dict[str, Any],
+    target_assignment_id: int | None,
+) -> dict[str, Any]:
+    """Return a non-mutating view of frozen diagnosis evidence scoped to one original target."""
+    if target_assignment_id is None or not isinstance(diagnosis, dict):
+        return diagnosis
+
+    activities = [
+        item for item in (diagnosis.get("supporting_activities") or [])
+        if isinstance(item, dict)
+    ]
+    target_classwork_id: int | None = None
+    stored_lesson_ids: set[int] = set()
+
+    matched_activity = next(
+        (item for item in activities if item.get("classwork_assignment_id") == target_assignment_id),
+        None,
+    )
+    if matched_activity is not None and isinstance(matched_activity.get("classwork_id"), int):
+        target_classwork_id = matched_activity["classwork_id"]
+
+    cutoff: datetime | None = None
+    cutoff_text = diagnosis.get("evidence_cutoff_at")
+    if isinstance(cutoff_text, str):
+        try:
+            cutoff = _utc(datetime.fromisoformat(cutoff_text))
+        except ValueError:
+            cutoff = None
+
+    if db is not None:
+        target_asgn = db.get(ClassworkAssignment, target_assignment_id)
+        if (
+            target_asgn is not None
+            and target_asgn.classwork is not None
+            and not target_asgn.classwork.is_archived
+            and target_asgn.source_intervention_id is None
+            and target_asgn.original_exam_assignment_id is None
+            and target_asgn.class_id == getattr(row, "class_id", None)
+            and target_asgn.academic_period_id == getattr(row, "academic_period_id", None)
+            and target_asgn.classwork.subject_id == getattr(row, "subject_id", None)
+            and assignment_allows_student(target_asgn, getattr(row, "student_id", None))
+        ):
+            target_classwork_id = target_asgn.classwork_id
+            stored_lesson_ids = _stored_target_classwork_lesson_ids(
+                db, target_asgn.classwork_id, target_asgn.classwork.subject_id, cutoff,
+            )
+
+    if target_classwork_id is None and matched_activity is None:
+        return diagnosis
+
+    def _matches_target(item: dict[str, Any]) -> bool:
+        item_asgn_id = item.get("classwork_assignment_id")
+        if isinstance(item_asgn_id, int):
+            return item_asgn_id == target_assignment_id
+        return target_classwork_id is not None and item.get("classwork_id") == target_classwork_id
+
+    target_activities = [item for item in activities if _matches_target(item)]
+
+    def _filter_competencies(predicate) -> list[dict[str, Any]]:
+        filtered: list[dict[str, Any]] = []
+        for comp in diagnosis.get("lowest_supported_competencies") or []:
+            if not isinstance(comp, dict):
+                continue
+            scores = [
+                score for score in (comp.get("supporting_scores") or [])
+                if isinstance(score, dict) and predicate(score)
+            ]
+            if not scores:
+                continue
+            earned = sum(
+                float(s["score"]) for s in scores if isinstance(s.get("score"), (int, float))
+            )
+            possible = sum(
+                float(s["possible_score"])
+                for s in scores
+                if isinstance(s.get("possible_score"), (int, float))
+            )
+            percent = round(earned / possible * 100, 4) if possible > 0 else comp.get("percent")
+            filtered.append({
+                **comp,
+                "score": round(earned, 4) if possible > 0 else comp.get("score"),
+                "possible_score": round(possible, 4) if possible > 0 else comp.get("possible_score"),
+                "percent": percent,
+                "supporting_scores": scores,
+            })
+        filtered.sort(key=lambda item: (
+            item["percent"] if isinstance(item.get("percent"), (int, float)) else float("inf"),
+            item.get("competency_id") or 0,
+        ))
+        return filtered
+
+    target_competencies = _filter_competencies(_matches_target)
+    target_coverage = [
+        item for item in (diagnosis.get("manual_assessment_coverage") or [])
+        if isinstance(item, dict) and _matches_target(item)
+    ]
+
+    if target_competencies or target_coverage:
+        updated = dict(diagnosis)
+        updated["lowest_supported_competencies"] = target_competencies
+        updated["manual_assessment_coverage"] = target_coverage
+        if target_activities:
+            updated["supporting_activities"] = target_activities
+        return updated
+
+    if target_activities:
+        updated = dict(diagnosis)
+        updated["lowest_supported_competencies"] = []
+        updated["manual_assessment_coverage"] = []
+        updated["supporting_activities"] = target_activities
+        return updated
+
+    if stored_lesson_ids:
+        lesson_competencies = _filter_competencies(
+            lambda score: isinstance(score.get("lesson_id"), int) and score["lesson_id"] in stored_lesson_ids
+        )
+        lesson_coverage: list[dict[str, Any]] = []
+        for cov in diagnosis.get("manual_assessment_coverage") or []:
+            if not isinstance(cov, dict):
+                continue
+            cov_lessons = [
+                lesson for lesson in (cov.get("covered_lessons") or [])
+                if isinstance(lesson, dict) and lesson.get("lesson_id") in stored_lesson_ids
+            ]
+            cov_links = [
+                link for link in (cov.get("coverage_links") or [])
+                if isinstance(link, dict) and link.get("lesson_id") in stored_lesson_ids
+            ]
+            if cov_lessons and cov_links:
+                allowed_comp_ids = {
+                    link.get("competency_id") for link in cov_links if isinstance(link.get("competency_id"), int)
+                }
+                cov_comps = [
+                    comp for comp in (cov.get("covered_competencies") or [])
+                    if isinstance(comp, dict) and comp.get("competency_id") in allowed_comp_ids
+                ]
+                lesson_coverage.append({
+                    **cov,
+                    "covered_lessons": cov_lessons,
+                    "coverage_links": cov_links,
+                    "covered_competencies": cov_comps,
+                })
+        updated = dict(diagnosis)
+        updated["lowest_supported_competencies"] = lesson_competencies
+        updated["manual_assessment_coverage"] = lesson_coverage
+        return updated
+
+    return diagnosis
 
 
 def _manual_coverage_at_cutoff(
@@ -306,7 +525,13 @@ def build_candidate_diagnosis(db: Session, prediction: DevelopmentCurrentTermPre
     review_coverage: dict[int, dict[str, Any]] = {}
     competency_evidence: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for assignment, classwork, submission, is_unresolved in rows:
-        if is_unresolved or submission is None or submission.grade is None or classwork.total_points is None:
+        if (
+            is_unresolved
+            or assignment.recipient_student_id not in (None, prediction.student_id)
+            or submission is None
+            or submission.grade is None
+            or classwork.total_points is None
+        ):
             continue
         score, possible = float(submission.grade), float(classwork.total_points)
         if possible <= 0:

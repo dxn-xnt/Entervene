@@ -350,6 +350,30 @@ RemediationDraft = Annotated[
 ]
 
 
+class RemediationQuizTestPartRequest(StrictModel):
+    """Single Quiz Builder test-part specification for AI remediation quiz generation."""
+
+    question_type: Literal["MULTIPLE_CHOICE", "TRUE_FALSE", "IDENTIFICATION", "SHORT_ANSWER"]
+    count: int = Field(ge=1, le=20)
+    points_per_item: float = Field(gt=0, le=100)
+    difficulty_breakdown: dict[Literal["EASY", "MEDIUM", "HARD"], int] | None = None
+
+    @model_validator(mode="after")
+    def validate_difficulty_breakdown(self) -> "RemediationQuizTestPartRequest":
+        if self.difficulty_breakdown is not None:
+            if not self.difficulty_breakdown:
+                raise ValueError("difficulty_breakdown cannot be empty when provided")
+            for level, qty in self.difficulty_breakdown.items():
+                if qty < 0:
+                    raise ValueError(f"difficulty_breakdown count for {level} must be >= 0")
+            total = sum(self.difficulty_breakdown.values())
+            if total != self.count:
+                raise ValueError(
+                    f"difficulty_breakdown total ({total}) must equal part item count ({self.count})"
+                )
+        return self
+
+
 class RemediationDraftGenerationRequest(StrictModel):
     """Teacher request parameters to generate an AI remediation draft."""
 
@@ -361,6 +385,11 @@ class RemediationDraftGenerationRequest(StrictModel):
     item_count: int = Field(default=5, ge=1, le=20)
     total_points: float = Field(default=20.0, gt=0, le=1000)
     activity_mode: Literal["ONLINE", "MANUAL"] = "ONLINE"
+    quiz_test_parts: list[RemediationQuizTestPartRequest] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=10,
+    )
     selected_lesson_ids: list[int] | None = None
     selected_competency_ids: list[int] | None = None
     selected_quiz_question_ids: list[int] | None = None
@@ -382,6 +411,21 @@ class RemediationDraftGenerationRequest(StrictModel):
                 raise ValueError("Graded EXAMINATION remediation requires an exam_subtype (e.g. SUMMATIVE_1)")
         elif self.exam_subtype is not None:
             raise ValueError("exam_subtype is only allowed when target_component is EXAMINATION")
+        if self.quiz_test_parts is not None:
+            if self.draft_format != "QUIZ":
+                raise ValueError("quiz_test_parts is only allowed when draft_format is QUIZ")
+            parts_item_count = sum(part.count for part in self.quiz_test_parts)
+            if parts_item_count < 1 or parts_item_count > 20:
+                raise ValueError("quiz_test_parts total item count must be between 1 and 20")
+            if parts_item_count != self.item_count:
+                raise ValueError(
+                    f"quiz_test_parts total item count ({parts_item_count}) must match item_count ({self.item_count})"
+                )
+            parts_total_points = sum(part.count * part.points_per_item for part in self.quiz_test_parts)
+            if abs(parts_total_points - self.total_points) > 0.01:
+                raise ValueError(
+                    f"quiz_test_parts total points ({parts_total_points:g}) must match total_points ({self.total_points:g})"
+                )
         return self
 
 

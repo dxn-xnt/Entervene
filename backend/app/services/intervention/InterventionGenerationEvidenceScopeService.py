@@ -27,7 +27,11 @@ from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
+from app.services.classwork.ClassworkAccessService import assignment_allows_student
+from app.services.intervention.InterventionDiagnosisService import (
+    effective_diagnosis_snapshot,
+    scope_diagnosis_to_target,
+)
 from app.services.lesson.LessonDeliveryService import get_delivered_lesson_ids_as_of
 
 
@@ -128,6 +132,7 @@ def _verified_activities(db: Session, row: Intervention, diagnosis: dict[str, An
             or assignment.classwork_id != classwork_id
             or assignment.class_id != row.class_id
             or assignment.academic_period_id != row.academic_period_id
+            or not assignment_allows_student(assignment, row.student_id)
             or classwork.subject_id != row.subject_id
             or submission.classwork_assignment_id != assignment_id
             or submission.student_id != row.student_id
@@ -173,16 +178,29 @@ def _authorized_competency(
     }
 
 
-def _verified_question_score(db: Session, score: dict[str, Any]) -> bool:
+def _verified_question_score(
+    db: Session,
+    score: dict[str, Any],
+    *,
+    expected_student_id: Any,
+    expected_submission_id: int,
+    expected_assignment_id: int,
+) -> bool:
     quiz_question_id = score.get("quiz_question_id")
     submission_id = score.get("submission_id")
     if not isinstance(quiz_question_id, int) or not isinstance(submission_id, int):
         return False
+    if submission_id != expected_submission_id:
+        return False
+    score_assignment_id = score.get("classwork_assignment_id")
+    if score_assignment_id is not None and score_assignment_id != expected_assignment_id:
+        return False
     row = (
-        db.query(QuizAnswer, QuizQuestion, Quiz, Question)
+        db.query(QuizAnswer, QuizQuestion, Quiz, Question, StudentSubmission)
         .join(QuizQuestion, QuizAnswer.quiz_question_id == QuizQuestion.quiz_question_id)
         .join(Quiz, QuizQuestion.quiz_id == Quiz.quiz_id)
         .join(Question, QuizQuestion.question_id == Question.question_id)
+        .join(StudentSubmission, QuizAnswer.submission_id == StudentSubmission.submission_id)
         .filter(
             QuizAnswer.submission_id == submission_id,
             QuizAnswer.quiz_question_id == quiz_question_id,
@@ -191,9 +209,11 @@ def _verified_question_score(db: Session, score: dict[str, Any]) -> bool:
     )
     if row is None:
         return False
-    answer, _link, quiz, question = row
+    answer, _link, quiz, question, submission = row
     return (
-        quiz.classwork_id == score.get("classwork_id")
+        submission.student_id == expected_student_id
+        and submission.classwork_assignment_id == expected_assignment_id
+        and quiz.classwork_id == score.get("classwork_id")
         and question.lesson_id == score.get("lesson_id")
         and answer.points_awarded is not None
         and question.points is not None
@@ -231,11 +251,17 @@ def _verified_coverage_targets(
 
 
 def resolve_generation_evidence_scope(
-    db: Session, row: Intervention, *, teaching_as_of: datetime | None = None,
+    db: Session,
+    row: Intervention,
+    *,
+    teaching_as_of: datetime | None = None,
+    target_assignment_id: int | None = None,
 ) -> dict[str, Any]:
     """Resolve the maximum evidence scope available to a future AI generator."""
     _raw_diagnosis, source, period, cutoff = _require_frozen_scope(db, row)
-    diagnosis = effective_diagnosis_snapshot(db, row)
+    diagnosis = scope_diagnosis_to_target(
+        db, row, effective_diagnosis_snapshot(db, row), target_assignment_id,
+    )
     activities = _verified_activities(db, row, diagnosis)
     component_evidence = diagnosis.get("components") or {}
     weakest = sorted({
@@ -254,15 +280,22 @@ def resolve_generation_evidence_scope(
     for competency_group in diagnosis.get("lowest_supported_competencies") or []:
         for score in competency_group.get("supporting_scores") or []:
             score_value, possible = score.get("score"), score.get("possible_score")
+            activity = activities.get(score.get("classwork_id"))
             if (
-                score.get("source_type") != "QUIZ_QUESTION"
+                activity is None
+                or score.get("source_type") != "QUIZ_QUESTION"
                 or not isinstance(score.get("quiz_question_id"), int)
                 or not isinstance(score_value, (int, float))
                 or not isinstance(possible, (int, float)) or possible <= 0
                 or score_value < 0 or score_value >= possible
-                or score.get("classwork_id") not in activities
                 or score.get("component") not in weakest
-                or not _verified_question_score(db, score)
+                or not _verified_question_score(
+                    db,
+                    score,
+                    expected_student_id=row.student_id,
+                    expected_submission_id=activity["submission_id"],
+                    expected_assignment_id=activity["classwork_assignment_id"],
+                )
             ):
                 continue
             lesson = _authorized_lesson(db, row.subject_id, score)
@@ -302,13 +335,24 @@ def resolve_generation_evidence_scope(
                 if activity is None or score.get("component") not in weakest:
                     continue
                 if score.get("source_type") == "QUIZ_QUESTION":
-                    if not _verified_question_score(db, score):
+                    if not _verified_question_score(
+                        db,
+                        score,
+                        expected_student_id=row.student_id,
+                        expected_submission_id=activity["submission_id"],
+                        expected_assignment_id=activity["classwork_assignment_id"],
+                    ):
                         continue
                 elif score.get("source_type") == "CLASSWORK_SINGLE_LESSON":
                     score_value = score.get("score")
                     possible_score = score.get("possible_score")
                     if (
                         score.get("lesson_id") is None or score.get("competency_id") != item.get("competency_id")
+                        or (score.get("submission_id") is not None and score.get("submission_id") != activity["submission_id"])
+                        or (
+                            score.get("classwork_assignment_id") is not None
+                            and score.get("classwork_assignment_id") != activity["classwork_assignment_id"]
+                        )
                         or not isinstance(score_value, (int, float))
                         or not isinstance(possible_score, (int, float))
                         or abs(score_value - float(activity["score"])) >= 0.000001

@@ -375,6 +375,8 @@ async def create_classwork_wizard_record(
     save_file_func=save_file,
 ) -> ClassworkResponse:
     normalized_type = normalize_classwork_type(classwork_type)
+    classwork_category = (classwork_category or "").strip() or None
+    exam_subtype = (exam_subtype or "").strip() or None
     rubric_levels = _parse_rubric_payload(rubric_payload, normalized_type)
     if rubric_levels:
         total_points = max(level.points for level in rubric_levels)
@@ -548,16 +550,30 @@ async def create_classwork_wizard_record(
         expected_category = "QUARTERLY_ASSESSMENT" if treatment == "EXAMINATION" else treatment
         if (treatment == "PRACTICE_ONLY" and classwork_category is not None) or (treatment != "PRACTICE_ONLY" and classwork_category != expected_category):
             raise HTTPException(status_code=400, detail="Remediation grade treatment does not match the saved choice")
+        if treatment != "EXAMINATION" and exam_subtype is not None:
+            raise HTTPException(status_code=400, detail="Exam sub-type is only permitted for Examination remediation")
         if treatment in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
             if original_classwork_assignment_id is None:
                 raise HTTPException(status_code=400, detail="Select the original classwork assignment to link this remediation activity")
+            orig_target_asgn = db.get(ClassworkAssignment, original_classwork_assignment_id)
+            orig_target_work = orig_target_asgn.classwork if orig_target_asgn is not None else None
+            if orig_target_work is not None:
+                from app.services.grading.ComponentMapper import classify_classwork_component
+                original_component = classify_classwork_component(
+                    orig_target_work.classwork_type,
+                    orig_target_work.classwork_category,
+                    orig_target_work.exam_subtype,
+                ).value
+                if original_component != treatment:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Remediation grading component must match the targeted original classwork ({original_component})",
+                    )
             if normalized_type in {"ACTIVITY", "ASSIGNMENT"}:
                 from app.services.intervention.RemediationRubricService import (
                     assert_remediation_rubric_compatible,
                     original_rubric_inputs,
                 )
-                orig_target_asgn = db.get(ClassworkAssignment, original_classwork_assignment_id)
-                orig_target_work = orig_target_asgn.classwork if orig_target_asgn is not None else None
                 inherited_inputs = original_rubric_inputs(orig_target_work)
                 if inherited_inputs:
                     if rubric_levels is None:
@@ -1125,20 +1141,133 @@ def update_classwork_record(
         classwork,
         block_future_period=is_live_update,
     )
-    linked_exam = any(a.original_exam_assignment_id is not None for a in classwork.assignments) or db.query(
-        ClassworkAssignment.classwork_assignment_id,
-    ).filter(ClassworkAssignment.original_exam_assignment_id.in_(
-        a.classwork_assignment_id for a in classwork.assignments
-    )).first() is not None
-    if linked_exam and any(key in values and values[key] != getattr(classwork, key) for key in
-                           ("classwork_type", "classwork_category", "exam_subtype", "total_points", "is_graded")):
+    if "classwork_category" in values and isinstance(values["classwork_category"], str):
+        values["classwork_category"] = values["classwork_category"].strip() or None
+    if "exam_subtype" in values and isinstance(values["exam_subtype"], str):
+        values["exam_subtype"] = values["exam_subtype"].strip() or None
+
+    assignment_ids = [
+        a.classwork_assignment_id
+        for a in classwork.assignments
+        if a.classwork_assignment_id is not None
+    ]
+    from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+    from app.services.grading.ComponentMapper import classify_classwork_component
+
+    remediation_link = (
+        db.query(RemediationAssignmentLink)
+        .filter(RemediationAssignmentLink.remediation_assignment_id.in_(assignment_ids))
+        .first()
+        if assignment_ids
+        else None
+    )
+    linked_as_original = (
+        db.query(RemediationAssignmentLink)
+        .filter(RemediationAssignmentLink.original_assignment_id.in_(assignment_ids))
+        .first()
+        if assignment_ids
+        else None
+    )
+    linked_exam = any(a.original_exam_assignment_id is not None for a in classwork.assignments) or (
+        bool(assignment_ids)
+        and db.query(ClassworkAssignment.classwork_assignment_id)
+        .filter(ClassworkAssignment.original_exam_assignment_id.in_(assignment_ids))
+        .first()
+        is not None
+    )
+    if linked_exam and any(
+        key in values and (
+            (normalize_classwork_type(values[key]) != classwork.classwork_type)
+            if key == "classwork_type" and values[key]
+            else (
+                (values[key] is None and classwork.total_points is not None)
+                or (values[key] is not None and classwork.total_points is None)
+                or (
+                    values[key] is not None
+                    and classwork.total_points is not None
+                    and Decimal(str(values[key])) != Decimal(str(classwork.total_points))
+                )
+            )
+            if key == "total_points"
+            else values[key] != getattr(classwork, key)
+        )
+        for key in ("classwork_type", "classwork_category", "exam_subtype", "total_points", "is_graded")
+    ):
         raise HTTPException(status_code=400, detail="Linked Examination grading fields cannot be changed")
     if linked_exam and "rubric_levels" in values:
         raise HTTPException(status_code=400, detail="Linked Examination rubric cannot be changed")
-    if any(a.recipient_student_id for a in classwork.assignments):
+
+    if remediation_link is not None:
+        orig_asgn = db.get(ClassworkAssignment, remediation_link.original_assignment_id)
+        orig_work = orig_asgn.classwork if orig_asgn is not None else None
+        expected_component = (
+            classify_classwork_component(
+                orig_work.classwork_type,
+                orig_work.classwork_category,
+                orig_work.exam_subtype,
+            ).value
+            if orig_work is not None
+            else remediation_link.component
+        )
+        if "classwork_category" in values and values["classwork_category"] != expected_component:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Remediation grading component is locked to {expected_component} to match the targeted original classwork",
+            )
+        if "exam_subtype" in values and values["exam_subtype"] is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Exam sub-type cannot be set on a Written Work or Performance Task remediation activity",
+            )
+        if "is_graded" in values and values["is_graded"] is not True:
+            raise HTTPException(
+                status_code=400,
+                detail="Linked remediation grading treatment cannot be changed after creation",
+            )
+        if (
+            "total_points" in values
+            and orig_work is not None
+            and orig_work.total_points is not None
+            and (
+                values["total_points"] is None
+                or Decimal(str(values["total_points"])) != Decimal(str(orig_work.total_points))
+            )
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Linked remediation maximum points must remain aligned with the original classwork",
+            )
+
+    if linked_as_original is not None:
+        if (
+            ("classwork_type" in values and values["classwork_type"] and normalize_classwork_type(values["classwork_type"]) != classwork.classwork_type)
+            or ("classwork_category" in values and values["classwork_category"] != (classwork.classwork_category or None))
+            or ("exam_subtype" in values and values["exam_subtype"] != (classwork.exam_subtype or None))
+            or ("is_graded" in values and values["is_graded"] != classwork.is_graded)
+            or (
+                "total_points" in values
+                and (
+                    (values["total_points"] is None and classwork.total_points is not None)
+                    or (values["total_points"] is not None and classwork.total_points is None)
+                    or (
+                        values["total_points"] is not None
+                        and classwork.total_points is not None
+                        and Decimal(str(values["total_points"])) != Decimal(str(classwork.total_points))
+                    )
+                )
+            )
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Grading component and maximum points cannot be changed for a classwork linked to a remediation activity",
+            )
+
+    if any(a.recipient_student_id or a.source_intervention_id for a in classwork.assignments) or remediation_link is not None:
         if ("subject_id" in values and values["subject_id"] != classwork.subject_id) or (values.get("classwork_type") and normalize_classwork_type(values["classwork_type"]) != classwork.classwork_type):
             raise HTTPException(status_code=400, detail="Targeted remediation subject and type cannot be changed")
-        if "classwork_category" in values and values["classwork_category"] != classwork.classwork_category:
+        if "classwork_category" in values and values["classwork_category"] != (classwork.classwork_category or None):
+            raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
+        if "exam_subtype" in values and values["exam_subtype"] != (classwork.exam_subtype or None):
             raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
         if "is_graded" in values and values["is_graded"] != classwork.is_graded:
             raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
@@ -1358,6 +1487,40 @@ def archive_classwork_record(classwork_id: int, staff_id: str, db: Session) -> d
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     _assert_classwork_writable(db, classwork)
+    assignment_ids = [
+        row[0]
+        for row in db.query(ClassworkAssignment.classwork_assignment_id)
+        .filter(ClassworkAssignment.classwork_id == classwork_id)
+        .all()
+    ]
+    if assignment_ids:
+        from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+
+        has_remediation_link = (
+            db.query(RemediationAssignmentLink.remediation_link_id)
+            .filter(
+                (RemediationAssignmentLink.remediation_assignment_id.in_(assignment_ids))
+                | (RemediationAssignmentLink.original_assignment_id.in_(assignment_ids))
+            )
+            .first()
+            is not None
+            or db.query(ClassworkAssignment.classwork_assignment_id)
+            .filter(
+                (ClassworkAssignment.classwork_assignment_id.in_(assignment_ids))
+                & (ClassworkAssignment.original_exam_assignment_id.isnot(None))
+            )
+            .first()
+            is not None
+            or db.query(ClassworkAssignment.classwork_assignment_id)
+            .filter(ClassworkAssignment.original_exam_assignment_id.in_(assignment_ids))
+            .first()
+            is not None
+        )
+        if has_remediation_link:
+            raise HTTPException(
+                status_code=409,
+                detail="Classwork linked to a remediation activity cannot be archived",
+            )
     if classwork_has_submissions(db, classwork_id):
         raise HTTPException(status_code=409, detail="Classwork has turned-in submissions and cannot be archived")
     classwork.is_archived = True

@@ -87,10 +87,17 @@ router = APIRouter(dependencies=[Depends(require_development_intervention_api)])
 
 @router.get("/{intervention_id}/remediation")
 def get_remediation_endpoint(
-    intervention_id: int, _teacher: dict = Depends(require_intervention_teacher),
+    intervention_id: int,
+    target_assignment_id: int | None = Query(None, gt=0),
+    _teacher: dict = Depends(require_intervention_teacher),
     staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db),
 ):
-    return get_workspace(db, staff_id, intervention_id)
+    return get_workspace(
+        db,
+        staff_id,
+        intervention_id,
+        target_assignment_id=target_assignment_id,
+    )
 
 
 @router.put("/{intervention_id}/remediation")

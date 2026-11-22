@@ -397,7 +397,16 @@ export interface RemediationGenerationEligibility {
 }
 export const eligibleRemediationLessonIds = (eligibility: RemediationGenerationEligibility | null | undefined): number[] =>
   eligibility?.eligible_taught_lessons.map((lesson) => lesson.lesson_id) ?? [];
-export const getRemediationWorkspace = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation`);
+export const getRemediationWorkspace = (
+  id: number,
+  targetAssignmentId?: number | null,
+) =>
+  read<RemediationWorkspace>(
+    `${base}/${id}/remediation${targetAssignmentId && targetAssignmentId > 0
+      ? `?target_assignment_id=${encodeURIComponent(String(targetAssignmentId))}`
+      : ""
+    }`,
+  );
 export const refreshRemediationEvidence = (id: number) => read<RemediationGenerationEligibility>(`${base}/${id}/remediation/evidence/refresh`, "POST");
 export interface SaveRemediationResourceRef {
   kind: "LESSON" | "CLASSWORK";
@@ -532,6 +541,13 @@ export function matchingActiveIntervention(prediction: DevelopmentCurrentTermLis
     && intervention.academic_period_id === prediction.academic_period_id);
 }
 
+export interface RemediationQuizTestPartRequest {
+  question_type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "IDENTIFICATION" | "SHORT_ANSWER";
+  count: number;
+  points_per_item: number;
+  difficulty_breakdown?: Partial<Record<"EASY" | "MEDIUM" | "HARD", number>>;
+}
+
 export interface RemediationDraftGenerationRequest {
   draft_format: "QUIZ" | "CLASSWORK";
   target_component: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
@@ -541,6 +557,7 @@ export interface RemediationDraftGenerationRequest {
   item_count?: number;
   total_points?: number;
   activity_mode?: "ONLINE" | "MANUAL";
+  quiz_test_parts?: RemediationQuizTestPartRequest[];
   selected_lesson_ids?: number[] | null;
   selected_competency_ids?: number[] | null;
   selected_quiz_question_ids?: number[] | null;

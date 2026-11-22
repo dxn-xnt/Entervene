@@ -1,10 +1,17 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, ChevronDown, Download, FileText, Upload, Users, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Download, FileText, Settings, Upload, Users, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { useOptionalAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { cn } from "@/lib/utils";
-import { ApiRequestError, getClassFormOptions, validateClassImport } from "@/lib/api";
+import {
+  ApiRequestError,
+  fetchPathways,
+  getClassFormOptions,
+  validateClassImport,
+  type AcademicPathwayRead,
+} from "@/lib/api";
 import type {
   AdviserOption,
   ClassAssignmentStudent,
@@ -20,6 +27,7 @@ import type {
   ValidatedImportAdviser,
 } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
+import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
@@ -28,6 +36,7 @@ import { Text } from "@/components/retroui/Text";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { FormMessage } from "@/components/retroui/FormMessage";
+import OfficialSectionsSettings from "@/pages/admin/official-sections-settings";
 
 const MODERN_CLASS_IMPORT_HEADERS = [
   "section_name",
@@ -58,14 +67,18 @@ export default function ImportClassWizard({
   onValidationStale,
   onBack,
   onClose,
+  onScreenChange,
 }: {
   existingClasses?: ClassListItem[];
   onContinue: (setup: ManualClassSetup, assignmentState: ManualAssignmentWorkspaceState, skipToReview?: boolean) => void;
   onValidationStale?: () => void;
   onBack?: () => void;
   onClose: () => void;
+  onScreenChange?: (screen: "details" | "official-sections") => void;
 }) {
   const navigate = useNavigate();
+  const academicPeriod = useOptionalAcademicPeriod();
+  const lockedYearId = academicPeriod?.selectedYearId ?? undefined;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,11 +92,15 @@ export default function ImportClassWizard({
   const [validationError, setValidationError] = useState<ImportValidationErrorState | null>(null);
   const [selectedAdvisers, setSelectedAdvisers] = useState<Record<string, string>>({});
   const [showExistingClasses, setShowExistingClasses] = useState(false);
+  const [screen, setScreen] = useState<"details" | "official-sections">("details");
+  const [managerError, setManagerError] = useState("");
+  const [returningToDetails, setReturningToDetails] = useState(false);
+  const [availablePathways, setAvailablePathways] = useState<AcademicPathwayRead[]>([]);
 
   useEffect(() => {
     let cancelled = false;
 
-    getClassFormOptions()
+    getClassFormOptions(lockedYearId)
       .then((data) => {
         if (cancelled) return;
         setOptions(data);
@@ -99,7 +116,19 @@ export default function ImportClassWizard({
     return () => {
       cancelled = true;
     };
-  }, [retryKey]);
+  }, [lockedYearId, retryKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPathways(true)
+      .then((res) => {
+        if (!cancelled && res?.pathways) setAvailablePathways(res.pathways);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function retryLoading() {
     setLoading(true);
@@ -301,15 +330,63 @@ export default function ImportClassWizard({
 
 
   const handleConfigureSections = () => {
-    if (selectedFile || validationResult) {
-      const confirmLeave = window.confirm(
-        "You have an import in progress. Navigating away will close the wizard. Do you want to continue?"
-      );
-      if (!confirmLeave) return;
-    }
-    onClose();
-    navigate("/admin/settings");
+    setManagerError("");
+    setScreen("official-sections");
+    onScreenChange?.("official-sections");
   };
+
+  async function returnToDetails() {
+    if (returningToDetails) return;
+    setReturningToDetails(true);
+    setManagerError("");
+    try {
+      const data = await getClassFormOptions(lockedYearId);
+      setOptions(data);
+      if (validationResult || validationError) {
+        clearValidationState();
+      }
+      setScreen("details");
+      onScreenChange?.("details");
+    } catch (error: unknown) {
+      setManagerError(
+        error instanceof Error ? error.message : "Unable to refresh configured sections."
+      );
+    } finally {
+      setReturningToDetails(false);
+    }
+  }
+
+  if (screen === "official-sections") {
+    return (
+      <div className="grid gap-4">
+        {managerError && (
+          <Alert status="error">
+            <Alert.Title>Unable to return to class import</Alert.Title>
+            <Alert.Description>{managerError}</Alert.Description>
+          </Alert>
+        )}
+        <OfficialSectionsSettings
+          academicYearId={options.academic_year.academic_year_id}
+          initialLevelId={Number(selectedAcademicLevelId)}
+          levels={options.academic_levels}
+          pathways={availablePathways}
+          pathwayScopes={[]}
+        />
+        <Dialog.Footer className="-mx-4 -mb-4 w-[calc(100%+2rem)] justify-between border-t-2 px-4 py-4">
+          <Button variant="outline" autoIcon={false} onClick={onClose}>
+            Close
+          </Button>
+          <Button
+            variant="default"
+            disabled={returningToDetails}
+            onClick={() => void returnToDetails()}
+          >
+            {returningToDetails ? "Refreshing..." : "Back to Import Classes"}
+          </Button>
+        </Dialog.Footer>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4">
@@ -438,6 +515,7 @@ export default function ImportClassWizard({
                       className="w-fit text-xs h-7 px-2.5 font-semibold text-black border-2 border-black"
                       onClick={handleConfigureSections}
                     >
+                      <Settings className="mr-1.5 size-3.5" />
                       Configure Sections
                     </Button>
                   </div>
@@ -446,7 +524,7 @@ export default function ImportClassWizard({
                 <div className="grid gap-2 text-destructive">
                   <FormMessage>No official sections configured</FormMessage>
                   <p className="text-sm text-destructive/90 leading-relaxed">
-                    No official sections are currently configured for {selectedLevel.level_name} in academic year {options.academic_year.year_label}. Configure official sections in System Settings before importing classes.
+                    No official sections are currently configured for {selectedLevel.level_name} in academic year {options.academic_year.year_label}. Configure official sections before importing classes.
                   </p>
                   <div>
                     <Button
@@ -456,6 +534,7 @@ export default function ImportClassWizard({
                       className="font-bold text-xs sm:text-sm h-8 px-3 text-black border-2 border-black"
                       onClick={handleConfigureSections}
                     >
+                      <Settings className="mr-1.5 size-3.5" />
                       Configure Sections
                     </Button>
                   </div>
@@ -483,32 +562,44 @@ export default function ImportClassWizard({
                       </div>
                     </div>
 
-                    {existingClassSections.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-auto">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="font-bold text-xs sm:text-sm h-8 px-2.5 shrink-0 self-start sm:self-auto border-2 border-black"
-                        aria-expanded={showExistingClasses}
-                        aria-controls="existing-classes-disclosure"
-                        onClick={() => setShowExistingClasses((prev) => !prev)}
+                        className="font-bold text-xs sm:text-sm h-8 px-2.5 border-2 border-black"
+                        onClick={handleConfigureSections}
                       >
-                        <Users className="size-3.5 mr-1" />
-                        <span>
-                          {existingClassSections.length} existing class{existingClassSections.length > 1 ? "es" : ""}
-                        </span>
-                        <span className="mx-1 text-muted-foreground">•</span>
-                        <span className="text-primary underline">
-                          {showExistingClasses ? "Hide" : "Manage classes"}
-                        </span>
-                        <ChevronDown
-                          className={cn(
-                            "size-3.5 ml-1 transition-transform duration-200",
-                            showExistingClasses && "rotate-180"
-                          )}
-                        />
+                        <Settings className="size-3.5 mr-1.5" />
+                        Configure Sections
                       </Button>
-                    )}
+                      {existingClassSections.length > 0 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="font-bold text-xs sm:text-sm h-8 px-2.5 border-2 border-black"
+                          aria-expanded={showExistingClasses}
+                          aria-controls="existing-classes-disclosure"
+                          onClick={() => setShowExistingClasses((prev) => !prev)}
+                        >
+                          <Users className="size-3.5 mr-1" />
+                          <span>
+                            {existingClassSections.length} existing class{existingClassSections.length > 1 ? "es" : ""}
+                          </span>
+                          <span className="mx-1 text-muted-foreground">•</span>
+                          <span className="text-primary underline">
+                            {showExistingClasses ? "Hide" : "Manage classes"}
+                          </span>
+                          <ChevronDown
+                            className={cn(
+                              "size-3.5 ml-1 transition-transform duration-200",
+                              showExistingClasses && "rotate-180"
+                            )}
+                          />
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {existingClassSections.length > 0 && showExistingClasses && (
