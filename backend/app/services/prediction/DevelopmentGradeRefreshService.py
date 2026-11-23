@@ -33,6 +33,7 @@ def refresh_after_committed_grade_change(
     class_id: int,
     subject_id: int,
     period_id: int | None,
+    trigger_assignment_id: int | None = None,
 ) -> None:
     """Use the normal generator for changed students, outside the grade transaction."""
     students = set(student_ids)
@@ -83,6 +84,7 @@ def refresh_after_committed_grade_change(
                 period_id,
                 model_version_id=model_version_id,
                 bind=bind,
+                trigger_assignment_id=trigger_assignment_id,
             )
         except Exception:
             logger.exception(

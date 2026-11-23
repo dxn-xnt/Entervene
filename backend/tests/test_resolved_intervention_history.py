@@ -21,6 +21,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.intervention.InterventionSupportMaterial import InterventionSupportMaterial
 from app.models.people.Student import Student
+from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.intervention.InterventionSupportMaterialService import create_material
 from app.services.intervention.TeacherInterventionService import (
@@ -67,9 +68,14 @@ def test_resolved_history_is_scoped_read_only_and_preserves_stored_records(candi
     assert teacher.get("/teacher/interventions/resolved").json()["total"] == 0
 
     work = Classwork(title="Targeted practice", classwork_type="QUIZ", subject_id=ctx["subject"].subject_id,
-                     created_by_staff_id=_staff(ctx), is_published=True, total_points=Decimal("10"))
+                     created_by_staff_id=_staff(ctx), is_published=True, show_scores=True, total_points=Decimal("10"))
     db.add(work)
     db.flush()
+    db.add(QuizSetting(
+        classwork_id=work.classwork_id,
+        show_correct_answers=True,
+        summary_release_mode="IMMEDIATE",
+    ))
     assignment = ClassworkAssignment(classwork_id=work.classwork_id, class_id=ctx["class"].class_id,
         academic_period_id=ctx["period"].academic_period_id, assigned_by_staff_id=_staff(ctx), is_published=True,
         recipient_student_id=ctx["student"].student_id, source_intervention_id=_id(ctx), remediation_request_id=uuid4())
@@ -78,6 +84,18 @@ def test_resolved_history_is_scoped_read_only_and_preserves_stored_records(candi
     submission = StudentSubmission(student_id=ctx["student"].student_id,
         classwork_assignment_id=assignment.classwork_assignment_id, status="graded", grade=Decimal("8"))
     db.add(submission)
+
+    hidden_work = Classwork(title="Hidden quiz", classwork_type="QUIZ", subject_id=ctx["subject"].subject_id,
+                            created_by_staff_id=_staff(ctx), is_published=True, show_scores=False, total_points=Decimal("10"))
+    db.add(hidden_work)
+    db.flush()
+    hidden_assignment = ClassworkAssignment(classwork_id=hidden_work.classwork_id, class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id, assigned_by_staff_id=_staff(ctx), is_published=True,
+        recipient_student_id=ctx["student"].student_id, source_intervention_id=_id(ctx), remediation_request_id=uuid4())
+    db.add(hidden_assignment)
+    db.flush()
+    db.add(StudentSubmission(student_id=ctx["student"].student_id,
+        classwork_assignment_id=hidden_assignment.classwork_assignment_id, status="graded", grade=Decimal("7")))
     draft = create_material(db, _staff(ctx), _id(ctx), "STUDENT_REVIEWER")
     row = ctx["candidate"]
     frozen = row.diagnosis_snapshot.copy()
@@ -97,6 +115,7 @@ def test_resolved_history_is_scoped_read_only_and_preserves_stored_records(candi
     assert teacher_data["diagnosis_snapshot"] == frozen
     assert teacher_data["resolved_at"] is not None
     assert teacher_data["targeted_activities"][0]["grade"] == 8
+    assert teacher_data["targeted_activities"][1]["grade"] == 7
     assert teacher_data["sent_reviewer"] is None
     assert teacher.get(f"/teacher/interventions/active/{_id(ctx)}").status_code == 404
     assert teacher.put(f"/teacher/interventions/{_id(ctx)}/remediation", json={}).status_code == 409
@@ -108,6 +127,7 @@ def test_resolved_history_is_scoped_read_only_and_preserves_stored_records(candi
     assert own_detail.status_code == 200
     student_data = own_detail.json()
     assert student_data["activities"][0]["grade"] == 8
+    assert student_data["activities"][1]["grade"] is None
     assert student_data["resolution_message"] == "Your progress reached the goal for this support."
     assert student_data["reviewer_id"] is None
     assert reviewers.get(f"/student/intervention-reviewers/{draft.material_id}").status_code == 404
