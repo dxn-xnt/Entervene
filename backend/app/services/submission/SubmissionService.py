@@ -1200,6 +1200,7 @@ def grade_student_submission(
             class_id=assignment.class_id,
             subject_id=classwork.subject_id,
             period_id=assignment.academic_period_id,
+            trigger_assignment_id=assignment.classwork_assignment_id,
         )
 
     # Notify student that their grade was released only when results are visible.

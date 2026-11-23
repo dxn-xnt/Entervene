@@ -273,7 +273,16 @@ def stage_intervention_assessment_result(
     return None
 
 
-def stage_intervention_notification(db: Session, intervention: Intervention, *, event: str, predicted_grade: float) -> None:
+def stage_intervention_notification(
+    db: Session,
+    intervention: Intervention,
+    *,
+    event: str,
+    predicted_grade: float,
+    passing_threshold: float | None = None,
+    reason_summary: str | None = None,
+    prediction_id: int | None = None,
+) -> None:
     """Only the effective teacher can receive one notification for a real transition."""
     user_id = _responsible_teacher_user_id(db, intervention)
     if user_id is None:
@@ -286,35 +295,98 @@ def stage_intervention_notification(db: Session, intervention: Intervention, *, 
     )
     subject_name = intervention.subject.subject_name
     grade = format(Decimal(str(predicted_grade)).quantize(Decimal("0.001"), rounding=ROUND_DOWN).normalize(), "f")
+    threshold_text = (
+        format(Decimal(str(passing_threshold)).quantize(Decimal("0.01"), rounding=ROUND_DOWN).normalize(), "f")
+        if passing_threshold is not None
+        else None
+    )
     if event == "CANDIDATE":
+        action_url = f"/teacher/interventions?candidate={intervention.intervention_id}"
+        if db.query(Notification.notification_id).filter_by(
+            user_id=user_id,
+            notification_type="intervention_candidate",
+            action_url=action_url,
+        ).first() is not None:
+            return
         payload = NotificationCreate(
             user_id=user_id, notification_type="intervention_candidate",
             title="Intervention candidate ready for review",
             body=f"{student_name} in {subject_name} is a candidate (projected grade {grade}). Evidence is available for review.",
-            action_url=f"/teacher/interventions?candidate={intervention.intervention_id}",
+            action_url=action_url,
         )
     elif event == "IMPROVED_PREDICTION":
+        action_url = f"/teacher/interventions?view=resolved&resolved={intervention.intervention_id}"
+        if db.query(Notification.notification_id).filter_by(
+            user_id=user_id,
+            notification_type="intervention_resolved",
+            action_url=action_url,
+        ).first() is not None:
+            return
         payload = NotificationCreate(
             user_id=user_id, notification_type="intervention_resolved",
             title="Intervention resolved after improved prediction",
             body=f"{student_name}'s latest {subject_name} prediction improved to {grade}. Intervention criteria are no longer met; the previous intervention remains in history.",
-            action_url="/teacher/interventions",
+            action_url=action_url,
+        )
+    elif event == "REMEDIATION_AUTO_RESOLVED":
+        action_url = f"/teacher/interventions?view=resolved&resolved={intervention.intervention_id}"
+        if db.query(Notification.notification_id).filter_by(
+            user_id=user_id,
+            notification_type="intervention_resolved",
+            action_url=action_url,
+        ).first() is not None:
+            return
+        target_clause = f" (passing target {threshold_text})" if threshold_text else ""
+        reason_clause = (
+            reason_summary.strip()
+            if reason_summary and reason_summary.strip()
+            else "Verified graded remediation improvement raised the prediction to the passing target."
+        )
+        payload = NotificationCreate(
+            user_id=user_id,
+            notification_type="intervention_resolved",
+            title="Intervention automatically resolved",
+            body=(
+                f"{student_name}'s latest {subject_name} prediction reached {grade}{target_clause}. "
+                f"{reason_clause} The intervention has been moved to Resolved history."
+            ),
+            action_url=action_url,
         )
     elif event == "RESOLUTION_RECOMMENDED":
         action_url = f"/teacher/interventions?view=active&active={intervention.intervention_id}"
-        if db.query(Notification.notification_id).filter_by(
+        target_clause = f" (passing target {threshold_text})" if threshold_text else ""
+        reason_clause = (
+            f" {reason_summary.strip()}"
+            if reason_summary and reason_summary.strip()
+            else ""
+        )
+        body = (
+            f"{student_name}'s latest {subject_name} prediction improved to {grade}{target_clause}.{reason_clause} "
+            "Review the active intervention to either continue support or confirm resolution."
+        )
+        # When prediction_id is not provided (legacy direct calls), deduplicate by action_url.
+        # When prediction_id IS provided, InterventionCandidateService enforces per-revision
+        # deduplication via resolution_review.last_recommended_prediction_id so a new revision
+        # after Continue Support still notifies the teacher while exact duplicates are suppressed.
+        if prediction_id is None:
+            if db.query(Notification.notification_id).filter_by(
+                user_id=user_id,
+                notification_type="intervention_resolution_recommended",
+                action_url=action_url,
+            ).first() is not None:
+                return
+        elif db.query(Notification.notification_id).filter_by(
             user_id=user_id,
             notification_type="intervention_resolution_recommended",
             action_url=action_url,
+            body=body,
+            is_read=False,
         ).first() is not None:
             return
         payload = NotificationCreate(
             user_id=user_id, notification_type="intervention_resolution_recommended",
             title="Resolution recommended for active intervention",
-            body=(
-                f"{student_name}'s latest {subject_name} prediction improved to {grade}. "
-                "Review the active intervention to either continue support or confirm resolution."
-            ),
+            body=body,
             action_url=action_url,
         )
     else:

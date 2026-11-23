@@ -14,7 +14,12 @@ from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTer
 from app.models.intervention.Intervention import Intervention
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.intervention.InterventionDiagnosisService import build_candidate_diagnosis
+from app.services.intervention.InterventionHistoryService import capture_resolution_history_snapshot
 from app.services.intervention.InterventionNotificationService import stage_intervention_notification
+from app.services.intervention.InterventionResolutionService import (
+    REMEDIATION_IMPROVED_PREDICTION,
+    evaluate_active_resolution_attribution,
+)
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME, MODEL_NAMES
 
 
@@ -31,6 +36,8 @@ def sync_intervention_for_persisted_prediction(
     class_id: int,
     subject_id: int,
     academic_period_id: int,
+    trigger_assignment_id: int | None = None,
+    allow_active_auto_resolve: bool = True,
 ) -> Intervention | None:
     """Run inside the prediction transaction, immediately after its row is flushed.
 
@@ -115,22 +122,103 @@ def sync_intervention_for_persisted_prediction(
     if grade >= passing_threshold:
         if open_intervention is not None:
             if open_intervention.status == "CANDIDATE":
+                now = datetime.now(timezone.utc)
+                plan = dict(open_intervention.remediation_plan or {})
+                plan["resolution_review"] = {
+                    "decision": "AUTO_RESOLVED",
+                    "resolution_mode": "CANDIDATE_IMPROVED",
+                    "decided_at": now.isoformat(),
+                    "prediction_id": prediction.prediction_id,
+                    "prediction_revision": prediction.revision,
+                    "predicted_grade": grade,
+                    "passing_threshold": passing_threshold,
+                }
+                plan["resolution_history_snapshot"] = capture_resolution_history_snapshot(
+                    db,
+                    open_intervention,
+                    prediction=prediction,
+                    predicted_grade=grade,
+                )
+                open_intervention.remediation_plan = plan
                 open_intervention.status = "RESOLVED"
                 open_intervention.resolution_reason = IMPROVED_PREDICTION
-                open_intervention.resolved_at = datetime.now(timezone.utc)
+                open_intervention.resolved_at = now
                 db.flush()
                 stage_intervention_notification(
                     db, open_intervention, event=IMPROVED_PREDICTION, predicted_grade=grade,
                 )
             elif open_intervention.status == "ACTIVE":
-                # Keep ACTIVE interventions open until the teacher explicitly confirms
-                # resolution, protecting ongoing remediation work from unexpected locking.
-                plan = open_intervention.remediation_plan if isinstance(open_intervention.remediation_plan, dict) else {}
-                review = plan.get("resolution_review") if isinstance(plan.get("resolution_review"), dict) else {}
-                if review.get("continued_prediction_id") != prediction.prediction_id:
-                    stage_intervention_notification(
-                        db, open_intervention, event="RESOLUTION_RECOMMENDED", predicted_grade=grade,
+                attribution = evaluate_active_resolution_attribution(
+                    db,
+                    open_intervention,
+                    prediction,
+                    passing_threshold=passing_threshold,
+                    trigger_assignment_id=trigger_assignment_id,
+                )
+                now = datetime.now(timezone.utc)
+                plan = dict(open_intervention.remediation_plan or {})
+                review = dict(plan.get("resolution_review")) if isinstance(plan.get("resolution_review"), dict) else {}
+
+                if allow_active_auto_resolve and attribution.should_auto_resolve:
+                    plan["resolution_review"] = {
+                        "decision": "AUTO_RESOLVED",
+                        "resolution_mode": "AUTOMATIC_REMEDIATION",
+                        "decided_by_staff_id": None,
+                        "decided_at": now.isoformat(),
+                        "prediction_id": prediction.prediction_id,
+                        "prediction_revision": prediction.revision,
+                        "predicted_grade": grade,
+                        "passing_threshold": passing_threshold,
+                        **attribution.to_review_metadata(),
+                    }
+                    plan["resolution_history_snapshot"] = capture_resolution_history_snapshot(
+                        db,
+                        open_intervention,
+                        prediction=prediction,
+                        predicted_grade=grade,
                     )
+                    open_intervention.remediation_plan = plan
+                    open_intervention.status = "RESOLVED"
+                    open_intervention.resolution_reason = REMEDIATION_IMPROVED_PREDICTION
+                    open_intervention.resolved_at = now
+                    db.flush()
+                    stage_intervention_notification(
+                        db,
+                        open_intervention,
+                        event="REMEDIATION_AUTO_RESOLVED",
+                        predicted_grade=grade,
+                        passing_threshold=passing_threshold,
+                        reason_summary=attribution.reason_summary,
+                        prediction_id=prediction.prediction_id,
+                    )
+                else:
+                    # Keep ACTIVE open for teacher review whenever attribution is not
+                    # verifiably pure graded remediation improvement.
+                    review["latest_attribution"] = {
+                        "prediction_id": prediction.prediction_id,
+                        "prediction_revision": prediction.revision,
+                        "predicted_grade": grade,
+                        "passing_threshold": passing_threshold,
+                        **attribution.to_review_metadata(),
+                    }
+                    already_continued = review.get("continued_prediction_id") == prediction.prediction_id
+                    already_recommended = review.get("last_recommended_prediction_id") == prediction.prediction_id
+                    if not already_continued and not already_recommended:
+                        stage_intervention_notification(
+                            db,
+                            open_intervention,
+                            event="RESOLUTION_RECOMMENDED",
+                            predicted_grade=grade,
+                            passing_threshold=passing_threshold,
+                            reason_summary=attribution.reason_summary,
+                            prediction_id=prediction.prediction_id,
+                        )
+                        review["last_recommended_prediction_id"] = prediction.prediction_id
+                        review["last_recommended_prediction_revision"] = prediction.revision
+                        review["last_recommended_at"] = now.isoformat()
+                    plan["resolution_review"] = review
+                    open_intervention.remediation_plan = plan
+                    db.flush()
         return open_intervention
 
     # A non-triggering risk level must not erase an existing candidate or

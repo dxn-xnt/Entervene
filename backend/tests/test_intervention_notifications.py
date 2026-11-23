@@ -103,7 +103,7 @@ def test_improvement_resolves_and_notifies_once_but_no_open_intervention_does_no
     resolved = next(item for item in items if item.notification_type == "intervention_resolved")
     assert resolved.user_id == ctx["staff"].user_id
     assert "criteria are no longer met" in resolved.body and "history" in resolved.body
-    assert resolved.action_url == "/teacher/interventions"
+    assert resolved.action_url == f"/teacher/interventions?view=resolved&resolved={candidate.intervention_id}"
     assert _run(ctx, ctx["model_id"])["unchanged"] is True
     assert len(_items(ctx)) == 2
 
@@ -173,13 +173,13 @@ def test_admin_cannot_read_or_mark_accidental_intervention_row(notified_context)
         title="Accidental candidate", action_url="/teacher/interventions?candidate=99", is_read=False,
     )
     ordinary = Notification(
-        notification_id=uuid4(), user_id=user_id, notification_type="announcement",
-        title="Existing announcement", is_read=False,
+        notification_id=uuid4(), user_id=user_id, notification_type="grade_submission_window_opened",
+        title="Existing grade submission window", is_read=False,
     )
     ctx["db"].add_all([accidental, ordinary])
     ctx["db"].commit()
     listed = get_notifications_for_user(ctx["db"], user_id)
-    assert [item.title for item in listed.notifications] == ["Existing announcement"]
+    assert [item.title for item in listed.notifications] == ["Existing grade submission window"]
     assert listed.unread_count == 1
     with pytest.raises(HTTPException) as exc:
         mark_notification_read(ctx["db"], str(accidental.notification_id), user_id)

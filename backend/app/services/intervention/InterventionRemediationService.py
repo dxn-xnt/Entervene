@@ -495,6 +495,7 @@ def progress(db: Session, row: Intervention) -> dict:
                 db,
                 academic_year_id=period.academic_year_id,
                 subject_id=row.subject_id,
+                academic_period_id=row.academic_period_id,
             )
             threshold_val = float(res.threshold)
     except Exception:
@@ -517,7 +518,7 @@ def progress(db: Session, row: Intervention) -> dict:
             if latest_grade is not None and float(latest_grade) < threshold_val
             else "Latest valid projection is unavailable."
             if latest_grade is None
-            else "Current status is awaiting reconciliation."
+            else f"Latest AI-predicted grade reached the passing target ({threshold_val:g}). Review to continue support or confirm resolution."
         )
     elif not published_assigned:
         remediation_status = "DRAFT"
@@ -550,7 +551,7 @@ def progress(db: Session, row: Intervention) -> dict:
                 if latest_grade is not None and float(latest_grade) < threshold_val
                 else "Latest valid projection is unavailable."
                 if latest_grade is None
-                else "Current status is awaiting reconciliation."
+                else f"Latest AI-predicted grade reached the passing target ({threshold_val:g}). Review to continue support or confirm resolution."
             )
 
     return {"triggering_projection": float(source_grade if source_grade is not None else source.predicted_period_grade),
@@ -580,6 +581,7 @@ def build_remediation_prediction_impact(
                     db,
                     academic_year_id=period.academic_year_id,
                     subject_id=row.subject_id,
+                    academic_period_id=row.academic_period_id,
                 )
                 threshold_val = float(res.threshold)
         except Exception:

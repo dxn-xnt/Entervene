@@ -48,6 +48,7 @@ from app.services.intervention.PracticeAssessmentImportService import (
     preview_practice_quiz_import,
 )
 from app.services.intervention.PracticeAssessmentService import (
+    _require_teacher_scope,
     add_question,
     archive_assessment,
     batch_save_questions,
@@ -283,6 +284,7 @@ def get_progression_teacher(
     intervention = db.get(Intervention, intervention_id)
     if intervention is None:
         raise HTTPException(status_code=404, detail="Intervention not found")
+    _require_teacher_scope(db, staff_id, intervention)
     return evaluate_practice_progression(db, intervention_id, intervention.student_id)
 
 

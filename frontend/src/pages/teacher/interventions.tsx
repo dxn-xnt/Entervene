@@ -253,14 +253,74 @@ export default function TeacherInterventions() {
       }
     });
 
-    const fetcher =
-      selectedKind === "resolved"
-        ? getTeacherResolved(selectedId)
-        : selectedKind === "active"
-          ? getTeacherActive(selectedId)
-          : getTeacherCandidate(selectedId);
+    const fetchWithFallback = async (): Promise<
+      TeacherInterventionDetail | TeacherResolvedInterventionDetail
+    > => {
+      if (selectedKind === "resolved") {
+        return getTeacherResolved(selectedId);
+      }
+      if (selectedKind === "active") {
+        try {
+          return await getTeacherActive(selectedId);
+        } catch (err) {
+          if (err instanceof InterventionApiError && err.status === 404) {
+            const resolvedFallback = await getTeacherResolved(selectedId);
+            if (!cancelled) {
+              setParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete("active");
+                next.delete("candidate");
+                next.delete("setup");
+                next.delete("step");
+                next.set("view", "resolved");
+                next.set("resolved", String(selectedId));
+                return next;
+              }, { replace: true });
+            }
+            return resolvedFallback;
+          }
+          throw err;
+        }
+      }
+      try {
+        return await getTeacherCandidate(selectedId);
+      } catch (err) {
+        if (err instanceof InterventionApiError && (err.status === 409 || err.status === 404)) {
+          try {
+            const activeFallback = await getTeacherActive(selectedId);
+            if (!cancelled) {
+              setParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete("candidate");
+                next.delete("resolved");
+                next.set("view", "active");
+                next.set("active", String(selectedId));
+                return next;
+              }, { replace: true });
+            }
+            return activeFallback;
+          } catch {
+            const resolvedFallback = await getTeacherResolved(selectedId);
+            if (!cancelled) {
+              setParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete("candidate");
+                next.delete("active");
+                next.delete("setup");
+                next.delete("step");
+                next.set("view", "resolved");
+                next.set("resolved", String(selectedId));
+                return next;
+              }, { replace: true });
+            }
+            return resolvedFallback;
+          }
+        }
+        throw err;
+      }
+    };
 
-    fetcher
+    fetchWithFallback()
       .then((result) => {
         if (!cancelled) setDetail(result);
       })
@@ -280,7 +340,7 @@ export default function TeacherInterventions() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, selectedKind]);
+  }, [selectedId, selectedKind, setParams]);
 
   const close = () => {
     const next = new URLSearchParams(params);

@@ -37,6 +37,8 @@ def _sync_current_term_intervention_if_enabled(
     class_id: int,
     subject_id: int,
     period_id: int,
+    trigger_assignment_id: int | None = None,
+    allow_active_auto_resolve: bool = True,
 ) -> None:
     readiness = row.evidence_snapshot.get("readiness") if isinstance(row.evidence_snapshot, dict) else None
     environment = settings.app_environment.lower()
@@ -62,6 +64,8 @@ def _sync_current_term_intervention_if_enabled(
             db, row,
             student_id=student_id, class_id=class_id, subject_id=subject_id,
             academic_period_id=period_id,
+            trigger_assignment_id=trigger_assignment_id,
+            allow_active_auto_resolve=allow_active_auto_resolve,
         )
 
 
@@ -127,11 +131,15 @@ def _reuse_latest_prediction(
     class_id: int,
     subject_id: int,
     period_id: int,
+    trigger_assignment_id: int | None = None,
+    allow_active_auto_resolve: bool = True,
 ) -> dict[str, Any]:
     _sync_current_term_intervention_if_enabled(
         db, model_version, latest,
         student_id=student_id, class_id=class_id, subject_id=subject_id,
         period_id=period_id,
+        trigger_assignment_id=trigger_assignment_id,
+        allow_active_auto_resolve=allow_active_auto_resolve,
     )
     snapshot = latest.evidence_snapshot if isinstance(latest.evidence_snapshot, dict) else {}
     return {
@@ -173,6 +181,8 @@ def _persist_successful_result(
     intervention: dict[str, Any],
     scored_features: dict[str, Any],
     material_evidence: dict[str, Any],
+    trigger_assignment_id: int | None = None,
+    allow_active_auto_resolve: bool = True,
 ) -> dict[str, Any]:
     if prediction["status"] != prediction_service.STATUS_DEVELOPMENT_PREDICTION_AVAILABLE:
         raise ValueError("Only successful development predictions may be persisted.")
@@ -305,6 +315,8 @@ def _persist_successful_result(
         db, model_version, row,
         student_id=student_id, class_id=class_id, subject_id=subject_id,
         period_id=period_id,
+        trigger_assignment_id=trigger_assignment_id,
+        allow_active_auto_resolve=allow_active_auto_resolve,
     )
     return {
         "persisted": True,
@@ -342,6 +354,8 @@ def generate_and_persist_current_term(
     supporting_context: Mapping[str, Any] | None = None,
     bind: Connectable | None = None,
     after_result: Callable[[Session, dict[str, Any]], None] | None = None,
+    trigger_assignment_id: int | None = None,
+    allow_active_auto_resolve: bool = True,
 ) -> dict[str, Any]:
     cutoff = cutoff_at or datetime.now(timezone.utc)
     scope = {
@@ -394,6 +408,8 @@ def generate_and_persist_current_term(
                     class_id=class_id,
                     subject_id=subject_id,
                     period_id=period_id,
+                    trigger_assignment_id=trigger_assignment_id,
+                    allow_active_auto_resolve=allow_active_auto_resolve,
                 )
 
             scored_features: dict[str, Any] = {}
@@ -438,6 +454,8 @@ def generate_and_persist_current_term(
             intervention=intervention,
             scored_features=scored_features,
             material_evidence=material_evidence,
+            trigger_assignment_id=trigger_assignment_id,
+            allow_active_auto_resolve=allow_active_auto_resolve,
         )
 
     def operation_with_followup(db: Session) -> dict[str, Any]:
