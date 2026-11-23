@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  AlertTriangle,
   ArrowUpRight,
   BookOpen,
   Calendar,
   CheckCircle2,
   CheckSquare,
   ClipboardList,
-  Clock,
   FileText,
   GraduationCap,
   HeartHandshake,
@@ -42,8 +40,8 @@ import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import IconContainer from "@/components/icon-container";
 import { cn } from "@/lib/utils";
+import { classifyMasteryPercentage } from "@/lib/student-lesson-mastery";
 import {
-  computeAcademicOverview,
   computeOnTimeSummary,
   computeSubjectMastery,
   prioritizeStudyboardTasks,
@@ -105,77 +103,6 @@ function SectionCard({
   );
 }
 
-function OverviewStatCard({
-  label,
-  value,
-  sublabel,
-  icon,
-  tone = "default",
-  onClick,
-}: {
-  label: string;
-  value: string | number;
-  sublabel: string;
-  icon: ReactNode;
-  tone?: "default" | "primary" | "destructive" | "success";
-  onClick?: () => void;
-}) {
-  const iconContainerClass =
-    tone === "destructive"
-      ? "bg-destructive text-destructive-foreground"
-      : tone === "primary"
-        ? "bg-primary text-primary-foreground"
-        : tone === "success"
-          ? "bg-success text-black"
-          : "bg-accent text-accent-foreground";
-
-  return (
-    <Card
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onClick={onClick}
-      onKeyDown={
-        onClick
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onClick();
-              }
-            }
-          : undefined
-      }
-      className={cn(
-        "flex min-w-0 flex-col justify-between gap-2 border-border bg-card p-3.5 shadow-sm transition-transform",
-        onClick &&
-          "cursor-pointer hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </span>
-        <span
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded border-2 border-border",
-            iconContainerClass,
-          )}
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
-      </div>
-      <div className="min-w-0">
-        <p className="text-2xl font-black leading-none tracking-tight sm:text-3xl">
-          {value}
-        </p>
-        <p className="mt-1 truncate text-xs text-muted-foreground">
-          {sublabel}
-        </p>
-      </div>
-    </Card>
-  );
-}
-
 function SubjectPerformanceCard({
   item,
   onSelect,
@@ -184,6 +111,7 @@ function SubjectPerformanceCard({
   onSelect: () => void;
 }) {
   const hasScore = item.percentage !== null;
+  const mastery = classifyMasteryPercentage(item.percentage);
 
   return (
     <div
@@ -219,18 +147,18 @@ function SubjectPerformanceCard({
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {hasScore ? (
-            <span className="text-lg font-black leading-none text-foreground sm:text-xl">
-              {item.percentage}%
-            </span>
+            <Badge
+              size="sm"
+              className={cn(mastery.badgeClass)}
+              data-testid="subject-mastery-badge"
+            >
+              {mastery.badgeLabel}
+            </Badge>
           ) : (
             <Badge variant="outline" size="sm">
               No scores yet
             </Badge>
           )}
-          <ArrowUpRight
-            className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
-            aria-hidden="true"
-          />
         </div>
       </div>
 
@@ -323,7 +251,6 @@ const StoryBoard = () => {
     };
   }, [selectedPeriodId]);
 
-  const overview = useMemo(() => computeAcademicOverview(todos), [todos]);
   const prioritizedTasks = useMemo(
     () => prioritizeStudyboardTasks(todos, new Date(), PRIORITY_PREVIEW_LIMIT),
     [todos],
@@ -526,73 +453,6 @@ const StoryBoard = () => {
             </header>
 
             <div className="-mt-[1px] flex flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              {/* 1. Academic Overview KPI Strip */}
-              <section
-                aria-label="Academic overview"
-                className="grid grid-cols-2 gap-3 lg:grid-cols-4"
-              >
-                <OverviewStatCard
-                  label="Pending Work"
-                  value={isLoading ? "—" : overview.pendingCount}
-                  sublabel={
-                    overview.pendingCount === 0
-                      ? "No open tasks right now"
-                      : `${overview.pendingCount} ${overview.pendingCount === 1 ? "activity" : "activities"} to complete`
-                  }
-                  icon={<ClipboardList className="size-4" />}
-                  tone="primary"
-                  onClick={() => navigate(routes.student.todo)}
-                />
-                <OverviewStatCard
-                  label="Overdue"
-                  value={isLoading ? "—" : overview.overdueCount}
-                  sublabel={
-                    overview.overdueCount === 0
-                      ? "No overdue activities"
-                      : overview.overdueActionableCount > 0
-                        ? `${overview.overdueActionableCount} open for late submission`
-                        : `${overview.overdueClosedCount} past due (closed)`
-                  }
-                  icon={<AlertTriangle className="size-4" />}
-                  tone={overview.overdueCount > 0 ? "destructive" : "default"}
-                  onClick={() => navigate(routes.student.todo)}
-                />
-                <OverviewStatCard
-                  label="Upcoming (7d)"
-                  value={isLoading ? "—" : overview.upcomingCount}
-                  sublabel={
-                    overview.nextDeadlineItem
-                      ? `Next: ${overview.nextDeadlineItem.deadline}`
-                      : "No deadlines in next 7 days"
-                  }
-                  icon={<Clock className="size-4" />}
-                  tone="default"
-                  onClick={() => navigate(routes.student.todo)}
-                />
-                <OverviewStatCard
-                  label="Classwork Completion"
-                  value={
-                    isLoading
-                      ? "—"
-                      : overview.completionRate === null
-                        ? "—"
-                        : `${overview.completionRate}%`
-                  }
-                  sublabel={
-                    overview.totalCount === 0
-                      ? "No activities assigned yet"
-                      : `${overview.completedCount} of ${overview.totalCount} activities done`
-                  }
-                  icon={<CheckCircle2 className="size-4" />}
-                  tone={
-                    overview.completionRate !== null &&
-                    overview.completionRate >= 80
-                      ? "success"
-                      : "default"
-                  }
-                />
-              </section>
-
               {/* 2. Main Responsive Workspace */}
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
                 {/* Left Column (8 cols): My Subjects + Subject Mastery */}
@@ -796,7 +656,6 @@ const StoryBoard = () => {
                   {/* My Priorities */}
                   <SectionCard
                     title="My Priorities"
-                    subtitle="Actionable overdue work first, then upcoming deadlines"
                     action={
                       <Button
                         type="button"
@@ -806,7 +665,6 @@ const StoryBoard = () => {
                         className="px-2 shadow-none"
                         aria-label="View all to-do items"
                       >
-                        <span className="text-xs font-bold">View all</span>
                         <ArrowUpRight className="ml-1 size-3.5" />
                       </Button>
                     }
@@ -892,6 +750,9 @@ const StoryBoard = () => {
                         })}
                       </div>
                     )}
+                    <label className="text-xs px-1 text-muted-foreground mt-2">
+                      Actionable overdue work first, then upcoming deadlines
+                    </label>
                   </SectionCard>
 
                   {/* Study Support Preview */}
@@ -967,7 +828,6 @@ const StoryBoard = () => {
                   {/* On-Time Submissions */}
                   <SectionCard
                     title="On-Time Submissions"
-                    subtitle="Submitted work with assigned due dates"
                   >
                     {metricsLoading ? (
                       <LoadingPanel label="Loading submission timeliness..." />
@@ -1011,12 +871,14 @@ const StoryBoard = () => {
                         </div>
                       </div>
                     )}
+                    <label className="text-xs px-1 text-muted-foreground mt-2">
+                      Submitted work with assigned due dates
+                    </label>
                   </SectionCard>
 
                   {/* Weekly Attendance */}
                   <SectionCard
                     title="Weekly Attendance"
-                    subtitle="Monday–Friday recorded attendance"
                   >
                     {metricsLoading ? (
                       <LoadingPanel label="Loading attendance..." />
@@ -1096,6 +958,9 @@ const StoryBoard = () => {
                         </p>
                       </>
                     )}
+                    <label className="text-xs px-1 text-muted-foreground mt-2">
+                      Monday–Friday recorded attendance
+                    </label>
                   </SectionCard>
                 </div>
               </div>

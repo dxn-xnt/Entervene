@@ -283,7 +283,7 @@ describe("Student StoryBoard Subject Performance and Layout", () => {
     const mathCard = perfScope.getByRole("button", {
       name: /View Enhanced Mathematics 9, 73% released score average/i,
     });
-    expect(perfScope.getByText("73%")).toBeTruthy();
+    expect(perfScope.getByTestId("subject-mastery-badge").textContent).toBe("Low");
     expect(perfScope.getByText("Based on 3 released graded scores")).toBeTruthy();
     expect(
       perfScope.queryByRole("button", { name: /View Science 9, no released graded scores yet/i }),
