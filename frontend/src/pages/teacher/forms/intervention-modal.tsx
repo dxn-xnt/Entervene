@@ -382,7 +382,12 @@ export default function InterventionModal({
 
                           <p className="text-sm text-muted-foreground px-2">
                             Resolved: {resolved.resolved_at ? date(resolved.resolved_at) : "Unavailable"}.
-                            This resolution describes this past cycle, not the student's current prediction.
+                            {resolved.resolution_review?.resolution_mode === "AUTOMATIC_REMEDIATION"
+                              ? " Automatically resolved after verified graded remediation improvement."
+                              : resolved.resolution_review?.attribution_summary
+                                ? ` ${resolved.resolution_review.attribution_summary}`
+                                : ""}{" "}
+                            This resolution describes this past cycle, not the student&apos;s current prediction.
                           </p>
                         </div>
 
@@ -410,56 +415,202 @@ export default function InterventionModal({
                           <h3 className="font-black">Targeted Support History</h3>
                           {resolved.targeted_activities.length ? (
                             <div className="space-y-2">
-                              {resolved.targeted_activities.map((activity) => (
-                                <Card
-                                  key={activity.assignment_id}
-                                  className="p-3 text-sm space-y-1.5 w-full"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span className="text-lg font-semibold">{formatToTitleCase(activity.title)}</span>
-                                    <Badge
-                                      variant={activity.submission_status === "graded" ? "solid" : "outline"}
-                                      size="sm"
-                                    >
-                                      {activity.submission_status === "graded"
-                                        ? "Completed"
-                                        : label(
-                                          activity.submission_status ||
-                                          "Not submitted"
+                              {resolved.targeted_activities.map((activity) => {
+                                const originalTypeLabel = activity.exam_subtype
+                                  ? label(activity.exam_subtype)
+                                  : label(activity.component || activity.classwork_type);
+                                const attemptsUsed = activity.attempt_count ?? 0;
+                                const maxAttempts = activity.max_attempts ?? null;
+                                const attemptHistory = activity.attempt_history ?? [];
+                                return (
+                                  <Card
+                                    key={activity.assignment_id}
+                                    className="p-3 text-sm space-y-2 w-full"
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <span className="text-lg font-semibold">
+                                        {formatToTitleCase(activity.title)}
+                                      </span>
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        {activity.component && (
+                                          <Badge variant="outline" size="sm">
+                                            {label(activity.component)}
+                                          </Badge>
                                         )}
-                                    </Badge>
-                                  </div>
-                                  {activity.grade != null && activity.total_points != null && (
-                                    <p className="text-base">
-                                      Score: <strong>{activity.grade}/{activity.total_points}</strong>
-                                    </p>
-                                  )}
-
-                                  {activity.original_assignment_id && (
-                                    <div className="text-base text-foreground flex flex-wrap gap-x-3 gap-1">
-                                      <span>
-                                        Original: <strong>{activity.original_title}</strong> ·{" "}
-                                        <strong>{label(activity.exam_subtype || "Examination")}</strong>
-                                      </span>
-                                      <span>
-                                        Original: <strong>{activity.original_grade ?? "—"}/{activity.total_points ?? "—"}</strong>
-                                      </span>
-                                      <span>
-                                        Remedial: <strong>{activity.grade ?? "Pending"}/{activity.total_points ?? "—"}</strong>
-                                      </span>
-                                      <span>
-                                        Effective: <strong>{activity.effective_grade ?? "—"}/{activity.total_points ?? "—"}</strong>
-                                      </span>
+                                        {maxAttempts != null && (
+                                          <Badge variant="outline" size="sm">
+                                            {attemptsUsed}/{maxAttempts} {attemptsUsed === 1 ? "attempt" : "attempts"}
+                                          </Badge>
+                                        )}
+                                        {activity.score_adjustment_cap != null && (
+                                          <Badge variant="surface" size="sm">
+                                            Cap: {activity.score_adjustment_cap}%
+                                          </Badge>
+                                        )}
+                                        <Badge
+                                          variant={activity.submission_status === "graded" ? "solid" : "outline"}
+                                          size="sm"
+                                        >
+                                          {activity.submission_status === "graded"
+                                            ? "Completed"
+                                            : label(
+                                              activity.submission_status ||
+                                              "Not submitted"
+                                            )}
+                                        </Badge>
+                                      </div>
                                     </div>
-                                  )}
-                                </Card>
-                              ))}
+                                    {activity.grade != null && activity.total_points != null && (
+                                      <p className="text-base">
+                                        Latest Graded Score: <strong>{activity.grade}/{activity.total_points}</strong>
+                                      </p>
+                                    )}
+
+                                    {activity.original_assignment_id && (
+                                      <div className="text-base text-foreground flex flex-wrap gap-x-3 gap-1">
+                                        <span>
+                                          Original: <strong>{activity.original_title}</strong> ·{" "}
+                                          <strong>{originalTypeLabel}</strong>
+                                        </span>
+                                        <span>
+                                          Original: <strong>{activity.original_grade ?? "—"}/{activity.total_points ?? "—"}</strong>
+                                        </span>
+                                        <span>
+                                          Remedial: <strong>{activity.grade ?? "Pending"}/{activity.total_points ?? "—"}</strong>
+                                        </span>
+                                        <span>
+                                          Effective: <strong>{activity.effective_grade ?? "—"}/{activity.total_points ?? "—"}</strong>
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {attemptHistory.length > 0 && (
+                                      <div className="pt-1 border-t border-border/70 flex flex-wrap gap-1.5">
+                                        {attemptHistory.map((att) => (
+                                          <Badge
+                                            key={att.submission_id}
+                                            variant={att.status === "graded" ? "outline" : "default"}
+                                            size="sm"
+                                          >
+                                            Attempt #{att.attempt_count}:{" "}
+                                            {att.grade != null && activity.total_points != null
+                                              ? `${att.grade}/${activity.total_points}`
+                                              : label(att.status || "Pending")}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </Card>
+                                );
+                              })}
                             </div>
                           ) : (
                             <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
                               <Empty.Content>
                                 <Empty.Description className="text-sm text-muted-foreground">
                                   No targeted activity was recorded for this resolved cycle.
+                                </Empty.Description>
+                              </Empty.Content>
+                            </Empty>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-black">Practice Assessment History</h3>
+                            <Badge variant="outline" size="sm">Optional · Ungraded</Badge>
+                          </div>
+                          {resolved.practice_assessment ? (
+                            <Card className="p-3 text-sm space-y-3 w-full">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-base font-bold">
+                                      {resolved.practice_assessment.title}
+                                    </span>
+                                    <Badge variant="solid" size="sm">
+                                      {formatToTitleCase(resolved.practice_assessment.status)}
+                                    </Badge>
+                                    <Badge variant="outline" size="sm">
+                                      {resolved.practice_assessment.gatekeeper_policy === "REQUIRE_PASS"
+                                        ? "Require Passing Score"
+                                        : resolved.practice_assessment.gatekeeper_policy === "REQUIRE_ATTEMPT"
+                                          ? "Allow Progress Below Passing"
+                                          : "Optional Practice"}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {resolved.practice_assessment.total_questions}{" "}
+                                    {resolved.practice_assessment.total_questions === 1 ? "question" : "questions"} ·{" "}
+                                    {resolved.practice_assessment.passing_percentage.toFixed(2)}% passing score
+                                  </p>
+                                </div>
+                                {resolved.practice_assessment.practice_passed && (
+                                  <Badge variant="success" size="sm">Passed</Badge>
+                                )}
+                              </div>
+
+                              {resolved.practice_assessment.attempts.length > 0 ? (
+                                <div className="space-y-1.5">
+                                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                                    Recorded Attempts ({resolved.practice_assessment.attempts.length})
+                                  </p>
+                                  <div className="flex flex-col gap-1.5">
+                                    {resolved.practice_assessment.attempts.map((att) => (
+                                      <div
+                                        key={att.attempt_id}
+                                        className="flex flex-wrap items-center justify-between gap-2 rounded! border-2 border-border bg-background px-3 py-2 text-sm"
+                                      >
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <span className="font-semibold">
+                                            Attempt #{att.attempt_number}:
+                                          </span>
+                                          <span className="font-bold tabular-nums">
+                                            {att.total_score.toFixed(2)}/{att.max_score.toFixed(2)} (
+                                            {att.status === "SUBMITTED"
+                                              ? `${att.score_percentage.toFixed(2)}%`
+                                              : label(att.status)}
+                                            )
+                                          </span>
+                                          <Badge
+                                            variant={
+                                              att.is_passed
+                                                ? "solid"
+                                                : att.status === "SUBMITTED"
+                                                  ? "default"
+                                                  : "outline"
+                                            }
+                                            size="sm"
+                                          >
+                                            {att.is_passed
+                                              ? "Passed"
+                                              : att.status === "SUBMITTED"
+                                                ? "Below Passing"
+                                                : label(att.status)}
+                                          </Badge>
+                                        </div>
+                                        <span className="text-xs text-muted-foreground">
+                                          {att.completed_at
+                                            ? `Completed ${formatDateTime(att.completed_at)}`
+                                            : att.started_at
+                                              ? `Started ${formatDateTime(att.started_at)}`
+                                              : "Not completed"}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">
+                                  No student attempts were recorded for this practice assessment.
+                                </p>
+                              )}
+                            </Card>
+                          ) : (
+                            <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                              <Empty.Content>
+                                <Empty.Description className="text-sm text-muted-foreground">
+                                  No optional Practice Assessment was recorded for this resolved cycle.
                                 </Empty.Description>
                               </Empty.Content>
                             </Empty>
@@ -510,6 +661,11 @@ export default function InterventionModal({
                                 : ""}
                               . Active support remains open until you confirm resolution.
                             </p>
+                            {detail.resolution_recommendation_detail && (
+                              <p className="text-sm">
+                                {detail.resolution_recommendation_detail}
+                              </p>
+                            )}
                             {(detail.unfinished_remediation_count ?? 0) > 0 && (
                               <p className="font-semibold">
                                 {detail.has_in_progress_remediation

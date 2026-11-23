@@ -197,7 +197,7 @@ def _summary(db: Session, row: Intervention, student_id) -> StudentPersistentInt
             activated_at=row.activated_at,
             resolved_at=row.resolved_at,
             resolution_message=("Your progress reached the goal for this support."
-                                if row.resolution_reason == "IMPROVED_PREDICTION" else "This support has ended."),
+                                if row.resolution_reason in {"IMPROVED_PREDICTION", "REMEDIATION_IMPROVED_PREDICTION"} else "This support has ended."),
         )
     required_readings, resource_issues, preparation = resolve_required_readings(db, row, student_id)
     assignments = db.query(ClassworkAssignment).filter(

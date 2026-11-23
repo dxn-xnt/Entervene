@@ -360,12 +360,15 @@ def bulk_update_activity_scores(
 
     if assignment.source_intervention_id is not None and changed_student_ids:
         from app.services.intervention.InterventionNotificationService import (
+            stage_intervention_assessment_result,
             stage_remediation_needs_teacher_review_if_exhausted,
         )
         db.flush()
         for sid_str in changed_student_ids:
             sub = sub_map.get(sid_str)
             if sub is not None and sub.status == "graded":
+                if classwork.is_graded:
+                    stage_intervention_assessment_result(db, assignment, sub)
                 stage_remediation_needs_teacher_review_if_exhausted(db, assignment, sub)
 
     db.commit()
@@ -390,6 +393,7 @@ def bulk_update_activity_scores(
             class_id=assignment.class_id,
             subject_id=classwork.subject_id,
             period_id=assignment.academic_period_id,
+            trigger_assignment_id=assignment.classwork_assignment_id,
         )
 
     return get_activity_scores(db, staff_id, classwork.classwork_id, payload.class_id)

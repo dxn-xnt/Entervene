@@ -26,6 +26,8 @@ export interface TeacherInterventionSummary {
   candidate_activation_reason?: string | null;
   resolution_recommended?: boolean;
   resolution_recommendation_reason?: string | null;
+  resolution_recommendation_detail?: string | null;
+  resolution_attribution_code?: string | null;
   can_confirm_resolution?: boolean;
   resolution_continued_at?: string | null;
   resolution_continued_by_staff_id?: string | null;
@@ -64,9 +66,83 @@ export interface TeacherInterventionDetail extends TeacherInterventionSummary {
   resolution_reason: string | null;
 }
 
+export interface ResolvedSupportAttempt {
+  submission_id: number;
+  attempt_count: number;
+  status?: string | null;
+  grade?: number | null;
+  submitted_at?: string | null;
+  graded_at?: string | null;
+}
+
+export interface ResolvedPracticeAttempt {
+  attempt_id: number;
+  attempt_number: number;
+  reading_review_cycle: number;
+  status: string;
+  total_score: number;
+  max_score: number;
+  score_percentage: number;
+  passing_threshold_snapshot: number;
+  is_passed: boolean;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface ResolvedPracticeAssessmentHistory {
+  practice_assessment_id: number;
+  title: string;
+  status: string;
+  gatekeeper_policy: string;
+  passing_percentage: number;
+  total_questions: number;
+  total_points: number;
+  attempts_count: number;
+  submitted_attempts_count: number;
+  practice_passed: boolean;
+  eligible_for_remediation: boolean;
+  best_score_percentage?: number | null;
+  progression_reason?: string | null;
+  attempts: ResolvedPracticeAttempt[];
+}
+
+export interface ResolutionReviewSummary {
+  decision?: string | null;
+  resolution_mode?: string | null;
+  attribution_code?: string | null;
+  attribution_summary?: string | null;
+  decided_by_staff_id?: string | null;
+  decided_at?: string | null;
+  prediction_id?: number | null;
+  prediction_revision?: number | null;
+  predicted_grade?: number | null;
+  previous_predicted_grade?: number | null;
+  passing_threshold?: number | null;
+}
+
 export interface TeacherResolvedInterventionDetail extends TeacherInterventionDetail {
   resolution_projection: number | null;
-  targeted_activities: Array<{ assignment_id: number; title: string; classwork_type: string; submission_status: string | null; grade: number | null; total_points: number | null; original_assignment_id?: number | null; original_title?: string | null; exam_subtype?: string | null; original_grade?: number | null; effective_grade?: number | null }>;
+  targeted_activities: Array<{
+    assignment_id: number;
+    title: string;
+    classwork_type: string;
+    component?: string | null;
+    submission_status: string | null;
+    grade: number | null;
+    total_points: number | null;
+    attempt_count?: number;
+    max_attempts?: number | null;
+    is_passed?: boolean;
+    score_adjustment_cap?: number | null;
+    attempt_history?: ResolvedSupportAttempt[];
+    original_assignment_id?: number | null;
+    original_title?: string | null;
+    exam_subtype?: string | null;
+    original_grade?: number | null;
+    effective_grade?: number | null;
+  }>;
+  practice_assessment?: ResolvedPracticeAssessmentHistory | null;
+  resolution_review?: ResolutionReviewSummary | null;
   sent_reviewer: { title: string; introduction: string; body: string } | null;
 }
 

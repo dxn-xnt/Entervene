@@ -635,5 +635,6 @@ def grade_teacher_quiz_submission(
             class_id=assignment.class_id,
             subject_id=classwork.subject_id,
             period_id=assignment.academic_period_id,
+            trigger_assignment_id=assignment.classwork_assignment_id,
         )
     return get_teacher_quiz_submission_detail(db, staff_id, submission_id)

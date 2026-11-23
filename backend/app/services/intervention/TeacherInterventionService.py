@@ -19,7 +19,11 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.classwork.ClassworkShared import is_reading_type
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.schemas.TeacherIntervention import (
-    TeacherInterventionDetail, TeacherInterventionList, TeacherInterventionSummary, TeacherResolvedInterventionDetail,
+    ResolutionReviewSummary,
+    TeacherInterventionDetail,
+    TeacherInterventionList,
+    TeacherInterventionSummary,
+    TeacherResolvedInterventionDetail,
 )
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.academic.SubstitutionService import SubstitutionService
@@ -29,6 +33,8 @@ from app.services.intervention.InterventionCandidateService import (
 )
 from app.services.intervention.InterventionDiagnosisService import effective_diagnosis_snapshot
 from app.services.intervention.InterventionHistoryService import (
+    capture_resolution_history_snapshot,
+    practice_assessment_history,
     resolution_prediction,
     resolution_projection,
     sent_reviewer,
@@ -147,6 +153,8 @@ def _active_resolution_status(
         return {
             "resolution_recommended": False,
             "resolution_recommendation_reason": None,
+            "resolution_recommendation_detail": None,
+            "resolution_attribution_code": None,
             "can_confirm_resolution": False,
             "resolution_continued_at": None,
             "resolution_continued_by_staff_id": None,
@@ -183,9 +191,21 @@ def _active_resolution_status(
         if resolution_recommended
         else ("CONTINUED_BY_TEACHER" if reaches_target and continued_for_latest else None)
     )
+    latest_attr = (
+        review.get("latest_attribution")
+        if isinstance(review.get("latest_attribution"), dict)
+        and review.get("latest_attribution", {}).get("prediction_id") == latest.prediction_id
+        else {}
+    )
     return {
         "resolution_recommended": resolution_recommended,
         "resolution_recommendation_reason": reason,
+        "resolution_recommendation_detail": (
+            latest_attr.get("attribution_summary") if reaches_target else None
+        ),
+        "resolution_attribution_code": (
+            latest_attr.get("attribution_code") if reaches_target else None
+        ),
         "can_confirm_resolution": reaches_target,
         "resolution_continued_at": continued_at,
         "resolution_continued_by_staff_id": continued_by,
@@ -243,6 +263,8 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
         candidate_activation_reason=activation_reason,
         resolution_recommended=active_resolution["resolution_recommended"],
         resolution_recommendation_reason=active_resolution["resolution_recommendation_reason"],
+        resolution_recommendation_detail=active_resolution["resolution_recommendation_detail"],
+        resolution_attribution_code=active_resolution["resolution_attribution_code"],
         can_confirm_resolution=active_resolution["can_confirm_resolution"],
         resolution_continued_at=active_resolution["resolution_continued_at"],
         resolution_continued_by_staff_id=active_resolution["resolution_continued_by_staff_id"],
@@ -325,10 +347,29 @@ def get_teacher_resolved(db: Session, staff_id: str, intervention_id: int) -> Te
     if row is None or row.status != "RESOLVED" or not _eligible_scope(db, staff_id, row):
         raise HTTPException(status_code=404, detail="Resolved intervention not found")
     reviewer = sent_reviewer(db, row)
+    plan = row.remediation_plan if isinstance(row.remediation_plan, dict) else {}
+    raw_review = plan.get("resolution_review") if isinstance(plan.get("resolution_review"), dict) else None
+    review_summary = None
+    if raw_review:
+        review_summary = ResolutionReviewSummary(
+            decision=raw_review.get("decision"),
+            resolution_mode=raw_review.get("resolution_mode"),
+            attribution_code=raw_review.get("attribution_code"),
+            attribution_summary=raw_review.get("attribution_summary"),
+            decided_by_staff_id=raw_review.get("decided_by_staff_id"),
+            decided_at=raw_review.get("decided_at"),
+            prediction_id=raw_review.get("prediction_id"),
+            prediction_revision=raw_review.get("prediction_revision"),
+            predicted_grade=raw_review.get("predicted_grade"),
+            previous_predicted_grade=raw_review.get("previous_predicted_grade"),
+            passing_threshold=raw_review.get("passing_threshold"),
+        )
     return TeacherResolvedInterventionDetail(
         **_detail(db, row).model_dump(),
         resolution_projection=resolution_projection(db, row),
         targeted_activities=targeted_activities(db, row, student_view=False),
+        practice_assessment=practice_assessment_history(db, row),
+        resolution_review=review_summary,
         sent_reviewer=reviewer.current_content if reviewer else None,
     )
 
@@ -536,20 +577,26 @@ def continue_teacher_active_intervention(
             return
         now = datetime.now(timezone.utc)
         plan = dict(row.remediation_plan or {})
-        plan["resolution_review"] = {
+        existing_review = dict(plan.get("resolution_review")) if isinstance(plan.get("resolution_review"), dict) else {}
+        existing_review.update({
             "decision": "CONTINUE_SUPPORT",
             "decided_by_staff_id": staff_id,
             "decided_at": now.isoformat(),
             "continued_prediction_id": latest.prediction_id,
             "continued_prediction_revision": latest.revision,
             "predicted_grade": grade,
-        }
+        })
+        plan["resolution_review"] = existing_review
         row.remediation_plan = plan
         transaction.flush()
 
     try:
         generate_and_persist_development_current_term(
-            *scope, model_version_id=model_version_id, bind=db.get_bind(), after_result=record_continue,
+            *scope,
+            model_version_id=model_version_id,
+            bind=db.get_bind(),
+            after_result=record_continue,
+            allow_active_auto_resolve=False,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -593,14 +640,34 @@ def resolve_teacher_active_intervention(
             return
         now = datetime.now(timezone.utc)
         plan = dict(row.remediation_plan or {})
+        existing_review = plan.get("resolution_review") if isinstance(plan.get("resolution_review"), dict) else {}
+        latest_attr = (
+            existing_review.get("latest_attribution")
+            if isinstance(existing_review.get("latest_attribution"), dict)
+            and existing_review.get("latest_attribution", {}).get("prediction_id") == latest.prediction_id
+            else {}
+        )
         plan["resolution_review"] = {
             "decision": "RESOLVED",
+            "resolution_mode": "TEACHER_CONFIRMED",
             "decided_by_staff_id": staff_id,
             "decided_at": now.isoformat(),
             "prediction_id": latest.prediction_id,
             "prediction_revision": latest.revision,
             "predicted_grade": grade,
+            "passing_threshold": passing_threshold,
+            "attribution_code": latest_attr.get("attribution_code"),
+            "attribution_summary": latest_attr.get("attribution_summary"),
+            "previous_prediction_id": latest_attr.get("previous_prediction_id"),
+            "previous_prediction_revision": latest_attr.get("previous_prediction_revision"),
+            "previous_predicted_grade": latest_attr.get("previous_predicted_grade"),
         }
+        plan["resolution_history_snapshot"] = capture_resolution_history_snapshot(
+            transaction,
+            row,
+            prediction=latest,
+            predicted_grade=grade,
+        )
         row.remediation_plan = plan
         row.status = "RESOLVED"
         row.resolution_reason = IMPROVED_PREDICTION
@@ -609,7 +676,11 @@ def resolve_teacher_active_intervention(
 
     try:
         generate_and_persist_development_current_term(
-            *scope, model_version_id=model_version_id, bind=db.get_bind(), after_result=confirm_resolution,
+            *scope,
+            model_version_id=model_version_id,
+            bind=db.get_bind(),
+            after_result=confirm_resolution,
+            allow_active_auto_resolve=False,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
