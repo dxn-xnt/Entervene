@@ -186,7 +186,7 @@ function SubjectPerformanceCard({
 const StoryBoard = () => {
   const navigate = useNavigate();
   const { subjects, todos, isLoading, error } = useStudentOverviewData();
-  const { selectedPeriodId, selectedPeriod, selectedYear } = useAcademicPeriod();
+  const { selectedPeriodId } = useAcademicPeriod();
 
   const [metrics, setMetrics] = useState<StudentStudyboardMetrics | null>(null);
   const [metricsLoadedPeriod, setMetricsLoadedPeriod] = useState<
