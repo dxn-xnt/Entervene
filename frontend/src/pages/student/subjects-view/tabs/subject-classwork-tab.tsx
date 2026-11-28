@@ -14,7 +14,7 @@ import {
   Paperclip,
   X,
 } from "lucide-react";
-import SubmissionForm from "@/components/submission-form";
+import SubmissionForm, { type SubmissionLinkDraft } from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import AttachmentDisplay from "@/components/attachment-display";
 import { Select } from "@/components/retroui/Select";
@@ -26,7 +26,8 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/student/button";
 import { useToast } from "@/components/retroui/Toast";
 import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/student-quiz-answer";
-import { API_URL, apiFetch } from "@/lib/api";
+import { API_URL, apiFetch, apiUpload, formatUploadErrorResponse } from "@/lib/api";
+import { hasSubmissionAdvanced } from "@/lib/classwork-utils";
 import {
   STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE,
   STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
@@ -636,24 +637,31 @@ export default function SubjectClassworkTab({
     }
   };
 
-  const handleSubmit = async (assignmentId: number, files: File[]) => {
+  const handleSubmit = async (
+    assignmentId: number,
+    files: File[],
+    links: SubmissionLinkDraft[] = [],
+    onProgress?: (percent: number) => void,
+    signal?: AbortSignal,
+  ) => {
     setSubmittingId(assignmentId);
     try {
       const formData = new FormData();
       files.forEach((file) => {
         formData.append("files", file);
       });
+      if (links.length) formData.append("links", JSON.stringify(links));
 
-      const response = await apiFetch(
+      const response = await apiUpload(
         `/api/v1/submissions/assignment/${assignmentId}/submit`,
-        {
-          method: "POST",
-          body: formData,
-        },
+        formData,
+        { onProgress, signal },
       );
 
       if (!response.ok) {
-        throw new Error("Failed to submit assignment");
+        throw new Error(
+          await formatUploadErrorResponse(response, "Failed to submit assignment"),
+        );
       }
 
       const submission = (await response.json()) as Submission;
@@ -661,8 +669,6 @@ export default function SubjectClassworkTab({
       updateClassworkStatus(assignmentId, submission.status);
 
       toast.success({ title: "Assignment submitted", description: "Your work was submitted successfully." });
-    } catch (err) {
-      toast.error({ title: "Submission failed", description: err instanceof Error ? err.message : "Failed to submit assignment" });
     } finally {
       setSubmittingId(null);
     }
@@ -1698,10 +1704,12 @@ export default function SubjectClassworkTab({
                             selectedClasswork.classwork_assignment_id,
                           )
                         }
-                        onSubmitRetry={(files) =>
+                        onSubmitRetry={(files, links, onProgress) =>
                           handleSubmit(
                             selectedClasswork.classwork_assignment_id,
                             files,
+                            links,
+                            onProgress,
                           )
                         }
                         isRetrying={
@@ -1724,12 +1732,29 @@ export default function SubjectClassworkTab({
                         assignmentId={selectedClasswork.classwork_assignment_id}
                         maxAttempts={selectedClasswork.max_attempts}
                         currentAttempt={0}
-                        onSubmit={(files) =>
+                        onSubmit={(files, links, onProgress, signal) =>
                           handleSubmit(
                             selectedClasswork.classwork_assignment_id,
                             files,
+                            links,
+                            onProgress,
+                            signal,
                           )
                         }
+                        onReconcileAfterCancel={async () => {
+                          const sub = await fetchSubmissionForAssignment(
+                            selectedClasswork.classwork_assignment_id,
+                          );
+                          if (sub && hasSubmissionAdvanced(selectedSubmission, sub)) {
+                            setSelectedSubmission(sub);
+                            updateClassworkStatus(
+                              selectedClasswork.classwork_assignment_id,
+                              sub.status,
+                            );
+                            return true;
+                          }
+                          return false;
+                        }}
                         isLoading={
                           submittingId ===
                           selectedClasswork.classwork_assignment_id

@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Download, FileText, File, X, Image as ImageIcon } from "lucide-react";
+import { Download, FileText, File, Play, X, Image as ImageIcon, Video } from "lucide-react";
 import DocumentViewer, { type PreviewDocumentKind } from "./document-viewer";
 import { API_URL, apiFetch } from "@/lib/api";
+import { Alert } from "@/components/retroui/Alert";
+import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "./retroui/Card";
 import { IconContainer } from "@/components/icon-container";
+import { Dialog } from "@/components/retroui/Dialog";
+import { Text } from "@/components/retroui/Text";
 
 interface Attachment {
   classwork_attachment_id?: number;
@@ -52,11 +56,25 @@ export default function AttachmentDisplay({
     url: string;
     name: string;
   } | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<{
+    url: string;
+    name: string;
+    attachment: Attachment;
+  } | null>(null);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoPlaybackError, setVideoPlaybackError] = useState(false);
   const [imageLoadingName, setImageLoadingName] = useState<string | null>(null);
   const [downloadLoadingName, setDownloadLoadingName] = useState<string | null>(
     null,
   );
   const [previewError, setPreviewError] = useState("");
+
+  const closeImagePreview = useCallback(() => {
+    setSelectedImage((current) => {
+      if (current?.url.startsWith("blob:")) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -94,7 +112,7 @@ export default function AttachmentDisplay({
       document.body.style.overflow = originalBodyOverflow;
       document.documentElement.style.overflow = originalHtmlOverflow;
     };
-  }, [selectedImage]);
+  }, [selectedImage, closeImagePreview]);
 
   if (!attachments || attachments.length === 0) {
     return (
@@ -115,6 +133,9 @@ export default function AttachmentDisplay({
       /\.(jpe?g|png)$/i.test(attachment.file_name),
     );
   };
+
+  const isVideo = (attachment: Attachment): boolean =>
+    Boolean(attachment.file_type?.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(attachment.file_name));
 
   const getAttachmentUrl = (attachment: Attachment): string => {
     if (attachment.file_path) {
@@ -160,13 +181,6 @@ export default function AttachmentDisplay({
     }
   };
 
-  const closeImagePreview = () => {
-    if (selectedImage?.url.startsWith("blob:")) {
-      URL.revokeObjectURL(selectedImage.url);
-    }
-    setSelectedImage(null);
-  };
-
   const handleOpenImage = async (attachment: Attachment) => {
     const url = getInlineUrl(attachment);
     if (!url) return;
@@ -207,6 +221,23 @@ export default function AttachmentDisplay({
     setDownloadLoadingName(attachment.file_name);
     setPreviewError("");
     try {
+      if (isVideo(attachment)) {
+        // Verify authorization and refresh the HttpOnly access cookie with a 1-byte range request,
+        // then let the browser stream the full video directly to disk without JS memory buffering.
+        const probe = await apiFetch(url, { headers: { Range: "bytes=0-0" } });
+        if (!probe.ok && probe.status !== 206) {
+          throw new Error("The video could not be downloaded.");
+        }
+        const link = document.createElement("a");
+        link.href = resolveAbsoluteUrl(url);
+        link.download = attachment.file_name;
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return;
+      }
+
       const response = await apiFetch(url);
       if (!response.ok) throw new Error("The file could not be downloaded.");
       const blobUrl = URL.createObjectURL(await response.blob());
@@ -226,6 +257,21 @@ export default function AttachmentDisplay({
     }
   };
 
+  const openVideoPreview = (attachment: Attachment) => {
+    const url = getInlineUrl(attachment);
+    if (!url) return;
+    setPreviewError("");
+    setVideoLoading(true);
+    setVideoPlaybackError(false);
+    setSelectedVideo({ url, name: attachment.file_name, attachment });
+  };
+
+  const closeVideoPreview = () => {
+    setSelectedVideo(null);
+    setVideoLoading(false);
+    setVideoPlaybackError(false);
+  };
+
   return (
     <div className="space-y-3">
       {selectedDocument && (
@@ -240,6 +286,79 @@ export default function AttachmentDisplay({
           }}
         />
       )}
+
+      <Dialog open={selectedVideo !== null} onOpenChange={(open) => { if (!open) closeVideoPreview(); }}>
+        {selectedVideo && (
+          <Dialog.Content size="4xl">
+            <Dialog.Header position="static">
+              <Text as="h5" className="truncate font-sans text-xl font-bold" title={selectedVideo.name}>
+                Preview: {selectedVideo.name}
+              </Text>
+            </Dialog.Header>
+            <div className="min-h-0 flex-1 overflow-auto bg-neutral-950 p-4 sm:p-6">
+              {videoPlaybackError ? (
+                <div className="mx-auto flex max-w-lg flex-col items-center justify-center gap-4 rounded border-2 border-border bg-card p-6 text-center text-foreground">
+                  <Alert status="error" className="w-full text-left">
+                    <Alert.Description>
+                      This video cannot be played in your browser. Download the file to open it using a compatible video player.
+                    </Alert.Description>
+                  </Alert>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleDownload(selectedVideo.attachment)}
+                    disabled={downloadLoadingName === selectedVideo.name}
+                    className="gap-2"
+                  >
+                    <Download size={15} />
+                    {downloadLoadingName === selectedVideo.name ? "Preparing download..." : "Download video"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {videoLoading && (
+                    <p className="text-center text-xs text-neutral-300" role="status" aria-live="polite">
+                      Loading video metadata...
+                    </p>
+                  )}
+                  <video
+                    src={selectedVideo.url}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    onLoadedMetadata={() => setVideoLoading(false)}
+                    onCanPlay={() => setVideoLoading(false)}
+                    onError={() => {
+                      setVideoLoading(false);
+                      setVideoPlaybackError(true);
+                    }}
+                    className="mx-auto max-h-[65dvh] max-w-full bg-black"
+                  >
+                    Your browser does not support video playback.
+                  </video>
+                </div>
+              )}
+            </div>
+            <Dialog.Footer position="static">
+              <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => handleDownload(selectedVideo.attachment)}
+                  disabled={downloadLoadingName === selectedVideo.name}
+                  className="gap-1.5"
+                >
+                  <Download size={14} />
+                  {downloadLoadingName === selectedVideo.name ? "Downloading..." : "Download"}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={closeVideoPreview}>
+                  Close preview
+                </Button>
+              </div>
+            </Dialog.Footer>
+          </Dialog.Content>
+        )}
+      </Dialog>
 
       {selectedImage &&
         createPortal(
@@ -291,25 +410,28 @@ export default function AttachmentDisplay({
 
       <div className="space-y-2">
         {previewError && (
-          <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {previewError}
-          </div>
+          <Alert status="error">
+            <Alert.Description>{previewError}</Alert.Description>
+          </Alert>
         )}
         <div className="grid gap-2 min-w-0 w-full">
           {attachments.map((attachment, idx) => {
             const documentKind = getDocumentKind(attachment.file_name);
             const isPdfFile = documentKind === "pdf";
             const isImageFile = isImage(attachment);
+            const isVideoFile = isVideo(attachment);
             const url = getAttachmentUrl(attachment);
 
             return (
               <Card
                 key={idx}
-                className="flex w-full min-w-0 flex-row gap-2 p-3 shadow-none transition-colors hover:bg-retro overflow-hidden"
+                className="flex w-full min-w-0 flex-col gap-3 p-3 shadow-none transition-colors hover:bg-retro overflow-hidden sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="flex w-full min-w-0 items-center gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                   <IconContainer variant="primary">
-                    {isImageFile ? (
+                    {isVideoFile ? (
+                      <Video />
+                    ) : isImageFile ? (
                       <ImageIcon />
                     ) : isPdfFile ? (
                       <FileText />
@@ -324,19 +446,24 @@ export default function AttachmentDisplay({
                     >
                       {attachment.file_name}
                     </p>
-                    <p className="text-xs text-gray-500">
-                      {formatFileSize(attachment.file_size)}
-                    </p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      {isVideoFile && (
+                        <Badge variant="outline" size="sm" className="px-1.5 py-0 text-[10px] uppercase tracking-wide">
+                          Video
+                        </Badge>
+                      )}
+                      <span>{formatFileSize(attachment.file_size)}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex shrink-0 flex-wrap gap-2 sm:ml-2 sm:justify-end items-center">
-                  {(documentKind || isImageFile) && url && (
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-2 sm:justify-end">
+                  {(documentKind || isImageFile || isVideoFile) && url && (
                     <Button
                       asChild
                       variant="outline"
                       size="sm"
-                      className={`shadow-none h-fit ${imageLoadingName === attachment.file_name ? "pointer-events-none opacity-50" : ""}`}
+                      className={`gap-1.5 shadow-none h-fit ${imageLoadingName === attachment.file_name ? "pointer-events-none opacity-50" : ""}`}
                     >
                       <a
                         href={documentKind === "pptx"
@@ -352,7 +479,9 @@ export default function AttachmentDisplay({
                           }
                           if (!isModifiedClick(e)) {
                             e.preventDefault();
-                            if (documentKind) {
+                            if (isVideoFile) {
+                              openVideoPreview(attachment);
+                            } else if (documentKind) {
                               handleOpenDocument(attachment, documentKind);
                             } else {
                               handleOpenImage(attachment);
@@ -360,7 +489,14 @@ export default function AttachmentDisplay({
                           }
                         }}
                       >
-                        View
+                        {isVideoFile ? (
+                          <>
+                            <Play size={13} aria-hidden="true" />
+                            Preview
+                          </>
+                        ) : (
+                          "View"
+                        )}
                       </a>
                     </Button>
                   )}
@@ -372,7 +508,7 @@ export default function AttachmentDisplay({
                       disabled={downloadLoadingName === attachment.file_name}
                       className="gap-1.5 h-fit shadow-none"
                     >
-                      Download
+                      {downloadLoadingName === attachment.file_name ? "Downloading..." : "Download"}
                     </Button>
                   )}
                   {action && (

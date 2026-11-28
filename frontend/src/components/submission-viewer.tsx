@@ -110,7 +110,13 @@ interface SubmissionViewerProps {
   allowLateSubmissions?: boolean;
   onResubmit?: () => void | Promise<void>;
   onDeleteSubmission?: (submissionId: number) => Promise<void | boolean>;
-  onSubmitRetry?: (files: File[], links: SubmissionLinkDraft[]) => Promise<void>;
+  onSubmitRetry?: (
+    files: File[],
+    links: SubmissionLinkDraft[],
+    onProgress?: (percent: number) => void,
+    signal?: AbortSignal,
+  ) => Promise<void>;
+  onReconcileAfterCancel?: () => Promise<boolean>;
   isDeleting?: boolean;
   isRetrying?: boolean;
   showScores?: boolean;
@@ -134,6 +140,7 @@ export default function SubmissionViewer({
   onResubmit,
   onDeleteSubmission,
   onSubmitRetry,
+  onReconcileAfterCancel,
   isDeleting = false,
   isRetrying = false,
   showScores = true,
@@ -237,6 +244,7 @@ export default function SubmissionViewer({
                   currentAttempt={submission.attempt_count}
                   isLoading={isRetrying}
                   onSubmit={onSubmitRetry}
+                  onReconcileAfterCancel={onReconcileAfterCancel}
                 />
               )}
             </div>

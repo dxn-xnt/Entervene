@@ -1,17 +1,28 @@
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import Optional, cast
 from uuid import UUID
 
 from fastapi import HTTPException, Request
-from fastapi.responses import FileResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
-from app.core.FileUpload import delete_file, save_file
+from app.core.FileUpload import (
+    ATTACHMENT_SAVE_ERROR,
+    delete_file,
+    file_sha256,
+    protected_file_response,
+    save_file,
+    upload_file_size,
+    validate_attachment_collection,
+    validate_saved_attachment_collection,
+)
 from app.core.ExternalUrl import (
     MAX_EXTERNAL_LINK_TITLE_LENGTH,
     MAX_EXTERNAL_URL_LENGTH,
@@ -60,6 +71,102 @@ from app.services.intervention.RemediationPrerequisiteService import require_rem
 
 MAX_READING_FOCUS_DELTA_SECONDS = 300
 MAX_SUBMISSION_LINKS = 20
+FILE_DELETION_ERROR = "The attachment record was removed, but stored-file cleanup failed."
+logger = logging.getLogger(__name__)
+
+
+def _safe_rollback(db: Session) -> None:
+    try:
+        db.rollback()
+    except Exception:
+        logger.error("Could not roll back submission database session cleanly", exc_info=True)
+
+
+def _safe_delete_files(file_paths: list[str], delete_file_func=delete_file) -> None:
+    for path in file_paths:
+        try:
+            delete_file_func(path)
+        except Exception:
+            logger.error("Unexpected error deleting staged submission attachment %s", path, exc_info=True)
+
+
+def _cleanup_uncommitted_submission_files(
+    db: Session,
+    file_paths: list[str],
+    *,
+    commit_attempted: bool = True,
+) -> None:
+    """Delete staged files only after confirming no committed attachment references them."""
+    if not file_paths:
+        return
+    if not commit_attempted:
+        _safe_delete_files(file_paths)
+        return
+    try:
+        committed = {
+            row[0]
+            for row in db.query(SubmissionAttachment.file_path)
+            .filter(SubmissionAttachment.file_path.in_(file_paths))
+            .all()
+        }
+    except Exception:
+        logger.error(
+            "AMBIGUOUS_COMMIT ORPHAN_FILE_RISK: Could not verify failed submission commit; retaining %d staged file(s) conservatively",
+            len(file_paths),
+            exc_info=True,
+        )
+        return
+    _safe_delete_files([path for path in file_paths if path not in committed])
+
+
+def _is_duplicate_submission_replay(
+    existing_attachments: list[SubmissionAttachment],
+    existing_links: list[SubmissionLink],
+    saved_infos: list[dict],
+    incoming_links: list[SubmissionLinkInput] | None,
+) -> bool:
+    """Detect an exact content-and-link replay of an already-submitted deliverable.
+
+    Requires matching normalized links AND matching sorted multisets of
+    (file_name, file_size, sha256). If any existing attachment cannot be hashed
+    from disk, returns False conservatively so legitimate deliverables are never
+    discarded.
+    """
+    if not saved_infos and incoming_links is None:
+        return False
+    existing_link_sig = [(link.url, link.title) for link in existing_links]
+    incoming_link_sig = (
+        [(link.url, link.title) for link in incoming_links]
+        if incoming_links is not None
+        else []
+    )
+    if existing_link_sig != incoming_link_sig:
+        return False
+    if len(existing_attachments) != len(saved_infos):
+        return False
+    if not saved_infos:
+        return bool(incoming_link_sig)
+    existing_meta = sorted(
+        (str(att.file_name), int(att.file_size or 0)) for att in existing_attachments
+    )
+    incoming_meta = sorted(
+        (str(info["file_name"]), int(info["file_size"] or 0)) for info in saved_infos
+    )
+    if existing_meta != incoming_meta:
+        return False
+    existing_hashes: list[tuple[str, int, str]] = []
+    for att in existing_attachments:
+        digest = file_sha256(cast(str, att.file_path))
+        if digest is None:
+            return False
+        existing_hashes.append((str(att.file_name), int(att.file_size or 0), digest))
+    incoming_hashes: list[tuple[str, int, str]] = []
+    for info in saved_infos:
+        digest = file_sha256(str(info["file_path"]))
+        if digest is None:
+            return False
+        incoming_hashes.append((str(info["file_name"]), int(info["file_size"] or 0), digest))
+    return sorted(existing_hashes) == sorted(incoming_hashes)
 
 
 def parse_submission_links(raw: str | None) -> list[SubmissionLinkInput] | None:
@@ -385,7 +492,7 @@ def assert_student_can_modify_submission(
 ) -> tuple[ClassworkAssignment, StudentSubmission]:
     assignment = db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_assignment_id == assignment_id
-    ).first()
+    ).with_for_update().first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
@@ -440,50 +547,47 @@ async def submit_student_work(
     links: str | None = None,
 ) -> SubmissionResponse:
     """Create or resubmit work while preserving attempts and rolling back failed uploads."""
-    assignment = db.query(ClassworkAssignment).filter(
-        ClassworkAssignment.classwork_assignment_id == assignment_id
-    ).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
-    if not classwork or classwork.is_archived:
-        raise HTTPException(status_code=404, detail="Classwork not found")
-    require_assignment_recipient(assignment, student)
-    _assert_student_submission_mutation_scope(db, student, assignment, classwork)
-    ensure_remedial_period_open(db, assignment, student.student_id)
-    require_remediation_prerequisite(db, assignment, student)
     incoming_links = parse_submission_links(links)
-    if incoming_links and (classwork.classwork_type or "").upper() not in {"ASSIGNMENT", "ACTIVITY"}:
-        raise HTTPException(status_code=422, detail="Links are supported only for assignments and activities.")
-    now = datetime.now(timezone.utc)
-    if not assignment_is_available(assignment, now):
-        raise HTTPException(status_code=403, detail="This assignment is not available")
-    if assignment_is_locked(assignment, now):
-        raise HTTPException(status_code=403, detail="This assignment is locked")
-
-    existing = db.query(StudentSubmission).filter(
-        StudentSubmission.classwork_assignment_id == assignment_id,
-        StudentSubmission.student_id == student.student_id,
-    ).order_by(StudentSubmission.submission_id.desc()).first()
-
     upload_files: list[StarletteUploadFile] = [
         cast(StarletteUploadFile, file) for file in (files or []) if file and file.filename
     ]
     if not upload_files:
         upload_files = await files_from_form(request, {"files", "file", "attachments", "attachment"})
 
-    due_date = aware_utc(assignment.due_date)
-    is_late = bool(due_date and now > due_date)
-
-    # Check Excused Attendance / Approved Leave Exemption
-    if is_late:
-        has_excused = student_has_excused_exemption(db, cast(UUID, getattr(student, "student_id")), cast(int, assignment.class_id), due_date or now)
-        if has_excused:
-            is_late = False  # Excused exemption applied: bypass late penalty & restriction
-
-    if is_late and not assignment.allow_late_submissions:
+    # Fast non-locking pre-check before streaming files to disk so unauthorized or
+    # obviously invalid requests fail early and PostgreSQL row locks are never held
+    # across async file I/O.
+    precheck_assignment = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_assignment_id == assignment_id
+    ).first()
+    if not precheck_assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    precheck_classwork = db.query(Classwork).filter(
+        Classwork.classwork_id == precheck_assignment.classwork_id
+    ).first()
+    if not precheck_classwork or precheck_classwork.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
+    require_assignment_recipient(precheck_assignment, student)
+    _assert_student_submission_mutation_scope(db, student, precheck_assignment, precheck_classwork)
+    ensure_remedial_period_open(db, precheck_assignment, student.student_id)
+    require_remediation_prerequisite(db, precheck_assignment, student)
+    if incoming_links and (precheck_classwork.classwork_type or "").upper() not in {"ASSIGNMENT", "ACTIVITY"}:
+        raise HTTPException(status_code=422, detail="Links are supported only for assignments and activities.")
+    now = datetime.now(timezone.utc)
+    if not assignment_is_available(precheck_assignment, now):
+        raise HTTPException(status_code=403, detail="This assignment is not available")
+    if assignment_is_locked(precheck_assignment, now):
+        raise HTTPException(status_code=403, detail="This assignment is locked")
+    precheck_due = aware_utc(precheck_assignment.due_date)
+    precheck_late = bool(precheck_due and now > precheck_due)
+    if precheck_late and student_has_excused_exemption(
+        db, cast(UUID, getattr(student, "student_id")), cast(int, precheck_assignment.class_id), precheck_due or now
+    ):
+        precheck_late = False
+    if precheck_late and not precheck_assignment.allow_late_submissions:
         raise HTTPException(status_code=403, detail="Cannot submit after due date")
-    enforce_attempt_limit = classwork_uses_attempt_limit(classwork, assignment)
+    validate_attachment_collection([], upload_files)
+
     from app.services.intervention.RemediationAttemptPolicy import (
         REMEDIATION_MAX_ATTEMPTS_LOCKED_MESSAGE,
         REMEDIATION_PASSED_MESSAGE,
@@ -491,73 +595,140 @@ async def submit_student_work(
         is_remediation_assessment,
     )
 
-    is_remediation = is_remediation_assessment(assignment, classwork)
-
     saved_paths: list[str] = []
-    if existing:
-        if existing.status == "graded":
-            if not is_remediation:
-                raise HTTPException(status_code=403, detail="Cannot modify a graded submission")
-            attempt_state = evaluate_remediation_attempt_state(db, assignment, classwork, existing)
-            if attempt_state["is_passed"]:
-                raise HTTPException(status_code=403, detail=REMEDIATION_PASSED_MESSAGE)
-            if (
-                attempt_state["needs_teacher_review"]
-                or attempt_state["attempts_used"] >= (attempt_state["max_attempts"] or 3)
-            ):
-                raise HTTPException(status_code=403, detail=REMEDIATION_MAX_ATTEMPTS_LOCKED_MESSAGE)
-            if not upload_files and not incoming_links:
+    saved_infos: list[dict] = []
+    commit_attempted = False
+    committed = False
+    try:
+        # Stage all incoming files to disk BEFORE acquiring the FOR UPDATE row lock.
+        for upload in upload_files:
+            info = await save_file_func(upload, "submissions")
+            saved_paths.append(info["file_path"])
+            saved_infos.append(info)
+
+        # Locked DB critical section: zero await points while holding FOR UPDATE.
+        db.expire_all()
+        assignment = db.query(ClassworkAssignment).filter(
+            ClassworkAssignment.classwork_assignment_id == assignment_id
+        ).with_for_update().first()
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
+        if not classwork or classwork.is_archived:
+            raise HTTPException(status_code=404, detail="Classwork not found")
+        require_assignment_recipient(assignment, student)
+        _assert_student_submission_mutation_scope(db, student, assignment, classwork)
+        ensure_remedial_period_open(db, assignment, student.student_id)
+        require_remediation_prerequisite(db, assignment, student)
+        if incoming_links and (classwork.classwork_type or "").upper() not in {"ASSIGNMENT", "ACTIVITY"}:
+            raise HTTPException(status_code=422, detail="Links are supported only for assignments and activities.")
+        now = datetime.now(timezone.utc)
+        if not assignment_is_available(assignment, now):
+            raise HTTPException(status_code=403, detail="This assignment is not available")
+        if assignment_is_locked(assignment, now):
+            raise HTTPException(status_code=403, detail="This assignment is locked")
+
+        due_date = aware_utc(assignment.due_date)
+        is_late = bool(due_date and now > due_date)
+        if is_late:
+            has_excused = student_has_excused_exemption(
+                db, cast(UUID, getattr(student, "student_id")), cast(int, assignment.class_id), due_date or now
+            )
+            if has_excused:
+                is_late = False
+        if is_late and not assignment.allow_late_submissions:
+            raise HTTPException(status_code=403, detail="Cannot submit after due date")
+
+        enforce_attempt_limit = classwork_uses_attempt_limit(classwork, assignment)
+        is_remediation = is_remediation_assessment(assignment, classwork)
+
+        existing = db.query(StudentSubmission).filter(
+            StudentSubmission.classwork_assignment_id == assignment_id,
+            StudentSubmission.student_id == student.student_id,
+        ).order_by(StudentSubmission.submission_id.desc()).first()
+
+        if existing:
+            existing_attachments = (
+                db.query(SubmissionAttachment)
+                .filter(SubmissionAttachment.submission_id == existing.submission_id)
+                .all()
+            )
+            existing_links = list(existing.links)
+            if existing.status == "graded":
+                if not is_remediation:
+                    raise HTTPException(status_code=403, detail="Cannot modify a graded submission")
+                attempt_state = evaluate_remediation_attempt_state(db, assignment, classwork, existing)
+                if attempt_state["is_passed"]:
+                    raise HTTPException(status_code=403, detail=REMEDIATION_PASSED_MESSAGE)
+                if (
+                    attempt_state["needs_teacher_review"]
+                    or attempt_state["attempts_used"] >= (attempt_state["max_attempts"] or 3)
+                ):
+                    raise HTTPException(status_code=403, detail=REMEDIATION_MAX_ATTEMPTS_LOCKED_MESSAGE)
+                if not saved_infos and not incoming_links:
+                    raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
+                validate_saved_attachment_collection([], saved_infos)
+                # Preserve prior graded attempt history by creating a new submission row.
+                submission = StudentSubmission(
+                    student_id=student.student_id,
+                    classwork_assignment_id=assignment_id,
+                    submitted_at=now,
+                    status="late" if is_late else "submitted",
+                    attempt_count=existing.attempt_count + 1,
+                )
+                db.add(submission)
+            else:
+                is_draft = existing.status == "pending"
+                if is_draft:
+                    validate_saved_attachment_collection(existing_attachments, saved_infos)
+                    retained_links = existing_links if incoming_links is None else incoming_links
+                    if not saved_infos and not existing_attachments and not retained_links:
+                        raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
+                    if saved_infos or incoming_links:
+                        if is_remediation:
+                            if existing.attempt_count == 0:
+                                existing.attempt_count = 1
+                        else:
+                            if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
+                                raise HTTPException(status_code=403, detail="Maximum attempts reached")
+                            existing.attempt_count += 1
+                else:
+                    if _is_duplicate_submission_replay(
+                        existing_attachments, existing_links, saved_infos, incoming_links
+                    ):
+                        _safe_delete_files(saved_paths)
+                        saved_paths.clear()
+                        response = build_submission_response(existing, db, for_student=True)
+                        _safe_rollback(db)
+                        return response
+                    if not saved_infos and not incoming_links:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Use Unsubmit first, then upload a file or link and submit again.",
+                        )
+                    validate_saved_attachment_collection(existing_attachments, saved_infos)
+                    if not is_remediation:
+                        if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
+                            raise HTTPException(status_code=403, detail="Maximum attempts reached")
+                        existing.attempt_count += 1
+                existing.submitted_at = now
+                existing.status = "late" if is_late else "submitted"
+                submission = existing
+        else:
+            if not saved_infos and not incoming_links:
                 raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
-            # Preserve prior graded attempt history by creating a new submission row.
+            validate_saved_attachment_collection([], saved_infos)
             submission = StudentSubmission(
                 student_id=student.student_id,
                 classwork_assignment_id=assignment_id,
                 submitted_at=now,
                 status="late" if is_late else "submitted",
-                attempt_count=existing.attempt_count + 1,
+                attempt_count=1,
             )
             db.add(submission)
-        else:
-            is_draft = existing.status == "pending"
-            if is_draft:
-                retained_links = existing.links if incoming_links is None else incoming_links
-                if not upload_files and not existing.attachments and not retained_links:
-                    raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
-                if upload_files or incoming_links:
-                    if is_remediation:
-                        if existing.attempt_count == 0:
-                            existing.attempt_count = 1
-                    else:
-                        if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
-                            raise HTTPException(status_code=403, detail="Maximum attempts reached")
-                        existing.attempt_count += 1
-            else:
-                if not upload_files and not incoming_links:
-                    raise HTTPException(status_code=400, detail="Use Unsubmit first, then upload a file or link and submit again.")
-                if not is_remediation:
-                    if enforce_attempt_limit and existing.attempt_count >= (assignment.max_attempts or 1):
-                        raise HTTPException(status_code=403, detail="Maximum attempts reached")
-                    existing.attempt_count += 1
-            existing.submitted_at = now
-            existing.status = "late" if is_late else "submitted"
-            submission = existing
-    else:
-        if not upload_files and not incoming_links:
-            raise HTTPException(status_code=400, detail="Attach at least one file or submit a link.")
-        submission = StudentSubmission(
-            student_id=student.student_id,
-            classwork_assignment_id=assignment_id,
-            submitted_at=now,
-            status="late" if is_late else "submitted",
-            attempt_count=1,
-        )
-        db.add(submission)
 
-    try:
         db.flush()
-        for upload in upload_files:
-            info = await save_file_func(upload, "submissions")
-            saved_paths.append(info["file_path"])
+        for info in saved_infos:
             db.add(SubmissionAttachment(submission_id=submission.submission_id, **info))
         if incoming_links is not None:
             for old_link in list(submission.links):
@@ -570,7 +741,9 @@ async def submit_student_work(
                     title=link.title,
                     position=position,
                 ))
+        commit_attempted = True
         db.commit()
+        committed = True
         db.refresh(submission)
         try:
             from app.services.submission.TeacherSubmissionNotificationService import (
@@ -579,9 +752,26 @@ async def submit_student_work(
             sync_teacher_submission_notifications_for_assignment(db, assignment_id)
         except Exception:
             pass
+    except asyncio.CancelledError:
+        if not committed:
+            _safe_rollback(db)
+            _cleanup_uncommitted_submission_files(
+                db, saved_paths, commit_attempted=commit_attempted
+            )
+        raise
+    except IntegrityError as exc:
+        if not committed:
+            _safe_rollback(db)
+            _cleanup_uncommitted_submission_files(
+                db, saved_paths, commit_attempted=commit_attempted
+            )
+        raise HTTPException(status_code=500, detail=ATTACHMENT_SAVE_ERROR) from exc
     except Exception:
-        db.rollback()
-        cleanup_saved_files(saved_paths)
+        if not committed:
+            _safe_rollback(db)
+            _cleanup_uncommitted_submission_files(
+                db, saved_paths, commit_attempted=commit_attempted
+            )
         raise
     return build_submission_response(submission, db, for_student=True)
 
@@ -769,9 +959,20 @@ def remove_submission_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    delete_file_func(cast(str, attachment.file_path))
-    db.delete(attachment)
-    db.commit()
+    file_path = cast(str, attachment.file_path)
+    try:
+        db.delete(attachment)
+        db.commit()
+    except Exception:
+        _safe_rollback(db)
+        raise
+    if delete_file_func(file_path) is False:
+        logger.error(
+            "POST_COMMIT_CLEANUP ORPHAN_FILE_RISK: Deleted submission attachment %s but failed to remove file %s",
+            attachment_id,
+            file_path,
+        )
+        raise HTTPException(status_code=500, detail=FILE_DELETION_ERROR)
     db.refresh(submission)
     try:
         from app.services.submission.TeacherSubmissionNotificationService import (
@@ -792,15 +993,29 @@ def clear_submission_files(
     _, submission = assert_student_can_modify_submission(assignment_id, student, db)
     if submission.status == "graded":
         raise HTTPException(status_code=403, detail="Cannot modify a graded submission")
+    file_paths: list[str] = []
     for raw_attachment in submission.attachments:
         attachment = cast(SubmissionAttachment, raw_attachment)
-        delete_file_func(cast(str, attachment.file_path))
+        file_paths.append(cast(str, attachment.file_path))
         db.delete(attachment)
     for link in list(submission.links):
         db.delete(link)
     submission.status = "pending"
     submission.submitted_at = None
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        _safe_rollback(db)
+        raise
+    failed_paths = [file_path for file_path in file_paths if delete_file_func(file_path) is False]
+    if failed_paths:
+        logger.error(
+            "POST_COMMIT_CLEANUP ORPHAN_FILE_RISK: Cleared submission %s but failed to remove %d file(s): %s",
+            submission.submission_id,
+            len(failed_paths),
+            failed_paths,
+        )
+        raise HTTPException(status_code=500, detail=FILE_DELETION_ERROR)
     return {"message": "Submission files and links cleared. You can now resubmit."}
 
 
@@ -1030,7 +1245,8 @@ def download_submission_file(
     payload: dict,
     inline: bool = False,
     db: Session = None,
-) -> FileResponse:
+    request: Request | None = None,
+):
     submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
@@ -1051,12 +1267,9 @@ def download_submission_file(
             path = candidate
         else:
             raise HTTPException(status_code=404, detail="File not found on server")
-    return FileResponse(
-        path=str(path),
-        filename=cast(str, attachment.file_name),
-        media_type=cast(Optional[str], attachment.file_type) or "application/octet-stream",
-        content_disposition_type="inline" if inline else "attachment",
-        headers={"Cache-Control": "no-store"},
+    return protected_file_response(
+        request, path, cast(str, attachment.file_name),
+        cast(Optional[str], attachment.file_type) or "application/octet-stream", inline,
     )
 
 

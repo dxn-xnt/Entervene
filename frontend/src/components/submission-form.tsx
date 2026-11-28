@@ -1,15 +1,19 @@
-import { useEffect, useState } from "react";
-import { Eye, Upload, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Eye, Play, Upload, Video, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Alert } from "@/components/retroui/Alert";
+import { Badge } from "@/components/retroui/Badge";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
-import { maxClassworkMaterialSize } from "@/lib/classwork-utils";
+import { LOCAL_VIDEO_PREVIEW_UNAVAILABLE_MESSAGE } from "@/components/video-file-preview";
+import { isUploadCancelledError } from "@/lib/api";
+import { formatFileSize, isVideoFile, validateAttachmentSelection } from "@/lib/classwork-utils";
 
 export type SubmissionLinkDraft = { url: string; title?: string | null };
 
-const submissionFilePreviewKind = (file: File): "image" | "pdf" | null => {
+const submissionFilePreviewKind = (file: File): "image" | "pdf" | "video" | null => {
+  if (isVideoFile(file)) return "video";
   if (file.type.startsWith("image/")) return "image";
   if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) return "pdf";
   return null;
@@ -17,7 +21,13 @@ const submissionFilePreviewKind = (file: File): "image" | "pdf" | null => {
 
 interface SubmissionFormProps {
   assignmentId: number;
-  onSubmit: (files: File[], links: SubmissionLinkDraft[]) => Promise<void>;
+  onSubmit: (
+    files: File[],
+    links: SubmissionLinkDraft[],
+    onProgress?: (percent: number) => void,
+    signal?: AbortSignal,
+  ) => Promise<void>;
+  onReconcileAfterCancel?: () => Promise<boolean>;
   isLoading?: boolean;
   maxAttempts?: number;
   currentAttempt?: number;
@@ -25,6 +35,7 @@ interface SubmissionFormProps {
 
 export default function SubmissionForm({
   onSubmit,
+  onReconcileAfterCancel,
   isLoading = false,
   maxAttempts = 1,
   currentAttempt = 0,
@@ -32,11 +43,26 @@ export default function SubmissionForm({
   const [files, setFiles] = useState<File[]>([]);
   const [links, setLinks] = useState<SubmissionLinkDraft[]>([]);
   const [error, setError] = useState<string>("");
+  const [notice, setNotice] = useState<string>("");
   const [dragActive, setDragActive] = useState(false);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [localVideoPreviewError, setLocalVideoPreviewError] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    setLocalVideoPreviewError(false);
     if (!previewFile) {
       setPreviewUrl("");
       return;
@@ -49,12 +75,9 @@ export default function SubmissionForm({
   const canSubmitMore = !maxAttempts || currentAttempt < maxAttempts;
 
   const validateAndSetFiles = (incomingFiles: File[]) => {
-    const oversized = incomingFiles.find(
-      (file) => file.size > maxClassworkMaterialSize,
-    );
-    if (oversized) {
-      const msg = `"${oversized.name}" exceeds the 10MB limit.`;
-      setError(msg);
+    const invalid = validateAttachmentSelection(incomingFiles);
+    if (invalid) {
+      setError(invalid);
       return;
     }
     setFiles(incomingFiles);
@@ -91,9 +114,19 @@ export default function SubmissionForm({
     setFiles(files.filter((_, i) => i !== index));
   };
 
+  const isUploading = uploadProgress !== null;
+  const isProcessingUpload = uploadProgress !== null && uploadProgress >= 100;
+  const isBusy = isLoading || isUploading;
+
+  const cancelUpload = () => {
+    abortControllerRef.current?.abort();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isBusy) return;
     setError("");
+    setNotice("");
 
     if (!canSubmitMore) {
       setError(`Maximum attempts (${maxAttempts}) reached`);
@@ -127,22 +160,56 @@ export default function SubmissionForm({
       urls.add(value);
     }
 
-    const oversized = files.find(
-      (file) => file.size > maxClassworkMaterialSize,
-    );
-    if (oversized) {
-      const msg = `"${oversized.name}" exceeds the 10MB limit.`;
-      setError(msg);
+    const invalid = validateAttachmentSelection(files);
+    if (invalid) {
+      setError(invalid);
       return;
     }
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     try {
-      await onSubmit(files, links.map((link) => ({ url: link.url.trim(), title: link.title?.trim() || null })));
+      setUploadProgress(0);
+      await onSubmit(
+        files,
+        links.map((link) => ({ url: link.url.trim(), title: link.title?.trim() || null })),
+        (percent) => {
+          if (mountedRef.current) setUploadProgress(percent);
+        },
+        controller.signal,
+      );
+      if (!mountedRef.current) return;
       setFiles([]);
       setLinks([]);
       setPreviewFile(null);
+      setNotice("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit");
+      if (!mountedRef.current) return;
+      if (isUploadCancelledError(err)) {
+        const alreadySaved = onReconcileAfterCancel
+          ? await onReconcileAfterCancel().catch(() => false)
+          : false;
+        if (!mountedRef.current) return;
+        if (alreadySaved) {
+          setFiles([]);
+          setLinks([]);
+          setPreviewFile(null);
+          setNotice("Your submission had already finished saving on the server.");
+        } else {
+          setNotice(
+            "Upload cancelled. Your selected files and links were kept so you can retry. If the upload had already reached the server, check your submission status before retrying.",
+          );
+        }
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to submit");
+      }
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      if (mountedRef.current) {
+        setUploadProgress(null);
+      }
     }
   };
 
@@ -150,6 +217,9 @@ export default function SubmissionForm({
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       {error && (
         <Alert status="error"><Alert.Description>{error}</Alert.Description></Alert>
+      )}
+      {notice && (
+        <Alert status="warning"><Alert.Description>{notice}</Alert.Description></Alert>
       )}
 
       {!canSubmitMore && (
@@ -175,7 +245,7 @@ export default function SubmissionForm({
           Drag and drop files here, or click to select
         </p>
         <p className="text-xs text-gray-500 mb-3">
-          You can upload multiple files (up to 10MB each)
+          Up to 10 files and 200 MB combined. Documents: 10 MB each; MP4, WebM, or MOV videos: 100 MB each.
         </p>
         <input
           type="file"
@@ -183,6 +253,7 @@ export default function SubmissionForm({
           onChange={handleFileChange}
           className="hidden"
           id="file-input"
+          accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.mp4,.webm,.mov,video/mp4,video/webm,video/quicktime"
           disabled={isLoading || !canSubmitMore}
         />
         <label htmlFor="file-input">
@@ -198,43 +269,58 @@ export default function SubmissionForm({
           <h4 className="font-medium text-sm text-gray-700">
             Selected Files ({files.length})
           </h4>
-          <div className="space-y-1">
-            {files.map((file, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{file.name}</p>
-                  <p className="text-xs text-gray-500">
-                    {(file.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                </div>
-                <div className="ml-2 flex items-center gap-2">
-                  {submissionFilePreviewKind(file) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                      disabled={isLoading}
-                      onClick={() => setPreviewFile(file)}
+          <div className="space-y-1.5">
+            {files.map((file, index) => {
+              const video = isVideoFile(file);
+              return (
+                <div
+                  key={`${file.name}-${file.size}-${index}`}
+                  className="flex flex-col gap-2 rounded border border-border bg-muted/40 p-2.5 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="flex items-center gap-1.5 truncate text-sm font-medium"
+                      title={file.name}
                     >
-                      <Eye size={15} /> View
-                    </Button>
-                  )}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${file.name}`}
-                    onClick={() => removeFile(index)}
-                    className="p-1 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                    disabled={isLoading}
-                  >
-                    <X size={16} />
-                  </button>
+                      {video && <Video aria-hidden="true" size={15} className="shrink-0" />}
+                      <span className="truncate">{file.name}</span>
+                    </p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      {video && (
+                        <Badge variant="outline" size="sm" className="px-1.5 py-0 text-[10px] uppercase tracking-wide">
+                          Video
+                        </Badge>
+                      )}
+                      <span>{formatFileSize(file.size)}</span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {submissionFilePreviewKind(file) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 shadow-none"
+                        disabled={isBusy}
+                        onClick={() => setPreviewFile(file)}
+                      >
+                        {video ? <Play size={14} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+                        {video ? "Preview" : "View"}
+                      </Button>
+                    )}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() => removeFile(index)}
+                      className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isBusy}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -288,21 +374,51 @@ export default function SubmissionForm({
       )}
 
       {/* Submit Button */}
+      {uploadProgress !== null && (
+        <div className="space-y-2 rounded border-2 border-border bg-card p-3" role="status" aria-live="polite">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium">
+            <span>
+              {isProcessingUpload
+                ? "Processing upload on server..."
+                : `Uploading... ${uploadProgress}%`}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-xs shadow-none"
+              onClick={cancelUpload}
+            >
+              Cancel upload
+            </Button>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full border border-black bg-white">
+            <div
+              className={`h-full transition-[width] ${isProcessingUpload ? "animate-pulse bg-[#7ABA78]" : "bg-[#7ABA78]"}`}
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
       <Button
         type="submit"
         variant="default"
         size="md"
         className="w-full gap-2"
-        disabled={isLoading || !canSubmitMore || (files.length === 0 && links.length === 0)}
+        disabled={isBusy || !canSubmitMore || (files.length === 0 && links.length === 0)}
       >
-        {isLoading ? "Submitting..." : "Submit Assignment"}
+        {isProcessingUpload
+          ? "Processing..."
+          : isBusy
+            ? "Uploading..."
+            : "Submit Assignment"}
       </Button>
 
       <Dialog open={previewFile !== null} onOpenChange={(open) => { if (!open) setPreviewFile(null); }}>
         {previewFile && previewUrl && (
           <Dialog.Content size="4xl">
             <Dialog.Header position="static">
-              <Text as="h5" className="truncate font-sans text-xl font-bold">
+              <Text as="h5" className="truncate font-sans text-xl font-bold" title={previewFile.name}>
                 Preview: {previewFile.name}
               </Text>
             </Dialog.Header>
@@ -313,6 +429,25 @@ export default function SubmissionForm({
                   alt={`Preview of ${previewFile.name}`}
                   className="mx-auto max-h-[65dvh] max-w-full border-2 border-black bg-white object-contain shadow-[4px_4px_0_#000]"
                 />
+              ) : submissionFilePreviewKind(previewFile) === "video" ? (
+                localVideoPreviewError ? (
+                  <div className="mx-auto max-w-lg rounded border-2 border-border bg-card p-5 text-foreground">
+                    <Alert status="warning">
+                      <Alert.Description>{LOCAL_VIDEO_PREVIEW_UNAVAILABLE_MESSAGE}</Alert.Description>
+                    </Alert>
+                  </div>
+                ) : (
+                  <video
+                    src={previewUrl}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    onError={() => setLocalVideoPreviewError(true)}
+                    className="mx-auto max-h-[65dvh] max-w-full border-2 border-black bg-black shadow-[4px_4px_0_#000]"
+                  >
+                    Your browser does not support video playback.
+                  </video>
+                )
               ) : (
                 <iframe
                   src={previewUrl}

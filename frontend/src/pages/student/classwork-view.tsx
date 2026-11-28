@@ -41,7 +41,8 @@ import ClassworkItemLine from "@/components/item-line/classwork";
 import StudentQuizFullscreen from "./forms/student-quiz-fullscreen";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { useToast } from "@/components/retroui/Toast";
-import { API_URL, apiFetch } from "@/lib/api";
+import { API_URL, apiFetch, apiUpload, formatUploadErrorResponse } from "@/lib/api";
+import { hasSubmissionAdvanced } from "@/lib/classwork-utils";
 import {
   getQuizAttempt,
   STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE,
@@ -286,20 +287,46 @@ export default function StudentClassworkView() {
   const status =
     quiz?.status ?? submission?.status ?? detail?.submission_status;
 
-  const submitFiles = async (files: File[], links: SubmissionLinkDraft[]) => {
+  const reconcileSubmissionAfterCancel = async (): Promise<boolean> => {
+    try {
+      const response = await apiFetch("/api/v1/submissions/my-submissions");
+      if (!response.ok) return false;
+      const list = (await response.json()) as Submission[];
+      const latest = list.find((item) => item.classwork_assignment_id === assignmentId);
+      if (latest && hasSubmissionAdvanced(submission, latest)) {
+        setSubmission(latest);
+        setDetail((current) =>
+          current ? { ...current, submission_status: latest.status } : current,
+        );
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  const submitFiles = async (
+    files: File[],
+    links: SubmissionLinkDraft[],
+    onProgress?: (percent: number) => void,
+    signal?: AbortSignal,
+  ) => {
     if (!isWritableContext) return;
     setActionLoading(true);
     try {
       const body = new FormData();
       files.forEach((file) => body.append("files", file));
       if (links.length) body.append("links", JSON.stringify(links));
-      const response = await apiFetch(
+      const response = await apiUpload(
         `/api/v1/submissions/assignment/${assignmentId}/submit`,
-        { method: "POST", body },
+        body,
+        { onProgress, signal },
       );
       if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(typeof payload?.detail === "string" ? payload.detail : "Failed to submit assignment.");
+        throw new Error(
+          await formatUploadErrorResponse(response, "Failed to submit assignment."),
+        );
       }
       const next = (await response.json()) as Submission;
       setSubmission(next);
@@ -984,6 +1011,7 @@ export default function StudentClassworkView() {
                       isRetrying={actionLoading}
                       onDeleteSubmission={deleteSubmission}
                       onSubmitRetry={isWritableContext ? submitFiles : undefined}
+                      onReconcileAfterCancel={reconcileSubmissionAfterCancel}
                     />
                   ) : closed ? (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -997,6 +1025,7 @@ export default function StudentClassworkView() {
                       currentAttempt={0}
                       isLoading={actionLoading}
                       onSubmit={submitFiles}
+                      onReconcileAfterCancel={reconcileSubmissionAfterCancel}
                     />
                   )}
                 </Card>

@@ -1,7 +1,7 @@
 "use client";
 
 import { DatePicker } from "@/components/retroui/DatePicker";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { unorderedValues, optionalNumber } from "@/lib/form-changes";
 import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2,
   UserCheck,
+  Video,
 } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/teacher/button";
@@ -26,7 +27,12 @@ import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Alert } from "@/components/retroui/Alert";
+import { Badge } from "@/components/retroui/Badge";
 import { ClassworkSettingRow } from "@/components/classwork-setting-row";
+import {
+  StoredVideoPreviewButton,
+  VideoFilePreview,
+} from "@/components/video-file-preview";
 import {
   Tooltip,
   TooltipContent,
@@ -40,15 +46,20 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { apiFetch } from "@/lib/api";
 import {
-  allowedClassworkMaterialExtensions,
+  API_URL,
+  apiFetch,
+  apiUpload,
+  formatUploadErrorResponse,
+  isUploadCancelledError,
+} from "@/lib/api";
+import {
   classworkToEditDraft,
-  fileExtension,
   formatFileSize,
+  isVideoFile,
   isQuizType,
   isReadingType,
-  maxClassworkMaterialSize,
+  validateAttachmentSelection,
 } from "@/lib/classwork-utils";
 import type {
   ActivityRubricLevel,
@@ -176,6 +187,16 @@ export default function EditClassworkModal({
     "submitted" | null
   >(null);
   const [editMaterials, setEditMaterials] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadNotice, setUploadNotice] = useState("");
+  const uploadAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      uploadAbortRef.current?.abort();
+      uploadAbortRef.current = null;
+    };
+  }, []);
   const [referenceLinks, setReferenceLinks] = useState<ReferenceLinkDraft[]>(
     () => editReferenceLinks(classwork),
   );
@@ -643,33 +664,28 @@ export default function EditClassworkModal({
   const addEditMaterials = (files: FileList | null) => {
     if (!files) return;
     const selectedFiles = Array.from(files);
-    const invalid = selectedFiles.find(
-      (file) =>
-        !allowedClassworkMaterialExtensions.includes(fileExtension(file.name)),
-    );
-    if (invalid) {
-      setFormError(
-        `${invalid.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`,
-      );
-      return;
-    }
-    const oversized = selectedFiles.find(
-      (file) => file.size > maxClassworkMaterialSize,
-    );
-    if (oversized) {
-      setFormError(`${oversized.name} is larger than the 10 MB limit.`);
-      return;
-    }
     setEditMaterials((current) => {
       const existing = new Set(
         current.map((file) => `${file.name}-${file.size}`),
       );
-      return [
+      const next = [
         ...current,
         ...selectedFiles.filter(
           (file) => !existing.has(`${file.name}-${file.size}`),
         ),
       ];
+      const savedAttachments = currentClasswork?.attachments ?? [];
+      const invalid = validateAttachmentSelection(
+        next,
+        savedAttachments.length,
+        savedAttachments.reduce((total, attachment) => total + Number(attachment.file_size || 0), 0),
+      );
+      if (invalid) {
+        setFormError(invalid);
+        return current;
+      }
+      setFormError("");
+      return next;
     });
   };
 
@@ -1027,6 +1043,9 @@ export default function EditClassworkModal({
         editMaterials.length === 0);
 
     setIsSavingEdit(true);
+    const preUploadAttachmentIds = new Set(
+      (currentClasswork.attachments ?? []).map((att) => att.classwork_attachment_id),
+    );
     try {
       let updated: TeacherClasswork = currentClasswork;
       if (shouldRunClassworkUpdate) {
@@ -1258,19 +1277,29 @@ export default function EditClassworkModal({
 
       // If there are pending materials to upload, upload them
       if (editMaterials.length > 0) {
+        setUploadNotice("");
+        setUploadProgress(0);
+        const controller = new AbortController();
+        uploadAbortRef.current = controller;
         const uploadedAttachments: ClassworkAttachment[] = [];
         for (let i = 0; i < editMaterials.length; i++) {
           const material = editMaterials[i];
           const formData = new FormData();
           formData.append("file", material);
-          const uploadResponse = await apiFetch(
+          const uploadResponse = await apiUpload(
             `/api/v1/classwork-assignments/classwork/${currentClasswork.classwork_id}/attachments`,
-            { method: "POST", body: formData },
+            formData,
+            {
+              onProgress: (percent) =>
+                setUploadProgress(Math.round(((i + percent / 100) / editMaterials.length) * 100)),
+              signal: controller.signal,
+            },
           );
           if (!uploadResponse.ok) {
-            const body = await uploadResponse.json().catch(() => ({}));
-            const uploadErrMsg =
-              body.detail || `Unable to upload ${material.name}.`;
+            const uploadErrMsg = await formatUploadErrorResponse(
+              uploadResponse,
+              `Unable to upload ${material.name}.`,
+            );
 
             const partialAttachments = [
               ...(updated.attachments ?? []),
@@ -1294,6 +1323,7 @@ export default function EditClassworkModal({
           uploadedAttachments.push(uploadedAtt);
         }
         setEditMaterials([]);
+        setUploadProgress(null);
       }
 
       const refreshed = await apiFetch(
@@ -1307,10 +1337,51 @@ export default function EditClassworkModal({
       toast.success({ title: "Classwork updated successfully." });
       onClose();
     } catch (err) {
-      setFormError(
-        err instanceof Error ? err.message : "Unable to update classwork.",
-      );
+      if (isUploadCancelledError(err)) {
+        // Reconcile server state so ONLY newly persisted attachments (not pre-existing
+        // attachments with matching names/sizes) are removed from the pending queue.
+        let latestAttachments = currentClasswork.attachments;
+        try {
+          const refreshed = await apiFetch(
+            `/api/v1/classwork-assignments/classwork/${currentClasswork.classwork_id}`,
+          );
+          if (refreshed.ok) {
+            const latest = (await refreshed.json()) as TeacherClasswork;
+            latestAttachments = latest.attachments ?? [];
+            setCurrentClasswork(latest);
+            onSuccess(latest);
+          }
+        } catch {
+          // Keep current view state if reconciliation fetch fails.
+        }
+        const newlySavedCounts = new Map<string, number>();
+        for (const att of latestAttachments) {
+          if (preUploadAttachmentIds.has(att.classwork_attachment_id)) continue;
+          const key = `${att.file_name}:${Number(att.file_size || 0)}`;
+          newlySavedCounts.set(key, (newlySavedCounts.get(key) ?? 0) + 1);
+        }
+        setEditMaterials((prev) =>
+          prev.filter((file) => {
+            const key = `${file.name}:${file.size}`;
+            const remaining = newlySavedCounts.get(key) ?? 0;
+            if (remaining > 0) {
+              newlySavedCounts.set(key, remaining - 1);
+              return false;
+            }
+            return true;
+          }),
+        );
+        setUploadNotice(
+          "Upload cancelled. Remaining files were kept for retry, and saved attachments were synced with the server.",
+        );
+      } else {
+        setFormError(
+          err instanceof Error ? err.message : "Unable to update classwork.",
+        );
+      }
     } finally {
+      uploadAbortRef.current = null;
+      setUploadProgress(null);
       setIsSavingEdit(false);
     }
   };
@@ -1614,8 +1685,9 @@ export default function EditClassworkModal({
                         <EmptyHeader>
                           <EmptyTitle>No Materials Added</EmptyTitle>
                           <EmptyDescription className="flex flex-col -gap-3 text-center whitespace-nowrap">
-                            <span className="font-semibold">Max 10mb</span>
-                            <span>(pdf, docx, pptx, jpg & png)</span>
+                            <span className="font-semibold">Up to 10 files · 200 MB combined</span>
+                            <span>Documents: 10 MB · videos: 100 MB</span>
+                            <span>(pdf, docx, pptx, jpg, png, mp4, webm & mov)</span>
                           </EmptyDescription>
                         </EmptyHeader>
                         <EmptyContent>
@@ -1632,7 +1704,7 @@ export default function EditClassworkModal({
                               <input
                                 type="file"
                                 multiple
-                                accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
+                                accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.mp4,.webm,.mov,video/mp4,video/webm,video/quicktime"
                                 onChange={(event) => {
                                   addEditMaterials(event.target.files);
                                   event.target.value = "";
@@ -1646,90 +1718,121 @@ export default function EditClassworkModal({
                       </Empty>
                     ) : (
                       <div className="w-full flex flex-wrap gap-3">
-                        {currentClasswork.attachments.map((attachment) => (
-                          <div
-                            key={attachment.classwork_attachment_id}
-                            className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
-                          >
-                            <Tooltip>
-                              <TooltipTrigger
-                                render={
-                                  <span className="absolute right-1 top-1 inline-flex">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        removeSelectedAttachment(
-                                          attachment.classwork_attachment_id,
-                                        )
-                                      }
-                                      disabled={
-                                        isSavingEdit ||
-                                        removingAttachmentId ===
-                                        attachment.classwork_attachment_id
-                                      }
-                                      className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                      aria-label={`Remove ${attachment.file_name}`}
-                                    >
-                                      <Trash2 size={13} />
-                                    </button>
-                                  </span>
-                                }
-                              />
-                              <TooltipContent>Remove file</TooltipContent>
-                            </Tooltip>
-                            <FileText className="mx-auto mt-5" size={22} />
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-semibold">
-                                {attachment.file_name}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Attached
-                              </p>
+                        {currentClasswork.attachments.map((attachment) => {
+                          const video = isVideoFile({
+                            name: attachment.file_name,
+                            type: attachment.file_type ?? "",
+                          });
+                          return (
+                            <div
+                              key={attachment.classwork_attachment_id}
+                              className="flex w-full flex-col justify-between gap-2 rounded border-2 border-border bg-card p-2.5 shadow-none sm:w-44"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <Badge variant="outline" size="sm" className="gap-1 px-1.5 py-0 text-[10px] uppercase tracking-wide">
+                                  {video ? <Video size={11} aria-hidden="true" /> : <FileText size={11} aria-hidden="true" />}
+                                  {video ? "Video" : "File"}
+                                </Badge>
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          removeSelectedAttachment(
+                                            attachment.classwork_attachment_id,
+                                          )
+                                        }
+                                        disabled={
+                                          isSavingEdit ||
+                                          removingAttachmentId ===
+                                          attachment.classwork_attachment_id
+                                        }
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                        aria-label={`Remove ${attachment.file_name}`}
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    }
+                                  />
+                                  <TooltipContent>Remove file</TooltipContent>
+                                </Tooltip>
+                              </div>
+                              <div className="min-w-0 text-left">
+                                <p className="truncate text-xs font-semibold" title={attachment.file_name}>
+                                  {attachment.file_name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {attachment.file_size != null
+                                    ? formatFileSize(Number(attachment.file_size))
+                                    : "Attached"}
+                                </p>
+                              </div>
+                              {video && (
+                                <StoredVideoPreviewButton
+                                  fileName={attachment.file_name}
+                                  downloadPath={`${API_URL}/api/v1/classwork-assignments/classwork/${currentClasswork.classwork_id}/attachments/${attachment.classwork_attachment_id}/download`}
+                                  disabled={
+                                    isSavingEdit ||
+                                    removingAttachmentId === attachment.classwork_attachment_id
+                                  }
+                                />
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
 
-                        {editMaterials.map((material, index) => (
-                          <div
-                            key={`${material.name}-${material.size}`}
-                            className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
-                          >
-                            <Tooltip>
-                              <TooltipTrigger
-                                render={
-                                  <span className="absolute right-1 top-1 inline-flex">
-                                    <button
-                                      type="button"
-                                      onClick={() => removeEditMaterial(index)}
-                                      disabled={isSavingEdit}
-                                      className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                      aria-label={`Remove ${material.name}`}
-                                    >
-                                      <Trash2 size={13} />
-                                    </button>
-                                  </span>
-                                }
-                              />
-                              <TooltipContent>Remove file</TooltipContent>
-                            </Tooltip>
-                            <FileText className="mx-auto mt-5" size={22} />
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-semibold">
-                                {material.name}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {formatFileSize(material.size)}
-                              </p>
+                        {editMaterials.map((material, index) => {
+                          const video = isVideoFile(material);
+                          return (
+                            <div
+                              key={`${material.name}-${material.size}`}
+                              className="flex w-full flex-col justify-between gap-2 rounded border-2 border-border bg-card p-2.5 shadow-none sm:w-44"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <Badge variant="outline" size="sm" className="gap-1 px-1.5 py-0 text-[10px] uppercase tracking-wide">
+                                  {video ? <Video size={11} aria-hidden="true" /> : <FileText size={11} aria-hidden="true" />}
+                                  {video ? "Video" : "File"}
+                                </Badge>
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <button
+                                        type="button"
+                                        onClick={() => removeEditMaterial(index)}
+                                        disabled={isSavingEdit}
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                        aria-label={`Remove ${material.name}`}
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    }
+                                  />
+                                  <TooltipContent>Remove file</TooltipContent>
+                                </Tooltip>
+                              </div>
+                              <div className="min-w-0 text-left">
+                                <p className="truncate text-xs font-semibold" title={material.name}>
+                                  {material.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatFileSize(material.size)}
+                                </p>
+                              </div>
+                              {video && (
+                                <VideoFilePreview file={material} disabled={isSavingEdit} />
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
 
-                        <label className="flex h-32 w-28 cursor-pointer items-center justify-center border-2 border-dashed border-black bg-[#F6E9B2] text-sm font-bold shadow-md hover:bg-[#7ABA78] hover:shadow-none transition-all">
-                          <Plus size={20} />
+                        <label className="flex min-h-[7rem] w-full cursor-pointer items-center justify-center gap-1.5 border-2 border-dashed border-black bg-[#F6E9B2] text-sm font-bold shadow-md hover:bg-[#7ABA78] hover:shadow-none transition-all sm:w-44">
+                          <Plus size={18} />
+                          <span>Add file</span>
                           <input
                             type="file"
                             multiple
-                            accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
+                            accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.mp4,.webm,.mov,video/mp4,video/webm,video/quicktime"
                             onChange={(event) => {
                               addEditMaterials(event.target.files);
                               event.target.value = "";
@@ -1740,6 +1843,37 @@ export default function EditClassworkModal({
                             className="hidden"
                           />
                         </label>
+                      </div>
+                    )}
+                    {uploadNotice && (
+                      <Alert status="warning" className="mt-3">
+                        <Alert.Description>{uploadNotice}</Alert.Description>
+                      </Alert>
+                    )}
+                    {uploadProgress !== null && (
+                      <div className="mt-3 space-y-2 rounded border-2 border-border bg-card p-3" role="status" aria-live="polite">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium">
+                          <span>
+                            {uploadProgress >= 100
+                              ? "Processing upload on server..."
+                              : `Uploading materials... ${uploadProgress}%`}
+                          </span>
+                          <RetroButton
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs shadow-none"
+                            onClick={() => uploadAbortRef.current?.abort()}
+                          >
+                            Cancel upload
+                          </RetroButton>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full border border-black bg-white">
+                          <div
+                            className={`h-full transition-[width] ${uploadProgress >= 100 ? "animate-pulse bg-[#7ABA78]" : "bg-[#7ABA78]"}`}
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
                       </div>
                     )}
                   </Field>
@@ -2337,7 +2471,11 @@ export default function EditClassworkModal({
                   className="cursor-pointer"
                 >
                   <Check size={16} />
-                  Save Changes
+                  {isSavingEdit
+                    ? uploadProgress !== null && uploadProgress >= 100
+                      ? "Processing..."
+                      : "Saving..."
+                    : "Save Changes"}
                 </Button>
               </div>
             </Dialog.Footer>

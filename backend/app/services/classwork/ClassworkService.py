@@ -1,16 +1,25 @@
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
+import logging
 from typing import Any, Optional, cast
 from uuid import UUID
 from app.schemas.Notification import NotificationType
 
-from fastapi import HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import HTTPException, Request, UploadFile
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.core.FileUpload import delete_file, save_file
+from app.core.FileUpload import (
+    ATTACHMENT_SAVE_ERROR,
+    delete_file,
+    protected_file_response,
+    save_file,
+    validate_attachment_collection,
+    validate_saved_attachment_collection,
+)
 from app.core.ExternalUrl import validate_external_link_title, validate_external_url
 from app.core.Security import decode_access_token
 from app.models.academic.AcademicLevel import AcademicLevel
@@ -82,6 +91,53 @@ from app.services.academic.AcademicLifecycleService import resolve_active_academ
 
 
 MAX_CLASSWORK_REFERENCE_LINKS = 20
+FILE_DELETION_ERROR = "The attachment record was removed, but stored-file cleanup failed."
+logger = logging.getLogger(__name__)
+
+
+def _safe_rollback(db: Session) -> None:
+    try:
+        db.rollback()
+    except Exception:
+        logger.error("Could not roll back classwork database session cleanly", exc_info=True)
+
+
+def _safe_delete_files(file_paths: list[str], delete_file_func=delete_file) -> None:
+    for path in file_paths:
+        try:
+            delete_file_func(path)
+        except Exception:
+            logger.error("Unexpected error deleting staged classwork attachment %s", path, exc_info=True)
+
+
+def _cleanup_uncommitted_classwork_files(
+    db: Session,
+    file_paths: list[str],
+    delete_file_func=delete_file,
+    *,
+    commit_attempted: bool = True,
+) -> None:
+    """Delete staged files only after confirming no committed attachment references them."""
+    if not file_paths:
+        return
+    if not commit_attempted:
+        _safe_delete_files(file_paths, delete_file_func)
+        return
+    try:
+        committed = {
+            row[0]
+            for row in db.query(ClassworkAttachment.file_path)
+            .filter(ClassworkAttachment.file_path.in_(file_paths))
+            .all()
+        }
+    except Exception:
+        logger.error(
+            "AMBIGUOUS_COMMIT ORPHAN_FILE_RISK: Could not verify failed classwork commit; retaining %d staged file(s) conservatively",
+            len(file_paths),
+            exc_info=True,
+        )
+        return
+    _safe_delete_files([path for path in file_paths if path not in committed], delete_file_func)
 
 
 def ensure_published_quiz_student_ready(db: Session, classwork: Classwork) -> None:
@@ -743,7 +799,9 @@ async def create_classwork_wizard_record(
                 db.add(assignment)
                 created_assignments.append(assignment)
 
-        for upload in files or []:
+        uploads = list(files or [])
+        validate_attachment_collection([], uploads)
+        for upload in uploads:
             info = normalize_uploaded_path(await save_file_func(upload, "classworks"))
             saved_paths.append(info["file_path"])
             db.add(ClassworkAttachment(classwork_id=classwork.classwork_id, **info))
@@ -791,7 +849,11 @@ async def create_classwork_wizard_record(
                 items=items,
             )
             _stage_targeted_assignment_notification(db, created_assignments[0], classwork, subject_id)
+        commit_attempted = False
+        committed = False
+        commit_attempted = True
         db.commit()
+        committed = True
         db.refresh(classwork)
 
         notify_class_ids = (
@@ -820,9 +882,26 @@ async def create_classwork_wizard_record(
             )
 
         return build_classwork_response(classwork)
+    except asyncio.CancelledError:
+        if not locals().get("committed", False):
+            _safe_rollback(db)
+            _cleanup_uncommitted_classwork_files(
+                db, saved_paths, commit_attempted=locals().get("commit_attempted", False)
+            )
+        raise
+    except IntegrityError as exc:
+        if not locals().get("committed", False):
+            _safe_rollback(db)
+            _cleanup_uncommitted_classwork_files(
+                db, saved_paths, commit_attempted=locals().get("commit_attempted", False)
+            )
+        raise HTTPException(status_code=500, detail=ATTACHMENT_SAVE_ERROR) from exc
     except Exception:
-        db.rollback()
-        cleanup_saved_files(saved_paths)
+        if not locals().get("committed", False):
+            _safe_rollback(db)
+            _cleanup_uncommitted_classwork_files(
+                db, saved_paths, commit_attempted=locals().get("commit_attempted", False)
+            )
         raise
 
 
@@ -1553,24 +1632,75 @@ async def add_classwork_attachment(
     save_file_func=save_file,
     delete_file_func=delete_file,
 ) -> ClassworkAttachmentResponse:
-    classwork = db.query(Classwork).filter(
+    # Fast non-locking pre-check so unauthorized/over-quota requests fail before disk I/O
+    # and the PostgreSQL row lock is never held across async file streaming.
+    precheck_classwork = db.query(Classwork).filter(
         Classwork.classwork_id == classwork_id,
         Classwork.created_by_staff_id == staff_id,
     ).first()
-    if not classwork:
+    if not precheck_classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
-    if classwork.is_archived:
+    if precheck_classwork.is_archived:
         raise HTTPException(status_code=400, detail="Cannot attach files to archived classwork")
-    _assert_classwork_writable(db, classwork)
-    info = normalize_uploaded_path(await save_file_func(file, "classworks"))
+    _assert_classwork_writable(db, precheck_classwork)
+    precheck_attachments = (
+        db.query(ClassworkAttachment)
+        .filter(ClassworkAttachment.classwork_id == classwork_id)
+        .all()
+    )
+    validate_attachment_collection(precheck_attachments, [file])
+
+    saved_paths: list[str] = []
+    commit_attempted = False
+    committed = False
     try:
+        info = normalize_uploaded_path(await save_file_func(file, "classworks"))
+        saved_paths.append(info["file_path"])
+
+        # Locked DB critical section: zero await points while holding FOR UPDATE.
+        db.expire_all()
+        classwork = db.query(Classwork).filter(
+            Classwork.classwork_id == classwork_id,
+            Classwork.created_by_staff_id == staff_id,
+        ).with_for_update().first()
+        if not classwork:
+            raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+        if classwork.is_archived:
+            raise HTTPException(status_code=400, detail="Cannot attach files to archived classwork")
+        _assert_classwork_writable(db, classwork)
+        existing_attachments = (
+            db.query(ClassworkAttachment)
+            .filter(ClassworkAttachment.classwork_id == classwork_id)
+            .all()
+        )
+        validate_saved_attachment_collection(existing_attachments, [info])
+
         attachment = ClassworkAttachment(classwork_id=classwork_id, **info)
         db.add(attachment)
+        commit_attempted = True
         db.commit()
+        committed = True
         db.refresh(attachment)
+    except asyncio.CancelledError:
+        if not committed:
+            _safe_rollback(db)
+            _cleanup_uncommitted_classwork_files(
+                db, saved_paths, delete_file_func, commit_attempted=commit_attempted
+            )
+        raise
+    except IntegrityError as exc:
+        if not committed:
+            _safe_rollback(db)
+            _cleanup_uncommitted_classwork_files(
+                db, saved_paths, delete_file_func, commit_attempted=commit_attempted
+            )
+        raise HTTPException(status_code=500, detail=ATTACHMENT_SAVE_ERROR) from exc
     except Exception:
-        db.rollback()
-        delete_file_func(info["file_path"])
+        if not committed:
+            _safe_rollback(db)
+            _cleanup_uncommitted_classwork_files(
+                db, saved_paths, delete_file_func, commit_attempted=commit_attempted
+            )
         raise
     return build_attachment_response(attachment)
 
@@ -1585,7 +1715,7 @@ def remove_classwork_attachment(
     classwork = db.query(Classwork).filter(
         Classwork.classwork_id == classwork_id,
         Classwork.created_by_staff_id == staff_id,
-    ).first()
+    ).with_for_update().first()
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     if classwork.is_archived:
@@ -1599,9 +1729,20 @@ def remove_classwork_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    delete_file_func(attachment.file_path)
-    db.delete(attachment)
-    db.commit()
+    file_path = attachment.file_path
+    try:
+        db.delete(attachment)
+        db.commit()
+    except Exception:
+        _safe_rollback(db)
+        raise
+    if delete_file_func(file_path) is False:
+        logger.error(
+            "POST_COMMIT_CLEANUP ORPHAN_FILE_RISK: Deleted classwork attachment %s but failed to remove file %s",
+            attachment_id,
+            file_path,
+        )
+        raise HTTPException(status_code=500, detail=FILE_DELETION_ERROR)
     return {"message": "Attachment deleted"}
 
 
@@ -1611,7 +1752,8 @@ def download_classwork_file(
     payload: dict,
     inline: bool,
     db: Session,
-) -> FileResponse:
+    request: Request | None = None,
+):
     classwork = db.query(Classwork).filter(Classwork.classwork_id == classwork_id).first()
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found")
@@ -1628,12 +1770,9 @@ def download_classwork_file(
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found on server (resolved: {path})")
 
-    return FileResponse(
-        path=str(path),
-        filename=attachment.file_name,
-        media_type=attachment.file_type or "application/octet-stream",
-        content_disposition_type="inline" if inline else "attachment",
-        headers={"Cache-Control": "no-store"},
+    return protected_file_response(
+        request, path, attachment.file_name,
+        attachment.file_type or "application/octet-stream", inline,
     )
 
 

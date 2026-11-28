@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, BigInteger, Text, DateTime, ForeignKey
+from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, relationship
 from app.db.Base import Base
@@ -10,6 +10,15 @@ from app.db.Base import Base
 
 class ClassworkAttachment(Base):
     __tablename__ = "classwork_attachment"
+    __table_args__ = (
+        CheckConstraint(
+            "file_size > 0 AND file_size <= CASE "
+            "WHEN LOWER(TRIM(COALESCE(file_type, ''))) IN "
+            "('video/mp4', 'video/webm', 'video/quicktime') "
+            "THEN 104857600 ELSE 10485760 END",
+            name="classwork_attachment_size_check",
+        ),
+    )
 
     classwork_attachment_id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
     classwork_id: Mapped[int] = Column(Integer, ForeignKey("classwork.classwork_id", ondelete="CASCADE"), nullable=False)

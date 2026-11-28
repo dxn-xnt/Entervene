@@ -65,8 +65,104 @@ export const emptyClassworkDraft: CreateDraft = {
   auto_ai_feedback_enabled: false,
 };
 
-export const allowedClassworkMaterialExtensions = [".pdf", ".docx", ".ppt", ".pptx", ".jpg", ".jpeg", ".png"];
+export const videoUploadExtensions = [".mp4", ".webm", ".mov"] as const;
+export const videoUploadMimeTypes = ["video/mp4", "video/webm", "video/quicktime"] as const;
+export const videoUploadLimit = 100 * 1024 * 1024;
+export const videoUploadSizeError = "The video exceeds the maximum allowed file size of 100 MB.";
+export const allowedClassworkMaterialExtensions = [".pdf", ".docx", ".ppt", ".pptx", ".jpg", ".jpeg", ".png", ...videoUploadExtensions];
 export const maxClassworkMaterialSize = 10 * 1024 * 1024;
+export const maxAttachmentCount = 10;
+export const maxAggregateAttachmentSize = 200 * 1024 * 1024;
+export const attachmentCountError = "A maximum of 10 attachments is allowed per classwork or submission.";
+export const attachmentAggregateSizeError = "Attachments exceed the maximum aggregate size of 200 MB.";
+
+const attachmentMimeTypes: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+};
+
+export function isVideoFile(file: Pick<File, "name" | "type">) {
+  return videoUploadExtensions.includes(fileExtension(file.name) as (typeof videoUploadExtensions)[number]);
+}
+
+export function attachmentFileSizeLimit(file: Pick<File, "name" | "type">) {
+  return isVideoFile(file) ? videoUploadLimit : maxClassworkMaterialSize;
+}
+
+export function validateAttachmentFile(file: File): string | null {
+  const extension = fileExtension(file.name);
+  if (!allowedClassworkMaterialExtensions.includes(extension)) {
+    return `${file.name} is not supported. Use PDF, DOCX, PPTX, JPG, PNG, MP4, WebM, or MOV.`;
+  }
+  if (file.type.split(";", 1)[0].toLowerCase() !== attachmentMimeTypes[extension]) {
+    return `${file.name} does not match its file extension.`;
+  }
+  if (file.size === 0) return `${file.name} is empty.`;
+  if (file.size > attachmentFileSizeLimit(file)) {
+    return isVideoFile(file) ? videoUploadSizeError : `${file.name} is larger than the 10 MB limit.`;
+  }
+  return null;
+}
+
+export function validateAttachmentSelection(
+  files: File[],
+  existingCount = 0,
+  existingSize = 0,
+): string | null {
+  const invalid = files.map(validateAttachmentFile).find(Boolean);
+  if (invalid) return invalid;
+  if (existingCount + files.length > maxAttachmentCount) return attachmentCountError;
+  const incomingSize = files.reduce((total, file) => total + file.size, 0);
+  if (existingSize + incomingSize > maxAggregateAttachmentSize) return attachmentAggregateSizeError;
+  return null;
+}
+
+export type SubmissionReconciliationSnapshot = {
+  submission_id?: number | null;
+  status?: string | null;
+  attempt_count?: number | null;
+  submitted_at?: string | null;
+  attachments?: Array<{ submission_attachment_id?: number }>;
+  links?: Array<{ submission_link_id?: number; url?: string }>;
+};
+
+/**
+ * Determine whether a newly fetched submission proves the cancelled upload actually
+ * persisted on the server, without mistaking a pre-existing submission (e.g. a prior
+ * graded remediation attempt or earlier submission) for the current cancelled attempt.
+ */
+export function hasSubmissionAdvanced(
+  previous: SubmissionReconciliationSnapshot | null | undefined,
+  latest: SubmissionReconciliationSnapshot | null | undefined,
+): boolean {
+  if (!latest || latest.status === "pending") return false;
+  if (!previous || previous.status === "pending") return true;
+  if (latest.submission_id !== previous.submission_id) return true;
+  if ((latest.attempt_count ?? 0) > (previous.attempt_count ?? 0)) return true;
+  if ((latest.attachments?.length ?? 0) > (previous.attachments?.length ?? 0)) return true;
+  const prevAttIds = new Set(
+    (previous.attachments ?? []).map((a) => a.submission_attachment_id).filter((id) => id != null),
+  );
+  if (
+    (latest.attachments ?? []).some(
+      (a) => a.submission_attachment_id != null && !prevAttIds.has(a.submission_attachment_id),
+    )
+  ) {
+    return true;
+  }
+  if (latest.submitted_at && latest.submitted_at !== previous.submitted_at) return true;
+  const prevLinks = JSON.stringify((previous.links ?? []).map((l) => l.url ?? ""));
+  const latestLinks = JSON.stringify((latest.links ?? []).map((l) => l.url ?? ""));
+  return latestLinks !== prevLinks;
+}
 
 export function formatDate(value?: string | null) {
   if (!value) return "Date unavailable";

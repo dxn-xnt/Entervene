@@ -9,7 +9,7 @@ import {
 import LessonItemLine from "@/components/item-line/lesson";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
-import { apiFetch, getStudentTodos, type TodoItem } from "@/lib/api";
+import { apiFetch, apiUpload, formatUploadErrorResponse, getStudentTodos, type TodoItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
@@ -25,6 +25,7 @@ import { mergeClassworkRecords } from "@/lib/student-lesson-mastery";
 import { LoadingPanel } from "@/components/loading-panel";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 import StudentClassworkDetailModal from "@/pages/student/forms/student-classwork-detail-modal";
+import type { SubmissionLinkDraft } from "@/components/submission-form";
 import type {
   ClassworkDetail,
   LessonClasswork,
@@ -623,16 +624,26 @@ export default function SubjectLessonTab({
     }
   };
 
-  const handleSubmit = async (assignmentId: number, files: File[]) => {
+  const handleSubmit = async (
+    assignmentId: number,
+    files: File[],
+    links: SubmissionLinkDraft[] = [],
+    onProgress?: (percent: number) => void,
+    signal?: AbortSignal,
+  ) => {
     setSubmittingId(assignmentId);
     try {
       const fd = new FormData();
       files.forEach((f) => fd.append("files", f));
-      const res = await apiFetch(
+      if (links.length) fd.append("links", JSON.stringify(links));
+      const res = await apiUpload(
         `/api/v1/submissions/assignment/${assignmentId}/submit`,
-        { method: "POST", body: fd },
+        fd,
+        { onProgress, signal },
       );
-      if (!res.ok) throw new Error("Failed to submit.");
+      if (!res.ok) {
+        throw new Error(await formatUploadErrorResponse(res, "Failed to submit."));
+      }
       const sub = (await res.json()) as Submission;
       setSelectedSubmission(sub);
       updateClassworkStatus(assignmentId, sub.status, sub.grade);
