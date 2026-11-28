@@ -424,17 +424,6 @@ const StoryBoard = () => {
                   <h1 className="whitespace-nowrap text-xl font-bold sm:text-2xl md:text-4xl">
                     Study Board
                   </h1>
-                  {(selectedPeriod?.period || selectedYear?.year_label) && (
-                    <Badge
-                      variant="outline"
-                      size="sm"
-                      className="hidden sm:inline-flex"
-                    >
-                      {[selectedPeriod?.period, selectedYear?.year_label]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </Badge>
-                  )}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
