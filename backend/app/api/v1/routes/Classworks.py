@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.core.Dependencies import get_staff_id, get_student_record, require_role
 from app.api.v1.routes.Auth import get_current_user
-from app.core.FileUpload import delete_file, save_file
+from app.core.FileUpload import AttachmentLimitedRoute, delete_file, save_file
 from app.db.Session import get_db
 from app.schemas.Classwork import (
     ClassworkAssignRequest,
@@ -39,7 +39,7 @@ from app.services.classwork.ClassworkService import (
     update_classwork_record,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=AttachmentLimitedRoute)
 
 
 @router.post("/", response_model=ClassworkResponse)
@@ -238,7 +238,7 @@ def download_classwork_attachment(
     db: Session = Depends(get_db),
 ):
     payload = auth_payload_from_request(request, ACCESS_COOKIE_NAME, token)
-    return download_classwork_file(classwork_id, attachment_id, payload, inline, db)
+    return download_classwork_file(classwork_id, attachment_id, payload, inline, db, request)
 
 
 @router.post("/classwork/{classwork_id}/assign")

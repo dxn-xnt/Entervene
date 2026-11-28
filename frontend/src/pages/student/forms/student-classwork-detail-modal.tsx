@@ -16,9 +16,10 @@ import { Dialog } from "@/components/retroui/Dialog";
 import IconContainer from "@/components/icon-container";
 import { StudentDialogCloseButton } from "@/components/student/student-dialog-close-button";
 import AttachmentDisplay from "@/components/attachment-display";
-import SubmissionForm from "@/components/submission-form";
+import SubmissionForm, { type SubmissionLinkDraft } from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import { API_URL } from "@/lib/api";
+import { hasSubmissionAdvanced } from "@/lib/classwork-utils";
 import {
   STUDY_SUPPORT_NEEDS_TEACHER_REVIEW_MESSAGE,
   STUDY_SUPPORT_QUIZ_PASSED_MESSAGE,
@@ -63,7 +64,13 @@ interface StudentClassworkDetailModalProps {
   onClose: () => void;
   onStartQuiz: () => Promise<void>;
   onSubmitQuiz: (autoSubmit?: boolean) => Promise<void>;
-  onSubmitFiles: (assignmentId: number, files: File[]) => Promise<void>;
+  onSubmitFiles: (
+    assignmentId: number,
+    files: File[],
+    links?: SubmissionLinkDraft[],
+    onProgress?: (percent: number) => void,
+    signal?: AbortSignal,
+  ) => Promise<void>;
   onCompleteReading: (assignmentId: number) => Promise<void>;
   onDeleteSubmission: (assignmentId: number) => Promise<void>;
   onFetchSubmission: (assignmentId: number) => Promise<Submission | null>;
@@ -629,12 +636,25 @@ export default function StudentClassworkDetailModal({
                           selectedClasswork.classwork_assignment_id,
                         )
                       }
-                      onSubmitRetry={(files) =>
+                      onSubmitRetry={(files, links, onProgress, signal) =>
                         onSubmitFiles(
                           selectedClasswork.classwork_assignment_id,
                           files,
+                          links,
+                          onProgress,
+                          signal,
                         )
                       }
+                      onReconcileAfterCancel={async () => {
+                        const sub = await onFetchSubmission(
+                          selectedClasswork.classwork_assignment_id,
+                        );
+                        if (sub && hasSubmissionAdvanced(selectedSubmission, sub)) {
+                          setSelectedSubmission(sub);
+                          return true;
+                        }
+                        return false;
+                      }}
                       isRetrying={
                         submittingId ===
                         selectedClasswork.classwork_assignment_id
@@ -658,12 +678,25 @@ export default function StudentClassworkDetailModal({
                         submittingId ===
                         selectedClasswork.classwork_assignment_id
                       }
-                      onSubmit={(files) =>
+                      onSubmit={(files, links, onProgress, signal) =>
                         onSubmitFiles(
                           selectedClasswork.classwork_assignment_id,
                           files,
+                          links,
+                          onProgress,
+                          signal,
                         )
                       }
+                      onReconcileAfterCancel={async () => {
+                        const sub = await onFetchSubmission(
+                          selectedClasswork.classwork_assignment_id,
+                        );
+                        if (sub && hasSubmissionAdvanced(selectedSubmission, sub)) {
+                          setSelectedSubmission(sub);
+                          return true;
+                        }
+                        return false;
+                      }}
                     />
                   )}
                 </Card>

@@ -643,6 +643,147 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   }
 }
 
+export type UploadProgressHandler = (percent: number, loaded: number, total: number) => void;
+
+export type UploadOptions = {
+  onProgress?: UploadProgressHandler;
+  signal?: AbortSignal;
+};
+
+export function isUploadCancelledError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      (error as { name?: unknown }).name === "AbortError")
+  );
+}
+
+/** Format upload failure responses consistently, respecting Retry-After on HTTP 429. */
+export async function formatUploadErrorResponse(
+  response: Response,
+  fallbackMessage: string,
+): Promise<string> {
+  if (response.status === 429) {
+    const retryAfterRaw = response.headers.get("Retry-After");
+    const retrySeconds = retryAfterRaw ? Number.parseInt(retryAfterRaw, 10) : Number.NaN;
+    if (Number.isFinite(retrySeconds) && retrySeconds > 0) {
+      return `Too many uploads are in progress. Please wait ${retrySeconds} seconds and try again.`;
+    }
+    return "Too many uploads are in progress. Please wait a moment and try again.";
+  }
+  if (response.status === 413) {
+    return "The upload exceeds the maximum allowed request size.";
+  }
+  const body = await response.json().catch(() => null);
+  const detail = body?.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((entry: { loc?: (string | number)[]; msg?: string }) => {
+        const field = (entry.loc || []).filter((item) => item !== "body").join(".");
+        return field ? `${field}: ${entry.msg}` : entry.msg || "Validation error";
+      })
+      .join("; ");
+    if (msgs) return msgs;
+  }
+  if (detail && typeof detail === "object" && typeof detail.message === "string" && detail.message.trim()) {
+    return detail.message;
+  }
+  return fallbackMessage;
+}
+
+function xhrUpload(
+  path: string,
+  body: FormData,
+  onProgress?: UploadProgressHandler,
+  signal?: AbortSignal,
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Upload cancelled.", "AbortError"));
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    const url = /^https?:\/\//i.test(path) ? path : `${API_URL}${path}`;
+    xhr.open("POST", url);
+    xhr.withCredentials = true;
+    xhr.responseType = "blob";
+    const csrfToken = getCookie("entervene_csrf") ?? sessionCsrfToken ?? getStoredCsrfToken();
+    if (csrfToken) xhr.setRequestHeader("X-CSRF-Token", csrfToken);
+
+    const handleAbortSignal = () => {
+      xhr.abort();
+    };
+    const cleanupSignal = () => {
+      signal?.removeEventListener("abort", handleAbortSignal);
+    };
+    signal?.addEventListener("abort", handleAbortSignal, { once: true });
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable && event.total > 0 && onProgress) {
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)), event.loaded, event.total);
+      }
+    });
+    const responseFromXhr = () => {
+      const headers = new Headers();
+      xhr.getAllResponseHeaders().trim().split(/[\r\n]+/).forEach((line) => {
+        const separator = line.indexOf(":");
+        if (separator > 0) headers.append(line.slice(0, separator).trim(), line.slice(separator + 1).trim());
+      });
+      const issuedCsrfToken = headers.get("X-CSRF-Token");
+      if (issuedCsrfToken) setStoredCsrfToken(issuedCsrfToken);
+      return new Response(xhr.response, { status: xhr.status, statusText: xhr.statusText, headers });
+    };
+    xhr.addEventListener("error", () => {
+      cleanupSignal();
+      if (xhr.status > 0) {
+        resolve(responseFromXhr());
+        return;
+      }
+      reject(new TypeError("Unable to reach the server while uploading."));
+    });
+    xhr.addEventListener("abort", () => {
+      cleanupSignal();
+      reject(new DOMException("Upload cancelled.", "AbortError"));
+    });
+    xhr.addEventListener("load", () => {
+      cleanupSignal();
+      resolve(responseFromXhr());
+    });
+    xhr.send(body);
+  });
+}
+
+/** Multipart upload with real byte progress, AbortSignal cancellation, and cookie/CSRF auth. */
+export async function apiUpload(
+  path: string,
+  body: FormData,
+  progressOrOptions?: UploadProgressHandler | UploadOptions,
+) {
+  const onProgress = typeof progressOrOptions === "function"
+    ? progressOrOptions
+    : progressOrOptions?.onProgress;
+  const signal = typeof progressOrOptions === "function"
+    ? undefined
+    : progressOrOptions?.signal;
+
+  startProgress();
+  try {
+    let response = await xhrUpload(path, body, onProgress, signal);
+    if (response.status === 401 && !signal?.aborted && await refreshAccessToken()) {
+      response = await xhrUpload(path, body, onProgress, signal);
+    }
+    return response;
+  } finally {
+    doneProgress();
+  }
+}
+
 export async function getUsers(params: { role?: UserRole; search?: string; status?: string } = {}) {
   const query = new URLSearchParams();
 

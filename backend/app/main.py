@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from fastapi import Depends
 from app.core.Config import settings
 from app.core.Csrf import CSRFMiddleware
@@ -95,6 +96,17 @@ app.add_middleware(CSRFMiddleware)
 app.add_middleware(RequestLimitsMiddleware)
 app.add_exception_handler(ClassManagementError, class_management_error_handler)
 app.add_exception_handler(ContentCloningError, content_cloning_error_handler)
+
+
+async def sqlalchemy_error_handler(_request, _exc):
+    """Return a stable response without exposing SQL or database diagnostics."""
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "The request could not be completed. Please try again."},
+    )
+
+
+app.add_exception_handler(SQLAlchemyError, sqlalchemy_error_handler)
 
 # Cannot use allow_origins=["*"] with allow_credentials=True (browser rejects).
 # List common dev origins + regex for LAN (Expo) so preflight/login always get CORS headers.

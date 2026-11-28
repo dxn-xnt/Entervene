@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.core.Dependencies import get_db, get_staff_id, get_student_record, require_role
-from app.core.FileUpload import delete_file, save_file
+from app.core.FileUpload import AttachmentLimitedRoute, delete_file, save_file
 from app.schemas.Submission import (
     FeedbackDeletionResponse,
     FeedbackDraftResponse,
@@ -46,7 +46,7 @@ from app.services.submission.SubmissionService import (
     unsubmit_student_work,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=AttachmentLimitedRoute)
 
 
 @router.get("/my-submissions", response_model=List[SubmissionResponse])
@@ -242,7 +242,7 @@ def download_submission_attachment(
     db: Session = Depends(get_db),
 ):
     payload = auth_payload_from_request(request, ACCESS_COOKIE_NAME, token)
-    return download_submission_file(submission_id, attachment_id, payload, inline, db)
+    return download_submission_file(submission_id, attachment_id, payload, inline, db, request)
 
 
 @router.put("/{submission_id}/grade", response_model=SubmissionResponse)
